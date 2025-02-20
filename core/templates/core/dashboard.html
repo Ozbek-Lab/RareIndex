@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - RareIndex{% endblock %}
+
+{% block content_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()" x-init="initCharts()">
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white rounded-lg p-4 shadow">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-primary-100 rounded-full p-3">
+                    <svg class="h-6 w-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h2 class="text-gray-900 text-lg font-medium">Total Individuals</h2>
+                    <p class="mt-1 text-3xl font-semibold text-primary-600">{{ stats.total_individuals }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg p-4 shadow">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-green-100 rounded-full p-3">
+                    <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h2 class="text-gray-900 text-lg font-medium">Total Samples</h2>
+                    <p class="mt-1 text-3xl font-semibold text-green-600">{{ stats.total_samples }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg p-4 shadow">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-blue-100 rounded-full p-3">
+                    <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h2 class="text-gray-900 text-lg font-medium">Completed Tests</h2>
+                    <p class="mt-1 text-3xl font-semibold text-blue-600">{{ stats.completed_tests }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg p-4 shadow">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-yellow-100 rounded-full p-3">
+                    <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h2 class="text-gray-900 text-lg font-medium">Pending Tests</h2>
+                    <p class="mt-1 text-3xl font-semibold text-yellow-600">{{ stats.pending_tests }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Sample Types Chart -->
+        <div class="bg-white rounded-lg p-6 shadow">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Sample Distribution</h3>
+            <canvas id="sampleTypesChart" class="w-full" height="300"></canvas>
+        </div>
+
+        <!-- Samples Over Time Chart -->
+        <div class="bg-white rounded-lg p-6 shadow">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Samples Over Time</h3>
+            <canvas id="samplesOverTimeChart" class="w-full" height="300"></canvas>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Recent Samples -->
+        <div class="bg-white rounded-lg p-6 shadow">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Recent Samples</h3>
+            <div class="flow-root">
+                <ul role="list" class="-mb-8">
+                    {% for sample in recent_samples %}
+                    <li>
+                        <div class="relative pb-8">
+                            {% if not forloop.last %}
+                            <span class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true"></span>
+                            {% endif %}
+                            <div class="relative flex space-x-3">
+                                <div>
+                                    <span class="h-8 w-8 rounded-full bg-green-500 flex items-center justify-center ring-8 ring-white">
+                                        <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                        </svg>
+                                    </span>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div>
+                                        <p class="text-sm text-gray-500">New {{ sample.sample_type.name }} sample received</p>
+                                        <div class="mt-1 text-sm text-gray-900">
+                                            <span class="font-medium">{{ sample.individual.name }}</span>
+                                            <span class="text-gray-500">({{ sample.individual.lab_id }})</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-1">
+                                        <p class="text-sm text-gray-600">
+                                            Received on {{ sample.received_date|date:"M d, Y" }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Recent Tests -->
+        <div class="bg-white rounded-lg p-6 shadow">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Recent Tests</h3>
+            <div class="flow-root">
+                <ul role="list" class="-mb-8">
+                    {% for test in recent_tests %}
+                    <li>
+                        <div class="relative pb-8">
+                            {% if not forloop.last %}
+                            <span class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true"></span>
+                            {% endif %}
+                            <div class="relative flex space-x-3">
+                                <div>
+                                    <span class="h-8 w-8 rounded-full {% if test.status == 'completed' %}bg-blue-500{% else %}bg-yellow-500{% endif %} flex items-center justify-center ring-8 ring-white">
+                                        <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                        </svg>
+                                    </span>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div>
+                                        <p class="text-sm text-gray-500">{{ test.name }}</p>
+                                        <div class="mt-1 text-sm text-gray-900">
+                                            <span class="font-medium">{{ test.sample.individual.name }}</span>
+                                            <span class="text-gray-500">({{ test.sample.individual.lab_id }})</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-1">
+                                        <p class="text-sm text-gray-600">
+                                            Test date: {{ test.test_date|date:"M d, Y" }}
+                                            <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if test.status == 'completed' %}bg-blue-100 text-blue-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                                                {{ test.status|title }}
+                                            </span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function dashboard() {
+    return {
+        initCharts() {
+            // Sample Types Chart
+            const sampleTypeCtx = document.getElementById('sampleTypesChart').getContext('2d');
+            const sampleTypeData = {{ sample_type_counts|safe }};
+            new Chart(sampleTypeCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: sampleTypeData.map(item => item.sample_type__name),
+                    datasets: [{
+                        data: sampleTypeData.map(item => item.count),
+                        backgroundColor: [
+                            '#3B82F6',
+                            '#10B981',
+                            '#F59E0B',
+                            '#EF4444',
+                            '#8B5CF6',
+                            '#EC4899',
+                        ],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        }
+                    }
+                }
+            });
+
+            // Samples Over Time Chart
+            const timelineCtx = document.getElementById('samplesOverTimeChart').getContext('2d');
+            const timelineData = {{ samples_over_time|safe }};
+            new Chart(timelineCtx, {
+                type: 'line',
+                data: {
+                    labels: timelineData.map(item => {
+                        const date = new Date(item.month);
+                        return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                    }),
+                    datasets: [{
+                        label: 'Samples',
+                        data: timelineData.map(item => item.count),
+                        borderColor: '#3B82F6',
+                        backgroundColor: '#93C5FD',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+}
+</script>
+{% endblock %}
