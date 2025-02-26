@@ -1,71 +1,118 @@
 # forms.py
 from django import forms
-from . import models
+from .models import Task, StatusLog, Individual, Sample, Note, Test, SampleType
+from django.contrib.contenttypes.models import ContentType
+
+
+class TaskForm(forms.ModelForm):
+    class Meta:
+        model = Task
+        fields = [
+            "title",
+            "description",
+            "assigned_to",
+            "due_date",
+            "priority",
+            "target_status",
+        ]
+        widgets = {
+            "due_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, content_object=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # If we have a content object, filter statuses accordingly
+        if content_object:
+            content_type = ContentType.objects.get_for_model(content_object.__class__)
+
+            # Get all statuses that have been used with this content type
+            used_status_ids = (
+                StatusLog.objects.filter(
+                    content_type=content_type,
+                )
+                .values_list("new_status_id", flat=True)
+                .distinct()
+            )
+
+            self.fields["target_status"].queryset = Status.objects.filter(
+                id__in=used_status_ids
+            )
+
 
 class IndividualForm(forms.ModelForm):
     class Meta:
-        model = models.Individual
+        model = Individual
         fields = [
-            'lab_id', 
-            'biobank_id', 
-            'full_name', 
-            'tc_identity', 
-            'birth_date',
-            'icd11_code',
-            'hpo_codes',
-            'family'
+            "lab_id",
+            "biobank_id",
+            "full_name",
+            "tc_identity",
+            "birth_date",
+            "icd11_code",
+            "hpo_codes",
+            "family",
         ]
         widgets = {
-            'birth_date': forms.DateInput(attrs={'type': 'date'}),
-            'hpo_codes': forms.Textarea(attrs={'rows': 3}),
+            "birth_date": forms.DateInput(attrs={"type": "date"}),
+            "hpo_codes": forms.Textarea(attrs={"rows": 3}),
         }
+
 
 class SampleForm(forms.ModelForm):
     class Meta:
-        model = models.Sample
+        model = Sample
         fields = [
-            'individual', 
-            'sample_type', 
-            'receipt_date', 
-            'processing_date',
-            'service_send_date', 
-            'data_receipt_date', 
-            'council_date',
-            'isolation_by',
-            'sample_measurements', 
-            'status'
+            "individual",
+            "sample_type",
+            "receipt_date",
+            "processing_date",
+            "service_send_date",
+            "data_receipt_date",
+            "council_date",
+            "isolation_by",
+            "sample_measurements",
+            "status",
         ]
         widgets = {
-            'receipt_date': forms.DateInput(attrs={'type': 'date'}),
-            'processing_date': forms.DateInput(attrs={'type': 'date'}),
-            'service_send_date': forms.DateInput(attrs={'type': 'date'}),
-            'data_receipt_date': forms.DateInput(attrs={'type': 'date'}),
-            'council_date': forms.DateInput(attrs={'type': 'date'}),
+            "receipt_date": forms.DateInput(attrs={"type": "date"}),
+            "processing_date": forms.DateInput(attrs={"type": "date"}),
+            "service_send_date": forms.DateInput(attrs={"type": "date"}),
+            "data_receipt_date": forms.DateInput(attrs={"type": "date"}),
+            "council_date": forms.DateInput(attrs={"type": "date"}),
         }
+
 
 class NoteForm(forms.ModelForm):
     class Meta:
-        model = models.Note
-        fields = ['content']
+        model = Note
+        fields = ["content"]
         widgets = {
-            'content': forms.Textarea(attrs={'rows': 3}),
+            "content": forms.Textarea(attrs={"rows": 3}),
         }
+
 
 class TestForm(forms.ModelForm):
     class Meta:
-        model = models.Test
-        fields = ['name', 'description']
+        model = Test
+        fields = ["name", "description"]
+
 
 class SampleTypeForm(forms.ModelForm):
     class Meta:
-        model = models.SampleType
-        fields = ['name', 'description']
+        model = SampleType
+        fields = ["name", "description"]
         widgets = {
-            'name': forms.TextInput(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'
-            }),
-            'description': forms.Textarea(attrs={
-                'rows': 3,
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'
-            })
+            "name": forms.TextInput(
+                attrs={
+                    "class": "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                }
+            ),
+            "description": forms.Textarea(
+                attrs={
+                    "rows": 3,
+                    "class": "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
+                }
+            ),
         }

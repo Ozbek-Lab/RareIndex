@@ -1,71 +1,76 @@
-{% extends "lab/base.html" %}
-
-{% block content %}
+{% extends "lab/base.html" %} {% block content %}
 <div class="flex h-screen">
-    <!-- Sidebar -->
-    <nav class="w-64 bg-white shadow-lg">
-        <div class="p-4">
-            <h1 class="text-xl font-bold mb-8 flex items-center">
-                <i class="fas fa-dna mr-2"></i> RareIndex
-            </h1>
-            <div class="space-y-2">
-                <button
-                    class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
-                    hx-get="{% url 'lab:individual_list' %}"
-                    hx-target="#main-content"
-                    hx-push-url="true"
-                >
-                    <i class="fas fa-users mr-2 w-5"></i> Individuals
-                </button>
-                <button
-                    class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
-                    hx-get="{% url 'lab:sample_list' %}"
-                    hx-target="#main-content"
-                    hx-push-url="true"
-                >
-                    <i class="fas fa-vial mr-2 w-5"></i> Samples
-                </button>
-                <button
-                    class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
-                    hx-get="{% url 'lab:test_list' %}"
-                    hx-target="#main-content"
-                    hx-push-url="true"
-                >
-                    <i class="fas fa-flask mr-2 w-5"></i> Tests
-                </button>
-                <button
-                    class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
-                    hx-get="{% url 'lab:sample_type_list' %}"
-                    hx-target="#main-content"
-                    hx-push-url="true"
-                >
-                    <i class="fas fa-list mr-2 w-5"></i> Sample Types
-                </button>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Main Content -->
-    <div class="flex-1 overflow-auto">
-        <main id="main-content" class="p-8">
-            {% if initial_view %}
-                {% include "lab/"|add:initial_view %}
-            {% endif %}
-        </main>
+  <!-- Sidebar -->
+  <nav class="w-64 bg-white shadow-lg">
+    <div class="p-4">
+      <h1 class="text-xl font-bold mb-8 flex items-center">
+        <i class="fas fa-dna mr-2"></i> RareIndex
+      </h1>
+      <div class="space-y-2">
+        <button
+          class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
+          hx-get="{% url 'lab:individual_list' %}"
+          hx-target="#main-content"
+          hx-push-url="true"
+        >
+          <i class="fas fa-users mr-2 w-5"></i> Individuals
+        </button>
+        <button
+          class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
+          hx-get="{% url 'lab:sample_list' %}"
+          hx-target="#main-content"
+          hx-push-url="true"
+        >
+          <i class="fas fa-vial mr-2 w-5"></i> Samples
+        </button>
+        <button
+          class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
+          hx-get="{% url 'lab:test_list' %}"
+          hx-target="#main-content"
+          hx-push-url="true"
+        >
+          <i class="fas fa-flask mr-2 w-5"></i> Tests
+        </button>
+        <button
+          class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
+          hx-get="{% url 'lab:sample_type_list' %}"
+          hx-target="#main-content"
+          hx-push-url="true"
+        >
+          <i class="fas fa-list mr-2 w-5"></i> Sample Types
+        </button>
+        <!-- Add to sidebar nav in app.html -->
+        <button
+          class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
+          hx-get="{% url 'lab:my_tasks' %}"
+          hx-target="#main-content"
+          hx-push-url="true"
+        >
+          <i class="fas fa-tasks mr-2 w-5"></i> My Tasks
+        </button>
+      </div>
     </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="flex-1 overflow-auto">
+    <main id="main-content" class="p-8">
+      {% if initial_view %} {% include "lab/"|add:initial_view %} {% endif %}
+    </main>
+  </div>
 </div>
 
 <!-- HTMX CSRF Token Setup -->
 <script>
-    document.body.addEventListener("htmx:configRequest", (event) => {
-        const csrfToken = document.cookie
-            .split("; ")
-            .find((row) => row.startsWith("csrftoken="))
-            ?.split("=")[1];
+  document.body.addEventListener("htmx:configRequest", (event) => {
+    const csrfToken = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("csrftoken="))
+      ?.split("=")[1];
 
-        if (csrfToken) {
-            event.detail.headers["X-CSRFToken"] = csrfToken;
-        }
-    });
+    if (csrfToken) {
+      event.detail.headers["X-CSRFToken"] = csrfToken;
+    }
+  });
 </script>
-{% endblock %} 
+{% endblock %}

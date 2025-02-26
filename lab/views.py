@@ -5,6 +5,7 @@ from django.template.response import TemplateResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.contenttypes.models import ContentType
 from . import models, forms
+from django.db.models import Q
 
 
 @login_required
@@ -118,25 +119,35 @@ def sample_list(request):
 @login_required
 @permission_required("lab.add_sample")
 def sample_create(request):
-    if request.method == 'POST':
+    if request.method == "POST":
         form = forms.SampleForm(request.POST)
         if form.is_valid():
             sample = form.save(commit=False)
             sample.created_by = request.user
             sample.save()
-            return HttpResponse('')  # Return empty string with 200 status
-    
+
+            # Return the add button template instead of empty string
+            return TemplateResponse(request, "lab/samples/_add_button.html")
+
     # If button=true is in query params, return the add button instead of the form
-    if request.GET.get('button') == 'true':
-        return TemplateResponse(request, 'lab/samples/_add_button.html')
-        
+    if request.GET.get("button") == "true":
+        return TemplateResponse(request, "lab/samples/_add_button.html")
+
+    # Get appropriate statuses for Samples
+    sample_content_type = ContentType.objects.get_for_model(models.Sample)
+    sample_statuses = models.Status.objects.filter(content_type=sample_content_type)
+
     # For GET requests, return the form
-    return TemplateResponse(request, 'lab/samples/card_edit.html', {
-        'sample': None,
-        'individuals': models.Individual.objects.all(),
-        'sample_types': models.SampleType.objects.all(),
-        'status_choices': models.Sample.STATUS_CHOICES,
-    })
+    return TemplateResponse(
+        request,
+        "lab/samples/card_edit.html",
+        {
+            "sample": None,
+            "individuals": models.Individual.objects.all(),
+            "sample_types": models.SampleType.objects.all(),
+            "statuses": sample_statuses,  # Use the statuses from the database
+        },
+    )
 
 
 @login_required
@@ -150,6 +161,11 @@ def sample_edit(request, pk):
             return TemplateResponse(
                 request, "lab/samples/card.html", {"sample": sample}
             )
+
+    # Get appropriate statuses for Samples
+    sample_content_type = ContentType.objects.get_for_model(models.Sample)
+    sample_statuses = models.Status.objects.filter(content_type=sample_content_type)
+
     return TemplateResponse(
         request,
         "lab/samples/card_edit.html",
@@ -157,7 +173,7 @@ def sample_edit(request, pk):
             "sample": sample,
             "individuals": models.Individual.objects.all(),
             "sample_types": models.SampleType.objects.all(),
-            "status_choices": models.Sample.STATUS_CHOICES,
+            "statuses": sample_statuses,  # Use the statuses from the database
         },
     )
 
@@ -188,13 +204,29 @@ def sample_detail(request, pk):
 def sample_status_update(request, pk):
     sample = get_object_or_404(models.Sample, pk=pk)
     if request.method == "POST":
-        status = request.POST.get("status")
-        if status in dict(models.Sample.STATUS_CHOICES):
-            sample.status = status
-            sample.save()
-            return TemplateResponse(
-                request, "lab/sample/partials/status_badge.html", {"status": status}
-            )
+        status_id = request.POST.get("status")
+
+        try:
+            # Get the status object from the database
+            new_status = models.Status.objects.get(pk=status_id)
+
+            # Verify status is appropriate for samples
+            sample_content_type = ContentType.objects.get_for_model(models.Sample)
+            if new_status.content_type == sample_content_type:
+                # Use the StatusMixin method to properly update status with logging
+                sample.update_status(
+                    new_status, request.user, "Status updated via form"
+                )
+
+                return TemplateResponse(
+                    request,
+                    "lab/sample/partials/status_badge.html",
+                    {"status": new_status},
+                )
+
+        except models.Status.DoesNotExist:
+            pass  # Invalid status ID
+
     return HttpResponse(status=400)
 
 
@@ -367,4 +399,79 @@ def sample_type_search(request):
     # Return the same list template but only the grid will be swapped due to hx-select
     return TemplateResponse(
         request, "lab/sample_types/list.html", {"sample_types": sample_types}
+    )
+
+
+@login_required
+def task_create(request, model, pk):
+    """Create a task for a specific object"""
+    content_type = get_object_or_404(ContentType, app_label="lab", model=model)
+    content_object = get_object_or_404(content_type.model_class(), pk=pk)
+
+    if request.method == "POST":
+        form = forms.TaskForm(request.POST, content_object=content_object)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.content_type = content_type
+            task.object_id = pk
+            task.created_by = request.user
+            task.save()
+
+            return TemplateResponse(request, "lab/tasks/task_card.html", {"task": task})
+    else:
+        form = forms.TaskForm(content_object=content_object)
+
+    return TemplateResponse(
+        request,
+        "lab/tasks/task_form.html",
+        {"form": form, "content_object": content_object, "model": model, "pk": pk},
+    )
+
+
+@login_required
+def task_complete(request, pk):
+    """Mark a task as complete and update the related object's status"""
+    task = get_object_or_404(models.Task, pk=pk)
+
+    if request.method == "POST":
+        notes = request.POST.get("notes", "")
+        success = task.complete(request.user, notes=notes)
+
+        if success:
+            return TemplateResponse(request, "lab/tasks/task_card.html", {"task": task})
+
+    return HttpResponse(status=400)
+
+
+@login_required
+def my_tasks(request):
+    """View for a user to see their assigned tasks"""
+    tasks = models.Task.objects.filter(
+        assigned_to=request.user, is_completed=False
+    ).select_related("content_type", "assigned_to", "target_status")
+
+    return TemplateResponse(request, "lab/tasks/my_tasks.html", {"tasks": tasks})
+
+
+@login_required
+def task_search(request):
+    """Search tasks by title or description"""
+    query = request.GET.get("q", "")
+
+    # Base queryset - filter by the search query
+    tasks = models.Task.objects.filter(
+        Q(title__icontains=query) | Q(description__icontains=query)
+    )
+
+    # If user is not staff/admin, limit to tasks they created or are assigned to them
+    if not request.user.is_staff:
+        tasks = tasks.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
+
+    # Select related fields for performance
+    tasks = tasks.select_related(
+        "content_type", "assigned_to", "created_by", "completed_by", "target_status"
+    )
+
+    return TemplateResponse(
+        request, "lab/tasks/my_tasks.html", {"tasks": tasks, "query": query}
     )
