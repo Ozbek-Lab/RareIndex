@@ -1,0 +1,92 @@
+<div class="sample-card bg-white rounded-lg shadow p-6">
+    <form class="space-y-4" 
+        {% if sample %}
+        hx-post="{% url 'lab:sample_edit' sample.pk %}" 
+        hx-target="closest .sample-card"
+        {% else %}
+        hx-post="{% url 'lab:sample_create' %}" 
+        hx-target="this"
+        hx-swap="outerHTML"
+        hx-on::after-request="if(event.detail.successful) htmx.trigger('#sample-list', 'sampleCreated')"
+        {% endif %}
+    >
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Individual</label>
+            <select name="individual" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                {% for individual in individuals %}
+                <option value="{{ individual.id }}" {% if individual.id == sample.individual_id %}selected{% endif %}>
+                    {{ individual.lab_id }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Sample Type</label>
+            <select name="sample_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                {% for type in sample_types %}
+                <option value="{{ type.id }}" {% if type.id == sample.sample_type_id %}selected{% endif %}>
+                    {{ type.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Receipt Date</label>
+            <input type="date" name="receipt_date" value="{{ sample.receipt_date|date:'Y-m-d'|default:'' }}"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Processing Date</label>
+            <input type="date" name="processing_date" value="{{ sample.processing_date|date:'Y-m-d'|default:'' }}"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Service Send Date</label>
+            <input type="date" name="service_send_date" value="{{ sample.service_send_date|date:'Y-m-d'|default:'' }}"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Data Receipt Date</label>
+            <input type="date" name="data_receipt_date" value="{{ sample.data_receipt_date|date:'Y-m-d'|default:'' }}"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Council Date</label>
+            <input type="date" name="council_date" value="{{ sample.council_date|date:'Y-m-d'|default:'' }}"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Isolation By</label>
+            <input type="text" name="isolation_by" value="{{ sample.isolation_by|default:'' }}"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Sample Measurements</label>
+            <input type="text" name="sample_measurements" value="{{ sample.sample_measurements|default:'' }}"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Status</label>
+            <select name="status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if value == sample.status %}selected{% endif %}>
+                    {{ label }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="pt-4 border-t flex justify-end space-x-3">
+            <button type="submit" class="text-green-600 hover:text-green-900 flex items-center">
+                <i class="fas fa-save mr-1"></i> Save
+            </button>
+            <button type="button" 
+                class="text-gray-600 hover:text-gray-900 flex items-center"
+                hx-get="{% url 'lab:sample_create' %}?button=true"
+                hx-target="closest .sample-card"
+                hx-swap="outerHTML"
+            >
+                <i class="fas fa-times mr-1"></i> Cancel
+            </button>
+        </div>
+    </form>
+</div> 
