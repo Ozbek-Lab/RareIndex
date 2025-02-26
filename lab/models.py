@@ -149,6 +149,9 @@ class Status(models.Model):
     color = models.CharField(max_length=50, default="gray")
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     created_at = models.DateTimeField(auto_now_add=True)
+    content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE, null=True, blank=True
+    )
 
     class Meta:
         verbose_name_plural = "statuses"

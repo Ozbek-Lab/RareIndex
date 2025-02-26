@@ -8,14 +8,16 @@
     <div class="flex justify-between items-center">
         <h2 class="text-2xl font-bold">Samples</h2>
         {% if perms.lab.add_sample %}
-            <button 
-                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center"
-                hx-get="{% url 'lab:sample_create' %}"
-                hx-target="this"
-                hx-swap="outerHTML"
-            >
-                <i class="fas fa-plus mr-2"></i> Add Sample
-            </button>
+            <div id="sample-form-container">
+                <button
+                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center"
+                    hx-get="{% url 'lab:sample_create' %}"
+                    hx-target="#sample-form-container"
+                    hx-swap="innerHTML"
+                >
+                    <i class="fas fa-plus mr-2"></i> Add Sample
+                </button>
+            </div>
         {% endif %}
     </div>
     
@@ -41,4 +43,4 @@
 
 {% if not partial %}
 </div>
-{% endif %} 
+{% endif %}

@@ -133,11 +133,7 @@ def sample_create(request):
     if request.GET.get("button") == "true":
         return TemplateResponse(request, "lab/samples/_add_button.html")
 
-    # Get appropriate statuses for Samples
-    sample_content_type = ContentType.objects.get_for_model(models.Sample)
-    sample_statuses = models.Status.objects.filter(content_type=sample_content_type)
-
-    # For GET requests, return the form
+    # For GET requests, return the form with all available statuses
     return TemplateResponse(
         request,
         "lab/samples/card_edit.html",
@@ -145,7 +141,9 @@ def sample_create(request):
             "sample": None,
             "individuals": models.Individual.objects.all(),
             "sample_types": models.SampleType.objects.all(),
-            "statuses": sample_statuses,  # Use the statuses from the database
+            "status_choices": [
+                (status.id, status.name) for status in models.Status.objects.all()
+            ],
         },
     )
 
