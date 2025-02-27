@@ -1,0 +1,681 @@
+[
+  {
+    "model": "auth.user",
+    "pk": 1,
+    "fields": {
+      "password": "pbkdf2_sha256$720000$T8JHgIRLjsxFMORmjX9TTP$ZyWA8qPcgJ8ZGpkDj2Pg4NrcN+TPDkrpyQQi2qc2lS8=",
+      "last_login": "2025-02-27T10:00:00Z",
+      "is_superuser": true,
+      "username": "admin",
+      "first_name": "Admin",
+      "last_name": "User",
+      "email": "admin@example.com",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2025-02-01T10:00:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 2,
+    "fields": {
+      "password": "pbkdf2_sha256$720000$WplFx67YKsOGSIcJZU7IEK$sLM6kEtvCqH7o8SQA0sRVTtX17mYPbHUXyZqv4p6lWA=",
+      "last_login": "2025-02-27T10:00:00Z",
+      "is_superuser": false,
+      "username": "labtech",
+      "first_name": "Lab",
+      "last_name": "Technician",
+      "email": "labtech@example.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2025-02-01T10:00:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 3,
+    "fields": {
+      "password": "pbkdf2_sha256$720000$sPqYARBDPwLnxXNSPfvvXS$Bd78Qra2vGBw/t4/i/qg+nj+bUG7xDZfQJm+qbcM4jo=",
+      "last_login": "2025-02-27T10:00:00Z",
+      "is_superuser": false,
+      "username": "researcher",
+      "first_name": "Research",
+      "last_name": "Scientist",
+      "email": "researcher@example.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2025-02-01T10:00:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "lab.status",
+    "pk": 1,
+    "fields": {
+      "name": "Pending",
+      "description": "Item is pending processing",
+      "color": "yellow",
+      "created_by": 1,
+      "created_at": "2025-02-01T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.status",
+    "pk": 2,
+    "fields": {
+      "name": "In Progress",
+      "description": "Item is currently being processed",
+      "color": "blue",
+      "created_by": 1,
+      "created_at": "2025-02-01T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.status",
+    "pk": 3,
+    "fields": {
+      "name": "Completed",
+      "description": "Item has been completed",
+      "color": "green",
+      "created_by": 1,
+      "created_at": "2025-02-01T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.status",
+    "pk": 4,
+    "fields": {
+      "name": "Failed",
+      "description": "Item processing has failed",
+      "color": "red",
+      "created_by": 1,
+      "created_at": "2025-02-01T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.status",
+    "pk": 5,
+    "fields": {
+      "name": "Rejected",
+      "description": "Item was rejected",
+      "color": "red",
+      "created_by": 1,
+      "created_at": "2025-02-01T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.family",
+    "pk": 1,
+    "fields": {
+      "family_id": "RB_2023_01",
+      "description": "Family with rare disorder X",
+      "created_at": "2025-02-01T10:00:00Z",
+      "updated_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.family",
+    "pk": 2,
+    "fields": {
+      "family_id": "RB_2023_02",
+      "description": "Family with rare disorder Y",
+      "created_at": "2025-02-01T10:00:00Z",
+      "updated_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.family",
+    "pk": 3,
+    "fields": {
+      "family_id": "FB_2023_01",
+      "description": "Family with disorder Z",
+      "created_at": "2025-02-01T10:00:00Z",
+      "updated_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.institution",
+    "pk": 1,
+    "fields": {
+      "name": "University Medical Center",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.institution",
+    "pk": 2,
+    "fields": {
+      "name": "Central Hospital",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.institution",
+    "pk": 3,
+    "fields": {
+      "name": "Research Institute",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.sampletype",
+    "pk": 1,
+    "fields": {
+      "name": "Blood",
+      "description": "Whole blood sample",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.sampletype",
+    "pk": 2,
+    "fields": {
+      "name": "Saliva",
+      "description": "Saliva sample",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.sampletype",
+    "pk": 3,
+    "fields": {
+      "name": "Tissue",
+      "description": "Tissue biopsy sample",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.sampletype",
+    "pk": 4,
+    "fields": {
+      "name": "DNA",
+      "description": "Extracted DNA sample",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.sampletype",
+    "pk": 5,
+    "fields": {
+      "name": "RNA",
+      "description": "Extracted RNA sample",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.test",
+    "pk": 1,
+    "fields": {
+      "name": "Whole Exome Sequencing",
+      "description": "Whole exome sequencing (WES) to identify genetic variants",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.test",
+    "pk": 2,
+    "fields": {
+      "name": "Whole Genome Sequencing",
+      "description": "Whole genome sequencing (WGS) to identify genetic variants across the entire genome",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.test",
+    "pk": 3,
+    "fields": {
+      "name": "RNA-seq",
+      "description": "RNA sequencing to analyze gene expression patterns",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.test",
+    "pk": 4,
+    "fields": {
+      "name": "Microarray",
+      "description": "DNA microarray analysis for genotyping and gene expression analysis",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.test",
+    "pk": 5,
+    "fields": {
+      "name": "PCR",
+      "description": "Polymerase chain reaction for targeted DNA amplification",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1
+    }
+  },
+  {
+    "model": "lab.individual",
+    "pk": 1,
+    "fields": {
+      "lab_id": "RB_2023_01.1",
+      "biobank_id": "BB-10001",
+      "full_name": "John Doe",
+      "tc_identity": "12345678901",
+      "birth_date": "1980-01-15",
+      "icd11_code": "5A60",
+      "hpo_codes": "HP:0002011,HP:0001249,HP:0000252",
+      "family": 1,
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1,
+      "status": 3,
+      "diagnosis": "Disorder X confirmed by WES",
+      "diagnosis_date": "2025-02-10"
+    }
+  },
+  {
+    "model": "lab.individual",
+    "pk": 2,
+    "fields": {
+      "lab_id": "RB_2023_01.2",
+      "biobank_id": "BB-10002",
+      "full_name": "Jane Doe",
+      "tc_identity": "12345678902",
+      "birth_date": "1982-03-22",
+      "icd11_code": "5A60",
+      "hpo_codes": "HP:0002011",
+      "family": 1,
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1,
+      "status": 3,
+      "diagnosis": "Carrier status confirmed",
+      "diagnosis_date": "2025-02-10"
+    }
+  },
+  {
+    "model": "lab.individual",
+    "pk": 3,
+    "fields": {
+      "lab_id": "RB_2023_02.1",
+      "biobank_id": "BB-10003",
+      "full_name": "James Smith",
+      "tc_identity": "12345678903",
+      "birth_date": "1975-06-10",
+      "icd11_code": "4A43.0",
+      "hpo_codes": "HP:0000252,HP:0002650",
+      "family": 2,
+      "created_at": "2025-02-05T10:00:00Z",
+      "created_by": 1,
+      "status": 2,
+      "diagnosis": "Pending final analysis",
+      "diagnosis_date": null
+    }
+  },
+  {
+    "model": "lab.individual",
+    "pk": 4,
+    "fields": {
+      "lab_id": "FB_2023_01.1",
+      "biobank_id": "BB-10004",
+      "full_name": "Emily Wilson",
+      "tc_identity": "12345678904",
+      "birth_date": "1990-11-05",
+      "icd11_code": "4A41",
+      "hpo_codes": "HP:0001249,HP:0000252",
+      "family": 3,
+      "created_at": "2025-02-10T10:00:00Z",
+      "created_by": 1,
+      "status": 1,
+      "diagnosis": "",
+      "diagnosis_date": null
+    }
+  },
+  {
+    "model": "lab.individual",
+    "pk": 5,
+    "fields": {
+      "lab_id": "SP_2023_01",
+      "biobank_id": "BB-10005",
+      "full_name": "Mark Johnson",
+      "tc_identity": "12345678905",
+      "birth_date": "1985-07-20",
+      "icd11_code": "5A11",
+      "hpo_codes": "HP:0000252",
+      "family": null,
+      "created_at": "2025-02-15T10:00:00Z",
+      "created_by": 1,
+      "status": 1,
+      "diagnosis": "",
+      "diagnosis_date": null
+    }
+  },
+  {
+    "model": "lab.sample",
+    "pk": 1,
+    "fields": {
+      "individual": 1,
+      "sample_type": 1,
+      "status": 3,
+      "receipt_date": "2025-02-01",
+      "processing_date": "2025-02-03",
+      "service_send_date": "2025-02-05",
+      "data_receipt_date": "2025-02-10",
+      "council_date": "2025-02-15",
+      "sending_institution": 1,
+      "isolation_by": 2,
+      "sample_measurements": "OD: 1.8/2.0",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1,
+      "updated_at": "2025-02-15T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sample",
+    "pk": 2,
+    "fields": {
+      "individual": 2,
+      "sample_type": 1,
+      "status": 3,
+      "receipt_date": "2025-02-01",
+      "processing_date": "2025-02-03",
+      "service_send_date": "2025-02-05",
+      "data_receipt_date": "2025-02-10",
+      "council_date": "2025-02-15",
+      "sending_institution": 1,
+      "isolation_by": 2,
+      "sample_measurements": "OD: 1.7/1.9",
+      "created_at": "2025-02-01T10:00:00Z",
+      "created_by": 1,
+      "updated_at": "2025-02-15T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sample",
+    "pk": 3,
+    "fields": {
+      "individual": 3,
+      "sample_type": 1,
+      "status": 2,
+      "receipt_date": "2025-02-06",
+      "processing_date": "2025-02-08",
+      "service_send_date": "2025-02-10",
+      "data_receipt_date": "2025-02-20",
+      "council_date": null,
+      "sending_institution": 2,
+      "isolation_by": 2,
+      "sample_measurements": "OD: 1.9/2.1",
+      "created_at": "2025-02-06T10:00:00Z",
+      "created_by": 1,
+      "updated_at": "2025-02-20T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sample",
+    "pk": 4,
+    "fields": {
+      "individual": 4,
+      "sample_type": 2,
+      "status": 1,
+      "receipt_date": "2025-02-11",
+      "processing_date": null,
+      "service_send_date": null,
+      "data_receipt_date": null,
+      "council_date": null,
+      "sending_institution": 3,
+      "isolation_by": 3,
+      "sample_measurements": "",
+      "created_at": "2025-02-11T10:00:00Z",
+      "created_by": 1,
+      "updated_at": "2025-02-11T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sample",
+    "pk": 5,
+    "fields": {
+      "individual": 5,
+      "sample_type": 3,
+      "status": 1,
+      "receipt_date": "2025-02-16",
+      "processing_date": null,
+      "service_send_date": null,
+      "data_receipt_date": null,
+      "council_date": null,
+      "sending_institution": 2,
+      "isolation_by": 2,
+      "sample_measurements": "",
+      "created_at": "2025-02-16T10:00:00Z",
+      "created_by": 1,
+      "updated_at": "2025-02-16T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sample",
+    "pk": 6,
+    "fields": {
+      "individual": 1,
+      "sample_type": 4,
+      "status": 3,
+      "receipt_date": "2025-02-03",
+      "processing_date": "2025-02-04",
+      "service_send_date": "2025-02-05",
+      "data_receipt_date": "2025-02-10",
+      "council_date": "2025-02-15",
+      "sending_institution": 1,
+      "isolation_by": 2,
+      "sample_measurements": "Concentration: 50ng/µl",
+      "created_at": "2025-02-03T10:00:00Z",
+      "created_by": 1,
+      "updated_at": "2025-02-15T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sampletest",
+    "pk": 1,
+    "fields": {
+      "sample": 1,
+      "test": 1,
+      "performed_date": "2025-02-05",
+      "performed_by": 2,
+      "status": 3,
+      "created_at": "2025-02-05T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sampletest",
+    "pk": 2,
+    "fields": {
+      "sample": 2,
+      "test": 1,
+      "performed_date": "2025-02-05",
+      "performed_by": 2,
+      "status": 3,
+      "created_at": "2025-02-05T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sampletest",
+    "pk": 3,
+    "fields": {
+      "sample": 3,
+      "test": 2,
+      "performed_date": "2025-02-10",
+      "performed_by": 3,
+      "status": 2,
+      "created_at": "2025-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.sampletest",
+    "pk": 4,
+    "fields": {
+      "sample": 6,
+      "test": 5,
+      "performed_date": "2025-02-06",
+      "performed_by": 2,
+      "status": 3,
+      "created_at": "2025-02-06T10:00:00Z"
+    }
+  },
+  {
+    "model": "lab.note",
+    "pk": 1,
+    "fields": {
+      "content": "Sample arrived in good condition, slightly hemolyzed.",
+      "created_at": "2025-02-01T10:00:00Z",
+      "updated_at": "2025-02-01T10:00:00Z",
+      "user": 2,
+      "content_type": ["lab", "sample"],
+      "object_id": 1
+    }
+  },
+  {
+    "model": "lab.note",
+    "pk": 2,
+    "fields": {
+      "content": "DNA extraction completed with high yield.",
+      "created_at": "2025-02-03T10:00:00Z",
+      "updated_at": "2025-02-03T10:00:00Z",
+      "user": 2,
+      "content_type": ["lab", "sample"],
+      "object_id": 1
+    }
+  },
+  {
+    "model": "lab.note",
+    "pk": 3,
+    "fields": {
+      "content": "Patient reports family history of similar symptoms.",
+      "created_at": "2025-02-01T10:00:00Z",
+      "updated_at": "2025-02-01T10:00:00Z",
+      "user": 1,
+      "content_type": ["lab", "individual"],
+      "object_id": 1
+    }
+  },
+  {
+    "model": "lab.note",
+    "pk": 4,
+    "fields": {
+      "content": "Samples from the same family should be processed together.",
+      "created_at": "2025-02-02T10:00:00Z",
+      "updated_at": "2025-02-02T10:00:00Z",
+      "user": 1,
+      "content_type": ["lab", "family"],
+      "object_id": 1
+    }
+  },
+  {
+    "model": "lab.statuslog",
+    "pk": 1,
+    "fields": {
+      "content_type": ["lab", "sample"],
+      "object_id": 1,
+      "changed_by": 2,
+      "changed_at": "2025-02-01T10:00:00Z",
+      "previous_status": 1,
+      "new_status": 2,
+      "notes": "Started processing the sample"
+    }
+  },
+  {
+    "model": "lab.statuslog",
+    "pk": 2,
+    "fields": {
+      "content_type": ["lab", "sample"],
+      "object_id": 1,
+      "changed_by": 2,
+      "changed_at": "2025-02-10T10:00:00Z",
+      "previous_status": 2,
+      "new_status": 3,
+      "notes": "Sample processing complete, data received"
+    }
+  },
+  {
+    "model": "lab.statuslog",
+    "pk": 3,
+    "fields": {
+      "content_type": ["lab", "individual"],
+      "object_id": 1,
+      "changed_by": 1,
+      "changed_at": "2025-02-15T10:00:00Z",
+      "previous_status": 2,
+      "new_status": 3,
+      "notes": "Case review complete, diagnosis confirmed"
+    }
+  },
+  {
+    "model": "lab.task",
+    "pk": 1,
+    "fields": {
+      "title": "Process DNA extraction",
+      "description": "Perform DNA extraction and QC",
+      "content_type": ["lab", "sample"],
+      "object_id": 4,
+      "assigned_to": 2,
+      "created_by": 1,
+      "created_at": "2025-02-11T10:00:00Z",
+      "updated_at": "2025-02-11T10:00:00Z",
+      "due_date": "2025-02-14T10:00:00Z",
+      "priority": "high",
+      "is_completed": false,
+      "completed_at": null,
+      "completed_by": null,
+      "target_status": 2
+    }
+  },
+  {
+    "model": "lab.task",
+    "pk": 2,
+    "fields": {
+      "title": "Prepare sample for WGS",
+      "description": "Prepare sample for whole genome sequencing service",
+      "content_type": ["lab", "sample"],
+      "object_id": 3,
+      "assigned_to": 2,
+      "created_by": 1,
+      "created_at": "2025-02-06T10:00:00Z",
+      "updated_at": "2025-02-08T10:00:00Z",
+      "due_date": "2025-02-09T10:00:00Z",
+      "priority": "medium",
+      "is_completed": true,
+      "completed_at": "2025-02-08T10:00:00Z",
+      "completed_by": 2,
+      "target_status": 2
+    }
+  },
+  {
+    "model": "lab.task",
+    "pk": 3,
+    "fields": {
+      "title": "Review final report",
+      "description": "Review genetic analysis report and prepare for council",
+      "content_type": ["lab", "individual"],
+      "object_id": 1,
+      "assigned_to": 3,
+      "created_by": 1,
+      "created_at": "2025-02-10T10:00:00Z",
+      "updated_at": "2025-02-15T10:00:00Z",
+      "due_date": "2025-02-14T10:00:00Z",
+      "priority": "high",
+      "is_completed": true,
+      "completed_at": "2025-02-15T10:00:00Z",
+      "completed_by": 3,
+      "target_status": 3
+    }
+  }
+]

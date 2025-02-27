@@ -1,0 +1,6 @@
+<div x-data="{ open: false }">
+  <button @click="open = !open">{% include 'lab/notes/summary.html' %}</button>
+  <div x-show="open" @click.outside="open = false">
+    {% include 'lab/notes/list.html' %}
+  </div>
+</div>

@@ -1,0 +1,200 @@
+<!-- Search Container with optimized styling -->
+<div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100" x-data="{ showAdvanced: false }">
+    <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
+        <div class="flex items-center space-x-3">
+            <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <div>
+                <h2 class="text-lg font-semibold text-gray-800">Individual Search</h2>
+                <p class="text-xs text-gray-500">Search and filter individuals by various criteria</p>
+            </div>
+        </div>
+    </div>
+
+    <form hx-post="{% url 'lab:individual_search' %}"
+          hx-target="next div"
+          hx-trigger="change delay:500ms, search delay:500ms"
+          class="space-y-4">
+        
+        <!-- Basic Search Section -->
+        <div class="bg-gray-50 p-3 rounded-lg">
+            <div class="flex items-center mb-3">
+                <svg class="w-4 h-4 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
+                </svg>
+                <h3 class="text-sm font-medium text-gray-700">Basic Search</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <!-- Lab ID Search -->
+                <div class="relative">
+                    <label class="text-xs font-medium text-gray-600 mb-1 flex items-center">
+                        <svg class="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>
+                        </svg>
+                        Lab ID
+                    </label>
+                    <input type="text" 
+                           name="lab_id" 
+                           class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm"
+                           placeholder="Enter Lab ID"
+                           hx-trigger="keyup delay:500ms">
+                </div>
+
+                <!-- Status Filter -->
+                <div class="relative">
+                    <label class="text-xs font-medium text-gray-600 mb-1 flex items-center">
+                        <svg class="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Status
+                    </label>
+                    <select name="status" 
+                            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm appearance-none pr-8">
+                        <option value="">All Statuses</option>
+                        {% for status in individual_statuses %}
+                            <option value="{{ status.id }}">{{ status.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Family Filter -->
+                <div class="relative">
+                    <label class="text-xs font-medium text-gray-600 mb-1 flex items-center">
+                        <svg class="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        Family
+                    </label>
+                    <select name="family" 
+                            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm appearance-none pr-8">
+                        <option value="">All Families</option>
+                        {% for family in families %}
+                            <option value="{{ family.id }}">{{ family.family_id }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Advanced Search Toggle Button -->
+        <button type="button" 
+                @click="showAdvanced = !showAdvanced" 
+                class="flex items-center text-sm text-gray-600 hover:text-indigo-600 focus:outline-none group">
+            <svg class="w-4 h-4 mr-1 transition-transform duration-200" 
+                 :class="{ 'rotate-180': showAdvanced }"
+                 fill="none" 
+                 stroke="currentColor" 
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+            <span class="group-hover:underline">Advanced Search Options</span>
+        </button>
+
+        <!-- Advanced Search Section -->
+        <div x-show="showAdvanced"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 transform -translate-y-2"
+             x-transition:enter-end="opacity-100 transform translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 transform translate-y-0"
+             x-transition:leave-end="opacity-0 transform -translate-y-2"
+             class="bg-gray-50 p-3 rounded-lg">
+            <div class="flex items-center mb-3">
+                <svg class="w-4 h-4 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                </svg>
+                <h3 class="text-sm font-medium text-gray-700">Advanced Search</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <!-- Test Filter -->
+                <div class="relative">
+                    <label class="text-xs font-medium text-gray-600 mb-1 flex items-center">
+                        <svg class="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+                        </svg>
+                        Sample Test
+                    </label>
+                    <select name="test" 
+                            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm appearance-none pr-8">
+                        <option value="">All Tests</option>
+                        {% for test in tests %}
+                            <option value="{{ test.id }}">{{ test.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Test Status Filter -->
+                <div class="relative">
+                    <label class="text-xs font-medium text-gray-600 mb-1 flex items-center">
+                        <svg class="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Test Status
+                    </label>
+                    <select name="test_status" 
+                            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm appearance-none pr-8">
+                        <option value="">All Test Statuses</option>
+                        {% for status in test_statuses %}
+                            <option value="{{ status.id }}">{{ status.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- ICD11 Code -->
+                <div class="relative">
+                    <label class="text-xs font-medium text-gray-600 mb-1 flex items-center">
+                        <svg class="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        ICD11 Code
+                    </label>
+                    <input type="text" 
+                           name="icd11_code" 
+                           class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm"
+                           placeholder="Enter ICD11 code"
+                           hx-trigger="keyup delay:500ms">
+                </div>
+
+                <!-- HPO Codes -->
+                <div class="relative">
+                    <label class="text-xs font-medium text-gray-600 mb-1 flex items-center">
+                        <svg class="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                        </svg>
+                        HPO Codes
+                    </label>
+                    <input type="text" 
+                           name="hpo_codes" 
+                           class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm"
+                           placeholder="Enter HPO codes"
+                           hx-trigger="keyup delay:500ms">
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div>
+    {% include "lab/individuals/list.html" %}
+</div>

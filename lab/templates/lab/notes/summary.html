@@ -1,0 +1,22 @@
+<div
+  class="flex items-center space-x-2 text-sm"
+  hx-get="{% url 'lab:note_count' %}"
+  hx-trigger="noteCountUpdate-{{ content_type }}-{{ object.id }} from:body"
+  hx-target="closest div"
+  hx-swap="outerHTML"
+  hx-vals='{"object_id": "{{ object.id }}", "content_type": "{{ content_type }}"}'
+>
+  {% with note_count=object.notes.count %}
+    {% if note_count == 0 %}
+      <div class="text-gray-400">
+        <i class="fa-solid fa-note-sticky"></i>
+      </div>
+      <span class="text-gray-500">No notes</span>
+    {% else %}
+      <div class="text-blue-500">
+        <i class="fa-solid fa-note-sticky"></i>
+      </div>
+      <span class="font-medium text-gray-700">{{ note_count }} Note{% if note_count != 1 %}s{% endif %}</span>
+    {% endif %}
+  {% endwith %}
+</div>

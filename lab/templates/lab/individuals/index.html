@@ -1,0 +1,21 @@
+<!-- Individual List/Detail View Container with Alpine.js -->
+<div x-data="{ showDetail: false }">
+  <!-- Detail View - Shown when an individual is selected -->
+  <div x-show="showDetail" x-cloak>
+    <!-- Back button -->
+    <div class="flex items-center space-x-2 mb-4">
+      <button
+        class="flex items-center text-blue-600 hover:text-blue-800"
+        @click="showDetail = false"
+      >
+        <i class="fas fa-arrow-left mr-1"></i> Back to Individuals
+      </button>
+    </div>
+
+    <!-- Individual detail container loaded by HTMX -->
+    <div id="individual-detail-container"></div>
+  </div>
+
+  <!-- List View - Hidden when detail is shown -->
+  <div x-show="!showDetail">{% include "lab/individuals/search.html" %}</div>
+</div>
