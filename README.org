@@ -10,6 +10,6 @@ source venv/bin/activate
 pip install -r requirements.txt
 python manage.py makemigrations
 python manage.py migrate --run-syncdb
-python manage.py loaddata test_lab_data.json
+python manage.py loaddata lab_test_data.json
 python manage.py createsuperuser
 #+end_src
