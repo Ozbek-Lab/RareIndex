@@ -1,77 +1,100 @@
+from django.apps import apps
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required, permission_required
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.contenttypes.models import ContentType
-from . import models, forms
+from .models import (
+    Individual,
+    Sample,
+    Test,
+    SampleType,
+    Status,
+    Task,
+    Note,
+    Family,
+    SampleTest,
+)
+from .forms import (
+    IndividualForm,
+    SampleForm,
+    TestForm,
+    SampleTypeForm,
+    TaskForm,
+    NoteForm,
+)
 from django.db.models import Q
+from django.core.paginator import Paginator
 
 
 @login_required
-def app(request, page=None):
+def app(request, page=None, context=None):
     """Main SPA entry point"""
-    context = {}
 
     if page == "individuals":
-        individuals = models.Individual.objects.all()
-        context["individuals"] = individuals
-        context["initial_view"] = "individuals/list.html"
+        context["initial_view"] = "individuals/index.html"
     elif page == "samples":
-        samples = models.Sample.objects.all()
-        context["samples"] = samples
         context["initial_view"] = "samples/list.html"
     elif page == "tests":
-        tests = models.Test.objects.all()
-        context["tests"] = tests
         context["initial_view"] = "tests/list.html"
     elif page == "sample_types":
-        sample_types = models.SampleType.objects.all()
-        context["sample_types"] = sample_types
         context["initial_view"] = "sample_types/list.html"
 
-    return TemplateResponse(request, "lab/app.html", context)
+    return render(request, "lab/app.html", context)
 
 
 @login_required
-def individual_list(request):
-    individuals = models.Individual.objects.all()
-    template = "lab/individuals/list.html"
+def individual_index(request):
+    individuals = Individual.objects.all()
+
+    # Get all the necessary data for filters
+    context = {
+        "individuals": individuals,
+        "individual_statuses": Status.objects.filter(
+            content_type=ContentType.objects.get_for_model(Individual)
+        ),
+        "families": Family.objects.all(),
+        "tests": Test.objects.all(),
+        "test_statuses": Status.objects.filter(
+            content_type=ContentType.objects.get_for_model(SampleTest)
+        ),
+    }
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, template, {"individuals": individuals})
+        return TemplateResponse(request, "lab/individuals/index.html", context)
 
-    # Otherwise, redirect to the main app with individuals view
-    return app(request, page="individuals")
+    # For regular requests, return via the main app
+    return app(request, page="individuals", context=context)
 
 
 @login_required
 @permission_required("lab.add_individual")
 def individual_create(request):
     if request.method == "POST":
-        form = forms.IndividualForm(request.POST)
+        form = IndividualForm(request.POST)
         if form.is_valid():
             individual = form.save(commit=False)
             individual.created_by = request.user
             individual.save()
-            individuals = models.Individual.objects.all()
+            individuals = Individual.objects.all()
             return TemplateResponse(
                 request, "lab/individuals/list.html", {"individuals": individuals}
             )
     return TemplateResponse(
         request,
         "lab/individuals/card_edit.html",
-        {"individual": None, "families": models.Family.objects.all()},
+        {"individual": None, "families": Family.objects.all()},
     )
 
 
 @login_required
 @permission_required("lab.change_individual")
 def individual_edit(request, pk):
-    individual = get_object_or_404(models.Individual, pk=pk)
+    individual = get_object_or_404(Individual, pk=pk)
     if request.method == "POST":
-        form = forms.IndividualForm(request.POST, instance=individual)
+        form = IndividualForm(request.POST, instance=individual)
         if form.is_valid():
             individual = form.save()
             return TemplateResponse(
@@ -80,7 +103,7 @@ def individual_edit(request, pk):
     return TemplateResponse(
         request,
         "lab/individuals/card_edit.html",
-        {"individual": individual, "families": models.Family.objects.all()},
+        {"individual": individual, "families": Family.objects.all()},
     )
 
 
@@ -88,24 +111,103 @@ def individual_edit(request, pk):
 @permission_required("lab.delete_individual")
 @require_http_methods(["DELETE"])
 def individual_delete(request, pk):
-    individual = get_object_or_404(models.Individual, pk=pk)
+    individual = get_object_or_404(Individual, pk=pk)
     individual.delete()
     return HttpResponse(status=200)
 
 
 @login_required
 def individual_search(request):
-    query = request.GET.get("q", "")
-    individuals = models.Individual.objects.filter(lab_id__icontains=query)
-    # Return the same list template but only the grid will be swapped due to hx-select
+    queryset = Individual.objects.all()
+
+    # Status filter
+    status_id = request.POST.get("status")
+    if status_id:
+        queryset = queryset.filter(status_id=status_id)
+
+    # Sample Test filter
+    test_id = request.POST.get("test")
+    if test_id:
+        queryset = queryset.filter(samples__sampletest__test_id=test_id)
+
+    # Sample Test Status filter
+    test_status_id = request.POST.get("test_status")
+    if test_status_id:
+        queryset = queryset.filter(samples__sampletest__status_id=test_status_id)
+
+    # Lab ID filter
+    lab_id = request.POST.get("lab_id")
+    if lab_id:
+        queryset = queryset.filter(lab_id__icontains=lab_id)
+
+    # Family ID filter
+    family_id = request.POST.get("family")
+    if family_id:
+        queryset = queryset.filter(family_id=family_id)
+
+    # ICD11 code filter
+    icd11_code = request.POST.get("icd11_code")
+    if icd11_code:
+        queryset = queryset.filter(icd11_code__icontains=icd11_code)
+
+    # HPO codes filter
+    hpo_codes = request.POST.get("hpo_codes")
+    if hpo_codes:
+        queryset = queryset.filter(hpo_codes__icontains=hpo_codes)
+
+    # Remove duplicates and order results
+    queryset = queryset.distinct().order_by("lab_id")
+
+    # Get total count before pagination
+    total_count = queryset.count()
+
+    # Paginate results
+    page = request.POST.get("page", 1)
+    paginator = Paginator(queryset, 12)  # 12 items per page
+    individuals = paginator.get_page(page)
+
     return TemplateResponse(
-        request, "lab/individuals/list.html", {"individuals": individuals}
+        request,
+        "lab/individuals/list.html",
+        {
+            "individuals": individuals,
+            "total_count": total_count,
+            "filters": {  # Pass filters for subsequent page loads
+                "status": status_id,
+                "test": request.POST.get("test"),
+                "test_status": request.POST.get("test_status"),
+                "lab_id": request.POST.get("lab_id"),
+                "family": request.POST.get("family"),
+                "icd11_code": request.POST.get("icd11_code"),
+                "hpo_codes": request.POST.get("hpo_codes"),
+            },
+        },
     )
 
 
 @login_required
+def individual_detail(request, pk):
+    """Detailed view for an individual with all related data"""
+    individual = get_object_or_404(Individual, pk=pk)
+
+    # Prefetch related data for efficiency
+    individual.samples.prefetch_related("tests", "sample_type", "status")
+    individual.tasks.prefetch_related("assigned_to", "completed_by", "target_status")
+    individual.notes.prefetch_related("user")
+    individual.status_logs.prefetch_related(
+        "changed_by", "previous_status", "new_status"
+    )
+
+    context = {
+        "individual": individual,
+    }
+
+    return TemplateResponse(request, "lab/individuals/detail.html", context)
+
+
+@login_required
 def sample_list(request):
-    samples = models.Sample.objects.all()
+    samples = Sample.objects.all()
     template = "lab/samples/list.html"
 
     # If it's an HTMX request, return just the list content
@@ -120,7 +222,7 @@ def sample_list(request):
 @permission_required("lab.add_sample")
 def sample_create(request):
     if request.method == "POST":
-        form = forms.SampleForm(request.POST)
+        form = SampleForm(request.POST)
         if form.is_valid():
             sample = form.save(commit=False)
             sample.created_by = request.user
@@ -139,10 +241,10 @@ def sample_create(request):
         "lab/samples/card_edit.html",
         {
             "sample": None,
-            "individuals": models.Individual.objects.all(),
-            "sample_types": models.SampleType.objects.all(),
+            "individuals": Individual.objects.all(),
+            "sample_types": SampleType.objects.all(),
             "status_choices": [
-                (status.id, status.name) for status in models.Status.objects.all()
+                (status.id, status.name) for status in Status.objects.all()
             ],
         },
     )
@@ -151,9 +253,9 @@ def sample_create(request):
 @login_required
 @permission_required("lab.change_sample")
 def sample_edit(request, pk):
-    sample = get_object_or_404(models.Sample, pk=pk)
+    sample = get_object_or_404(Sample, pk=pk)
     if request.method == "POST":
-        form = forms.SampleForm(request.POST, instance=sample)
+        form = SampleForm(request.POST, instance=sample)
         if form.is_valid():
             sample = form.save()
             return TemplateResponse(
@@ -161,16 +263,16 @@ def sample_edit(request, pk):
             )
 
     # Get appropriate statuses for Samples
-    sample_content_type = ContentType.objects.get_for_model(models.Sample)
-    sample_statuses = models.Status.objects.filter(content_type=sample_content_type)
+    sample_content_type = ContentType.objects.get_for_model(Sample)
+    sample_statuses = Status.objects.filter(content_type=sample_content_type)
 
     return TemplateResponse(
         request,
         "lab/samples/card_edit.html",
         {
             "sample": sample,
-            "individuals": models.Individual.objects.all(),
-            "sample_types": models.SampleType.objects.all(),
+            "individuals": Individual.objects.all(),
+            "sample_types": SampleType.objects.all(),
             "statuses": sample_statuses,  # Use the statuses from the database
         },
     )
@@ -180,7 +282,7 @@ def sample_edit(request, pk):
 @permission_required("lab.delete_sample")
 @require_http_methods(["DELETE"])
 def sample_delete(request, pk):
-    sample = get_object_or_404(models.Sample, pk=pk)
+    sample = get_object_or_404(Sample, pk=pk)
     sample.delete()
     return HttpResponse(status=200)
 
@@ -188,28 +290,28 @@ def sample_delete(request, pk):
 @login_required
 def sample_search(request):
     query = request.GET.get("q", "")
-    samples = models.Sample.objects.filter(individual__lab_id__icontains=query)
+    samples = Sample.objects.filter(individual__lab_id__icontains=query)
     return TemplateResponse(request, "lab/samples/list.html", {"samples": samples})
 
 
 @login_required
 def sample_detail(request, pk):
-    sample = get_object_or_404(models.Sample, pk=pk)
+    sample = get_object_or_404(Sample, pk=pk)
     return TemplateResponse(request, "lab/sample/detail.html", {"sample": sample})
 
 
 @login_required
 def sample_status_update(request, pk):
-    sample = get_object_or_404(models.Sample, pk=pk)
+    sample = get_object_or_404(Sample, pk=pk)
     if request.method == "POST":
         status_id = request.POST.get("status")
 
         try:
             # Get the status object from the database
-            new_status = models.Status.objects.get(pk=status_id)
+            new_status = Status.objects.get(pk=status_id)
 
             # Verify status is appropriate for samples
-            sample_content_type = ContentType.objects.get_for_model(models.Sample)
+            sample_content_type = ContentType.objects.get_for_model(Sample)
             if new_status.content_type == sample_content_type:
                 # Use the StatusMixin method to properly update status with logging
                 sample.update_status(
@@ -222,7 +324,7 @@ def sample_status_update(request, pk):
                     {"status": new_status},
                 )
 
-        except models.Status.DoesNotExist:
+        except Status.DoesNotExist:
             pass  # Invalid status ID
 
     return HttpResponse(status=400)
@@ -240,10 +342,10 @@ def note_list(request, model, pk):
 
 @login_required
 def note_form(request, model=None, pk=None, note_pk=None):
-    note = None if note_pk is None else get_object_or_404(models.Note, pk=note_pk)
+    note = None if note_pk is None else get_object_or_404(Note, pk=note_pk)
 
     if request.method == "POST":
-        form = forms.NoteForm(request.POST, instance=note)
+        form = NoteForm(request.POST, instance=note)
         if form.is_valid():
             note = form.save(commit=False)
             if model and pk:
@@ -256,7 +358,7 @@ def note_form(request, model=None, pk=None, note_pk=None):
                 request, "lab/notes/partials/note.html", {"note": note}
             )
     else:
-        form = forms.NoteForm(instance=note)
+        form = NoteForm(instance=note)
 
     return TemplateResponse(
         request, "lab/notes/partials/note_form.html", {"form": form, "note": note}
@@ -266,14 +368,14 @@ def note_form(request, model=None, pk=None, note_pk=None):
 @login_required
 @require_http_methods(["DELETE"])
 def note_delete(request, pk):
-    note = get_object_or_404(models.Note, pk=pk)
+    note = get_object_or_404(Note, pk=pk)
     note.delete()
     return HttpResponse(status=200)
 
 
 @login_required
 def test_list(request):
-    tests = models.Test.objects.all()
+    tests = Test.objects.all()
     template = "lab/tests/list.html"
 
     # If it's an HTMX request, return just the list content
@@ -288,12 +390,12 @@ def test_list(request):
 @permission_required("lab.add_test")
 def test_create(request):
     if request.method == "POST":
-        form = forms.TestForm(request.POST)
+        form = TestForm(request.POST)
         if form.is_valid():
             test = form.save(commit=False)
             test.created_by = request.user
             test.save()
-            tests = models.Test.objects.all()
+            tests = Test.objects.all()
             return TemplateResponse(request, "lab/tests/list.html", {"tests": tests})
     # For GET requests, return just the form
     return TemplateResponse(
@@ -306,9 +408,9 @@ def test_create(request):
 @login_required
 @permission_required("lab.change_test")
 def test_edit(request, pk):
-    test = get_object_or_404(models.Test, pk=pk)
+    test = get_object_or_404(Test, pk=pk)
     if request.method == "POST":
-        form = forms.TestForm(request.POST, instance=test)
+        form = TestForm(request.POST, instance=test)
         if form.is_valid():
             test = form.save()
             return TemplateResponse(request, "lab/tests/card.html", {"test": test})
@@ -319,7 +421,7 @@ def test_edit(request, pk):
 @permission_required("lab.delete_test")
 @require_http_methods(["DELETE"])
 def test_delete(request, pk):
-    test = get_object_or_404(models.Test, pk=pk)
+    test = get_object_or_404(Test, pk=pk)
     test.delete()
     return HttpResponse(status=200)
 
@@ -327,14 +429,14 @@ def test_delete(request, pk):
 @login_required
 def test_search(request):
     query = request.GET.get("q", "")
-    tests = models.Test.objects.filter(name__icontains=query)
+    tests = Test.objects.filter(name__icontains=query)
     # Return the same list template but only the grid will be swapped due to hx-select
     return TemplateResponse(request, "lab/tests/list.html", {"tests": tests})
 
 
 @login_required
 def sample_type_list(request):
-    sample_types = models.SampleType.objects.all()
+    sample_types = SampleType.objects.all()
     template = "lab/sample_types/list.html"
 
     # If it's an HTMX request, return just the list content
@@ -349,12 +451,12 @@ def sample_type_list(request):
 @permission_required("lab.add_sampletype")
 def sample_type_create(request):
     if request.method == "POST":
-        form = forms.SampleTypeForm(request.POST)
+        form = SampleTypeForm(request.POST)
         if form.is_valid():
             sample_type = form.save(commit=False)
             sample_type.created_by = request.user
             sample_type.save()
-            sample_types = models.SampleType.objects.all()
+            sample_types = SampleType.objects.all()
             return TemplateResponse(
                 request, "lab/sample_types/list.html", {"sample_types": sample_types}
             )
@@ -368,9 +470,9 @@ def sample_type_create(request):
 @login_required
 @permission_required("lab.change_sampletype")
 def sample_type_edit(request, pk):
-    sample_type = get_object_or_404(models.SampleType, pk=pk)
+    sample_type = get_object_or_404(SampleType, pk=pk)
     if request.method == "POST":
-        form = forms.SampleTypeForm(request.POST, instance=sample_type)
+        form = SampleTypeForm(request.POST, instance=sample_type)
         if form.is_valid():
             sample_type = form.save()
             return TemplateResponse(
@@ -385,7 +487,7 @@ def sample_type_edit(request, pk):
 @permission_required("lab.delete_sampletype")
 @require_http_methods(["DELETE"])
 def sample_type_delete(request, pk):
-    sample_type = get_object_or_404(models.SampleType, pk=pk)
+    sample_type = get_object_or_404(SampleType, pk=pk)
     sample_type.delete()
     return HttpResponse(status=200)
 
@@ -393,7 +495,7 @@ def sample_type_delete(request, pk):
 @login_required
 def sample_type_search(request):
     query = request.GET.get("q", "")
-    sample_types = models.SampleType.objects.filter(name__icontains=query)
+    sample_types = SampleType.objects.filter(name__icontains=query)
     # Return the same list template but only the grid will be swapped due to hx-select
     return TemplateResponse(
         request, "lab/sample_types/list.html", {"sample_types": sample_types}
@@ -407,7 +509,7 @@ def task_create(request, model, pk):
     content_object = get_object_or_404(content_type.model_class(), pk=pk)
 
     if request.method == "POST":
-        form = forms.TaskForm(request.POST, content_object=content_object)
+        form = TaskForm(request.POST, content_object=content_object)
         if form.is_valid():
             task = form.save(commit=False)
             task.content_type = content_type
@@ -417,7 +519,7 @@ def task_create(request, model, pk):
 
             return TemplateResponse(request, "lab/tasks/task_card.html", {"task": task})
     else:
-        form = forms.TaskForm(content_object=content_object)
+        form = TaskForm(content_object=content_object)
 
     return TemplateResponse(
         request,
@@ -429,7 +531,7 @@ def task_create(request, model, pk):
 @login_required
 def task_complete(request, pk):
     """Mark a task as complete and update the related object's status"""
-    task = get_object_or_404(models.Task, pk=pk)
+    task = get_object_or_404(Task, pk=pk)
 
     if request.method == "POST":
         notes = request.POST.get("notes", "")
@@ -444,7 +546,7 @@ def task_complete(request, pk):
 @login_required
 def my_tasks(request):
     """View for a user to see their assigned tasks"""
-    tasks = models.Task.objects.filter(
+    tasks = Task.objects.filter(
         assigned_to=request.user, is_completed=False
     ).select_related("content_type", "assigned_to", "target_status")
 
@@ -457,7 +559,7 @@ def task_search(request):
     query = request.GET.get("q", "")
 
     # Base queryset - filter by the search query
-    tasks = models.Task.objects.filter(
+    tasks = Task.objects.filter(
         Q(title__icontains=query) | Q(description__icontains=query)
     )
 
@@ -473,3 +575,108 @@ def task_search(request):
     return TemplateResponse(
         request, "lab/tasks/my_tasks.html", {"tasks": tasks, "query": query}
     )
+
+
+@login_required
+def note_create(request):
+    if request.method == "POST":
+        content = request.POST.get("content")
+        content_type_str = request.POST.get("content_type")
+        object_id = request.POST.get("object_id")
+
+        # Get the content type
+        model = apps.get_model("lab", content_type_str.capitalize())
+        content_type = ContentType.objects.get_for_model(model)
+
+        # Get the object
+        obj = model.objects.get(id=object_id)
+
+        # Create the note
+        Note.objects.create(
+            content=content,
+            user=request.user,
+            content_type=content_type,
+            object_id=object_id,
+        )
+
+        response = render(
+            request,
+            "lab/notes/list.html",
+            {
+                "object": obj,
+                "content_type": content_type_str,
+                "user": request.user,
+            },
+        )
+        response["HX-Trigger"] = f"noteCountUpdate-{content_type_str}-{object_id}"
+        return response
+
+
+@login_required
+def note_delete(request, pk):
+    if request.method == "DELETE":
+        note = get_object_or_404(Note, id=pk)
+
+        # Get the object and content type before deleting the note
+        obj = note.content_object
+        content_type_str = note.content_type.model
+        object_id = note.object_id
+
+        # Only allow the note creator or staff to delete
+        if request.user == note.user or request.user.is_staff:
+            note.delete()
+
+            response = render(
+                request,
+                "lab/notes/list.html",
+                {
+                    "object": obj,
+                    "content_type": content_type_str,
+                    "user": request.user,
+                },
+            )
+            response["HX-Trigger"] = f"noteCountUpdate-{content_type_str}-{object_id}"
+            return response
+
+        return HttpResponseForbidden()
+
+
+@login_required
+def note_count(request):
+    if request.method == "GET":
+        object_id = request.GET.get("object_id")
+        content_type_str = request.GET.get("content_type")
+
+        # Get the content type and object
+        model = apps.get_model("lab", content_type_str.capitalize())
+        obj = model.objects.get(id=object_id)
+
+        return render(
+            request,
+            "lab/notes/summary.html",
+            context={
+                "object": obj,
+                "content_type": content_type_str,
+            },
+        )
+
+
+@login_required
+def note_list(request):
+    if request.method == "POST":
+        object_id = request.POST.get("object_id")
+        content_type_str = request.POST.get("content_type")
+
+        # Get the content type and object
+        model = apps.get_model("lab", content_type_str.capitalize())
+        obj = model.objects.get(id=object_id)
+
+        return render(
+            request,
+            "lab/notes/list.html",
+            context={
+                "object": obj,
+                "content_type": content_type_str,
+                "user": request.user,
+            },
+        )

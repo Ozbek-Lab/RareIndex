@@ -1,7 +1,5 @@
-# models.py
 from django.db import models
 from django.contrib.auth.models import User
-from django.core.validators import RegexValidator
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 
@@ -230,6 +228,20 @@ class Individual(StatusMixin, models.Model):
             "tc_identity": self.tc_identity,
             "birth_date": self.birth_date,
         }
+
+    def get_all_tests(self):
+        """Get all unique tests associated with this individual's samples"""
+
+        # Get all sample IDs for this individual
+        sample_ids = self.samples.values_list("id", flat=True)
+
+        test_ids = (
+            SampleTest.objects.filter(sample_id__in=sample_ids)
+            .values_list("test_id", flat=True)
+            .distinct()
+        )
+
+        return Test.objects.filter(id__in=test_ids)
 
     def __str__(self):
         return f"{self.lab_id}"

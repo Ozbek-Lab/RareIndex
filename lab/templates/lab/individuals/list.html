@@ -1,36 +1,43 @@
-<div id="individual-list" class="space-y-6">
-    <div class="flex justify-between items-center">
-        <h2 class="text-2xl font-bold">Individuals</h2>
-        {% if perms.lab.add_individual %}
-        <div id="individual-add-button">
-            <button 
-                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center"
-                hx-get="{% url 'lab:individual_create' %}"
-                hx-target="#individual-add-button"
-                hx-swap="outerHTML"
-            >
-                <i class="fas fa-plus mr-2"></i> Add Individual
-            </button>
+<!-- Show result count on first page -->
+{% if individuals.number == 1 %}
+<div class="mb-4">
+    <span class="px-3 py-1 text-sm rounded-full {% if total_count > 0 %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+        Found {{ total_count }} individual{{ total_count|pluralize }}
+    </span>
+</div>
+{% endif %}
+
+<!-- Grid of individual cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for individual in individuals %}
+        <div {% if forloop.last and individuals.has_next %}
+             hx-post="{% url 'lab:individual_search' %}"
+             hx-trigger="intersect once"
+             hx-swap="afterend"
+             hx-target="this"
+             hx-vals='{"page": "{{ individuals.next_page_number }}",
+                      "status": "{{ filters.status }}",
+                      "test": "{{ filters.test }}",
+                      "test_status": "{{ filters.test_status }}",
+                      "lab_id": "{{ filters.lab_id }}",
+                      "family": "{{ filters.family }}",
+                      "icd11_code": "{{ filters.icd11_code }}",
+                      "hpo_codes": "{{ filters.hpo_codes }}"}'
+             {% endif %}>
+            {% include "lab/individuals/card.html" with individual=individual %}
         </div>
-        {% endif %}
-    </div>
-    
-    <div class="mb-6">
-        <input 
-            type="search" 
-            name="q"
-            placeholder="Search individuals..."
-            class="w-full px-4 py-2 border rounded"
-            hx-get="{% url 'lab:individual_search' %}"
-            hx-trigger="keyup changed delay:500ms"
-            hx-target="#individual-grid"
-            hx-select="#individual-grid"
-        >
-    </div>
-    
-    <div id="individual-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {% for individual in individuals %}
-            {% include "lab/individuals/card.html" %}
-        {% endfor %}
-    </div>
-</div> 
+    {% empty %}
+        <div class="col-span-full text-center py-8 text-gray-500">
+            No individuals found matching your criteria
+        </div>
+    {% endfor %}
+</div>
+
+<!-- End of results message -->
+{% if not individuals.has_next and total_count > 0 %}
+<div class="mt-4 text-center">
+    <span class="px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-800">
+        No more individuals to load
+    </span>
+</div>
+{% endif %}

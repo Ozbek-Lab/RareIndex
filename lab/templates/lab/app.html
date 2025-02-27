@@ -9,7 +9,7 @@
       <div class="space-y-2">
         <button
           class="block px-4 py-2 rounded hover:bg-gray-100 transition-colors w-full text-left flex items-center"
-          hx-get="{% url 'lab:individual_list' %}"
+          hx-get="{% url 'lab:individual_index' %}"
           hx-target="#main-content"
           hx-push-url="true"
         >
@@ -59,18 +59,4 @@
     </main>
   </div>
 </div>
-
-<!-- HTMX CSRF Token Setup -->
-<script>
-  document.body.addEventListener("htmx:configRequest", (event) => {
-    const csrfToken = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("csrftoken="))
-      ?.split("=")[1];
-
-    if (csrfToken) {
-      event.detail.headers["X-CSRFToken"] = csrfToken;
-    }
-  });
-</script>
 {% endblock %}

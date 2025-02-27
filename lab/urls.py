@@ -6,12 +6,13 @@ app_name = "lab"
 urlpatterns = [
     # Main SPA routes
     path("", views.app, name="app"),
-    path("individuals/", views.individual_list, name="individual_list"),
+    path("individuals/", views.individual_index, name="individual_index"),
     path("samples/", views.sample_list, name="sample_list"),
     path("tests/", views.test_list, name="test_list"),
     path("sample-types/", views.sample_type_list, name="sample_type_list"),
     # HTMX endpoints
     path("individuals/create/", views.individual_create, name="individual_create"),
+    path("individuals/<int:pk>/", views.individual_detail, name="individual_detail"),
     path("individuals/<int:pk>/edit/", views.individual_edit, name="individual_edit"),
     path(
         "individuals/<int:pk>/delete/",
@@ -45,4 +46,9 @@ urlpatterns = [
     path("tasks/create/<str:model>/<int:pk>/", views.task_create, name="task_create"),
     path("tasks/<int:pk>/complete/", views.task_complete, name="task_complete"),
     path("tasks/search/", views.task_search, name="task_search"),
+    # Notes
+    path("notes/", views.note_list, name="note_list"),
+    path("note_count/", views.note_count, name="note_count"),
+    path("note/create/", views.note_create, name="note_create"),
+    path("note/<int:pk>/delete/", views.note_delete, name="note_delete"),
 ]
