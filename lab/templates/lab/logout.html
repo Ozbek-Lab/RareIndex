@@ -1,0 +1,18 @@
+<!-- logout_button.html - Include this in the user section of the sidebar -->
+<form
+  hx-post="{% url 'account_logout' %}"
+  hx-target="body"
+  hx-swap="outerHTML"
+  hx-confirm="Are you sure you want to log out?"
+>
+  {% csrf_token %}
+  <button
+    type="submit"
+    class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+  >
+    <i
+      class="fas fa-sign-out-alt text-gray-400 group-hover:text-red-500 w-5 h-5 mr-3 transition-colors"
+    ></i>
+    <span>Sign out</span>
+  </button>
+</form>

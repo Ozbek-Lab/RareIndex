@@ -28,10 +28,14 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 
 
-@login_required
 def app(request, page=None, context=None):
-    """Main SPA entry point"""
+    """Main SPA entry point that handles both authenticated and unauthenticated states"""
 
+    # Initialize context if not provided
+    if context is None:
+        context = {}
+
+    # Set initial view if provided
     if page == "individuals":
         context["initial_view"] = "individuals/index.html"
     elif page == "samples":
@@ -41,6 +45,7 @@ def app(request, page=None, context=None):
     elif page == "sample_types":
         context["initial_view"] = "sample_types/list.html"
 
+    # If user is not authenticated, app.html will automatically show the login page
     return render(request, "lab/app.html", context)
 
 
