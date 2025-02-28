@@ -65,3 +65,30 @@ class FamilyAdmin(admin.ModelAdmin):
     list_display = ['family_id', 'created_by', 'created_at', 'updated_at']
     search_fields = ['family_id', 'description']
     date_hierarchy = 'created_at'
+
+@admin.register(models.AnalysisType)
+class AnalysisTypeAdmin(admin.ModelAdmin):
+    list_display = ('name', 'version', 'created_by', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('name', 'description', 'version')
+    filter_horizontal = ('parent_types',)
+    readonly_fields = ('created_at', 'created_by')
+
+    def save_model(self, request, obj, form, change):
+        if not change:  # Only set created_by on creation
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(models.SampleTestAnalysis)
+class SampleTestAnalysisAdmin(admin.ModelAdmin):
+    list_display = ('sample_test', 'type', 'performed_date', 'performed_by', 'status')
+    list_filter = ('performed_date', 'status', 'created_at')
+    search_fields = ('sample_test__sample__individual__lab_id', 'type__name')
+    readonly_fields = ('created_at', 'created_by')
+    date_hierarchy = 'performed_date'
+
+    def save_model(self, request, obj, form, change):
+        if not change:  # Only set created_by on creation
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)

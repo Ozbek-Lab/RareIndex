@@ -352,3 +352,62 @@ class SampleTest(StatusMixin, models.Model):
 
     def __str__(self):
         return f"{self.test.name} - {self.performed_date}"
+
+
+class AnalysisType(models.Model):
+    """Model for defining types of analyses that can be performed"""
+    
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    version = models.CharField(max_length=50)
+    parent_types = models.ManyToManyField(
+        'self',
+        blank=True,
+        symmetrical=False,
+        related_name='subtypes'
+    )
+    source_url = models.URLField(
+        max_length=500, 
+        blank=True, 
+        help_text="URL to the analysis source code or documentation"
+    )
+    results_url = models.URLField(
+        max_length=500,
+        blank=True,
+        help_text="URL to view analysis results"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User, 
+        on_delete=models.PROTECT, 
+        related_name="created_analysis_types"
+    )
+
+    class Meta:
+        ordering = ['name', '-version']
+
+    def __str__(self):
+        return f"{self.name} v{self.version}"
+
+
+class SampleTestAnalysis(StatusMixin, models.Model):
+    """Model for tracking analyses performed on sample tests"""
+    
+    sample_test = models.ForeignKey(SampleTest, on_delete=models.PROTECT, related_name='analyses')
+    performed_date = models.DateField()
+    performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    type = models.ForeignKey(AnalysisType, on_delete=models.PROTECT)
+    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    status_logs = GenericRelation(StatusLog)
+    notes = GenericRelation("Note")
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="created_analyses"
+    )
+
+    class Meta:
+        verbose_name_plural = "sample test analyses"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.sample_test} - {self.type} - {self.performed_date}"
