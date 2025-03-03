@@ -1,9 +1,30 @@
 # forms.py
 from django import forms
-from .models import Task, StatusLog, Individual, Sample, Note, Test, SampleType, Status
+from .models import (
+    Task,
+    StatusLog,
+    Individual,
+    Sample,
+    Note,
+    Test,
+    SampleType,
+    Status,
+    Project,
+)
 from django.contrib.contenttypes.models import ContentType
 
 
+class ProjectForm(forms.ModelForm):
+    class Meta:
+        model = Project
+        fields = ["name", "description", "due_date", "priority"]
+        widgets = {
+            "due_date": forms.DateInput(attrs={"type": "date"}),
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+# Update the TaskForm to include project field
 class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
@@ -14,6 +35,7 @@ class TaskForm(forms.ModelForm):
             "due_date",
             "priority",
             "target_status",
+            "project",  # Add this field
         ]
         widgets = {
             "due_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
@@ -39,6 +61,9 @@ class TaskForm(forms.ModelForm):
             self.fields["target_status"].queryset = Status.objects.filter(
                 id__in=used_status_ids
             )
+
+        # Always sort projects by name
+        self.fields["project"].queryset = Project.objects.all().order_by("name")
 
 
 class IndividualForm(forms.ModelForm):
