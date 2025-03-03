@@ -1,5 +1,6 @@
-<!-- Search Container with optimized styling -->
+<!-- Updated version of lab/templates/lab/individuals/search.html with Font Awesome icons -->
 
+<!-- Search Container with optimized styling -->
 <div
   class="bg-white p-4 rounded-xl shadow-sm border border-gray-100"
   x-data="{ showAdvanced: false }"
@@ -8,19 +9,7 @@
     class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100"
   >
     <div class="flex items-center space-x-3">
-      <svg
-        class="w-5 h-5 text-indigo-500"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-        />
-      </svg>
+      <i class="fas fa-search w-5 h-5 text-indigo-500"></i>
       <div>
         <h2 class="text-lg font-semibold text-gray-800">Individual Search</h2>
         <p class="text-xs text-gray-500">
@@ -33,55 +22,27 @@
   <form
     hx-post="{% url 'lab:individual_search' %}"
     hx-target="next div"
-    hx-trigger="change delay:500ms, search delay:500ms"
+    hx-trigger="change delay:500ms, search delay:500ms, multiselect-change from:body"
     class="space-y-4"
   >
     <!-- Basic Search Section -->
     <div class="bg-gray-50 p-3 rounded-lg">
       <div class="flex items-center mb-3">
-        <svg
-          class="w-4 h-4 mr-2 text-indigo-500"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 6h16M4 12h16M4 18h7"
-          />
-        </svg>
+        <i class="fas fa-list w-4 h-4 mr-2 text-indigo-500"></i>
         <h3 class="text-sm font-medium text-gray-700">Basic Search</h3>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        <!-- Lab ID Search -->
+        <!-- Lab ID Search - Using Multi-Select Component -->
         <div class="relative">
           <label
             class="text-xs font-medium text-gray-600 mb-1 flex items-center"
           >
-            <svg
-              class="w-3 h-3 mr-1 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"
-              />
-            </svg>
+            <i class="fas fa-id-card w-3 h-3 mr-1 text-gray-400"></i>
             Lab ID
           </label>
-          <input
-            type="text"
-            name="lab_id"
-            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm"
-            placeholder="Enter Lab ID"
-            hx-trigger="keyup delay:500ms"
-          />
+
+          <!-- Multi-Select Component for Lab ID -->
+          {% include "lab/components/multi_select.html" with component_id="lab-id-select" name="lab_id" model="Individual" field="lab_id" placeholder="Select Individual..." result_container_id="lab-id-results" loading_indicator_id="lab-id-loading" allow_multiple=True %}
         </div>
 
         <!-- Status Filter -->
@@ -89,19 +50,7 @@
           <label
             class="text-xs font-medium text-gray-600 mb-1 flex items-center"
           >
-            <svg
-              class="w-3 h-3 mr-1 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
+            <i class="fas fa-check-circle w-3 h-3 mr-1 text-gray-400"></i>
             Status
           </label>
           <select
@@ -116,68 +65,20 @@
           <div
             class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none"
           >
-            <svg
-              class="w-4 h-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
+            <i class="fas fa-chevron-down w-4 h-4 text-gray-400"></i>
           </div>
         </div>
 
-        <!-- Family Filter -->
+        <!-- Family Filter - Also Using Multi-Select -->
         <div class="relative">
           <label
             class="text-xs font-medium text-gray-600 mb-1 flex items-center"
           >
-            <svg
-              class="w-3 h-3 mr-1 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
+            <i class="fas fa-users w-3 h-3 mr-1 text-gray-400"></i>
             Family
           </label>
-          <select
-            name="family"
-            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm appearance-none pr-8"
-          >
-            <option value="">All Families</option>
-            {% for family in families %}
-              <option value="{{ family.id }}">{{ family.family_id }}</option>
-            {% endfor %}
-          </select>
-          <div
-            class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none"
-          >
-            <svg
-              class="w-4 h-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </div>
+
+          {% include "lab/components/multi_select.html" with component_id="family-select" name="family" model="Family" field="family_id" placeholder="Select Family..." result_container_id="family-results" loading_indicator_id="family-loading" %}
         </div>
       </div>
     </div>
@@ -188,20 +89,10 @@
       @click="showAdvanced = !showAdvanced"
       class="flex items-center text-sm text-gray-600 hover:text-indigo-600 focus:outline-none group"
     >
-      <svg
-        class="w-4 h-4 mr-1 transition-transform duration-200"
+      <i
+        class="fas fa-chevron-down w-4 h-4 mr-1 transition-transform duration-200"
         :class="{ 'rotate-180': showAdvanced }"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M19 9l-7 7-7-7"
-        />
-      </svg>
+      ></i>
       <span class="group-hover:underline">Advanced Search Options</span>
     </button>
 
@@ -217,68 +108,20 @@
       class="bg-gray-50 p-3 rounded-lg"
     >
       <div class="flex items-center mb-3">
-        <svg
-          class="w-4 h-4 mr-2 text-indigo-500"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-          />
-        </svg>
+        <i class="fas fa-sliders-h w-4 h-4 mr-2 text-indigo-500"></i>
         <h3 class="text-sm font-medium text-gray-700">Advanced Search</h3>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        <!-- Test Filter -->
+        <!-- Test Filter - Using Multi-Select -->
         <div class="relative">
           <label
             class="text-xs font-medium text-gray-600 mb-1 flex items-center"
           >
-            <svg
-              class="w-3 h-3 mr-1 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-              />
-            </svg>
+            <i class="fas fa-flask w-3 h-3 mr-1 text-gray-400"></i>
             Sample Test
           </label>
-          <select
-            name="test"
-            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm appearance-none pr-8"
-          >
-            <option value="">All Tests</option>
-            {% for test in tests %}
-              <option value="{{ test.id }}">{{ test.name }}</option>
-            {% endfor %}
-          </select>
-          <div
-            class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none"
-          >
-            <svg
-              class="w-4 h-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </div>
+
+          {% include "lab/components/multi_select.html" with component_id="test-select" name="test" model="Test" field="name" placeholder="Select Test..." result_container_id="test-results" loading_indicator_id="test-loading" %}
         </div>
 
         <!-- Test Status Filter -->
@@ -286,19 +129,7 @@
           <label
             class="text-xs font-medium text-gray-600 mb-1 flex items-center"
           >
-            <svg
-              class="w-3 h-3 mr-1 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
+            <i class="fas fa-check-circle w-3 h-3 mr-1 text-gray-400"></i>
             Test Status
           </label>
           <select
@@ -313,19 +144,7 @@
           <div
             class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none"
           >
-            <svg
-              class="w-4 h-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
+            <i class="fas fa-chevron-down w-4 h-4 text-gray-400"></i>
           </div>
         </div>
 
@@ -334,19 +153,7 @@
           <label
             class="text-xs font-medium text-gray-600 mb-1 flex items-center"
           >
-            <svg
-              class="w-3 h-3 mr-1 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
+            <i class="fas fa-file-medical w-3 h-3 mr-1 text-gray-400"></i>
             ICD11 Code
           </label>
           <input
@@ -363,19 +170,7 @@
           <label
             class="text-xs font-medium text-gray-600 mb-1 flex items-center"
           >
-            <svg
-              class="w-3 h-3 mr-1 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-              />
-            </svg>
+            <i class="fas fa-tag w-3 h-3 mr-1 text-gray-400"></i>
             HPO Codes
           </label>
           <input
@@ -392,3 +187,18 @@
 </div>
 
 <div>{% include "lab/individuals/list.html" %}</div>
+
+<!-- Add this JavaScript to handle the multi-select change event -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Listen for changes to hidden inputs in multi-select components
+    document
+      .querySelectorAll('[id^="multi-select"] input[type="hidden"]')
+      .forEach((input) => {
+        input.addEventListener("change", function () {
+          // Dispatch a custom event that the form is listening for
+          document.body.dispatchEvent(new CustomEvent("multiselect-change"));
+        });
+      });
+  });
+</script>
