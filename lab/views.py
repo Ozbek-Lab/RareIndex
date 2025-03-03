@@ -51,6 +51,101 @@ def app(request, page=None, context=None):
 
 
 @login_required
+def select_search(request):
+    """
+    Generic search endpoint for select2-like dropdown functionality.
+
+    Parameters:
+    - model: The model name to search (e.g., 'Individual', 'SampleType')
+    - field: The field to search (default is 'name')
+    - search: The search query
+    - page: The page number for pagination (optional)
+
+    Returns:
+    - Rendered HTML with search results
+    """
+    search_query = request.GET.get("search", "").strip()
+    model_name = request.GET.get("model", "")
+    field_name = request.GET.get("field", "name")
+    page = request.GET.get("page", 1)
+
+    # Protect against 'undefined' values coming from JavaScript
+    if search_query == "undefined":
+        search_query = ""
+    if model_name == "undefined":
+        return render(
+            request,
+            "lab/components/search_results.html",
+            {"error": "Invalid model parameter"},
+        )
+    if field_name == "undefined":
+        field_name = "name"  # Default to name field
+
+    try:
+        # Get the model class dynamically
+        model = apps.get_model(app_label="lab", model_name=model_name)
+
+        # Build the query for the specified field
+        filter_kwargs = {}
+        if search_query:
+            filter_kwargs[f"{field_name}__icontains"] = search_query
+            queryset = model.objects.filter(**filter_kwargs)
+        else:
+            queryset = model.objects.all()
+
+        # Customize queryset based on model
+        if model_name == "Individual":
+            # Apply any specific filtering for Individual model
+            queryset = queryset.order_by("lab_id")
+        else:
+            # Default ordering
+            queryset = queryset.order_by(field_name)
+
+        # Apply pagination
+        paginator = Paginator(queryset, 10)  # 10 items per page
+        page_obj = paginator.get_page(page)
+
+        # Format items for the response
+        items = []
+        for item in page_obj:
+            # Handle different models - customize the text display based on model
+            if model_name == "Individual":
+                text = item.lab_id
+                if hasattr(request.user, "has_perm") and request.user.has_perm(
+                    "lab.view_individual_sensitive_data"
+                ):
+                    text = f"{item.lab_id} ({item.full_name})"
+                items.append({"id": item.id, "text": text})
+            elif hasattr(item, "name"):
+                items.append({"id": item.id, "text": item.name})
+            elif model_name == "Family" and hasattr(item, "family_id"):
+                items.append({"id": item.id, "text": item.family_id})
+            else:
+                # Default fallback
+                items.append({"id": item.id, "text": str(item)})
+
+        context = {
+            "items": items,
+            "query": search_query,
+            "paginator": paginator,
+            "page_obj": page_obj,
+        }
+
+        return render(request, "lab/components/search_results.html", context)
+
+    except (LookupError, ValueError, AttributeError) as e:
+        # Return error in development, generic message in production
+        if settings.DEBUG:
+            error_message = str(e)
+        else:
+            error_message = "An error occurred while searching."
+
+        return render(
+            request, "lab/components/search_results.html", {"error": error_message}
+        )
+
+
+@login_required
 def individual_index(request):
     individuals = Individual.objects.all()
 
@@ -122,6 +217,9 @@ def individual_delete(request, pk):
     return HttpResponse(status=200)
 
 
+# Update to individual_search function in lab/views.py
+
+
 @login_required
 def individual_search(request):
     queryset = Individual.objects.all()
@@ -131,25 +229,33 @@ def individual_search(request):
     if status_id:
         queryset = queryset.filter(status_id=status_id)
 
+    # Lab ID filter - now supports multiple IDs
+    lab_ids = request.POST.get("lab_id", "")
+    if lab_ids:
+        # Split comma-separated IDs
+        lab_id_list = lab_ids.split(",")
+        queryset = queryset.filter(id__in=lab_id_list)
+
     # Sample Test filter
     test_id = request.POST.get("test")
     if test_id:
-        queryset = queryset.filter(samples__sampletest__test_id=test_id)
+        # Check if it's a comma-separated list
+        if "," in test_id:
+            test_ids = test_id.split(",")
+            queryset = queryset.filter(samples__sampletest__test_id__in=test_ids)
+        else:
+            queryset = queryset.filter(samples__sampletest__test_id=test_id)
 
     # Sample Test Status filter
     test_status_id = request.POST.get("test_status")
     if test_status_id:
         queryset = queryset.filter(samples__sampletest__status_id=test_status_id)
 
-    # Lab ID filter
-    lab_id = request.POST.get("lab_id")
-    if lab_id:
-        queryset = queryset.filter(lab_id__icontains=lab_id)
-
-    # Family ID filter
-    family_id = request.POST.get("family")
-    if family_id:
-        queryset = queryset.filter(family_id=family_id)
+    # Family ID filter - now supports multiple families
+    family_ids = request.POST.get("family")
+    if family_ids:
+        family_id_list = family_ids.split(",")
+        queryset = queryset.filter(family_id__in=family_id_list)
 
     # ICD11 code filter
     icd11_code = request.POST.get("icd11_code")
@@ -246,6 +352,9 @@ def sample_list(request):
     return app(request, page="samples", context=context)
 
 
+# Update to sample_search function in lab/views.py
+
+
 @login_required
 def sample_search(request):
     """Search and filter samples"""
@@ -261,15 +370,35 @@ def sample_search(request):
     if status_id:
         queryset = queryset.filter(status_id=status_id)
 
-    # Sample Type filter
-    sample_type_id = request.POST.get("sample_type")
-    if sample_type_id:
-        queryset = queryset.filter(sample_type_id=sample_type_id)
+    # Sample Type filter - now supports multiple selection
+    sample_type_ids = request.POST.get("sample_type")
+    if sample_type_ids:
+        # Check if it's a comma-separated list
+        if "," in sample_type_ids:
+            sample_type_id_list = sample_type_ids.split(",")
+            queryset = queryset.filter(sample_type_id__in=sample_type_id_list)
+        else:
+            queryset = queryset.filter(sample_type_id=sample_type_ids)
 
-    # Individual filter
-    individual_id = request.POST.get("individual")
-    if individual_id:
-        queryset = queryset.filter(individual_id=individual_id)
+    # Individual filter - now supports multiple selection
+    individual_ids = request.POST.get("individual")
+    if individual_ids:
+        # Check if it's a comma-separated list
+        if "," in individual_ids:
+            individual_id_list = individual_ids.split(",")
+            queryset = queryset.filter(individual_id__in=individual_id_list)
+        else:
+            queryset = queryset.filter(individual_id=individual_ids)
+
+    # Test filter - added new filter for tests
+    test_ids = request.POST.get("test")
+    if test_ids:
+        # Check if it's a comma-separated list
+        if "," in test_ids:
+            test_id_list = test_ids.split(",")
+            queryset = queryset.filter(tests__id__in=test_id_list)
+        else:
+            queryset = queryset.filter(tests__id=test_ids)
 
     # Date range (receipt date)
     date_from = request.POST.get("date_from")
@@ -299,8 +428,9 @@ def sample_search(request):
             "total_count": total_count,
             "filters": {  # Pass filters for subsequent page loads
                 "status": status_id,
-                "sample_type": sample_type_id,
-                "individual": individual_id,
+                "sample_type": sample_type_ids,
+                "individual": individual_ids,
+                "test": test_ids,
                 "date_from": date_from,
                 "date_to": date_to,
             },

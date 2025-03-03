@@ -1,6 +1,6 @@
 # forms.py
 from django import forms
-from .models import Task, StatusLog, Individual, Sample, Note, Test, SampleType
+from .models import Task, StatusLog, Individual, Sample, Note, Test, SampleType, Status
 from django.contrib.contenttypes.models import ContentType
 
 

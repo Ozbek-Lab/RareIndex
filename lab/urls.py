@@ -4,6 +4,7 @@ from . import views
 app_name = "lab"
 
 urlpatterns = [
+    path("select/search/", views.select_search, name="select_search"),
     # Main SPA routes
     path("", views.app, name="app"),
     path("individuals/", views.individual_index, name="individual_index"),
