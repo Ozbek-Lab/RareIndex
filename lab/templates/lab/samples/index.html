@@ -1,0 +1,21 @@
+<!-- Sample List/Detail View Container with Alpine.js -->
+<div x-data="{ showDetail: false }">
+  <!-- Detail View - Shown when a sample is selected -->
+  <div x-show="showDetail" x-cloak>
+    <!-- Back button -->
+    <div class="flex items-center space-x-2 mb-4">
+      <button
+        class="flex items-center text-blue-600 hover:text-blue-800"
+        @click="showDetail = false"
+      >
+        <i class="fas fa-arrow-left mr-1"></i> Back to Samples
+      </button>
+    </div>
+
+    <!-- Sample detail container loaded by HTMX -->
+    <div id="sample-detail-container"></div>
+  </div>
+
+  <!-- List View - Hidden when detail is shown -->
+  <div x-show="!showDetail">{% include "lab/samples/search.html" %}</div>
+</div>

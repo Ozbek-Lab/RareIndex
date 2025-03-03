@@ -1,43 +1,44 @@
 <!-- Show result count on first page -->
+
 {% if individuals.number == 1 %}
-<div class="mb-4">
-    <span class="px-3 py-1 text-sm rounded-full {% if total_count > 0 %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-        Found {{ total_count }} individual{{ total_count|pluralize }}
+  <div class="mb-4">
+    <span
+      class="px-3 py-1 text-sm rounded-full {% if total_count > 0 %}bg-green-100
+      text-green-800{% else %}bg-red-100 text-red-800{% endif %}"
+    >
+      Found {{ total_count }} individual{{ total_count|pluralize }}
     </span>
-</div>
+  </div>
 {% endif %}
 
 <!-- Grid of individual cards -->
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-    {% for individual in individuals %}
-        <div {% if forloop.last and individuals.has_next %}
-             hx-post="{% url 'lab:individual_search' %}"
-             hx-trigger="intersect once"
-             hx-swap="afterend"
-             hx-target="this"
-             hx-vals='{"page": "{{ individuals.next_page_number }}",
-                      "status": "{{ filters.status }}",
-                      "test": "{{ filters.test }}",
-                      "test_status": "{{ filters.test_status }}",
-                      "lab_id": "{{ filters.lab_id }}",
-                      "family": "{{ filters.family }}",
-                      "icd11_code": "{{ filters.icd11_code }}",
-                      "hpo_codes": "{{ filters.hpo_codes }}"}'
-             {% endif %}>
-            {% include "lab/individuals/card.html" with individual=individual %}
-        </div>
+  {% for individual in individuals %}
+    <div
+      {% if forloop.last and individuals.has_next %}
+        hx-post="{% url 'lab:individual_search' %}" hx-trigger="intersect once"
+        hx-swap="afterend" hx-target="this" hx-vals='{"page":
+        "{{ individuals.next_page_number }}", "status": "{{ filters.status }}",
+        "test": "{{ filters.test }}", "test_status":
+        "{{ filters.test_status }}", "lab_id": "{{ filters.lab_id }}", "family":
+        "{{ filters.family }}", "icd11_code": "{{ filters.icd11_code }}",
+        "hpo_codes": "{{ filters.hpo_codes }}"}'
+      {% endif %}
+    >
+      {% include "lab/individuals/card.html" with individual=individual %}
+    </div>
     {% empty %}
-        <div class="col-span-full text-center py-8 text-gray-500">
-            No individuals found matching your criteria
-        </div>
-    {% endfor %}
+    <div class="col-span-full text-center py-8 text-gray-500">
+      No individuals found matching your criteria
+    </div>
+  {% endfor %}
 </div>
 
 <!-- End of results message -->
 {% if not individuals.has_next and total_count > 0 %}
-<div class="mt-4 text-center">
+  <div class="mt-4 text-center">
     <span class="px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-800">
-        No more individuals to load
+      No more individuals to load
     </span>
-</div>
+  </div>
 {% endif %}

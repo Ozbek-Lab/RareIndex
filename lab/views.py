@@ -26,6 +26,7 @@ from .forms import (
 )
 from django.db.models import Q
 from django.core.paginator import Paginator
+from django.contrib.auth.models import User
 
 
 def app(request, page=None, context=None):
@@ -39,7 +40,7 @@ def app(request, page=None, context=None):
     if page == "individuals":
         context["initial_view"] = "individuals/index.html"
     elif page == "samples":
-        context["initial_view"] = "samples/list.html"
+        context["initial_view"] = "samples/index.html"
     elif page == "tests":
         context["initial_view"] = "tests/list.html"
     elif page == "sample_types":
@@ -212,57 +213,225 @@ def individual_detail(request, pk):
 
 @login_required
 def sample_list(request):
-    samples = Sample.objects.all()
-    template = "lab/samples/list.html"
+    """Sample list view"""
+    # Get all samples with related data
+    samples = (
+        Sample.objects.all()
+        .select_related("individual", "sample_type", "status", "isolation_by")
+        .prefetch_related("tests", "tasks", "notes")
+    )
 
-    # If it's an HTMX request, return just the list content
+    # Get data for filters
+    context = {
+        "samples": samples,
+        "individuals": Individual.objects.all(),
+        "sample_types": SampleType.objects.all(),
+        "sample_statuses": Status.objects.filter(
+            content_type=ContentType.objects.get_for_model(Sample)
+        ),
+    }
+
+    # If it's an HTMX request, check what part the client is asking for
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, template, {"samples": samples})
+        # If they're requesting a specific part, return just that
+        requested_url = request.headers.get("HX-Request-URL", "")
+        if "/samples/search/" in requested_url:
+            return TemplateResponse(request, "lab/samples/list.html", context)
+        # Otherwise return the full index that includes the search
+        return TemplateResponse(request, "lab/samples/index.html", context)
 
-    # Otherwise, redirect to the main app with samples view
-    return app(request, page="samples")
+    # For regular requests, return via the main app
+    # Include the initial_view context to ensure it loads the sample index with search
+    context["initial_view"] = "samples/index.html"
+    return app(request, page="samples", context=context)
 
 
 @login_required
-@permission_required("lab.add_sample")
-def sample_create(request):
-    if request.method == "POST":
-        form = SampleForm(request.POST)
-        if form.is_valid():
-            sample = form.save(commit=False)
-            sample.created_by = request.user
-            sample.save()
+def sample_search(request):
+    """Search and filter samples"""
+    queryset = (
+        Sample.objects.all()
+        .select_related("individual", "sample_type", "status", "isolation_by")
+        .prefetch_related("tests", "tasks", "notes")
+    )
 
-            # Return the add button template instead of empty string
-            return TemplateResponse(request, "lab/samples/_add_button.html")
+    # Apply filters
+    # Status filter
+    status_id = request.POST.get("status")
+    if status_id:
+        queryset = queryset.filter(status_id=status_id)
 
-    # If button=true is in query params, return the add button instead of the form
-    if request.GET.get("button") == "true":
-        return TemplateResponse(request, "lab/samples/_add_button.html")
+    # Sample Type filter
+    sample_type_id = request.POST.get("sample_type")
+    if sample_type_id:
+        queryset = queryset.filter(sample_type_id=sample_type_id)
 
-    # For GET requests, return the form with all available statuses
+    # Individual filter
+    individual_id = request.POST.get("individual")
+    if individual_id:
+        queryset = queryset.filter(individual_id=individual_id)
+
+    # Date range (receipt date)
+    date_from = request.POST.get("date_from")
+    if date_from:
+        queryset = queryset.filter(receipt_date__gte=date_from)
+
+    date_to = request.POST.get("date_to")
+    if date_to:
+        queryset = queryset.filter(receipt_date__lte=date_to)
+
+    # Order results
+    queryset = queryset.order_by("-receipt_date")
+
+    # Get total count before pagination
+    total_count = queryset.count()
+
+    # Paginate results
+    page = request.POST.get("page", 1)
+    paginator = Paginator(queryset, 12)  # 12 items per page
+    samples = paginator.get_page(page)
+
     return TemplateResponse(
         request,
-        "lab/samples/card_edit.html",
+        "lab/samples/list.html",
         {
-            "sample": None,
-            "individuals": Individual.objects.all(),
-            "sample_types": SampleType.objects.all(),
-            "status_choices": [
-                (status.id, status.name) for status in Status.objects.all()
-            ],
+            "samples": samples,
+            "total_count": total_count,
+            "filters": {  # Pass filters for subsequent page loads
+                "status": status_id,
+                "sample_type": sample_type_id,
+                "individual": individual_id,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
         },
     )
 
 
 @login_required
+def sample_detail(request, pk):
+    """Detailed view for a sample with all related data"""
+    sample = get_object_or_404(Sample, pk=pk)
+
+    # Prefetch related data for efficiency
+    sample = (
+        Sample.objects.select_related(
+            "individual",
+            "sample_type",
+            "status",
+            "sending_institution",
+            "isolation_by",
+            "created_by",
+        )
+        .prefetch_related(
+            "tests",
+            "tasks",
+            "notes",
+            "status_logs",
+            "sampletest_set",
+            "sampletest_set__test",
+            "sampletest_set__status",
+            "sampletest_set__performed_by",
+        )
+        .get(pk=pk)
+    )
+
+    # If card_only=true is in the query params, return just the card
+    if request.GET.get("card_only") == "true":
+        return TemplateResponse(request, "lab/samples/card.html", {"sample": sample})
+
+    context = {
+        "sample": sample,
+    }
+
+    return TemplateResponse(request, "lab/samples/detail.html", context)
+
+
+@login_required
+@permission_required("lab.add_sample")
+def sample_create(request):
+    """Create a new sample"""
+    if request.method == "POST":
+        form = SampleForm(request.POST)
+        if form.is_valid():
+            sample = form.save(commit=False)
+            sample.created_by = request.user
+
+            # Set the sending institution (assuming default for now)
+            if (
+                not hasattr(sample, "sending_institution")
+                or not sample.sending_institution
+            ):
+                # Get the first institution or create a default one
+                try:
+                    sample.sending_institution = Institution.objects.first()
+                except Institution.DoesNotExist:
+                    # Create a default institution if none exists
+                    sample.sending_institution = Institution.objects.create(
+                        name="Default Institution", created_by=request.user
+                    )
+
+            sample.save()
+
+            # Return the appropriate response based on context
+            individual_id = request.GET.get("individual")
+            if individual_id:
+                # If this was created from an individual detail page, return to that view
+                individual = get_object_or_404(Individual, pk=individual_id)
+                samples = individual.samples.all()
+                return TemplateResponse(
+                    request,
+                    "lab/individuals/detail.html",
+                    {"individual": individual, "active_tab": "samples"},
+                )
+            else:
+                # Return the add button template for a clean form reset
+                return TemplateResponse(request, "lab/samples/_add_button.html")
+
+    # For GET requests, prepare the form context
+    # If coming from individual detail, pre-select that individual
+    individual_id = request.GET.get("individual")
+    initial_data = {}
+    if individual_id:
+        initial_data["individual"] = individual_id
+
+    # Get all the necessary data for the form
+    sample_content_type = ContentType.objects.get_for_model(Sample)
+    context = {
+        "sample": None,
+        "individuals": Individual.objects.all(),
+        "sample_types": SampleType.objects.all(),
+        "statuses": Status.objects.filter(content_type=sample_content_type),
+        "users": User.objects.filter(is_active=True),
+        "initial_data": initial_data,
+    }
+
+    # If button=true is in query params, return the add button instead of the form
+    if request.GET.get("button") == "true":
+        context["individual"] = individual_id
+        return TemplateResponse(request, "lab/samples/_add_button.html", context)
+
+    return TemplateResponse(request, "lab/samples/card_edit.html", context)
+
+
+@login_required
 @permission_required("lab.change_sample")
 def sample_edit(request, pk):
+    """Edit an existing sample"""
     sample = get_object_or_404(Sample, pk=pk)
+
     if request.method == "POST":
         form = SampleForm(request.POST, instance=sample)
         if form.is_valid():
             sample = form.save()
+
+            # If return_to_detail is true, redirect to the detail view
+            if request.GET.get("return_to_detail") == "true":
+                return TemplateResponse(
+                    request, "lab/samples/detail.html", {"sample": sample}
+                )
+
+            # Otherwise return the card view
             return TemplateResponse(
                 request, "lab/samples/card.html", {"sample": sample}
             )
@@ -278,7 +447,8 @@ def sample_edit(request, pk):
             "sample": sample,
             "individuals": Individual.objects.all(),
             "sample_types": SampleType.objects.all(),
-            "statuses": sample_statuses,  # Use the statuses from the database
+            "statuses": sample_statuses,
+            "users": User.objects.filter(is_active=True),
         },
     )
 
@@ -287,52 +457,104 @@ def sample_edit(request, pk):
 @permission_required("lab.delete_sample")
 @require_http_methods(["DELETE"])
 def sample_delete(request, pk):
+    """Delete a sample"""
     sample = get_object_or_404(Sample, pk=pk)
     sample.delete()
     return HttpResponse(status=200)
 
 
-@login_required
-def sample_search(request):
-    query = request.GET.get("q", "")
-    samples = Sample.objects.filter(individual__lab_id__icontains=query)
-    return TemplateResponse(request, "lab/samples/list.html", {"samples": samples})
+# Sample Test Views
 
 
 @login_required
-def sample_detail(request, pk):
-    sample = get_object_or_404(Sample, pk=pk)
-    return TemplateResponse(request, "lab/sample/detail.html", {"sample": sample})
+@permission_required("lab.add_sampletest")
+def sample_test_create(request):
+    """Create a new test record for a sample"""
+    sample_id = request.GET.get("sample")
+    sample = get_object_or_404(Sample, pk=sample_id)
 
-
-@login_required
-def sample_status_update(request, pk):
-    sample = get_object_or_404(Sample, pk=pk)
     if request.method == "POST":
+        # Handle the form submission
+        test_id = request.POST.get("test")
         status_id = request.POST.get("status")
+        performed_date = request.POST.get("performed_date")
 
-        try:
-            # Get the status object from the database
-            new_status = Status.objects.get(pk=status_id)
+        if test_id and status_id and performed_date:
+            test = get_object_or_404(Test, pk=test_id)
+            status = get_object_or_404(Status, pk=status_id)
 
-            # Verify status is appropriate for samples
-            sample_content_type = ContentType.objects.get_for_model(Sample)
-            if new_status.content_type == sample_content_type:
-                # Use the StatusMixin method to properly update status with logging
-                sample.update_status(
-                    new_status, request.user, "Status updated via form"
-                )
+            # Create the sample test
+            sample_test = SampleTest.objects.create(
+                sample=sample,
+                test=test,
+                status=status,
+                performed_date=performed_date,
+                performed_by=request.user,
+            )
 
-                return TemplateResponse(
-                    request,
-                    "lab/sample/partials/status_badge.html",
-                    {"status": new_status},
-                )
+            return TemplateResponse(
+                request, "lab/samples/test_list.html", {"sample": sample}
+            )
 
-        except Status.DoesNotExist:
-            pass  # Invalid status ID
+    # For GET requests, render the form
+    test_content_type = ContentType.objects.get_for_model(SampleTest)
 
-    return HttpResponse(status=400)
+    return TemplateResponse(
+        request,
+        "lab/samples/test_form.html",
+        {
+            "sample": sample,
+            "tests": Test.objects.all(),
+            "statuses": Status.objects.filter(content_type=test_content_type),
+        },
+    )
+
+
+@login_required
+@permission_required("lab.change_sampletest")
+def sample_test_edit(request, pk):
+    """Edit an existing test record"""
+    sample_test = get_object_or_404(SampleTest, pk=pk)
+
+    if request.method == "POST":
+        # Handle the form submission
+        test_id = request.POST.get("test")
+        status_id = request.POST.get("status")
+        performed_date = request.POST.get("performed_date")
+
+        if test_id and status_id and performed_date:
+            sample_test.test_id = test_id
+            sample_test.status_id = status_id
+            sample_test.performed_date = performed_date
+            sample_test.save()
+
+            return TemplateResponse(
+                request, "lab/samples/test_list.html", {"sample": sample_test.sample}
+            )
+
+    # For GET requests, render the form
+    test_content_type = ContentType.objects.get_for_model(SampleTest)
+
+    return TemplateResponse(
+        request,
+        "lab/samples/test_form.html",
+        {
+            "sample_test": sample_test,
+            "sample": sample_test.sample,
+            "tests": Test.objects.all(),
+            "statuses": Status.objects.filter(content_type=test_content_type),
+        },
+    )
+
+
+@login_required
+@permission_required("lab.delete_sampletest")
+@require_http_methods(["DELETE"])
+def sample_test_delete(request, pk):
+    """Delete a test record"""
+    sample_test = get_object_or_404(SampleTest, pk=pk)
+    sample_test.delete()
+    return HttpResponse(status=200)
 
 
 @login_required
