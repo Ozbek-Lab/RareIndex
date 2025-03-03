@@ -68,3 +68,45 @@ def strip(value):
     if value:
         return value.strip()
     return value
+
+
+@register.filter
+def filter_by_status(tasks, status):
+    """Filter tasks by their completion status"""
+    if status == "open":
+        return [task for task in tasks if not task.is_completed]
+    elif status == "completed":
+        return [task for task in tasks if task.is_completed]
+    return tasks  # Return all tasks for 'all' status
+
+
+@register.filter
+def filter_by_project(tasks, project_id):
+    """Filter tasks by project ID"""
+    if project_id:
+        return [
+            task
+            for task in tasks
+            if task.project and str(task.project.id) == str(project_id)
+        ]
+    return tasks
+
+
+@register.filter
+def filter_by_assigned(tasks, user_id):
+    """Filter tasks by assigned user"""
+    if user_id == "me":
+        # This requires that 'request.user' be added to the context
+        # in the view function
+        return [
+            task
+            for task in tasks
+            if hasattr(task, "assigned_to") and task.assigned_to == "request.user"
+        ]
+    if user_id:
+        return [
+            task
+            for task in tasks
+            if hasattr(task, "assigned_to") and str(task.assigned_to.id) == str(user_id)
+        ]
+    return tasks

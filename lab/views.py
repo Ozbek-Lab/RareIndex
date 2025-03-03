@@ -15,6 +15,7 @@ from .models import (
     Note,
     Family,
     SampleTest,
+    Project,
 )
 from .forms import (
     IndividualForm,
@@ -23,6 +24,7 @@ from .forms import (
     SampleTypeForm,
     TaskForm,
     NoteForm,
+    ProjectForm,
 )
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -860,6 +862,37 @@ def sample_type_search(request):
 
 
 @login_required
+def task_index(request):
+    """Main task index view that shows all tasks"""
+    # Base queryset with related objects
+    tasks = Task.objects.select_related(
+        "assigned_to", "created_by", "project", "target_status", "content_type"
+    ).order_by("-created_at")
+
+    # Get projects for filter dropdown
+    projects = Project.objects.all().order_by("name")
+
+    # Get users for assignment filter
+    users = User.objects.filter(is_active=True).order_by("username")
+
+    context = {
+        "tasks": tasks,
+        "projects": projects,
+        "users": users,
+        "current_filters": {
+            "status": "open",  # Default to showing open tasks
+        },
+    }
+
+    # If it's an HTMX request, return just the list content
+    if request.headers.get("HX-Request"):
+        return TemplateResponse(request, "lab/tasks/list.html", context)
+
+    # For regular requests, return via the main app
+    return app(request, page="tasks", context=context)
+
+
+@login_required
 def task_create(request, model, pk):
     """Create a task for a specific object"""
     content_type = get_object_or_404(ContentType, app_label="lab", model=model)
@@ -883,6 +916,27 @@ def task_create(request, model, pk):
         "lab/tasks/task_form.html",
         {"form": form, "content_object": content_object, "model": model, "pk": pk},
     )
+
+
+@login_required
+def task_create_standalone(request):
+    """Create a task not associated with any specific object"""
+    if request.method == "POST":
+        form = TaskForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.created_by = request.user
+            task.save()
+
+            return redirect("lab:task_list")
+
+    # For GET requests, prepare the form
+    form = TaskForm()
+
+    # Make sure target_status field shows all available statuses for standalone tasks
+    form.fields["target_status"].queryset = Status.objects.all()
+
+    return TemplateResponse(request, "lab/tasks/create.html", {"form": form})
 
 
 @login_required
@@ -1037,3 +1091,300 @@ def note_list(request):
                 "user": request.user,
             },
         )
+
+
+# Project Views
+@login_required
+def project_list(request):
+    """List all projects"""
+    projects = Project.objects.all()
+
+    # Get counts for filters
+    open_count = projects.filter(is_completed=False).count()
+    completed_count = projects.filter(is_completed=True).count()
+
+    context = {
+        "projects": projects,
+        "open_count": open_count,
+        "completed_count": completed_count,
+    }
+
+    # If it's an HTMX request, return just the list content
+    if request.headers.get("HX-Request"):
+        return TemplateResponse(request, "lab/projects/list.html", context)
+
+    # For regular requests, return via the main app
+    return app(request, page="projects", context=context)
+
+
+@login_required
+@permission_required("lab.add_project")
+def project_create(request):
+    """Create a new project"""
+    if request.method == "POST":
+        form = ProjectForm(request.POST)
+        if form.is_valid():
+            project = form.save(commit=False)
+            project.created_by = request.user
+            project.save()
+
+            # If requested via HTMX, return to the list
+            if request.headers.get("HX-Request"):
+                projects = Project.objects.all()
+                return TemplateResponse(
+                    request, "lab/projects/list.html", {"projects": projects}
+                )
+
+            # Otherwise redirect to the detail view
+            return redirect("lab:project_detail", pk=project.pk)
+
+    # Return the form for GET requests
+    return TemplateResponse(
+        request, "lab/projects/create.html", {"form": ProjectForm()}
+    )
+
+
+@login_required
+def project_detail(request, pk):
+    """View project details including tasks"""
+    project = get_object_or_404(Project, pk=pk)
+
+    # Get tasks for this project with prefetch
+    tasks = project.tasks.select_related(
+        "assigned_to", "created_by", "target_status"
+    ).order_by("-priority", "created_at")
+
+    # Group tasks by completion status
+    open_tasks = tasks.filter(is_completed=False)
+    completed_tasks = tasks.filter(is_completed=True)
+
+    context = {
+        "project": project,
+        "open_tasks": open_tasks,
+        "completed_tasks": completed_tasks,
+    }
+
+    return TemplateResponse(request, "lab/projects/detail.html", context)
+
+
+@login_required
+@permission_required("lab.change_project")
+def project_edit(request, pk):
+    """Edit an existing project"""
+    project = get_object_or_404(Project, pk=pk)
+
+    if request.method == "POST":
+        form = ProjectForm(request.POST, instance=project)
+        if form.is_valid():
+            project = form.save()
+
+            # If requested via HTMX, return to the card
+            if request.headers.get("HX-Request"):
+                return TemplateResponse(
+                    request, "lab/projects/card.html", {"project": project}
+                )
+
+            # Otherwise redirect to the detail view
+            return redirect("lab:project_detail", pk=project.pk)
+
+    # Return the form for GET requests
+    return TemplateResponse(
+        request,
+        "lab/projects/edit.html",
+        {"project": project, "form": ProjectForm(instance=project)},
+    )
+
+
+@login_required
+@permission_required("lab.delete_project")
+@require_http_methods(["DELETE"])
+def project_delete(request, pk):
+    """Delete a project"""
+    project = get_object_or_404(Project, pk=pk)
+    project.delete()
+    return HttpResponse(status=200)
+
+
+@login_required
+def project_toggle_complete(request, pk):
+    """Toggle the completion status of a project"""
+    project = get_object_or_404(Project, pk=pk)
+
+    if request.method == "POST":
+        project.is_completed = not project.is_completed
+        project.save()
+
+        # If requested via HTMX, return the updated card
+        if request.headers.get("HX-Request"):
+            return TemplateResponse(
+                request, "lab/projects/card.html", {"project": project}
+            )
+
+    # Return 400 for anything other than POST
+    return HttpResponse(status=400)
+
+
+@login_required
+def project_search(request):
+    """Search and filter projects"""
+    query = request.GET.get("q", "")
+    status_filter = request.GET.get("status", "all")
+
+    projects = Project.objects.all()
+
+    # Apply text search if provided
+    if query:
+        projects = projects.filter(
+            Q(name__icontains=query) | Q(description__icontains=query)
+        )
+
+    # Apply status filter
+    if status_filter == "open":
+        projects = projects.filter(is_completed=False)
+    elif status_filter == "completed":
+        projects = projects.filter(is_completed=True)
+
+    # Order by status (incomplete first) then by creation date
+    projects = projects.order_by("is_completed", "-created_at")
+
+    return TemplateResponse(
+        request,
+        "lab/projects/list.html",
+        {"projects": projects, "query": query, "status_filter": status_filter},
+    )
+
+
+# Updated Task Views
+@login_required
+def task_list(request):
+    """View for listing all tasks with improved filtering"""
+    # Base queryset
+    tasks = Task.objects.select_related(
+        "content_type", "assigned_to", "created_by", "project", "target_status"
+    )
+
+    # Apply filters from query params
+    project_id = request.GET.get("project")
+    if project_id:
+        tasks = tasks.filter(project_id=project_id)
+
+    status_filter = request.GET.get("status", "open")
+    if status_filter == "open":
+        tasks = tasks.filter(is_completed=False)
+    elif status_filter == "completed":
+        tasks = tasks.filter(is_completed=True)
+
+    assigned_to = request.GET.get("assigned_to")
+    if assigned_to == "me":
+        tasks = tasks.filter(assigned_to=request.user)
+    elif assigned_to:
+        tasks = tasks.filter(assigned_to_id=assigned_to)
+
+    # Get projects for filter dropdown
+    projects = Project.objects.all().order_by("name")
+
+    # Get users for assignment filter
+    users = User.objects.filter(is_active=True).order_by("username")
+
+    context = {
+        "tasks": tasks,
+        "projects": projects,
+        "users": users,
+        "current_filters": {
+            "project": project_id,
+            "status": status_filter,
+            "assigned_to": assigned_to,
+        },
+    }
+
+    # Return the list template for HTMX requests
+    if request.headers.get("HX-Request"):
+        return TemplateResponse(request, "lab/tasks/list.html", context)
+
+    # Otherwise return the full page
+    return app(request, page="tasks", context=context)
+
+
+@login_required
+def task_create_standalone(request):
+    """Create a task not associated with any specific object"""
+    if request.method == "POST":
+        form = TaskForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.created_by = request.user
+            task.save()
+
+            return redirect("lab:task_list")
+
+    # For GET requests, prepare the form
+    form = TaskForm()
+
+    # Make sure target_status field shows all available statuses for standalone tasks
+    form.fields["target_status"].queryset = Status.objects.all()
+
+    return TemplateResponse(request, "lab/tasks/create.html", {"form": form})
+
+
+# Update the existing task_create view to support projects
+@login_required
+def task_create(request, model=None, pk=None):
+    """Create a task, optionally associated with an object and/or project"""
+    content_object = None
+    content_type = None
+
+    # If model and pk provided, get the related object
+    if model and pk:
+        content_type = get_object_or_404(ContentType, app_label="lab", model=model)
+        content_object = get_object_or_404(content_type.model_class(), pk=pk)
+
+    if request.method == "POST":
+        form = TaskForm(request.POST, content_object=content_object)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.created_by = request.user
+
+            # Set the content object if we have one
+            if content_type and content_object:
+                task.content_type = content_type
+                task.object_id = pk
+
+            task.save()
+
+            # Determine where to redirect based on the context
+            if request.headers.get("HX-Request"):
+                return TemplateResponse(
+                    request, "lab/tasks/task_card.html", {"task": task}
+                )
+
+            if task.project:
+                return redirect("lab:project_detail", pk=task.project.pk)
+
+            return redirect("lab:task_list")
+    else:
+        # Get the project_id from query params if it exists
+        project_id = request.GET.get("project")
+        initial_data = {}
+
+        if project_id:
+            initial_data["project"] = project_id
+
+        form = TaskForm(content_object=content_object, initial=initial_data)
+
+    # Determine template based on context
+    if request.headers.get("HX-Request"):
+        template = "lab/tasks/task_form.html"
+    else:
+        template = "lab/tasks/create.html"
+
+    return TemplateResponse(
+        request,
+        template,
+        {
+            "form": form,
+            "content_object": content_object,
+            "model": model,
+            "pk": pk,
+            "projects": Project.objects.all(),
+        },
+    )

@@ -1,0 +1,170 @@
+<!-- lab/templates/lab/tasks/create.html -->
+<div class="max-w-3xl mx-auto">
+  <div class="bg-white shadow-md rounded-lg p-6">
+    <div class="flex items-center mb-6 pb-2 border-b border-gray-200">
+      <div class="mr-4 text-indigo-500">
+        <i class="fas fa-tasks text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">Create New Task</h1>
+        <p class="text-sm text-gray-500">
+          Create a standalone task or assign it to a project
+        </p>
+      </div>
+    </div>
+
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      <!-- Task Title -->
+      <div>
+        <label for="id_title" class="block text-sm font-medium text-gray-700"
+          >Task Title*</label
+        >
+        <input
+          type="text"
+          name="title"
+          id="id_title"
+          required
+          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          placeholder="Enter task title"
+        />
+      </div>
+
+      <!-- Task Description -->
+      <div>
+        <label
+          for="id_description"
+          class="block text-sm font-medium text-gray-700"
+          >Description</label
+        >
+        <textarea
+          name="description"
+          id="id_description"
+          rows="3"
+          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          placeholder="Provide a description of the task"
+        ></textarea>
+      </div>
+
+      <!-- Project Selection -->
+      <div>
+        <label for="id_project" class="block text-sm font-medium text-gray-700"
+          >Project</label
+        >
+        <select
+          name="project"
+          id="id_project"
+          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+        >
+          <option value="">No Project</option>
+          {% for project in form.fields.project.queryset %}
+            <option
+              value="{{ project.id }}"
+              {% if request.GET.project == project.id|stringformat:"i" %}selected{% endif %}
+            >
+              {{ project.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Assigned To -->
+        <div>
+          <label
+            for="id_assigned_to"
+            class="block text-sm font-medium text-gray-700"
+            >Assigned To*</label
+          >
+          <select
+            name="assigned_to"
+            id="id_assigned_to"
+            required
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            {% for user in form.fields.assigned_to.queryset %}
+              <option
+                value="{{ user.id }}"
+                {% if user.id == request.user.id %}selected{% endif %}
+              >
+                {{ user.get_full_name|default:user.username }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Due Date -->
+        <div>
+          <label
+            for="id_due_date"
+            class="block text-sm font-medium text-gray-700"
+            >Due Date</label
+          >
+          <input
+            type="datetime-local"
+            name="due_date"
+            id="id_due_date"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Priority -->
+        <div>
+          <label
+            for="id_priority"
+            class="block text-sm font-medium text-gray-700"
+            >Priority</label
+          >
+          <select
+            name="priority"
+            id="id_priority"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+
+        <!-- Target Status -->
+        <div>
+          <label
+            for="id_target_status"
+            class="block text-sm font-medium text-gray-700"
+            >Target Status*</label
+          >
+          <select
+            name="target_status"
+            id="id_target_status"
+            required
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            {% for status in form.fields.target_status.queryset %}
+              <option value="{{ status.id }}">{{ status.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+        <a
+          href="{% url 'lab:task_list' %}"
+          class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          Cancel
+        </a>
+        <button
+          type="submit"
+          class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          Create Task
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -11,7 +11,14 @@ class Task(models.Model):
         ("high", "High"),
         ("urgent", "Urgent"),
     ]
-
+    # Add this field to your existing Task model
+    project = models.ForeignKey(
+        "Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks",
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
 
@@ -76,6 +83,46 @@ class Task(models.Model):
 
         self.save()
         return True
+
+
+class Project(models.Model):
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    is_completed = models.BooleanField(default=False)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="created_projects"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Optional prioritization
+    priority = models.CharField(
+        max_length=10, choices=Task.PRIORITY_CHOICES, default="medium"
+    )
+
+    # Notes for the project
+    notes = GenericRelation("Note")
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+    def get_task_count(self):
+        return self.tasks.count()
+
+    def get_completed_task_count(self):
+        return self.tasks.filter(is_completed=True).count()
+
+    def get_completion_percentage(self):
+        total = self.get_task_count()
+        if total == 0:
+            return 0
+        completed = self.get_completed_task_count()
+        return int((completed / total) * 100)
 
 
 class Note(models.Model):
