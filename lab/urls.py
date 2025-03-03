@@ -21,10 +21,23 @@ urlpatterns = [
     ),
     path("individuals/search/", views.individual_search, name="individual_search"),
     # Sample routes
+    # Sample routes in lab/urls.py
+    path("samples/", views.sample_list, name="sample_list"),
     path("samples/create/", views.sample_create, name="sample_create"),
+    path("samples/<int:pk>/", views.sample_detail, name="sample_detail"),
     path("samples/<int:pk>/edit/", views.sample_edit, name="sample_edit"),
     path("samples/<int:pk>/delete/", views.sample_delete, name="sample_delete"),
     path("samples/search/", views.sample_search, name="sample_search"),
+    # Sample Test routes
+    path("sample-tests/create/", views.sample_test_create, name="sample_test_create"),
+    path(
+        "sample-tests/<int:pk>/edit/", views.sample_test_edit, name="sample_test_edit"
+    ),
+    path(
+        "sample-tests/<int:pk>/delete/",
+        views.sample_test_delete,
+        name="sample_test_delete",
+    ),
     # Test routes
     path("tests/create/", views.test_create, name="test_create"),
     path("tests/<int:pk>/edit/", views.test_edit, name="test_edit"),
