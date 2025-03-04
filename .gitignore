@@ -1,0 +1,8 @@
+# Ignore all .sql files
+*.sql
+
+# Ignore all .pyc files
+*.pyc
+
+# Ignore __pycache__ directories
+__pycache__/
