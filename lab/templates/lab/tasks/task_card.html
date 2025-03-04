@@ -1,0 +1,108 @@
+{% load static %}
+
+<div class="bg-white rounded-lg shadow-md p-4 mb-4" id="task-{{ task.pk }}">
+    <div class="flex items-start justify-between">
+        <div class="flex-1">
+            <a href="{% url 'lab:task_detail' task.pk %}" 
+               class="text-lg font-semibold text-gray-900 hover:text-blue-600"
+               hx-get="{% url 'lab:task_detail' task.pk %}"
+               hx-target="#main-content"
+               hx-push-url="true">
+                {{ task.title }}
+            </a>
+            {% if task.description %}
+            <p class="mt-1 text-sm text-gray-600 line-clamp-2">{{ task.description }}</p>
+            {% endif %}
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="px-2 py-1 text-xs rounded-full 
+                {% if task.priority == 'urgent' %}bg-red-100 text-red-800
+                {% elif task.priority == 'high' %}bg-orange-100 text-orange-800
+                {% elif task.priority == 'medium' %}bg-yellow-100 text-yellow-800
+                {% else %}bg-green-100 text-green-800{% endif %}">
+                {{ task.get_priority_display }}
+            </span>
+            <span class="px-2 py-1 text-xs rounded-full 
+                {% if task.is_completed %}bg-green-100 text-green-800
+                {% else %}bg-blue-100 text-blue-800{% endif %}">
+                {% if task.is_completed %}Completed{% else %}In Progress{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center">
+                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                {{ task.assigned_to.get_full_name|default:task.assigned_to.username }}
+            </div>
+            {% if task.due_date %}
+            <div class="flex items-center">
+                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {{ task.due_date|date:"M j, Y" }}
+            </div>
+            {% endif %}
+        </div>
+        <div class="flex items-center space-x-2">
+            {% if task.is_completed %}
+            <form 
+                action="{% url 'lab:task_reopen' task.pk %}" 
+                method="POST" 
+                class="inline"
+                hx-post="{% url 'lab:task_reopen' task.pk %}"
+                hx-target="#task-{{ task.pk }}"
+                hx-swap="outerHTML"
+            >
+                {% csrf_token %}
+                <button type="submit" class="text-yellow-600 hover:text-yellow-800" title="Reopen Task">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </button>
+            </form>
+            {% else %}
+            <form 
+                action="{% url 'lab:task_complete' task.pk %}" 
+                method="POST" 
+                class="inline"
+                hx-post="{% url 'lab:task_complete' task.pk %}"
+                hx-target="#task-{{ task.pk }}"
+                hx-swap="outerHTML"
+                hx-prompt="Add completion notes (optional):"
+            >
+                {% csrf_token %}
+                <button type="submit" class="text-green-600 hover:text-green-800" title="Complete Task">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </button>
+            </form>
+            {% endif %}
+            <a href="{% url 'lab:task_create' 'task' task.pk %}" 
+               class="text-blue-600 hover:text-blue-800"
+               hx-get="{% url 'lab:task_create' 'task' task.pk %}"
+               hx-target="#main-content"
+               hx-push-url="true"
+               title="Edit Task">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+            </a>
+            <a href="{% url 'lab:task_detail' task.pk %}" 
+               class="text-blue-600 hover:text-blue-800"
+               hx-get="{% url 'lab:task_detail' task.pk %}"
+               hx-target="#main-content"
+               hx-push-url="true"
+               title="View Details">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+            </a>
+        </div>
+    </div>
+</div> 

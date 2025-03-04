@@ -23,8 +23,8 @@ class Task(models.Model):
     description = models.TextField(blank=True)
 
     # Generic relation to allow tasks for any model
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True)
+    object_id = models.PositiveIntegerField(null=True)
     content_object = GenericForeignKey("content_type", "object_id")
 
     # Task assignment and status
