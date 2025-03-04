@@ -1,5 +1,5 @@
 from django.apps import apps
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required, permission_required
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
@@ -1164,6 +1164,10 @@ def project_detail(request, pk):
         "completed_tasks": completed_tasks,
     }
 
+    # If card_only=true is in the query params, return just the card
+    if request.GET.get("card_only") == "true":
+        return TemplateResponse(request, "lab/projects/card.html", {"project": project})
+
     return TemplateResponse(request, "lab/projects/detail.html", context)
 
 
@@ -1388,3 +1392,29 @@ def task_create(request, model=None, pk=None):
             "projects": Project.objects.all(),
         },
     )
+
+
+@login_required
+def task_detail(request, pk):
+    """View for displaying task details"""
+    task = get_object_or_404(Task, pk=pk)
+    context = {
+        'task': task,
+    }
+    return render(request, 'lab/tasks/detail.html', context)
+
+
+@login_required
+def task_reopen(request, pk):
+    """Reopen a completed task"""
+    task = get_object_or_404(Task, pk=pk)
+
+    if request.method == "POST":
+        task.is_completed = False
+        task.completed_at = None
+        task.completed_by = None
+        task.save()
+
+        return TemplateResponse(request, "lab/tasks/task_card.html", {"task": task})
+
+    return HttpResponse(status=400)

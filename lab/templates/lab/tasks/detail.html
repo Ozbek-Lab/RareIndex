@@ -1,0 +1,130 @@
+{% extends "lab/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+        <!-- Task Header -->
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">{{ task.title }}</h1>
+                    <div class="mt-1 flex items-center space-x-2">
+                        <span class="px-2 py-1 text-sm rounded-full 
+                            {% if task.priority == 'urgent' %}bg-red-100 text-red-800
+                            {% elif task.priority == 'high' %}bg-orange-100 text-orange-800
+                            {% elif task.priority == 'medium' %}bg-yellow-100 text-yellow-800
+                            {% else %}bg-green-100 text-green-800{% endif %}">
+                            {{ task.get_priority_display }}
+                        </span>
+                        <span class="px-2 py-1 text-sm rounded-full 
+                            {% if task.is_completed %}bg-green-100 text-green-800
+                            {% else %}bg-blue-100 text-blue-800{% endif %}">
+                            {% if task.is_completed %}Completed{% else %}In Progress{% endif %}
+                        </span>
+                    </div>
+                </div>
+                <div class="flex space-x-2">
+                    {% if not task.is_completed %}
+                    <form action="{% url 'task_complete' task.pk %}" method="POST" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                            Complete Task
+                        </button>
+                    </form>
+                    {% endif %}
+                    <a href="{% url 'task_edit' task.pk %}" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        Edit Task
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Task Details -->
+        <div class="px-6 py-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Left Column -->
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Description</h2>
+                    <p class="text-gray-600 whitespace-pre-wrap">{{ task.description|default:"No description provided." }}</p>
+
+                    <div class="mt-6">
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Task Information</h2>
+                        <dl class="grid grid-cols-1 gap-4">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Assigned To</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Created By</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ task.created_by.get_full_name|default:task.created_by.username }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Created At</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ task.created_at|date:"F j, Y, g:i a" }}</dd>
+                            </div>
+                            {% if task.due_date %}
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Due Date</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ task.due_date|date:"F j, Y, g:i a" }}</dd>
+                            </div>
+                            {% endif %}
+                            {% if task.is_completed %}
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Completed At</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ task.completed_at|date:"F j, Y, g:i a" }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Completed By</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ task.completed_by.get_full_name|default:task.completed_by.username }}</dd>
+                            </div>
+                            {% endif %}
+                        </dl>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div>
+                    {% if task.project %}
+                    <div class="mb-6">
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Project</h2>
+                        <a href="{% url 'project_detail' task.project.pk %}" class="block p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                            <h3 class="font-medium text-gray-900">{{ task.project.name }}</h3>
+                            <p class="mt-1 text-sm text-gray-600">{{ task.project.description|truncatewords:30 }}</p>
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    {% if task.content_object %}
+                    <div class="mb-6">
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Related Object</h2>
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <h3 class="font-medium text-gray-900">{{ task.content_object }}</h3>
+                            <p class="mt-1 text-sm text-gray-600">
+                                Type: {{ task.content_type.model|title }}
+                            </p>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Notes</h2>
+                        <div class="space-y-4">
+                            {% for note in task.notes.all %}
+                            <div class="p-4 bg-gray-50 rounded-lg">
+                                <p class="text-gray-600">{{ note.content }}</p>
+                                <div class="mt-2 text-sm text-gray-500">
+                                    By {{ note.user.get_full_name|default:note.user.username }} on {{ note.created_at|date:"F j, Y, g:i a" }}
+                                </div>
+                            </div>
+                            {% empty %}
+                            <p class="text-gray-500">No notes available.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

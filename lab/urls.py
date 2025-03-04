@@ -73,12 +73,13 @@ urlpatterns = [
     ),
     path("projects/search/", views.project_search, name="project_search"),
     # Updated task URLs
-    # Update this line in urls.py
     path(
         "tasks/", views.task_index, name="task_list"
     ),  # Changed from "tasks" to "task_index"
     path("tasks/create/<str:model>/<int:pk>/", views.task_create, name="task_create"),
     path("tasks/create/", views.task_create_standalone, name="task_create_standalone"),
     path("tasks/<int:pk>/complete/", views.task_complete, name="task_complete"),
+    path("tasks/<int:pk>/reopen/", views.task_reopen, name="task_reopen"),
+    path("tasks/<int:pk>/", views.task_detail, name="task_detail"),
     path("tasks/search/", views.task_search, name="task_search"),
 ]
