@@ -1,141 +1,159 @@
-import csv
-from datetime import datetime
-from django.core.management.base import BaseCommand
+import random
+from datetime import datetime, timedelta
 from django.contrib.auth.models import User
-from django.db import transaction
-from lab.models import (
-    Individual,
-    SampleType,
-    Sample,
-    Test,
-    Family
+from django.utils.timezone import now
+from django.contrib.contenttypes.models import ContentType
+from myapp.models import (
+    Task, Project, Note, Test, SampleType, Institution, Family, Status,
+    StatusLog, Individual, Sample, SampleTest, AnalysisType, SampleTestAnalysis
 )
 
-class Command(BaseCommand):
-    help = 'Import lab data from TSV file'
+# Create Users
+users = [User(username=f"user_{i}", email=f"user_{i}@example.com") for i in range(1, 6)]
+User.objects.bulk_create(users)
+users = User.objects.all()
 
-    def add_arguments(self, parser):
-        parser.add_argument('tsv_file', type=str, help='Path to the TSV file')
-        parser.add_argument(
-            '--default-user',
-            type=str,
-            default='admin',
-            help='Username to use for data import'
-        )
+# Create Statuses
+statuses = [
+    Status(name=f"Status {i}", description=f"Status Description {i}", created_by=random.choice(users))
+    for i in range(1, 6)
+]
+Status.objects.bulk_create(statuses)
+statuses = Status.objects.all()
 
-    def handle(self, *args, **options):
-        tsv_file = options['tsv_file']
-        default_username = options['default_user']
+# Create Projects
+projects = [
+    Project(name=f"Project {i}", description=f"Project Description {i}", created_by=random.choice(users))
+    for i in range(3)
+]
+Project.objects.bulk_create(projects)
+projects = Project.objects.all()
 
-        try:
-            default_user = User.objects.get(username=default_username)
-        except User.DoesNotExist:
-            self.stdout.write(self.style.ERROR(f'User {default_username} does not exist'))
-            return
+# Create Institutions
+institutions = [
+    Institution(name=f"Institution {i}", created_by=random.choice(users))
+    for i in range(3)
+]
+Institution.objects.bulk_create(institutions)
+institutions = Institution.objects.all()
 
-        def parse_date(date_str):
-            if not date_str:
-                return None
-            try:
-                formats = [
-                    '%d.%m.%Y %H:%M:%S',
-                    '%d.%m.%Y',
-                    '%Y-%m-%d',
-                ]
-                for fmt in formats:
-                    try:
-                        return datetime.strptime(date_str.strip(), fmt).date()
-                    except ValueError:
-                        continue
-                return None
-            except Exception:
-                return None
+# Create Families
+families = [
+    Family(family_id=f"FAM{i}", description=f"Family Description {i}", created_by=random.choice(users))
+    for i in range(3)
+]
+Family.objects.bulk_create(families)
+families = Family.objects.all()
 
-        def get_or_create_sample_type(name):
-            if not name:
-                return None
-            sample_type, _ = SampleType.objects.get_or_create(
-                name=name.strip(),
-                defaults={'created_by': default_user}
-            )
-            return sample_type
+# Create Individuals
+individuals = [
+    Individual(
+        lab_id=f"IND{i}",
+        full_name=f"Person {i}",
+        tc_identity=str(10000000000 + i),
+        birth_date=datetime(1990, 1, 1) + timedelta(days=i * 365),
+        status=random.choice(statuses),
+        family=random.choice(families),
+        created_by=random.choice(users)
+    )
+    for i in range(5)
+]
+Individual.objects.bulk_create(individuals)
+individuals = Individual.objects.all()
 
-        def extract_family_id(lab_id):
-            # Extract family ID from lab_id (assuming format like RB_2023_01.1)
-            parts = lab_id.split('.')
-            if len(parts) > 1:
-                return parts[0]  # Return RB_2023_01 from RB_2023_01.1
-            # For non-family IDs (like Deneme_2023_01), return None
-            if not any(prefix in lab_id for prefix in ['RB_', 'FB_']):
-                return None
-            return lab_id
+# Create Sample Types
+sample_types = [
+    SampleType(name=f"SampleType {i}", created_by=random.choice(users))
+    for i in range(3)
+]
+SampleType.objects.bulk_create(sample_types)
+sample_types = SampleType.objects.all()
 
-        with open(tsv_file, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f, delimiter='\t')
-            
-            with transaction.atomic():
-                for row in reader:
-                    try:
-                        # Get or create family if applicable
-                        family = None
-                        family_id = extract_family_id(row['Özbek Lab. ID'])
-                        if family_id:
-                            family, _ = Family.objects.get_or_create(
-                                family_id=family_id,
-                                defaults={'created_by': default_user}
-                            )
+# Create Samples
+samples = [
+    Sample(
+        individual=random.choice(individuals),
+        sample_type=random.choice(sample_types),
+        status=random.choice(statuses),
+        receipt_date=now() - timedelta(days=random.randint(1, 100)),
+        sending_institution=random.choice(institutions),
+        isolation_by=random.choice(users),
+        created_by=random.choice(users)
+    )
+    for i in range(10)
+]
+Sample.objects.bulk_create(samples)
+samples = Sample.objects.all()
 
-                        # Create individual (formerly patient)
-                        individual, created = Individual.objects.get_or_create(
-                            lab_id=row['Özbek Lab. ID'],
-                            defaults={
-                                'biobank_id': row['Biyobanka ID'],
-                                'full_name': row['Ad-Soyad'],
-                                'tc_identity': row['TC Kimlik No'],
-                                'birth_date': parse_date(row['Doğum Tarihi']),
-                                'icd11_code': row['ICD11'],
-                                'hpo_codes': row['HPO kodları'],
-                                'family': family,
-                                'created_by': default_user
-                            }
-                        )
+# Create Tests
+tests = [
+    Test(name=f"Test {i}", description=f"Test Description {i}", created_by=random.choice(users))
+    for i in range(3)
+]
+Test.objects.bulk_create(tests)
+tests = Test.objects.all()
 
-                        # Create samples
-                        if row['Örnek Tipi']:
-                            for sample_type_name in row['Örnek Tipi'].split(','):
-                                if not sample_type_name.strip():
-                                    continue
-                                    
-                                sample_type = get_or_create_sample_type(sample_type_name)
-                                
-                                sample, _ = Sample.objects.get_or_create(
-                                    individual=individual,
-                                    sample_type=sample_type,
-                                    receipt_date=parse_date(row['Geliş Tarihi/ay/gün/yıl']),
-                                    defaults={
-                                        'processing_date': parse_date(row['Çalışılma Tarihi']),
-                                        'service_send_date': parse_date(row['Hiz.Alım.Gön. Tarihi']),
-                                        'data_receipt_date': parse_date(row['Data Geliş tarihi']),
-                                        'council_date': parse_date(row['Konsey Tarihi']),
-                                        'isolation_by': row['İzolasyonu yapan'],
-                                        'sample_measurements': row['Örnek gön.& OD değ.'],
-                                        'created_by': default_user
-                                    }
-                                )
+# Create Sample Tests
+sample_tests = [
+    SampleTest(
+        sample=random.choice(samples),
+        test=random.choice(tests),
+        performed_date=now() - timedelta(days=random.randint(1, 30)),
+        performed_by=random.choice(users),
+        status=random.choice(statuses)
+    )
+    for i in range(10)
+]
+SampleTest.objects.bulk_create(sample_tests)
+sample_tests = SampleTest.objects.all()
 
-                                # Create test if test name exists
-                                if row['Çalışılan Test Adı']:
-                                    test, _ = Test.objects.get_or_create(
-                                        name=row['Çalışılan Test Adı'],
-                                        description=row['Genel Notlar/Sonuçlar'],
-                                        created_by=default_user
-                                    )
+# Create Analysis Types
+analysis_types = [
+    AnalysisType(name=f"AnalysisType {i}", version=f"v{i}.0", created_by=random.choice(users))
+    for i in range(2)
+]
+AnalysisType.objects.bulk_create(analysis_types)
+analysis_types = AnalysisType.objects.all()
 
-                        self.stdout.write(
-                            self.style.SUCCESS(f'Successfully imported data for {row["Özbek Lab. ID"]}')
-                        )
+# Create Sample Test Analyses
+sample_test_analyses = [
+    SampleTestAnalysis(
+        sample_test=random.choice(sample_tests),
+        performed_date=now() - timedelta(days=random.randint(1, 20)),
+        performed_by=random.choice(users),
+        type=random.choice(analysis_types),
+        status=random.choice(statuses),
+        created_by=random.choice(users)
+    )
+    for i in range(5)
+]
+SampleTestAnalysis.objects.bulk_create(sample_test_analyses)
 
-                    except Exception as e:
-                        self.stdout.write(
-                            self.style.ERROR(f'Error importing row {row.get("Özbek Lab. ID", "unknown")}: {str(e)}')
-                        )
+# Create Notes
+notes = [
+    Note(
+        content=f"Note {i} for {random.choice(users).username}",
+        user=random.choice(users),
+        content_type=ContentType.objects.get_for_model(random.choice([Project, Individual, Sample])),
+        object_id=random.choice(individuals).id
+    )
+    for i in range(5)
+]
+Note.objects.bulk_create(notes)
+
+# Create Tasks
+tasks = [
+    Task(
+        project=random.choice(projects),
+        title=f"Task {i}",
+        description=f"Task Description {i}",
+        assigned_to=random.choice(users),
+        created_by=random.choice(users),
+        priority=random.choice(["low", "medium", "high", "urgent"]),
+        target_status=random.choice(statuses)
+    )
+    for i in range(5)
+]
+Task.objects.bulk_create(tasks)
+
+print("Test data created successfully!")

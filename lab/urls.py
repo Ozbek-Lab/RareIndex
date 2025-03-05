@@ -39,6 +39,8 @@ urlpatterns = [
         views.sample_test_delete,
         name="sample_test_delete",
     ),
+    path('sample-tests/<int:pk>/detail/', views.sample_test_detail, name='sample_test_detail'),
+    path('sample-tests/<int:pk>/card/', views.sample_test_card, name='sample_test_card'),
     # Test routes
     path("tests/create/", views.test_create, name="test_create"),
     path("tests/<int:pk>/edit/", views.test_edit, name="test_edit"),
@@ -82,4 +84,5 @@ urlpatterns = [
     path("tasks/<int:pk>/reopen/", views.task_reopen, name="task_reopen"),
     path("tasks/<int:pk>/", views.task_detail, name="task_detail"),
     path("tasks/search/", views.task_search, name="task_search"),
+    path('sampletests/', views.SampleTestListView.as_view(), name='sampletest-list'),
 ]

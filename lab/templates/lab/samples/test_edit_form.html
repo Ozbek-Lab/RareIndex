@@ -1,0 +1,45 @@
+<div class="card h-100">
+    <form hx-put="{% url 'lab:sample_test_edit' sampletest.pk %}"
+          hx-target="this"
+          hx-swap="outerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          class="h-100">
+        <div class="card-body">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Test</label>
+                    {{ form.test }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Performed Date</label>
+                    {{ form.performed_date }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Performed By</label>
+                    {{ form.performed_by }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Status</label>
+                    {{ form.status }}
+                </div>
+            </div>
+        </div>
+        <div class="card-footer bg-transparent">
+            <div class="flex justify-end space-x-2">
+                <button type="button"
+                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                        hx-get="{% url 'lab:sample_test_card' sampletest.pk %}"
+                        hx-target="closest .card"
+                        hx-swap="outerHTML">
+                    <i class="fas fa-times mr-1"></i>
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <i class="fas fa-save mr-1"></i>
+                    Save
+                </button>
+            </div>
+        </div>
+    </form>
+</div> 

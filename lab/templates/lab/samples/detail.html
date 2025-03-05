@@ -1,5 +1,5 @@
 {% load lab_filters %}
-<div id="sample-detail" class="space-y-6" x-data="{ activeTab: 'notes' }">
+<div id="sample-detail" class="space-y-6" x-data="{ activeTab: '{{ activeTab }}' }">
   <!-- Sample card -->
   <div class="bg-white rounded-lg shadow-lg overflow-hidden">
     <!-- Header with sample info -->
@@ -96,139 +96,61 @@
     </div>
 
     <!-- Tabs for related data -->
-    <div class="px-6 border-b border-gray-200">
-      <div class="flex -mb-px">
-        <button
-          class="py-2 px-4 border-b-2 transition-colors"
-          :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'"
-          @click="activeTab = 'notes'"
-        >
-          Notes ({{ sample.notes.count }})
-        </button>
-        <button
-          class="py-2 px-4 border-b-2 transition-colors"
-          :class="activeTab === 'tests' ? 'border-blue-500 text-blue-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'"
-          @click="activeTab = 'tests'"
-        >
-          Tests ({{ sample.tests.count }})
-        </button>
-        <button
-          class="py-2 px-4 border-b-2 transition-colors"
-          :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'"
-          @click="activeTab = 'tasks'"
-        >
-          Tasks ({{ sample.tasks.count }})
-        </button>
-        <button
-          class="py-2 px-4 border-b-2 transition-colors"
-          :class="activeTab === 'status' ? 'border-blue-500 text-blue-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'"
-          @click="activeTab = 'status'"
-        >
-          Status History
-        </button>
-      </div>
+    <div class="px-6 border-b border-gray-200 bg-gray-50">
+      <ul class="flex space-x-8 overflow-x-auto" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="px-1 py-4 text-sm font-medium border-b-2"
+            :class="activeTab == 'notes' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'"
+            @click.prevent="activeTab = 'notes'"
+          >
+            Notes ({{ sample.notes.count }})
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="px-1 py-4 text-sm font-medium border-b-2"
+            :class="activeTab == 'tests' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'"
+            @click.prevent="activeTab = 'tests'"
+          >
+            Tests ({{ sample.tests.count }})
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="px-1 py-4 text-sm font-medium border-b-2"
+            :class="activeTab == 'tasks' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'"
+            @click.prevent="activeTab = 'tasks'"
+          >
+            Tasks ({{ sample.tasks.count }})
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="px-1 py-4 text-sm font-medium border-b-2"
+            :class="activeTab == 'status' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'"
+            @click.prevent="activeTab = 'status'"
+          >
+            Status History
+          </button>
+        </li>
+      </ul>
     </div>
 
     <!-- Tab content -->
     <div class="p-6">
       <!-- Notes tab -->
-      <div x-show="activeTab === 'notes'" x-cloak>
-        {% include "lab/notes/list.html"  with object=sample content_type="sample" %}
+      <div x-show="activeTab == 'notes'" x-cloak>
+        {% include "lab/notes/list.html" with object=sample content_type="sample" %}
       </div>
 
       <!-- Tests tab -->
-      <div x-show="activeTab === 'tests'" x-cloak>
-        <div class="flex justify-between mb-4">
-          <h3 class="text-lg font-medium">Tests</h3>
-          {% if perms.lab.add_sampletest %}
-            <button
-              class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded flex items-center"
-              hx-get="{% url 'lab:sample_test_create' %}?sample={{ sample.id }}"
-              hx-target="#test-form-container"
-              hx-swap="innerHTML"
-            >
-              <i class="fas fa-plus mr-1"></i> Add Test
-            </button>
-          {% endif %}
-        </div>
-        <div id="test-form-container"></div>
-
-        {% if sample.sampletest_set.exists %}
-          <div class="overflow-x-auto bg-gray-50 rounded-lg p-2">
-            <table class="min-w-full">
-              <thead>
-                <tr
-                  class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  <th class="px-3 py-2">Test</th>
-                  <th class="px-3 py-2">Performed Date</th>
-                  <th class="px-3 py-2">Status</th>
-                  <th class="px-3 py-2">Performed By</th>
-                  <th class="px-3 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-200">
-                {% for sample_test in sample.sampletest_set.all %}
-                  <tr class="hover:bg-gray-100">
-                    <td class="px-3 py-2 whitespace-nowrap">
-                      <div class="flex items-center">
-                        <span class="font-medium text-gray-900"
-                          >{{ sample_test.test.name }}</span
-                        >
-                      </div>
-                    </td>
-                    <td
-                      class="px-3 py-2 whitespace-nowrap text-sm text-gray-500"
-                    >
-                      {{ sample_test.performed_date|date:"d M Y" }}
-                    </td>
-                    <td class="px-3 py-2 whitespace-nowrap">
-                      <span
-                        class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-{{ sample_test.status.color|default:'gray' }}-100 text-{{ sample_test.status.color|default:'gray' }}-800"
-                      >
-                        {{ sample_test.status.name }}
-                      </span>
-                    </td>
-                    <td
-                      class="px-3 py-2 whitespace-nowrap text-sm text-gray-500"
-                    >
-                      {{ sample_test.performed_by.get_full_name|default:sample_test.performed_by.username }}
-                    </td>
-                    <td
-                      class="px-3 py-2 whitespace-nowrap text-right text-sm font-medium"
-                    >
-                      <button
-                        class="text-blue-600 hover:text-blue-900 mr-2"
-                        hx-get="{% url 'lab:sample_test_edit' sample_test.pk %}"
-                        hx-target="#test-form-container"
-                        hx-swap="innerHTML"
-                      >
-                        <i class="fas fa-edit"></i>
-                      </button>
-                      <button
-                        class="text-red-600 hover:text-red-900"
-                        hx-delete="{% url 'lab:sample_test_delete' sample_test.pk %}"
-                        hx-confirm="Are you sure you want to delete this test record?"
-                        hx-target="closest tr"
-                        hx-swap="outerHTML swap:1s"
-                      >
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% else %}
-          <div class="bg-gray-50 rounded-lg p-6 text-center text-gray-500">
-            No tests have been performed on this sample yet.
-          </div>
-        {% endif %}
+      <div x-show="activeTab == 'tests'" x-cloak>
+        {% include "lab/samples/tests_tab.html" with sample=sample %}
       </div>
 
       <!-- Tasks tab -->
-      <div x-show="activeTab === 'tasks'" x-cloak>
+      <div x-show="activeTab == 'tasks'" x-cloak>
         <div class="flex justify-between mb-4">
           <h3 class="text-lg font-medium">Tasks</h3>
           <button
@@ -314,7 +236,7 @@
       </div>
 
       <!-- Status History tab -->
-      <div x-show="activeTab === 'status'" x-cloak>
+      <div x-show="activeTab == 'status'" x-cloak>
         <h3 class="text-lg font-medium mb-4">Status History</h3>
 
         {% if sample.status_logs.exists %}
