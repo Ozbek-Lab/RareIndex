@@ -144,7 +144,7 @@ class Note(models.Model):
 
 
 class Test(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)

@@ -25,10 +25,15 @@ from .forms import (
     TaskForm,
     NoteForm,
     ProjectForm,
+    SampleTestForm,
 )
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.contrib.auth.models import User
+from django.views.generic import ListView
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.utils import timezone
+from django.http import QueryDict
 
 
 def app(request, page=None, context=None):
@@ -443,9 +448,7 @@ def sample_search(request):
 @login_required
 def sample_detail(request, pk):
     """Detailed view for a sample with all related data"""
-    sample = get_object_or_404(Sample, pk=pk)
-
-    # Prefetch related data for efficiency
+    # Get sample with all related data
     sample = (
         Sample.objects.select_related(
             "individual",
@@ -467,13 +470,17 @@ def sample_detail(request, pk):
         )
         .get(pk=pk)
     )
+    
+    # Get the active tab from query params or default to 'notes'
+    active_tab = request.GET.get('tab', 'notes')
 
     # If card_only=true is in the query params, return just the card
     if request.GET.get("card_only") == "true":
         return TemplateResponse(request, "lab/samples/card.html", {"sample": sample})
 
     context = {
-        "sample": sample,
+        'sample': sample,
+        'activeTab': active_tab,
     }
 
     return TemplateResponse(request, "lab/samples/detail.html", context)
@@ -645,38 +652,36 @@ def sample_test_create(request):
 @login_required
 @permission_required("lab.change_sampletest")
 def sample_test_edit(request, pk):
-    """Edit an existing test record"""
-    sample_test = get_object_or_404(SampleTest, pk=pk)
-
-    if request.method == "POST":
-        # Handle the form submission
-        test_id = request.POST.get("test")
-        status_id = request.POST.get("status")
-        performed_date = request.POST.get("performed_date")
-
-        if test_id and status_id and performed_date:
-            sample_test.test_id = test_id
-            sample_test.status_id = status_id
-            sample_test.performed_date = performed_date
-            sample_test.save()
-
+    sampletest = get_object_or_404(SampleTest, pk=pk)
+    
+    if request.method == "GET":
+        form = SampleTestForm(instance=sampletest)
+        return TemplateResponse(
+            request,
+            "lab/samples/test_edit_form.html",
+            {"form": form, "sampletest": sampletest}
+        )
+    
+    elif request.method == "PUT":
+        # Parse the PUT data
+        put_data = QueryDict(request.body)
+        form = SampleTestForm(put_data, instance=sampletest)
+        if form.is_valid():
+            sampletest = form.save()
+            # Return the updated card view
             return TemplateResponse(
-                request, "lab/samples/test_list.html", {"sample": sample_test.sample}
+                request,
+                "lab/samples/test_card.html",
+                {"sampletest": sampletest}
             )
-
-    # For GET requests, render the form
-    test_content_type = ContentType.objects.get_for_model(SampleTest)
-
-    return TemplateResponse(
-        request,
-        "lab/samples/test_form.html",
-        {
-            "sample_test": sample_test,
-            "sample": sample_test.sample,
-            "tests": Test.objects.all(),
-            "statuses": Status.objects.filter(content_type=test_content_type),
-        },
-    )
+        else:
+            # Return the form with errors
+            return TemplateResponse(
+                request,
+                "lab/samples/test_edit_form.html",
+                {"form": form, "sampletest": sampletest},
+                status=422
+            )
 
 
 @login_required
@@ -748,19 +753,40 @@ def test_list(request):
 @login_required
 @permission_required("lab.add_test")
 def test_create(request):
+    """Create a new test, optionally associated with a sample"""
+    sample = None
+    if sample_id := request.GET.get('sample'):
+        sample = get_object_or_404(Sample, pk=sample_id)
+
     if request.method == "POST":
         form = TestForm(request.POST)
         if form.is_valid():
             test = form.save(commit=False)
             test.created_by = request.user
             test.save()
-            tests = Test.objects.all()
-            return TemplateResponse(request, "lab/tests/list.html", {"tests": tests})
-    # For GET requests, return just the form
+
+            # If we have a sample, create a SampleTest
+            if sample:
+                SampleTest.objects.create(
+                    sample=sample,
+                    test=test,
+                    performed_date=timezone.now().date(),
+                    performed_by=request.user,
+                    status=Status.objects.get(name="Pending")  # Adjust as needed
+                )
+                return redirect('lab:sample_detail', pk=sample.pk)
+            
+            return redirect('lab:test_list')
+    else:
+        form = TestForm()
+
     return TemplateResponse(
         request,
-        "lab/tests/card_edit.html",
-        {"test": None},  # Add this context
+        "lab/tests/create.html",
+        {
+            "form": form,
+            "sample": sample,
+        }
     )
 
 
@@ -1418,3 +1444,81 @@ def task_reopen(request, pk):
         return TemplateResponse(request, "lab/tasks/task_card.html", {"task": task})
 
     return HttpResponse(status=400)
+
+
+class SampleTestListView(LoginRequiredMixin, ListView):
+    model = SampleTest
+    template_name = 'lab/sampletest_list.html'
+    context_object_name = 'sampletests'
+    paginate_by = 25
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Add select_related to optimize queries
+        queryset = queryset.select_related(
+            'sample',
+            'sample__individual',
+            'test',
+            'status',
+            'performed_by'
+        )
+
+        # Filter by search query if provided
+        search_query = self.request.GET.get('search', '')
+        if search_query:
+            queryset = queryset.filter(
+                models.Q(sample__individual__lab_id__icontains=search_query) |
+                models.Q(test__name__icontains=search_query)
+            )
+
+        # Filter by status if provided
+        status = self.request.GET.get('status')
+        if status:
+            queryset = queryset.filter(status_id=status)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['search_query'] = self.request.GET.get('search', '')
+        context['current_status'] = self.request.GET.get('status', '')
+        context['statuses'] = models.Status.objects.all()
+        return context
+
+
+@login_required
+def sample_test_detail(request, pk):
+    """Detailed view for a sample test"""
+    sampletest = get_object_or_404(
+        SampleTest.objects.select_related(
+            'test',
+            'sample',
+            'sample__individual',
+            'sample__sample_type',
+            'performed_by',
+            'status'
+        ).prefetch_related(
+            'analyses',
+            'analyses__type',
+            'analyses__status'
+        ),
+        pk=pk
+    )
+    
+    return TemplateResponse(
+        request,
+        "lab/samples/test_detail.html",
+        {"sampletest": sampletest}
+    )
+
+
+# Add a new view for returning just the card
+@login_required
+def sample_test_card(request, pk):
+    sampletest = get_object_or_404(SampleTest, pk=pk)
+    return TemplateResponse(
+        request,
+        "lab/samples/test_card.html",
+        {"sampletest": sampletest}
+    )

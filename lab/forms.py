@@ -10,6 +10,7 @@ from .models import (
     SampleType,
     Status,
     Project,
+    SampleTest,
 )
 from django.contrib.contenttypes.models import ContentType
 
@@ -140,4 +141,13 @@ class SampleTypeForm(forms.ModelForm):
                     "class": "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
                 }
             ),
+        }
+
+
+class SampleTestForm(forms.ModelForm):
+    class Meta:
+        model = SampleTest
+        fields = ['test', 'performed_date', 'performed_by', 'status']
+        widgets = {
+            'performed_date': forms.DateInput(attrs={'type': 'date'}),
         }
