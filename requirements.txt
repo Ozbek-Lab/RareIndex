@@ -3,3 +3,5 @@ pillow
 django-cleanup
 django-allauth
 django-htmx
+django-template-partials
+neapolitan

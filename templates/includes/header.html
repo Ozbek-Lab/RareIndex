@@ -1,39 +1,131 @@
 {% load static %}
-<header class="flex items-center justify-between bg-gray-800 h-20 px-8 text-white sticky top-0 z-40">
-    <div>
-        <a class="flex items-center gap-2" href="/">
-            <img class="h-6" src="{% static 'images/logo.svg' %}" alt="Logo"/>
-            <span class="text-lg font-bold">Project Title</span>
+<aside
+  class="fixed left-0 top-0 h-full w-64 bg-gray-800 text-white z-40 flex flex-col"
+>
+  <div class="p-6">
+    <a
+      hx-get="{% url 'home' %}"
+      hx-target="content"
+      hx-select="content"
+      hx-swap="innerHTML"
+      class="flex items-center gap-2"
+    >
+      <img class="h-6" src="{% static 'images/logo.svg' %}" alt="Logo" />
+      <span class="text-lg font-bold">RareIndex</span>
+    </a>
+  </div>
+  <nav class="flex-1">
+    <ul class="navitems flex flex-col">
+      {% if request.user.is_authenticated %}
+        <li>
+          <a
+            hx-get="{% url 'home' %}"
+            hx-target="content"
+            hx-select="content"
+            hx-swap="innerHTML"
+            class="flex items-center gap-2"
+          >
+            <i class="fas fa-home w-5 h-5"></i>
+            Home
+          </a>
+        </li>
+      {% else %}
+        <li>
+          <a
+            hx-get="{% url 'account_login' %}"
+            hx-target="content"
+            hx-select="content"
+            hx-swap="innerHTML"
+            class="flex items-center gap-2"
+          >
+            <i class="fas fa-sign-in-alt w-5 h-5"></i>
+            Login
+          </a>
+        </li>
+        <li>
+          <a
+            href="{% url 'account_signup' %}?next={% url 'profile-onboarding' %}"
+            class="flex items-center gap-2"
+          >
+            <i class="fas fa-user-plus w-5 h-5"></i>
+            Signup
+          </a>
+        </li>
+      {% endif %}
+    </ul>
+  </nav>
+
+  {% if request.user.is_authenticated %}
+    <div class="border-t border-gray-700">
+      <div x-data="{ dropdownOpen: false }" class="relative">
+        <a
+          @click="dropdownOpen = !dropdownOpen"
+          @click.away="dropdownOpen = false"
+          class="cursor-pointer select-none flex items-center gap-2 h-16 px-4"
+        >
+          <img
+            class="h-8 w-8 rounded-full object-cover"
+            src="{{ user.profile.avatar }}"
+            alt="Avatar"
+          />
+          <span class="flex-1">{{ user.profile.name }}</span>
+          <i
+            class="fas fa-chevron-up w-4"
+            x-bind:class="dropdownOpen && 'rotate-180 duration-300'"
+          ></i>
         </a>
-    </div>
-    <nav class="block relative">
-        <ul class="navitems flex items-center justify-center h-full">
-            {% if request.user.is_authenticated %}
-            <li><a href="/">Home</a></li>
-            <li x-data="{ dropdownOpen: false }" class="relative">
-                <a @click="dropdownOpen = !dropdownOpen" @click.away="dropdownOpen = false" class="cursor-pointer select-none">
-                    <img class="h-8 w-8 rounded-full object-cover" src="{{ request.user.profile.avatar }}" alt="Avatar" />
-                    {{ request.user.profile.name }}
-                    <img x-bind:class="dropdownOpen && 'rotate-180 duration-300'" class="w-4" src="https://img.icons8.com/small/32/ffffff/expand-arrow.png" alt="Dropdown" />
-                </a>
-                <div x-show="dropdownOpen" x-cloak class="absolute right-0 bg-white text-black shadow rounded-lg w-40 p-2 z-20"
-                x-transition:enter="duration-300 ease-out"
-                x-transition:enter-start="opacity-0 -translate-y-5 scale-90"
-                x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-                >
-                    <ul class="hoverlist [&>li>a]:justify-end">
-                        <li><a href="{% url 'profile' %}">My Profile</a></li>
-                        <li><a href="{% url 'profile-edit' %}">Edit Profile</a></li>
-                        <li><a href="{% url 'profile-settings' %}">Settings</a></li>
-                        <li><a href="{% url 'account_logout' %}">Log Out</a></li>
-                    </ul>
-                </div>
+        <div
+          x-show="dropdownOpen"
+          x-cloak
+          class="absolute bottom-16 left-0 right-0 bg-gray-700 mx-4 rounded-lg overflow-hidden"
+          x-transition:enter="duration-300 ease-out"
+          x-transition:enter-start="opacity-0 translate-y-5 scale-90"
+          x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+        >
+          <ul class="py-2">
+            <li>
+              <a
+                hx-get="{% url 'profile' %}"
+                hx-target="content"
+                hx-select="content"
+                hx-swap="innerHTML"
+                class="px-4 py-2 hover:bg-gray-600 block"
+                ><i class="fas fa-user mr-2"></i>My Profile</a
+              >
             </li>
-            
-            {% else %}
-            <li><a href="{% url 'account_login' %}">Login</a></li>
-            <li><a href="{% url 'account_signup' %}?next={% url 'profile-onboarding' %}">Signup</a></li>
-            {% endif %}
-        </ul>
-    </nav>
-</header>
+            <li>
+              <a
+                hx-get="{% url 'profile-edit' %}"
+                hx-target="content"
+                hx-select="content"
+                hx-swap="innerHTML"
+                class="px-4 py-2 hover:bg-gray-600 block"
+                ><i class="fas fa-edit mr-2"></i>Edit Profile</a
+              >
+            </li>
+            <li>
+              <a
+                hx-get="{% url 'profile-settings' %}"
+                hx-target="content"
+                hx-select="content"
+                hx-swap="innerHTML"
+                class="px-4 py-2 hover:bg-gray-600 block"
+                ><i class="fas fa-cog mr-2"></i>Settings</a
+              >
+            </li>
+            <li>
+              <a
+                hx-get="{% url 'account_logout' %}"
+                hx-target="content"
+                hx-select="content"
+                hx-swap="innerHTML"
+                class="px-4 py-2 hover:bg-gray-600 block"
+                ><i class="fas fa-sign-out-alt mr-2"></i>Log Out</a
+              >
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</aside>
