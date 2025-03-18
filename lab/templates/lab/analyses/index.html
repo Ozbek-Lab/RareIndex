@@ -1,0 +1,33 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<!-- Analysis List/Detail View Container with Alpine.js -->
+<div x-data="{ showDetail: false }" class="container mx-auto px-4 py-8">
+  <!-- Detail View - Shown when an analysis is selected -->
+  <div x-show="showDetail" x-cloak>
+    <!-- Back button -->
+    <div class="flex items-center space-x-2 mb-4">
+      <button
+        class="flex items-center text-blue-600 hover:text-blue-800"
+        @click="showDetail = false"
+      >
+        <i class="fas fa-arrow-left mr-1"></i> Back to Analyses
+      </button>
+    </div>
+
+    <!-- Analysis detail container loaded by HTMX -->
+    <div id="analysis-detail-container"></div>
+  </div>
+
+  <!-- List View - Hidden when detail is shown -->
+  <div x-show="!showDetail" class="flex flex-col space-y-4">
+    <!-- Search Section -->
+    {% include "lab/analyses/search.html" %}
+
+    <!-- Analysis List -->
+    <div id="analysis-list" class="space-y-4">
+      {% include "lab/analyses/list.html" %}
+    </div>
+  </div>
+</div>
+{% endblock %} 

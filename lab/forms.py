@@ -6,11 +6,11 @@ from .models import (
     Individual,
     Sample,
     Note,
-    Test,
+    TestType,
     SampleType,
     Status,
     Project,
-    SampleTest,
+    Test,
 )
 from django.contrib.contenttypes.models import ContentType
 
@@ -119,9 +119,9 @@ class NoteForm(forms.ModelForm):
         }
 
 
-class TestForm(forms.ModelForm):
+class TestTypeForm(forms.ModelForm):
     class Meta:
-        model = Test
+        model = TestType
         fields = ["name", "description"]
 
 
@@ -144,10 +144,10 @@ class SampleTypeForm(forms.ModelForm):
         }
 
 
-class SampleTestForm(forms.ModelForm):
+class TestForm(forms.ModelForm):
     class Meta:
-        model = SampleTest
-        fields = ['test', 'performed_date', 'performed_by', 'status']
+        model = Test
+        fields = ['test_type', 'performed_date', 'performed_by', 'status']
         widgets = {
             'performed_date': forms.DateInput(attrs={'type': 'date'}),
         }

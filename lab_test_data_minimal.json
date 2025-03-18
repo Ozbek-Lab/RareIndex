@@ -1,0 +1,59 @@
+[
+    {
+        "model": "auth.user",
+        "pk": 1,
+        "fields": {
+            "password": "pbkdf2_sha256$600000$salt$hashedpassword",
+            "username": "admin",
+            "first_name": "Admin",
+            "last_name": "User",
+            "email": "admin@example.com",
+            "is_staff": true,
+            "is_superuser": true,
+            "is_active": true,
+            "date_joined": "2024-01-01T00:00:00Z",
+            "last_login": "2024-01-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "lab.status",
+        "pk": 1,
+        "fields": {
+            "name": "Pending",
+            "description": "Waiting to be processed",
+            "color": "yellow",
+            "created_by": 1,
+            "created_at": "2024-01-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "lab.family",
+        "pk": 1,
+        "fields": {
+            "family_id": "FAM001",
+            "description": "Example family #1",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+            "created_by": 1
+        }
+    },
+    {
+        "model": "lab.individual",
+        "pk": 1,
+        "fields": {
+            "lab_id": "IND001",
+            "biobank_id": "BIO001",
+            "full_name": "Alice",
+            "tc_identity": "12345678901",
+            "birth_date": "1990-05-10",
+            "icd11_code": "",
+            "hpo_codes": "",
+            "family": 1,
+            "created_at": "2024-01-01T00:00:00Z",
+            "created_by": 1,
+            "status": 1,
+            "diagnosis": "",
+            "diagnosis_date": null
+        }
+    }
+] 
