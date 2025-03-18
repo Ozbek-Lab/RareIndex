@@ -143,7 +143,7 @@ class Note(models.Model):
         return f"{self.user.username} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
 
 
-class Test(models.Model):
+class TestType(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -282,20 +282,13 @@ class Individual(StatusMixin, models.Model):
         # Get all sample IDs for this individual
         sample_ids = self.samples.values_list("id", flat=True)
 
-        test_ids = (
-            SampleTest.objects.filter(sample_id__in=sample_ids)
-            .values_list("test_id", flat=True)
-            .distinct()
-        )
-
-        return Test.objects.filter(id__in=test_ids)
+        return Test.objects.filter(sample_id__in=sample_ids).distinct()
 
     def __str__(self):
         return f"{self.lab_id}"
 
 
 class Sample(StatusMixin, models.Model):
-
     individual = models.ForeignKey(
         Individual, on_delete=models.PROTECT, related_name="samples"
     )
@@ -312,7 +305,6 @@ class Sample(StatusMixin, models.Model):
 
     # Relations
     sending_institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
-    tests = models.ManyToManyField(Test, through="SampleTest")
 
     # Sample details
     isolation_by = models.ForeignKey(
@@ -337,21 +329,26 @@ class Sample(StatusMixin, models.Model):
         return f"{self.individual.lab_id} - {self.sample_type} - {self.receipt_date}"
 
 
-class SampleTest(StatusMixin, models.Model):
+class Test(StatusMixin, models.Model):
     """Through model for tracking tests performed on samples"""
 
-    sample = models.ForeignKey(Sample, on_delete=models.PROTECT)
-    test = models.ForeignKey(Test, on_delete=models.PROTECT)
+    sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name='tests')
+    test_type = models.ForeignKey(TestType, on_delete=models.PROTECT)
     performed_date = models.DateField()
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     status_logs = GenericRelation(StatusLog)
     notes = GenericRelation("Note")
     created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User, 
+        on_delete=models.PROTECT, 
+        related_name="created_tests"
+    )
     tasks = GenericRelation("Task")
 
     def __str__(self):
-        return f"{self.test.name} - {self.performed_date}"
+        return f"{self.test_type.name} - {self.performed_date}"
 
 
 class AnalysisType(models.Model):
@@ -359,7 +356,7 @@ class AnalysisType(models.Model):
     
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    version = models.CharField(max_length=50)
+    version = models.CharField(max_length=50,blank=True)
     parent_types = models.ManyToManyField(
         'self',
         blank=True,
@@ -390,10 +387,10 @@ class AnalysisType(models.Model):
         return f"{self.name} v{self.version}"
 
 
-class SampleTestAnalysis(StatusMixin, models.Model):
+class Analysis(StatusMixin, models.Model):
     """Model for tracking analyses performed on sample tests"""
     
-    sample_test = models.ForeignKey(SampleTest, on_delete=models.PROTECT, related_name='analyses')
+    test = models.ForeignKey(Test, on_delete=models.PROTECT, related_name='analyses')
     performed_date = models.DateField()
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
     type = models.ForeignKey(AnalysisType, on_delete=models.PROTECT)
@@ -406,8 +403,8 @@ class SampleTestAnalysis(StatusMixin, models.Model):
     )
 
     class Meta:
-        verbose_name_plural = "sample test analyses"
+        verbose_name_plural = "analyses"
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.sample_test} - {self.type} - {self.performed_date}"
+        return f"{self.test} - {self.type} - {self.performed_date}"

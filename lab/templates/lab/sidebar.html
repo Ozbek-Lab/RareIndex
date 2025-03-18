@@ -1,0 +1,23 @@
+    <a href="{% url 'lab:test_list' %}" 
+       class="nav-link {% if request.resolver_match.url_name in 'test_list,test_create,test_edit,test_detail' %}active{% endif %}"
+       hx-boost="true"
+    >
+        <i class="fas fa-vial"></i>
+        Tests
+    </a>
+    
+    <a href="{% url 'lab:analysis_list' %}" 
+       class="nav-link {% if request.resolver_match.url_name in 'analysis_list,analysis_create,analysis_edit,analysis_detail' %}active{% endif %}"
+       hx-boost="true"
+    >
+        <i class="fas fa-microscope"></i>
+        Analyses
+    </a>
+    
+    <a href="{% url 'lab:types' %}"
+       class="nav-link {% if request.resolver_match.url_name == 'types' %}active{% endif %}"
+       hx-boost="true"
+    >
+        <i class="fas fa-list"></i>
+        Types
+    </a> 

@@ -1,0 +1,49 @@
+{% load lab_filters %}
+<div id="sample-type-{% if sample_type %}{{ sample_type.id }}{% else %}form{% endif %}" class="bg-white rounded-lg shadow p-4 mb-4">
+    <h3 class="text-lg font-medium text-gray-900 mb-4">
+        {% if sample_type %}Edit{% else %}New{% endif %} Sample Type
+    </h3>
+
+    <form hx-{% if sample_type %}put{% else %}post{% endif %}="{% if sample_type %}{% url 'lab:sample_type_edit' sample_type.pk %}{% else %}{% url 'lab:sample_type_create' %}{% endif %}"
+          hx-target="#sample-type-{% if sample_type %}{{ sample_type.id }}{% else %}form{% endif %}"
+          hx-swap="outerHTML">
+        {% csrf_token %}
+        
+        <div class="space-y-4">
+            <!-- Name Field -->
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700">Name *</label>
+                <input type="text" 
+                       name="name" 
+                       id="name" 
+                       value="{{ sample_type.name|default:'' }}"
+                       required
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+            </div>
+
+            <!-- Description Field -->
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
+                <textarea name="description" 
+                          id="description" 
+                          rows="3" 
+                          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">{{ sample_type.description|default:'' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="mt-4 flex justify-end space-x-3">
+            <button type="button"
+                    class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    hx-get="{% if sample_type %}{% url 'lab:sample_type_edit' sample_type.pk %}{% else %}{% url 'lab:sample_type_create' %}?action=cancel{% endif %}"
+                    hx-target="#sample-type-{% if sample_type %}{{ sample_type.id }}{% else %}form{% endif %}"
+                    hx-swap="outerHTML">
+                Cancel
+            </button>
+            <button type="submit"
+                    class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                {% if sample_type %}Save Changes{% else %}Create{% endif %}
+            </button>
+        </div>
+    </form>
+</div> 

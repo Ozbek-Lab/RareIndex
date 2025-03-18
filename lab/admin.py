@@ -8,8 +8,8 @@ class NoteAdmin(admin.ModelAdmin):
     search_fields = ['content']
     date_hierarchy = 'created_at'
 
-@admin.register(models.Test)
-class TestAdmin(admin.ModelAdmin):
+@admin.register(models.TestType)
+class TestTypeAdmin(admin.ModelAdmin):
     list_display = ['name', 'created_by', 'created_at']
     search_fields = ['name', 'description']
     list_filter = ['created_at', 'created_by']
@@ -40,11 +40,11 @@ class SampleAdmin(admin.ModelAdmin):
     search_fields = ['individual__lab_id', 'individual__full_name']
     date_hierarchy = 'receipt_date'
 
-@admin.register(models.SampleTest)
-class SampleTestAdmin(admin.ModelAdmin):
-    list_display = ['sample', 'test', 'status', 'performed_date', 'performed_by']
-    list_filter = ['status', 'performed_date', 'test']
-    search_fields = ['sample__individual__lab_id', 'test__name']
+@admin.register(models.Test)
+class TestAdmin(admin.ModelAdmin):
+    list_display = ['sample', 'test_type', 'status', 'performed_date', 'performed_by']
+    list_filter = ['status', 'performed_date', 'test_type']
+    search_fields = ['sample__individual__lab_id', 'test_type__name']
     date_hierarchy = 'performed_date'
 
 @admin.register(models.Status)
@@ -80,15 +80,9 @@ class AnalysisTypeAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
-@admin.register(models.SampleTestAnalysis)
-class SampleTestAnalysisAdmin(admin.ModelAdmin):
-    list_display = ('sample_test', 'type', 'performed_date', 'performed_by', 'status')
-    list_filter = ('performed_date', 'status', 'created_at')
-    search_fields = ('sample_test__sample__individual__lab_id', 'type__name')
-    readonly_fields = ('created_at', 'created_by')
+@admin.register(models.Analysis)
+class AnalysisAdmin(admin.ModelAdmin):
+    list_display = ['test', 'type', 'status', 'performed_date', 'performed_by']
+    list_filter = ['type', 'status', 'performed_date']
+    search_fields = ['test__sample__individual__lab_id', 'type__name']
     date_hierarchy = 'performed_date'
-
-    def save_model(self, request, obj, form, change):
-        if not change:  # Only set created_by on creation
-            obj.created_by = request.user
-        super().save_model(request, obj, form, change)

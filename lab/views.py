@@ -8,24 +8,26 @@ from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual,
     Sample,
-    Test,
+    TestType,
     SampleType,
     Status,
     Task,
     Note,
     Family,
-    SampleTest,
+    Test,
     Project,
+    Analysis,
+    AnalysisType,
 )
 from .forms import (
     IndividualForm,
     SampleForm,
-    TestForm,
+    TestTypeForm,
     SampleTypeForm,
     TaskForm,
     NoteForm,
     ProjectForm,
-    SampleTestForm,
+    TestForm,
 )
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -49,7 +51,7 @@ def app(request, page=None, context=None):
     elif page == "samples":
         context["initial_view"] = "samples/index.html"
     elif page == "tests":
-        context["initial_view"] = "tests/list.html"
+        context["initial_view"] = "tests/index.html"
     elif page == "sample_types":
         context["initial_view"] = "sample_types/list.html"
 
@@ -165,7 +167,7 @@ def individual_index(request):
         "families": Family.objects.all(),
         "tests": Test.objects.all(),
         "test_statuses": Status.objects.filter(
-            content_type=ContentType.objects.get_for_model(SampleTest)
+            content_type=ContentType.objects.get_for_model(Test)
         ),
     }
 
@@ -224,9 +226,6 @@ def individual_delete(request, pk):
     return HttpResponse(status=200)
 
 
-# Update to individual_search function in lab/views.py
-
-
 @login_required
 def individual_search(request):
     queryset = Individual.objects.all()
@@ -243,20 +242,20 @@ def individual_search(request):
         lab_id_list = lab_ids.split(",")
         queryset = queryset.filter(id__in=lab_id_list)
 
-    # Sample Test filter
+    # Test filter
     test_id = request.POST.get("test")
     if test_id:
         # Check if it's a comma-separated list
         if "," in test_id:
             test_ids = test_id.split(",")
-            queryset = queryset.filter(samples__sampletest__test_id__in=test_ids)
+            queryset = queryset.filter(samples__test__test_id__in=test_ids)
         else:
-            queryset = queryset.filter(samples__sampletest__test_id=test_id)
+            queryset = queryset.filter(samples__test__test_id=test_id)
 
     # Sample Test Status filter
     test_status_id = request.POST.get("test_status")
     if test_status_id:
-        queryset = queryset.filter(samples__sampletest__status_id=test_status_id)
+        queryset = queryset.filter(samples__test__status_id=test_status_id)
 
     # Family ID filter - now supports multiple families
     family_ids = request.POST.get("family")
@@ -291,6 +290,12 @@ def individual_search(request):
         {
             "individuals": individuals,
             "total_count": total_count,
+            "individual_statuses": Status.objects.filter(
+                content_type=ContentType.objects.get_for_model(Individual)
+            ),
+            "test_statuses": Status.objects.filter(
+                content_type=ContentType.objects.get_for_model(Test)
+            ),
             "filters": {  # Pass filters for subsequent page loads
                 "status": status_id,
                 "test": request.POST.get("test"),
@@ -354,12 +359,8 @@ def sample_list(request):
         return TemplateResponse(request, "lab/samples/index.html", context)
 
     # For regular requests, return via the main app
-    # Include the initial_view context to ensure it loads the sample index with search
     context["initial_view"] = "samples/index.html"
     return app(request, page="samples", context=context)
-
-
-# Update to sample_search function in lab/views.py
 
 
 @login_required
@@ -433,6 +434,9 @@ def sample_search(request):
         {
             "samples": samples,
             "total_count": total_count,
+            "sample_statuses": Status.objects.filter(
+                content_type=ContentType.objects.get_for_model(Sample)
+            ),
             "filters": {  # Pass filters for subsequent page loads
                 "status": status_id,
                 "sample_type": sample_type_ids,
@@ -463,10 +467,10 @@ def sample_detail(request, pk):
             "tasks",
             "notes",
             "status_logs",
-            "sampletest_set",
-            "sampletest_set__test",
-            "sampletest_set__status",
-            "sampletest_set__performed_by",
+            "tests",
+            "tests__test_type",
+            "tests__status",
+            "tests__performed_by",
         )
         .get(pk=pk)
     )
@@ -606,37 +610,37 @@ def sample_delete(request, pk):
 
 
 @login_required
-@permission_required("lab.add_sampletest")
-def sample_test_create(request):
+@permission_required("lab.add_test")
+def test_create(request):
     """Create a new test record for a sample"""
     sample_id = request.GET.get("sample")
     sample = get_object_or_404(Sample, pk=sample_id)
 
     if request.method == "POST":
         # Handle the form submission
-        test_id = request.POST.get("test")
+        test_id = request.POST.get("test_type")
         status_id = request.POST.get("status")
         performed_date = request.POST.get("performed_date")
 
         if test_id and status_id and performed_date:
-            test = get_object_or_404(Test, pk=test_id)
+            test_type = get_object_or_404(Test_Type, pk=test_id)
             status = get_object_or_404(Status, pk=status_id)
 
             # Create the sample test
-            sample_test = SampleTest.objects.create(
+            test = Test.objects.create(
                 sample=sample,
-                test=test,
+                test_type=test_type,
                 status=status,
                 performed_date=performed_date,
                 performed_by=request.user,
             )
 
             return TemplateResponse(
-                request, "lab/samples/test_list.html", {"sample": sample}
+                request, "lab/tests/list.html", {"sample": sample}
             )
 
     # For GET requests, render the form
-    test_content_type = ContentType.objects.get_for_model(SampleTest)
+    test_content_type = ContentType.objects.get_for_model(Test)
 
     return TemplateResponse(
         request,
@@ -650,12 +654,12 @@ def sample_test_create(request):
 
 
 @login_required
-@permission_required("lab.change_sampletest")
-def sample_test_edit(request, pk):
-    sampletest = get_object_or_404(SampleTest, pk=pk)
+@permission_required("lab.change_test")
+def test_edit(request, pk):
+    sampletest = get_object_or_404(Test, pk=pk)
     
     if request.method == "GET":
-        form = SampleTestForm(instance=sampletest)
+        form = TestForm(instance=sampletest)
         return TemplateResponse(
             request,
             "lab/samples/test_edit_form.html",
@@ -665,13 +669,13 @@ def sample_test_edit(request, pk):
     elif request.method == "PUT":
         # Parse the PUT data
         put_data = QueryDict(request.body)
-        form = SampleTestForm(put_data, instance=sampletest)
+        form = TestForm(put_data, instance=sampletest)
         if form.is_valid():
             sampletest = form.save()
             # Return the updated card view
             return TemplateResponse(
                 request,
-                "lab/samples/test_card.html",
+                "lab/tests/card.html",
                 {"sampletest": sampletest}
             )
         else:
@@ -685,12 +689,12 @@ def sample_test_edit(request, pk):
 
 
 @login_required
-@permission_required("lab.delete_sampletest")
+@permission_required("lab.delete_test")
 @require_http_methods(["DELETE"])
-def sample_test_delete(request, pk):
+def test_delete(request, pk):
     """Delete a test record"""
-    sample_test = get_object_or_404(SampleTest, pk=pk)
-    sample_test.delete()
+    test = get_object_or_404(Test, pk=pk)
+    test.delete()
     return HttpResponse(status=200)
 
 
@@ -739,46 +743,61 @@ def note_delete(request, pk):
 
 @login_required
 def test_list(request):
-    tests = Test.objects.all()
-    template = "lab/tests/list.html"
+    """List view for all tests"""
+    tests = Test.objects.select_related(
+        'created_by'
+    ).prefetch_related(
+        'test_type',
+        'sample',
+        'sample__individual',
+        'sample__sample_type'
+    ).order_by('-created_at')
+
+    context = {
+        "tests": tests,
+        "test_statuses": Status.objects.filter(
+            content_type=ContentType.objects.get_for_model(Test)
+        ),
+    }
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, template, {"tests": tests})
+        return TemplateResponse(request, "lab/tests/index.html", context)
 
-    # Otherwise, redirect to the main app with tests view
-    return app(request, page="tests")
+    context["initial_view"] = "tests/index.html"
+    # For regular requests, return via the main app
+    return app(request, page="tests", context=context)
 
 
 @login_required
 @permission_required("lab.add_test")
-def test_create(request):
-    """Create a new test, optionally associated with a sample"""
+def test_type_create(request):
+    """Create a new test_type, associated with a test"""
     sample = None
     if sample_id := request.GET.get('sample'):
         sample = get_object_or_404(Sample, pk=sample_id)
 
     if request.method == "POST":
-        form = TestForm(request.POST)
+        form = TestTypeForm(request.POST)
         if form.is_valid():
             test = form.save(commit=False)
             test.created_by = request.user
             test.save()
 
-            # If we have a sample, create a SampleTest
+            # If we have a sample, create a Test
             if sample:
-                SampleTest.objects.create(
+                Test.objects.create(
                     sample=sample,
                     test=test,
                     performed_date=timezone.now().date(),
                     performed_by=request.user,
-                    status=Status.objects.get(name="Pending")  # Adjust as needed
+                    status=Status.objects.get(name="Pending")
                 )
                 return redirect('lab:sample_detail', pk=sample.pk)
             
             return redirect('lab:test_list')
     else:
-        form = TestForm()
+        form = TestTypeForm()
 
     return TemplateResponse(
         request,
@@ -792,31 +811,30 @@ def test_create(request):
 
 @login_required
 @permission_required("lab.change_test")
-def test_edit(request, pk):
-    test = get_object_or_404(Test, pk=pk)
+def test_type_edit(request, pk):
+    test_type = get_object_or_404(TestType, pk=pk)
     if request.method == "POST":
-        form = TestForm(request.POST, instance=test)
+        form = TestTypeForm(request.POST, instance=test_type)
         if form.is_valid():
-            test = form.save()
-            return TemplateResponse(request, "lab/tests/card.html", {"test": test})
-    return TemplateResponse(request, "lab/tests/card_edit.html", {"test": test})
+            test_type = form.save()
+            return TemplateResponse(request, "lab/test_types/card.html", {"test_type": test_type})
+    return TemplateResponse(request, "lab/test_types/card_edit.html", {"test_type": test_type})
 
 
 @login_required
 @permission_required("lab.delete_test")
 @require_http_methods(["DELETE"])
-def test_delete(request, pk):
-    test = get_object_or_404(Test, pk=pk)
-    test.delete()
+def test_type_delete(request, pk):
+    test_type = get_object_or_404(TestType, pk=pk)
+    test_type.delete()
     return HttpResponse(status=200)
 
 
 @login_required
-def test_search(request):
+def test_type_search(request):
     query = request.GET.get("q", "")
-    tests = Test.objects.filter(name__icontains=query)
-    # Return the same list template but only the grid will be swapped due to hx-select
-    return TemplateResponse(request, "lab/tests/list.html", {"tests": tests})
+    test_types = TestType.objects.filter(name__icontains=query)
+    return TemplateResponse(request, "lab/test_types/list.html", {"test_types": test_types})
 
 
 @login_required
@@ -841,14 +859,21 @@ def sample_type_create(request):
             sample_type = form.save(commit=False)
             sample_type.created_by = request.user
             sample_type.save()
-            sample_types = SampleType.objects.all()
+            # Return the card view instead of the list
             return TemplateResponse(
-                request, "lab/sample_types/list.html", {"sample_types": sample_types}
+                request, "lab/sample_types/card.html", {"sample_type": sample_type}
             )
+    
+    # For GET requests, check if it's a cancel action
+    if request.headers.get("HX-Request") and request.GET.get("action") == "cancel":
+        # Return an empty div that will be removed
+        return HttpResponse("")
+        
+    # For normal GET requests, return the form
     return TemplateResponse(
         request,
         "lab/sample_types/card_edit.html",
-        {"sample_type": None, "container_id": "sample-type-add-button"},
+        {"sample_type": None}
     )
 
 
@@ -872,6 +897,7 @@ def sample_type_edit(request, pk):
 @permission_required("lab.delete_sampletype")
 @require_http_methods(["DELETE"])
 def sample_type_delete(request, pk):
+    """Delete a sample type"""
     sample_type = get_object_or_404(SampleType, pk=pk)
     sample_type.delete()
     return HttpResponse(status=200)
@@ -999,10 +1025,11 @@ def task_search(request):
     tasks = Task.objects.filter(
         Q(title__icontains=query) | Q(description__icontains=query)
     )
-
     # If user is not staff/admin, limit to tasks they created or are assigned to them
     if not request.user.is_staff:
         tasks = tasks.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
+    else:
+        tasks = tasks.all()
 
     # Select related fields for performance
     tasks = tasks.select_related(
@@ -1446,10 +1473,10 @@ def task_reopen(request, pk):
     return HttpResponse(status=400)
 
 
-class SampleTestListView(LoginRequiredMixin, ListView):
-    model = SampleTest
-    template_name = 'lab/sampletest_list.html'
-    context_object_name = 'sampletests'
+class TestListView(LoginRequiredMixin, ListView):
+    model = Test
+    template_name = 'lab/test_list.html'
+    context_object_name = 'tests'
     paginate_by = 25
 
     def get_queryset(self):
@@ -1488,11 +1515,11 @@ class SampleTestListView(LoginRequiredMixin, ListView):
 
 
 @login_required
-def sample_test_detail(request, pk):
-    """Detailed view for a sample test"""
-    sampletest = get_object_or_404(
-        SampleTest.objects.select_related(
-            'test',
+def test_detail(request, pk):
+    """Detailed view for a test"""
+    test = get_object_or_404(
+        Test.objects.select_related(
+            'test_type',
             'sample',
             'sample__individual',
             'sample__sample_type',
@@ -1501,24 +1528,482 @@ def sample_test_detail(request, pk):
         ).prefetch_related(
             'analyses',
             'analyses__type',
-            'analyses__status'
+            'analyses__status',
+            'notes',
+            'status_logs',
+            'notes__user'
         ),
         pk=pk
     )
     
+    # Get the active tab from query params or default to 'notes'
+    active_tab = request.GET.get('tab', 'notes')
+
+    # If card_only=true is in the query params, return just the card
+    if request.GET.get("card_only") == "true":
+        return TemplateResponse(request, "lab/tests/card.html", {"test": test})
+
+    context = {
+        'test': test,
+        'activeTab': active_tab,
+    }
+    
     return TemplateResponse(
         request,
-        "lab/samples/test_detail.html",
-        {"sampletest": sampletest}
+        "lab/tests/detail.html",
+        context
     )
 
 
 # Add a new view for returning just the card
 @login_required
-def sample_test_card(request, pk):
-    sampletest = get_object_or_404(SampleTest, pk=pk)
+def test_card(request, pk):
+    test = get_object_or_404(Test, pk=pk)
     return TemplateResponse(
         request,
-        "lab/samples/test_card.html",
-        {"sampletest": sampletest}
+        "lab/tests/card.html",
+        {"test": test}
     )
+
+
+@login_required
+def test_search(request):
+    """Search and filter tests"""
+    queryset = Test.objects.select_related(
+        "sample",
+        "test_type",
+        "status",
+        "performed_by"
+    ).prefetch_related("tasks", "notes")
+
+    # Apply filters
+    # Status filter
+    status_id = request.POST.get("status")
+    if status_id:
+        queryset = queryset.filter(status_id=status_id)
+
+    # Test Type filter - now supports multiple selection
+    test_type_ids = request.POST.get("test_type")
+    if test_type_ids:
+        # Check if it's a comma-separated list
+        if "," in test_type_ids:
+            test_type_id_list = test_type_ids.split(",")
+            queryset = queryset.filter(test_type_id__in=test_type_id_list)
+        else:
+            queryset = queryset.filter(test_type_id=test_type_ids)
+
+    # Individual filter - now supports multiple selection
+    sample_ids = request.POST.get("sample")
+    if sample_ids:
+        # Check if it's a comma-separated list
+        if "," in sample_ids:
+            sample_id_list = sample_ids.split(",")
+            queryset = queryset.filter(sample_id__in=sample_id_list)
+        else:
+            queryset = queryset.filter(sample_id=sample_ids)
+
+    # Date range (performed date)
+    date_from = request.POST.get("performed_date")
+    if date_from:
+        queryset = queryset.filter(performed_date__gte=date_from)
+
+    date_to = request.POST.get("performed_date")
+    if date_to:
+        queryset = queryset.filter(performed_date__lte=date_to)
+
+    # Order results
+    queryset = queryset.order_by("-performed_date")
+
+    # Get total count before pagination
+    total_count = queryset.count()
+
+    # Paginate results
+    page = request.POST.get("page", 1)
+    paginator = Paginator(queryset, 12)  # 12 items per page
+    tests = paginator.get_page(page)
+
+    return TemplateResponse(
+        request,
+        "lab/tests/list.html",
+        {
+            "tests": tests,
+            "total_count": total_count,
+            "test_statuses": Status.objects.filter(
+                content_type=ContentType.objects.get_for_model(Test)
+            ),
+            "filters": {  # Pass filters for subsequent page loads
+                "status": status_id,
+                "test_type": test_type_ids,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
+        },
+    )
+
+
+def types_list(request):
+    """View to display sample types, test types, and analysis types."""
+    sample_types = SampleType.objects.all().order_by('name')
+    test_types = TestType.objects.all().order_by('name')
+    analysis_types = AnalysisType.objects.all().order_by('name')
+    
+    context = {
+        'sample_types': sample_types,
+        'test_types': test_types,
+        'analysis_types': analysis_types,
+    }
+    
+    # If it's an HTMX request, return just the list content
+    if request.headers.get("HX-Request"):
+        return render(request, 'lab/types/list.html', context)
+
+    # For regular requests, return via the main app
+    context["initial_view"] = "types/list.html"
+    return app(request, context=context)
+
+
+@login_required
+def analysis_list(request):
+    """List view for all analyses"""
+    analyses = Analysis.objects.select_related(
+        'test',
+        'test__sample',
+        'test__sample__individual',
+        'type',
+        'status',
+        'performed_by'
+    ).order_by('-created_at')
+
+    context = {
+        "analyses": analyses,
+        "analysis_types": AnalysisType.objects.all(),
+        "analysis_statuses": Status.objects.filter(
+            content_type=ContentType.objects.get_for_model(Analysis)
+        ),
+    }
+
+    # If it's an HTMX request, check what part the client is asking for
+    if request.headers.get("HX-Request"):
+        # If they're requesting a specific part, return just that
+        requested_url = request.headers.get("HX-Request-URL", "")
+        if "/analyses/search/" in requested_url:
+            return TemplateResponse(request, "lab/analyses/list.html", context)
+        # Otherwise return the full index that includes the search
+        return TemplateResponse(request, "lab/analyses/index.html", context)
+
+    # For regular requests, return via the main app
+    context["initial_view"] = "analyses/index.html"
+    return app(request, page="analyses", context=context)
+
+
+@login_required
+def analysis_search(request):
+    """Search and filter analyses"""
+    queryset = Analysis.objects.select_related(
+        'test',
+        'test__sample',
+        'test__sample__individual',
+        'type',
+        'status',
+        'performed_by'
+    )
+
+    # Apply filters
+    # Status filter
+    status_id = request.POST.get("status")
+    if status_id:
+        queryset = queryset.filter(status_id=status_id)
+
+    # Analysis Type filter
+    analysis_type_ids = request.POST.get("analysis_type")
+    if analysis_type_ids:
+        if "," in analysis_type_ids:
+            type_id_list = analysis_type_ids.split(",")
+            queryset = queryset.filter(type_id__in=type_id_list)
+        else:
+            queryset = queryset.filter(type_id=analysis_type_ids)
+
+    # Individual filter
+    individual_ids = request.POST.get("individual")
+    if individual_ids:
+        if "," in individual_ids:
+            individual_id_list = individual_ids.split(",")
+            queryset = queryset.filter(test__sample__individual_id__in=individual_id_list)
+        else:
+            queryset = queryset.filter(test__sample__individual_id=individual_ids)
+
+    # Test filter
+    test_ids = request.POST.get("test")
+    if test_ids:
+        if "," in test_ids:
+            test_id_list = test_ids.split(",")
+            queryset = queryset.filter(test_id__in=test_id_list)
+        else:
+            queryset = queryset.filter(test_id=test_ids)
+
+    # Date range (performed date)
+    date_from = request.POST.get("date_from")
+    if date_from:
+        queryset = queryset.filter(performed_date__gte=date_from)
+
+    date_to = request.POST.get("date_to")
+    if date_to:
+        queryset = queryset.filter(performed_date__lte=date_to)
+
+    # Order results
+    queryset = queryset.order_by("-performed_date")
+
+    # Get total count before pagination
+    total_count = queryset.count()
+
+    # Paginate results
+    page = request.POST.get("page", 1)
+    paginator = Paginator(queryset, 12)  # 12 items per page
+    analyses = paginator.get_page(page)
+
+    return TemplateResponse(
+        request,
+        "lab/analyses/list.html",
+        {
+            "analyses": analyses,
+            "total_count": total_count,
+            "analysis_statuses": Status.objects.filter(
+                content_type=ContentType.objects.get_for_model(Analysis)
+            ),
+            "filters": {
+                "status": status_id,
+                "analysis_type": analysis_type_ids,
+                "individual": individual_ids,
+                "test": test_ids,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
+        },
+    )
+
+
+@login_required
+def analysis_detail(request, pk):
+    """Detailed view for an analysis"""
+    analysis = get_object_or_404(
+        Analysis.objects.select_related(
+            'test',
+            'test__sample',
+            'test__sample__individual',
+            'test__test_type',
+            'type',
+            'status',
+            'performed_by',
+            'created_by'
+        ).prefetch_related(
+            'notes',
+            'status_logs',
+            'notes__user'
+        ),
+        pk=pk
+    )
+
+    # Get the active tab from query params or default to 'notes'
+    active_tab = request.GET.get('tab', 'notes')
+
+    # If card_only=true is in the query params, return just the card
+    if request.GET.get("card_only") == "true":
+        return TemplateResponse(request, "lab/analyses/card.html", {"analysis": analysis})
+
+    context = {
+        'analysis': analysis,
+        'activeTab': active_tab,
+    }
+
+    return TemplateResponse(
+        request,
+        "lab/analyses/detail.html",
+        context
+    )
+
+
+@login_required
+@permission_required("lab.add_analysis")
+def analysis_create(request):
+    """Create a new analysis"""
+    test_id = request.GET.get("test")
+    test = get_object_or_404(Test, pk=test_id) if test_id else None
+
+    if request.method == "POST":
+        # Handle form submission
+        type_id = request.POST.get("type")
+        status_id = request.POST.get("status")
+        performed_date = request.POST.get("performed_date")
+
+        if type_id and status_id and performed_date:
+            analysis_type = get_object_or_404(AnalysisType, pk=type_id)
+            status = get_object_or_404(Status, pk=status_id)
+
+            analysis = Analysis.objects.create(
+                test=test,
+                type=analysis_type,
+                status=status,
+                performed_date=performed_date,
+                performed_by=request.user,
+                created_by=request.user
+            )
+
+            # Return the appropriate response based on context
+            if test:
+                return TemplateResponse(
+                    request,
+                    "lab/tests/detail.html",
+                    {"test": test, "active_tab": "analyses"}
+                )
+            else:
+                return TemplateResponse(request, "lab/analyses/_add_button.html")
+
+    # For GET requests
+    analysis_content_type = ContentType.objects.get_for_model(Analysis)
+    context = {
+        "analysis": None,
+        "test": test,
+        "analysis_types": AnalysisType.objects.all(),
+        "statuses": Status.objects.filter(content_type=analysis_content_type),
+    }
+
+    # If button=true is in query params, return the add button instead of the form
+    if request.GET.get("button") == "true":
+        context["test"] = test_id
+        return TemplateResponse(request, "lab/analyses/_add_button.html", context)
+
+    return TemplateResponse(request, "lab/analyses/card_edit.html", context)
+
+
+@login_required
+@permission_required("lab.change_analysis")
+def analysis_edit(request, pk):
+    """Edit an existing analysis"""
+    analysis = get_object_or_404(Analysis, pk=pk)
+
+    if request.method == "POST":
+        type_id = request.POST.get("type")
+        status_id = request.POST.get("status")
+        performed_date = request.POST.get("performed_date")
+
+        if type_id and status_id and performed_date:
+            analysis.type = get_object_or_404(AnalysisType, pk=type_id)
+            analysis.status = get_object_or_404(Status, pk=status_id)
+            analysis.performed_date = performed_date
+            analysis.save()
+
+            # If return_to_detail is true, redirect to the detail view
+            if request.GET.get("return_to_detail") == "true":
+                return TemplateResponse(
+                    request, "lab/analyses/detail.html", {"analysis": analysis}
+                )
+
+            # Otherwise return the card view
+            return TemplateResponse(
+                request, "lab/analyses/card.html", {"analysis": analysis}
+            )
+
+    # Get appropriate statuses for Analyses
+    analysis_content_type = ContentType.objects.get_for_model(Analysis)
+    analysis_statuses = Status.objects.filter(content_type=analysis_content_type)
+
+    return TemplateResponse(
+        request,
+        "lab/analyses/card_edit.html",
+        {
+            "analysis": analysis,
+            "analysis_types": AnalysisType.objects.all(),
+            "statuses": analysis_statuses,
+        },
+    )
+
+
+@login_required
+@permission_required("lab.delete_analysis")
+@require_http_methods(["DELETE"])
+def analysis_delete(request, pk):
+    """Delete an analysis"""
+    analysis = get_object_or_404(Analysis, pk=pk)
+    analysis.delete()
+    return HttpResponse(status=200)
+
+
+@login_required
+@permission_required("lab.add_analysistype")
+def analysis_type_create(request):
+    """Create a new analysis type"""
+    if request.method == "POST":
+        name = request.POST.get("name")
+        description = request.POST.get("description")
+        version = request.POST.get("version", "")
+        source_url = request.POST.get("source_url", "")
+        results_url = request.POST.get("results_url", "")
+
+        if name:
+            analysis_type = AnalysisType.objects.create(
+                name=name,
+                description=description,
+                version=version,
+                source_url=source_url,
+                results_url=results_url,
+                created_by=request.user
+            )
+
+            return TemplateResponse(
+                request,
+                "lab/types/list.html",
+                {
+                    "sample_types": SampleType.objects.all().order_by("name"),
+                    "test_types": TestType.objects.all().order_by("name"),
+                    "analysis_types": AnalysisType.objects.all().order_by("name"),
+                }
+            )
+
+    return TemplateResponse(request, "lab/types/analysis_type_form.html")
+
+
+@login_required
+@permission_required("lab.change_analysistype")
+def analysis_type_edit(request, pk):
+    """Edit an existing analysis type"""
+    analysis_type = get_object_or_404(AnalysisType, pk=pk)
+
+    if request.method == "POST":
+        name = request.POST.get("name")
+        description = request.POST.get("description")
+        version = request.POST.get("version", "")
+        source_url = request.POST.get("source_url", "")
+        results_url = request.POST.get("results_url", "")
+
+        if name:
+            analysis_type.name = name
+            analysis_type.description = description
+            analysis_type.version = version
+            analysis_type.source_url = source_url
+            analysis_type.results_url = results_url
+            analysis_type.save()
+
+            return TemplateResponse(
+                request,
+                "lab/types/list.html",
+                {
+                    "sample_types": SampleType.objects.all().order_by("name"),
+                    "test_types": TestType.objects.all().order_by("name"),
+                    "analysis_types": AnalysisType.objects.all().order_by("name"),
+                }
+            )
+
+    return TemplateResponse(
+        request,
+        "lab/types/analysis_type_form.html",
+        {"analysis_type": analysis_type}
+    )
+
+
+@login_required
+@permission_required("lab.delete_analysistype")
+def analysis_type_delete(request, pk):
+    """Delete an analysis type"""
+    analysis_type = get_object_or_404(AnalysisType, pk=pk)
+    analysis_type.delete()
+    return HttpResponse(status=200)
