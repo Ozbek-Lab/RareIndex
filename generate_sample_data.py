@@ -144,15 +144,38 @@ def create_sample_data():
 
     # Create Individuals (10)
     individuals = []
+    # First create all individuals without relationships
     for i in range(1, 11):
         ind, _ = Individual.objects.get_or_create(
             lab_id=f"IND{i:03d}",
             defaults={
+                'biobank_id': f"BIO{i:03d}",
+                'full_name': f"Test Person {i}",
                 'created_by': user,
                 'status': random.choice(statuses['individual'])
             }
         )
         individuals.append(ind)
+
+    # Now create family relationships
+    # We'll create two family groups: 0-4 and 5-9
+    # Family 1: IND001 and IND002 are parents, IND003 and IND004 are their children
+    individuals[2].mother = individuals[1]  # IND003's mother is IND002
+    individuals[2].father = individuals[0]  # IND003's father is IND001
+    individuals[3].mother = individuals[1]  # IND004's mother is IND002
+    individuals[3].father = individuals[0]  # IND004's father is IND001
+    individuals[2].save()
+    individuals[3].save()
+
+    # Family 2: IND006 and IND007 are parents, IND008 and IND009 are their children
+    individuals[7].mother = individuals[6]  # IND008's mother is IND007
+    individuals[7].father = individuals[5]  # IND008's father is IND006
+    individuals[8].mother = individuals[6]  # IND009's mother is IND007
+    individuals[8].father = individuals[5]  # IND009's father is IND006
+    individuals[7].save()
+    individuals[8].save()
+
+    # IND005 and IND010 remain without parents as controls
 
     # Create Samples (2-3 per individual)
     samples = []

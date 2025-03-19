@@ -79,6 +79,8 @@ class IndividualForm(forms.ModelForm):
             "icd11_code",
             "hpo_codes",
             "family",
+            "mother",
+            "father",
         ]
         widgets = {
             "birth_date": forms.DateInput(attrs={"type": "date"}),

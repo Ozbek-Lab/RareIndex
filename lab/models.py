@@ -257,6 +257,20 @@ class Individual(StatusMixin, models.Model):
         blank=True,
         related_name="individuals",
     )
+    mother = models.ForeignKey(
+        'self',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='children_as_mother'
+    )
+    father = models.ForeignKey(
+        'self',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='children_as_father'
+    )
     notes = GenericRelation("Note")
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
