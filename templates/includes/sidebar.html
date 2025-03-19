@@ -35,7 +35,7 @@
             hx-get="{% url 'account_login' %}"
             hx-target="content"
             hx-select="content"
-            hx-swap="innerHTML"
+            hx-swap="outerHTML"
             class="flex items-center gap-2"
           >
             <i class="fas fa-sign-in-alt w-5 h-5"></i>
@@ -44,7 +44,10 @@
         </li>
         <li>
           <a
-            href="{% url 'account_signup' %}?next={% url 'profile-onboarding' %}"
+            hx-get="{% url 'account_signup' %}?next={% url 'profile-onboarding' %}"
+            hx-target="content"
+            hx-select="content"
+            hx-swap="outerHTML"
             class="flex items-center gap-2"
           >
             <i class="fas fa-user-plus w-5 h-5"></i>
@@ -88,7 +91,7 @@
                 hx-get="{% url 'profile' %}"
                 hx-target="content"
                 hx-select="content"
-                hx-swap="innerHTML"
+                hx-swap="outerHTML"
                 class="px-4 py-2 hover:bg-gray-600 block"
                 ><i class="fas fa-user mr-2"></i>My Profile</a
               >
@@ -98,7 +101,7 @@
                 hx-get="{% url 'profile-edit' %}"
                 hx-target="content"
                 hx-select="content"
-                hx-swap="innerHTML"
+                hx-swap="outerHTML"
                 class="px-4 py-2 hover:bg-gray-600 block"
                 ><i class="fas fa-edit mr-2"></i>Edit Profile</a
               >
@@ -108,7 +111,7 @@
                 hx-get="{% url 'profile-settings' %}"
                 hx-target="content"
                 hx-select="content"
-                hx-swap="innerHTML"
+                hx-swap="outerHTML"
                 class="px-4 py-2 hover:bg-gray-600 block"
                 ><i class="fas fa-cog mr-2"></i>Settings</a
               >
@@ -118,7 +121,7 @@
                 hx-get="{% url 'account_logout' %}"
                 hx-target="content"
                 hx-select="content"
-                hx-swap="innerHTML"
+                hx-swap="outerHTML"
                 class="px-4 py-2 hover:bg-gray-600 block"
                 ><i class="fas fa-sign-out-alt mr-2"></i>Log Out</a
               >

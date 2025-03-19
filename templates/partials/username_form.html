@@ -1,6 +1,8 @@
 <form
-  action="{% url 'profile-usernamechange' %}"
-  method="post"
+  hx-post="{% url 'profile-usernamechange' %}"
+  hx-select="content"
+  hx-target="content"
+  hx-swap="outerHTML"
   class="flex gap-2 text-black"
   autocomplete="off"
 >
@@ -12,7 +14,10 @@
 <a
   hx-swap-oob="true"
   id="username-edit"
-  href="{% url 'profile-settings' %}"
+  hx-get="{% url 'profile-settings' %}"
+  hx-target="content"
+  hx-swap="outerHTML"
+  hx-select="content"
   class="font-medium text-blue-600 hover:underline"
 >
   Cancel

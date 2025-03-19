@@ -13,7 +13,10 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
     />
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
     <script src="https://unpkg.com/htmx.org/dist/htmx.js"></script>
     <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
     {% django_htmx_script %}
@@ -130,11 +133,13 @@
     class="{% block class %}{% endblock class %} flex"
   >
     {% include "includes/messages.html" %}
-    {% include "includes/header.html" %}
+    {% include "includes/sidebar.html" %}
 
     <main class="flex-1 p-8 ml-64">
-      {% block layout %}
-      {% endblock layout %}
+      <content class="block max-w-3xl mx-auto md:p-12">
+        {% block content %}
+        {% endblock %}
+      </content>
     </main>
 
     {% block javascript %}{% endblock javascript %}
