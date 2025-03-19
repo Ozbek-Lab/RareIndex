@@ -28,8 +28,8 @@ class InstitutionAdmin(admin.ModelAdmin):
 
 @admin.register(models.Individual)
 class IndividualAdmin(admin.ModelAdmin):
-    list_display = ['lab_id', 'biobank_id', 'full_name', 'status', 'family', 'created_by', 'created_at']
-    list_filter = ['status', 'created_at', 'family']
+    list_display = ['lab_id', 'biobank_id', 'full_name', 'status', 'family', 'mother', 'father', 'created_by', 'created_at']
+    list_filter = ['status', 'created_at', 'family', 'mother', 'father']
     search_fields = ['lab_id', 'biobank_id', 'full_name', 'tc_identity']
     date_hierarchy = 'created_at'
 
