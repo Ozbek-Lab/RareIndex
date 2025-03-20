@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <button
+    hx-get="{% url 'lab:individual-create' %}"
+    hx-trigger="click"
+    hx-select="content"
+    hx-swap="outerHTML"
+  >
+    Create Individual
+  </button>
+  <div
+    hx-get="{% url 'lab:individual-list' %}"
+    hx-trigger="load"
+    hx-select="content"
+  ></div>
+
+  <div
+    hx-get="{% url 'lab:sample-create' %}"
+    hx-trigger="click"
+    hx-select="content"
+    hx-swap="outerHTML"
+  >
+    Create Sample
+  </div>
+  <div
+    hx-get="{% url 'lab:sample-list' %}"
+    hx-trigger="load"
+    hx-select="content"
+  ></div>
+{% endblock %}
