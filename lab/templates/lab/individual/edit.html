@@ -1,0 +1,208 @@
+{% extends "lab/base.html" %}
+{% load lab_filters %}
+
+{% partialdef individual-edit-form %}
+  <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+    <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
+      <h2 class="text-2xl font-bold text-white">Edit Individual</h2>
+    </div>
+
+    <form
+      hx-post="{% url 'lab:individual_edit' individual.pk %}"
+      hx-target="main"
+      hx-swap="innerHTML"
+      class="p-6 space-y-6"
+    >
+      {% csrf_token %}
+
+      <!-- Basic Information -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h3 class="text-lg font-medium text-gray-900 mb-4">
+            Basic Information
+          </h3>
+          <div class="space-y-4">
+            <div>
+              <label
+                for="{{ form.lab_id.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >Lab ID</label
+              >
+              {{ form.lab_id }}
+              {% if form.lab_id.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.lab_id.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+            <div>
+              <label
+                for="{{ form.biobank_id.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >Biobank ID</label
+              >
+              {{ form.biobank_id }}
+              {% if form.biobank_id.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.biobank_id.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+            <div>
+              <label
+                for="{{ form.full_name.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >Full Name</label
+              >
+              {{ form.full_name }}
+              {% if form.full_name.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.full_name.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+            <div>
+              <label
+                for="{{ form.tc_identity.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >TC Identity</label
+              >
+              {{ form.tc_identity }}
+              {% if form.tc_identity.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.tc_identity.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+            <div>
+              <label
+                for="{{ form.birth_date.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >Birth Date</label
+              >
+              {{ form.birth_date }}
+              {% if form.birth_date.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.birth_date.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-medium text-gray-900 mb-4">
+            Medical Information
+          </h3>
+          <div class="space-y-4">
+            <div>
+              <label
+                for="{{ form.icd11_code.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >ICD-11 Code</label
+              >
+              {{ form.icd11_code }}
+              {% if form.icd11_code.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.icd11_code.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+            <div>
+              <label
+                for="{{ form.diagnosis.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >Diagnosis</label
+              >
+              {{ form.diagnosis }}
+              {% if form.diagnosis.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.diagnosis.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+            <div>
+              <label
+                for="{{ form.diagnosis_date.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >Diagnosis Date</label
+              >
+              {{ form.diagnosis_date }}
+              {% if form.diagnosis_date.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.diagnosis_date.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+            <div>
+              <label
+                for="{{ form.hpo_codes.id_for_label }}"
+                class="block text-sm font-medium text-gray-700"
+                >HPO Codes</label
+              >
+              {{ form.hpo_codes }}
+              {% if form.hpo_codes.errors %}
+                <p class="mt-1 text-sm text-red-600">
+                  {{ form.hpo_codes.errors.0 }}
+                </p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Family Information -->
+      <div>
+        <h3 class="text-lg font-medium text-gray-900 mb-4">
+          Family Information
+        </h3>
+        <div>
+          <label
+            for="{{ form.family.id_for_label }}"
+            class="block text-sm font-medium text-gray-700"
+            >Family</label
+          >
+          {{ form.family }}
+          {% if form.family.errors %}
+            <p class="mt-1 text-sm text-red-600">{{ form.family.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="flex justify-end space-x-3">
+        <button
+          type="button"
+          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          hx-get="{% url 'lab:individual_detail' individual.pk %}"
+          hx-target="main"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+        >
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+{% endpartialdef %}
+
+{% block content %}
+  <div class="flex items-center space-x-2 mb-4">
+    <button
+      hx-get="{% url 'lab:individual_detail' individual.pk %}"
+      hx-target="main"
+      hx-push-url="true"
+      class="flex items-center text-blue-600 hover:text-blue-800"
+    >
+      <i class="fas fa-arrow-left mr-1"></i> Back to Individual
+    </button>
+  </div>
+
+  {% partial individual-edit-form %}
+{% endblock content %}

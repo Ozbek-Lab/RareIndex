@@ -5,3 +5,4 @@ django-browser-reload
 django-compressor
 django-allauth
 whitenoise
+django-template-partials
