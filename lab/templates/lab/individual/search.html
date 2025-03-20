@@ -1,6 +1,3 @@
-<!-- Updated version of lab/templates/lab/individuals/search.html with Font Awesome icons -->
-
-<!-- Search Container with optimized styling -->
 <div
   class="bg-white p-4 rounded-xl shadow-sm border border-gray-100"
   x-data="{ showAdvanced: false }"
@@ -21,7 +18,7 @@
 
   <form
     hx-post="{% url 'lab:individual_search' %}"
-    hx-target="next div"
+    hx-target="#individual-list"
     hx-trigger="change delay:500ms, search delay:500ms, multiselect-change from:body"
     class="space-y-4"
   >
@@ -185,8 +182,6 @@
     </div>
   </form>
 </div>
-
-<div>{% include "lab/individuals/list.html" %}</div>
 
 <!-- Add this JavaScript to handle the multi-select change event -->
 <script>

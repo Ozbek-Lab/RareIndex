@@ -1,23 +1,148 @@
-    <a href="{% url 'lab:test_list' %}" 
-       class="nav-link {% if request.resolver_match.url_name in 'test_list,test_create,test_edit,test_detail' %}active{% endif %}"
-       hx-boost="true"
-    >
-        <i class="fas fa-vial"></i>
-        Tests
-    </a>
-    
-    <a href="{% url 'lab:analysis_list' %}" 
-       class="nav-link {% if request.resolver_match.url_name in 'analysis_list,analysis_create,analysis_edit,analysis_detail' %}active{% endif %}"
-       hx-boost="true"
-    >
-        <i class="fas fa-microscope"></i>
-        Analyses
-    </a>
-    
-    <a href="{% url 'lab:types' %}"
-       class="nav-link {% if request.resolver_match.url_name == 'types' %}active{% endif %}"
-       hx-boost="true"
-    >
-        <i class="fas fa-list"></i>
-        Types
-    </a> 
+<nav class="w-64 bg-white border-r border-gray-200 flex flex-col">
+  <!-- Logo Section -->
+  <div class="p-4 border-b border-gray-100">
+    <h1 class="text-xl font-bold text-gray-800 flex items-center">
+      <i class="fas fa-dna text-indigo-500 mr-2"></i>
+      <span
+        class="bg-gradient-to-r from-indigo-600 to-indigo-500 bg-clip-text text-transparent"
+      >
+        RareIndex
+      </span>
+    </h1>
+  </div>
+
+  <!-- Navigation Section -->
+  <div class="flex-1 overflow-y-auto py-4">
+    <div class="px-3 space-y-1">
+      <!-- Dashboard -->
+      <a
+        href="{% url 'lab:dashboard' %}"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'dashboard' %}bg-indigo-50
+        text-indigo-600{% endif %}"
+      >
+        <i
+          class="fas fa-chart-bar text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Dashboard</span>
+      </a>
+
+      <!-- Individuals -->
+      <a
+        href="{% url 'lab:individual_index' %}"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'individual_index' or request.resolver_match.url_name == 'individual_detail' %}bg-indigo-50
+        text-indigo-600{% endif %}"
+      >
+        <i
+          class="fas fa-users text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Individuals</span>
+      </a>
+
+      <!-- Samples -->
+      <a
+        href="{% url 'lab:sample_list' %}"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'sample_list' or request.resolver_match.url_name == 'sample_detail' %}bg-indigo-50
+        text-indigo-600{% endif %}"
+      >
+        <i
+          class="fas fa-vial text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Samples</span>
+      </a>
+
+      <!-- Tests -->
+      <a
+        href="{% url 'lab:test_list' %}"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'test_list' or request.resolver_match.url_name == 'test_detail' %}bg-indigo-50
+        text-indigo-600{% endif %}"
+      >
+        <i
+          class="fas fa-flask text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Tests</span>
+      </a>
+
+      <!-- Analyses -->
+      <a
+        href="{% url 'lab:analysis_list' %}"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'analysis_list' or request.resolver_match.url_name == 'analysis_detail' %}bg-indigo-50
+        text-indigo-600{% endif %}"
+      >
+        <i
+          class="fas fa-microscope text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Analyses</span>
+      </a>
+
+      <!-- Projects -->
+      <a
+        href="{% url 'lab:project_list' %}"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'project_list' or request.resolver_match.url_name == 'project_detail' %}bg-indigo-50
+        text-indigo-600{% endif %}"
+      >
+        <i
+          class="fas fa-project-diagram text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Projects</span>
+      </a>
+
+      <!-- Tasks -->
+      <a
+        href="{% url 'lab:task_list' %}"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'task_list' %}bg-indigo-50
+        text-indigo-600{% endif %}"
+      >
+        <i
+          class="fas fa-tasks text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Tasks</span>
+      </a>
+
+      <!-- Types -->
+      <a
+        href="{% url 'lab:types_list' %}"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'types_list' %}bg-indigo-50
+        text-indigo-600{% endif %}"
+      >
+        <i
+          class="fas fa-list text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Types</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- User Section -->
+  <div class="p-4 border-t border-gray-200">
+    <div class="flex items-center space-x-3 mb-3">
+      <div class="flex-shrink-0">
+        <div
+          class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center"
+        >
+          <i class="fas fa-user text-indigo-500 text-sm"></i>
+        </div>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-gray-900 truncate">
+          {{ user.get_full_name|default:user.username }}
+        </p>
+        <p class="text-xs text-gray-500 truncate">{{ user.email }}</p>
+      </div>
+    </div>
+
+    <!-- Logout Button -->
+    <form method="post" action="{% url 'account_logout' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="/" />
+      <button
+        type="submit"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+      >
+        <i
+          class="fas fa-sign-out-alt text-gray-400 group-hover:text-red-500 w-5 h-5 mr-3 transition-colors"
+        ></i>
+        <span>Sign out</span>
+      </button>
+    </form>
+  </div>
+</nav>

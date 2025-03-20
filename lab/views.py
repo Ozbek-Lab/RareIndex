@@ -38,25 +38,20 @@ from django.utils import timezone
 from django.http import QueryDict
 
 
-def app(request, page=None, context=None):
-    """Main SPA entry point that handles both authenticated and unauthenticated states"""
+@login_required
+def dashboard(request):
+    """Dashboard view that serves as the main landing page"""
 
-    # Initialize context if not provided
-    if context is None:
-        context = {}
+    # Gather some summary statistics for the dashboard
+    context = {
+        "individual_count": Individual.objects.count(),
+        "sample_count": Sample.objects.count(),
+        "test_count": Test.objects.count(),
+        "analysis_count": Analysis.objects.count(),
+        "pending_tasks": Task.objects.filter(is_completed=False).count(),
+    }
 
-    # Set initial view if provided
-    if page == "individuals":
-        context["initial_view"] = "individuals/index.html"
-    elif page == "samples":
-        context["initial_view"] = "samples/index.html"
-    elif page == "tests":
-        context["initial_view"] = "tests/index.html"
-    elif page == "sample_types":
-        context["initial_view"] = "sample_types/list.html"
-
-    # If user is not authenticated, app.html will automatically show the login page
-    return render(request, "lab/app.html", context)
+    return render(request, "lab/dashboard.html", context)
 
 
 @login_required
@@ -173,12 +168,16 @@ def individual_index(request):
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, "lab/individuals/index.html", context)
+        # The specific partial to return depends on what was requested
+        if "search" in request.path:
+            return render(request, "lab/individual/index.html#individual-list", context)
+        return render(request, "lab/individual/index.html#individual-index", context)
 
-    # For regular requests, return via the main app
-    return app(request, page="individuals", context=context)
+    # For regular requests, return the full page
+    return render(request, "lab/individual/index.html", context)
 
 
+# TODO: implement
 @login_required
 @permission_required("lab.add_individual")
 def individual_create(request):
@@ -190,11 +189,11 @@ def individual_create(request):
             individual.save()
             individuals = Individual.objects.all()
             return TemplateResponse(
-                request, "lab/individuals/list.html", {"individuals": individuals}
+                request, "lab/individual/list.html", {"individuals": individuals}
             )
     return TemplateResponse(
         request,
-        "lab/individuals/card_edit.html",
+        "lab/individual/edit.html",
         {"individual": None, "families": Family.objects.all()},
     )
 
@@ -207,14 +206,37 @@ def individual_edit(request, pk):
         form = IndividualForm(request.POST, instance=individual)
         if form.is_valid():
             individual = form.save()
+            # If it's an HTMX request, return the detail partial
+            if request.headers.get("HX-Request"):
+                return TemplateResponse(
+                    request, 
+                    "lab/individual/detail.html#individual-detail", 
+                    {"individual": individual}
+                )
+            # Otherwise return the card view
             return TemplateResponse(
-                request, "lab/individuals/card.html", {"individual": individual}
+                request, 
+                "lab/individual/card.html", 
+                {"individual": individual}
             )
-    return TemplateResponse(
-        request,
-        "lab/individuals/card_edit.html",
-        {"individual": individual, "families": Family.objects.all()},
-    )
+    
+    # For GET requests, return the edit form
+    context = {
+        "individual": individual, 
+        "families": Family.objects.all(),
+        "form": IndividualForm(instance=individual)
+    }
+    
+    # If it's an HTMX request, return just the form partial
+    if request.headers.get("HX-Request"):
+        return TemplateResponse(
+            request, 
+            "lab/individual/edit.html#individual-edit-form", 
+            context
+        )
+    
+    # Otherwise return the full edit page
+    return TemplateResponse(request, "lab/individual/edit.html", context)
 
 
 @login_required
@@ -283,10 +305,9 @@ def individual_search(request):
     page = request.POST.get("page", 1)
     paginator = Paginator(queryset, 12)  # 12 items per page
     individuals = paginator.get_page(page)
-
     return TemplateResponse(
         request,
-        "lab/individuals/list.html",
+        "lab/individual/index.html#individual-list",
         {
             "individuals": individuals,
             "total_count": total_count,
@@ -326,7 +347,12 @@ def individual_detail(request, pk):
         "individual": individual,
     }
 
-    return TemplateResponse(request, "lab/individuals/detail.html", context)
+    # If it's an HTMX request, return just the detail content
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/individual/detail.html#individual-detail", context)
+
+    # For regular requests, return the full page
+    return render(request, "lab/individual/detail.html", context)
 
 
 @login_required
@@ -474,17 +500,17 @@ def sample_detail(request, pk):
         )
         .get(pk=pk)
     )
-    
+
     # Get the active tab from query params or default to 'notes'
-    active_tab = request.GET.get('tab', 'notes')
+    active_tab = request.GET.get("tab", "notes")
 
     # If card_only=true is in the query params, return just the card
     if request.GET.get("card_only") == "true":
         return TemplateResponse(request, "lab/samples/card.html", {"sample": sample})
 
     context = {
-        'sample': sample,
-        'activeTab': active_tab,
+        "sample": sample,
+        "activeTab": active_tab,
     }
 
     return TemplateResponse(request, "lab/samples/detail.html", context)
@@ -524,7 +550,7 @@ def sample_create(request):
                 samples = individual.samples.all()
                 return TemplateResponse(
                     request,
-                    "lab/individuals/detail.html",
+                    "lab/individual/detail.html",
                     {"individual": individual, "active_tab": "samples"},
                 )
             else:
@@ -554,7 +580,7 @@ def sample_create(request):
         context["individual"] = individual_id
         return TemplateResponse(request, "lab/samples/_add_button.html", context)
 
-    return TemplateResponse(request, "lab/samples/card_edit.html", context)
+    return TemplateResponse(request, "lab/samples/edit.html", context)
 
 
 @login_required
@@ -585,7 +611,7 @@ def sample_edit(request, pk):
 
     return TemplateResponse(
         request,
-        "lab/samples/card_edit.html",
+        "lab/samples/edit.html",
         {
             "sample": sample,
             "individuals": Individual.objects.all(),
@@ -635,9 +661,7 @@ def test_create(request):
                 performed_by=request.user,
             )
 
-            return TemplateResponse(
-                request, "lab/tests/list.html", {"sample": sample}
-            )
+            return TemplateResponse(request, "lab/tests/list.html", {"sample": sample})
 
     # For GET requests, render the form
     test_content_type = ContentType.objects.get_for_model(Test)
@@ -657,15 +681,15 @@ def test_create(request):
 @permission_required("lab.change_test")
 def test_edit(request, pk):
     sampletest = get_object_or_404(Test, pk=pk)
-    
+
     if request.method == "GET":
         form = TestForm(instance=sampletest)
         return TemplateResponse(
             request,
             "lab/samples/test_edit_form.html",
-            {"form": form, "sampletest": sampletest}
+            {"form": form, "sampletest": sampletest},
         )
-    
+
     elif request.method == "PUT":
         # Parse the PUT data
         put_data = QueryDict(request.body)
@@ -674,9 +698,7 @@ def test_edit(request, pk):
             sampletest = form.save()
             # Return the updated card view
             return TemplateResponse(
-                request,
-                "lab/tests/card.html",
-                {"sampletest": sampletest}
+                request, "lab/tests/card.html", {"sampletest": sampletest}
             )
         else:
             # Return the form with errors
@@ -684,7 +706,7 @@ def test_edit(request, pk):
                 request,
                 "lab/samples/test_edit_form.html",
                 {"form": form, "sampletest": sampletest},
-                status=422
+                status=422,
             )
 
 
@@ -744,14 +766,13 @@ def note_delete(request, pk):
 @login_required
 def test_list(request):
     """List view for all tests"""
-    tests = Test.objects.select_related(
-        'created_by'
-    ).prefetch_related(
-        'test_type',
-        'sample',
-        'sample__individual',
-        'sample__sample_type'
-    ).order_by('-created_at')
+    tests = (
+        Test.objects.select_related("created_by")
+        .prefetch_related(
+            "test_type", "sample", "sample__individual", "sample__sample_type"
+        )
+        .order_by("-created_at")
+    )
 
     context = {
         "tests": tests,
@@ -774,7 +795,7 @@ def test_list(request):
 def test_type_create(request):
     """Create a new test_type, associated with a test"""
     sample = None
-    if sample_id := request.GET.get('sample'):
+    if sample_id := request.GET.get("sample"):
         sample = get_object_or_404(Sample, pk=sample_id)
 
     if request.method == "POST":
@@ -791,11 +812,11 @@ def test_type_create(request):
                     test=test,
                     performed_date=timezone.now().date(),
                     performed_by=request.user,
-                    status=Status.objects.get(name="Pending")
+                    status=Status.objects.get(name="Pending"),
                 )
-                return redirect('lab:sample_detail', pk=sample.pk)
-            
-            return redirect('lab:test_list')
+                return redirect("lab:sample_detail", pk=sample.pk)
+
+            return redirect("lab:test_list")
     else:
         form = TestTypeForm()
 
@@ -805,7 +826,7 @@ def test_type_create(request):
         {
             "form": form,
             "sample": sample,
-        }
+        },
     )
 
 
@@ -817,8 +838,12 @@ def test_type_edit(request, pk):
         form = TestTypeForm(request.POST, instance=test_type)
         if form.is_valid():
             test_type = form.save()
-            return TemplateResponse(request, "lab/test_types/card.html", {"test_type": test_type})
-    return TemplateResponse(request, "lab/test_types/card_edit.html", {"test_type": test_type})
+            return TemplateResponse(
+                request, "lab/test_types/card.html", {"test_type": test_type}
+            )
+    return TemplateResponse(
+        request, "lab/test_types/edit.html", {"test_type": test_type}
+    )
 
 
 @login_required
@@ -834,7 +859,9 @@ def test_type_delete(request, pk):
 def test_type_search(request):
     query = request.GET.get("q", "")
     test_types = TestType.objects.filter(name__icontains=query)
-    return TemplateResponse(request, "lab/test_types/list.html", {"test_types": test_types})
+    return TemplateResponse(
+        request, "lab/test_types/list.html", {"test_types": test_types}
+    )
 
 
 @login_required
@@ -863,17 +890,15 @@ def sample_type_create(request):
             return TemplateResponse(
                 request, "lab/sample_types/card.html", {"sample_type": sample_type}
             )
-    
+
     # For GET requests, check if it's a cancel action
     if request.headers.get("HX-Request") and request.GET.get("action") == "cancel":
         # Return an empty div that will be removed
         return HttpResponse("")
-        
+
     # For normal GET requests, return the form
     return TemplateResponse(
-        request,
-        "lab/sample_types/card_edit.html",
-        {"sample_type": None}
+        request, "lab/sample_types/edit.html", {"sample_type": None}
     )
 
 
@@ -889,7 +914,7 @@ def sample_type_edit(request, pk):
                 request, "lab/sample_types/card.html", {"sample_type": sample_type}
             )
     return TemplateResponse(
-        request, "lab/sample_types/card_edit.html", {"sample_type": sample_type}
+        request, "lab/sample_types/edit.html", {"sample_type": sample_type}
     )
 
 
@@ -1452,9 +1477,9 @@ def task_detail(request, pk):
     """View for displaying task details"""
     task = get_object_or_404(Task, pk=pk)
     context = {
-        'task': task,
+        "task": task,
     }
-    return render(request, 'lab/tasks/detail.html', context)
+    return render(request, "lab/tasks/detail.html", context)
 
 
 @login_required
@@ -1475,32 +1500,28 @@ def task_reopen(request, pk):
 
 class TestListView(LoginRequiredMixin, ListView):
     model = Test
-    template_name = 'lab/test_list.html'
-    context_object_name = 'tests'
+    template_name = "lab/test_list.html"
+    context_object_name = "tests"
     paginate_by = 25
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        
+
         # Add select_related to optimize queries
         queryset = queryset.select_related(
-            'sample',
-            'sample__individual',
-            'test',
-            'status',
-            'performed_by'
+            "sample", "sample__individual", "test", "status", "performed_by"
         )
 
         # Filter by search query if provided
-        search_query = self.request.GET.get('search', '')
+        search_query = self.request.GET.get("search", "")
         if search_query:
             queryset = queryset.filter(
-                models.Q(sample__individual__lab_id__icontains=search_query) |
-                models.Q(test__name__icontains=search_query)
+                models.Q(sample__individual__lab_id__icontains=search_query)
+                | models.Q(test__name__icontains=search_query)
             )
 
         # Filter by status if provided
-        status = self.request.GET.get('status')
+        status = self.request.GET.get("status")
         if status:
             queryset = queryset.filter(status_id=status)
 
@@ -1508,9 +1529,9 @@ class TestListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['search_query'] = self.request.GET.get('search', '')
-        context['current_status'] = self.request.GET.get('status', '')
-        context['statuses'] = models.Status.objects.all()
+        context["search_query"] = self.request.GET.get("search", "")
+        context["current_status"] = self.request.GET.get("status", "")
+        context["statuses"] = models.Status.objects.all()
         return context
 
 
@@ -1519,61 +1540,50 @@ def test_detail(request, pk):
     """Detailed view for a test"""
     test = get_object_or_404(
         Test.objects.select_related(
-            'test_type',
-            'sample',
-            'sample__individual',
-            'sample__sample_type',
-            'performed_by',
-            'status'
+            "test_type",
+            "sample",
+            "sample__individual",
+            "sample__sample_type",
+            "performed_by",
+            "status",
         ).prefetch_related(
-            'analyses',
-            'analyses__type',
-            'analyses__status',
-            'notes',
-            'status_logs',
-            'notes__user'
+            "analyses",
+            "analyses__type",
+            "analyses__status",
+            "notes",
+            "status_logs",
+            "notes__user",
         ),
-        pk=pk
+        pk=pk,
     )
-    
+
     # Get the active tab from query params or default to 'notes'
-    active_tab = request.GET.get('tab', 'notes')
+    active_tab = request.GET.get("tab", "notes")
 
     # If card_only=true is in the query params, return just the card
     if request.GET.get("card_only") == "true":
         return TemplateResponse(request, "lab/tests/card.html", {"test": test})
 
     context = {
-        'test': test,
-        'activeTab': active_tab,
+        "test": test,
+        "activeTab": active_tab,
     }
-    
-    return TemplateResponse(
-        request,
-        "lab/tests/detail.html",
-        context
-    )
+
+    return TemplateResponse(request, "lab/tests/detail.html", context)
 
 
 # Add a new view for returning just the card
 @login_required
 def test_card(request, pk):
     test = get_object_or_404(Test, pk=pk)
-    return TemplateResponse(
-        request,
-        "lab/tests/card.html",
-        {"test": test}
-    )
+    return TemplateResponse(request, "lab/tests/card.html", {"test": test})
 
 
 @login_required
 def test_search(request):
     """Search and filter tests"""
     queryset = Test.objects.select_related(
-        "sample",
-        "test_type",
-        "status",
-        "performed_by"
+        "sample", "test_type", "status", "performed_by"
     ).prefetch_related("tasks", "notes")
 
     # Apply filters
@@ -1643,19 +1653,19 @@ def test_search(request):
 
 def types_list(request):
     """View to display sample types, test types, and analysis types."""
-    sample_types = SampleType.objects.all().order_by('name')
-    test_types = TestType.objects.all().order_by('name')
-    analysis_types = AnalysisType.objects.all().order_by('name')
-    
+    sample_types = SampleType.objects.all().order_by("name")
+    test_types = TestType.objects.all().order_by("name")
+    analysis_types = AnalysisType.objects.all().order_by("name")
+
     context = {
-        'sample_types': sample_types,
-        'test_types': test_types,
-        'analysis_types': analysis_types,
+        "sample_types": sample_types,
+        "test_types": test_types,
+        "analysis_types": analysis_types,
     }
-    
+
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return render(request, 'lab/types/list.html', context)
+        return render(request, "lab/types/list.html", context)
 
     # For regular requests, return via the main app
     context["initial_view"] = "types/list.html"
@@ -1666,13 +1676,13 @@ def types_list(request):
 def analysis_list(request):
     """List view for all analyses"""
     analyses = Analysis.objects.select_related(
-        'test',
-        'test__sample',
-        'test__sample__individual',
-        'type',
-        'status',
-        'performed_by'
-    ).order_by('-created_at')
+        "test",
+        "test__sample",
+        "test__sample__individual",
+        "type",
+        "status",
+        "performed_by",
+    ).order_by("-created_at")
 
     context = {
         "analyses": analyses,
@@ -1700,12 +1710,12 @@ def analysis_list(request):
 def analysis_search(request):
     """Search and filter analyses"""
     queryset = Analysis.objects.select_related(
-        'test',
-        'test__sample',
-        'test__sample__individual',
-        'type',
-        'status',
-        'performed_by'
+        "test",
+        "test__sample",
+        "test__sample__individual",
+        "type",
+        "status",
+        "performed_by",
     )
 
     # Apply filters
@@ -1728,7 +1738,9 @@ def analysis_search(request):
     if individual_ids:
         if "," in individual_ids:
             individual_id_list = individual_ids.split(",")
-            queryset = queryset.filter(test__sample__individual_id__in=individual_id_list)
+            queryset = queryset.filter(
+                test__sample__individual_id__in=individual_id_list
+            )
         else:
             queryset = queryset.filter(test__sample__individual_id=individual_ids)
 
@@ -1787,39 +1799,33 @@ def analysis_detail(request, pk):
     """Detailed view for an analysis"""
     analysis = get_object_or_404(
         Analysis.objects.select_related(
-            'test',
-            'test__sample',
-            'test__sample__individual',
-            'test__test_type',
-            'type',
-            'status',
-            'performed_by',
-            'created_by'
-        ).prefetch_related(
-            'notes',
-            'status_logs',
-            'notes__user'
-        ),
-        pk=pk
+            "test",
+            "test__sample",
+            "test__sample__individual",
+            "test__test_type",
+            "type",
+            "status",
+            "performed_by",
+            "created_by",
+        ).prefetch_related("notes", "status_logs", "notes__user"),
+        pk=pk,
     )
 
     # Get the active tab from query params or default to 'notes'
-    active_tab = request.GET.get('tab', 'notes')
+    active_tab = request.GET.get("tab", "notes")
 
     # If card_only=true is in the query params, return just the card
     if request.GET.get("card_only") == "true":
-        return TemplateResponse(request, "lab/analyses/card.html", {"analysis": analysis})
+        return TemplateResponse(
+            request, "lab/analyses/card.html", {"analysis": analysis}
+        )
 
     context = {
-        'analysis': analysis,
-        'activeTab': active_tab,
+        "analysis": analysis,
+        "activeTab": active_tab,
     }
 
-    return TemplateResponse(
-        request,
-        "lab/analyses/detail.html",
-        context
-    )
+    return TemplateResponse(request, "lab/analyses/detail.html", context)
 
 
 @login_required
@@ -1845,7 +1851,7 @@ def analysis_create(request):
                 status=status,
                 performed_date=performed_date,
                 performed_by=request.user,
-                created_by=request.user
+                created_by=request.user,
             )
 
             # Return the appropriate response based on context
@@ -1853,7 +1859,7 @@ def analysis_create(request):
                 return TemplateResponse(
                     request,
                     "lab/tests/detail.html",
-                    {"test": test, "active_tab": "analyses"}
+                    {"test": test, "active_tab": "analyses"},
                 )
             else:
                 return TemplateResponse(request, "lab/analyses/_add_button.html")
@@ -1872,7 +1878,7 @@ def analysis_create(request):
         context["test"] = test_id
         return TemplateResponse(request, "lab/analyses/_add_button.html", context)
 
-    return TemplateResponse(request, "lab/analyses/card_edit.html", context)
+    return TemplateResponse(request, "lab/analyses/edit.html", context)
 
 
 @login_required
@@ -1909,7 +1915,7 @@ def analysis_edit(request, pk):
 
     return TemplateResponse(
         request,
-        "lab/analyses/card_edit.html",
+        "lab/analyses/edit.html",
         {
             "analysis": analysis,
             "analysis_types": AnalysisType.objects.all(),
@@ -1946,7 +1952,7 @@ def analysis_type_create(request):
                 version=version,
                 source_url=source_url,
                 results_url=results_url,
-                created_by=request.user
+                created_by=request.user,
             )
 
             return TemplateResponse(
@@ -1956,7 +1962,7 @@ def analysis_type_create(request):
                     "sample_types": SampleType.objects.all().order_by("name"),
                     "test_types": TestType.objects.all().order_by("name"),
                     "analysis_types": AnalysisType.objects.all().order_by("name"),
-                }
+                },
             )
 
     return TemplateResponse(request, "lab/types/analysis_type_form.html")
@@ -1990,13 +1996,11 @@ def analysis_type_edit(request, pk):
                     "sample_types": SampleType.objects.all().order_by("name"),
                     "test_types": TestType.objects.all().order_by("name"),
                     "analysis_types": AnalysisType.objects.all().order_by("name"),
-                }
+                },
             )
 
     return TemplateResponse(
-        request,
-        "lab/types/analysis_type_form.html",
-        {"analysis_type": analysis_type}
+        request, "lab/types/analysis_type_form.html", {"analysis_type": analysis_type}
     )
 
 
