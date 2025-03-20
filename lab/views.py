@@ -6,6 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
+from django.shortcuts import render
+
 
 from neapolitan.views import CRUDView, Role
 from lab.models import (
@@ -17,6 +19,11 @@ from lab.models import (
     Institution,
     Note,
 )
+
+
+def index(request):
+    context = {}
+    return render(request, "lab/index.html", context)
 
 
 class IndividualView(CRUDView):
@@ -33,6 +40,23 @@ class IndividualView(CRUDView):
         "status",
         "diagnosis",
         "diagnosis_date",
+    ]
+
+
+class SampleView(CRUDView):
+    model = Sample
+    fields = [
+        "individual",
+        "sample_type",
+        "status",
+        "receipt_date",
+        "processing_date",
+        "service_send_date",
+        "data_receipt_date",
+        "council_date",
+        "sending_institution",
+        "isolation_by",
+        "sample_measurements",
     ]
 
 

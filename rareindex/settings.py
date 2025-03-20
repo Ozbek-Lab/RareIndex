@@ -47,7 +47,6 @@ INSTALLED_APPS = [
     "neapolitan",
     "template_partials",
     # My apps
-    "a_home",
     "a_users",
     "lab",
 ]

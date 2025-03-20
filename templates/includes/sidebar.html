@@ -4,7 +4,7 @@
 >
   <div class="p-6">
     <a
-      hx-get="{% url 'home' %}"
+      hx-get="{% url 'lab:index' %}"
       hx-target="content"
       hx-select="content"
       hx-swap="innerHTML"
@@ -19,7 +19,7 @@
       {% if request.user.is_authenticated %}
         <li>
           <a
-            hx-get="{% url 'home' %}"
+            hx-get="{% url 'lab:index' %}"
             hx-target="content"
             hx-select="content"
             hx-swap="innerHTML"

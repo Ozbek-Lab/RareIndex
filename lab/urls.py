@@ -1,7 +1,9 @@
-from .views import IndividualView
+from lab import views
+from django.urls import path
 
 app_name = "lab"
 
-urlpatterns = []
+urlpatterns = [path("", views.index, name="index")]
 
-urlpatterns += IndividualView.get_urls()
+urlpatterns += views.IndividualView.get_urls()
+urlpatterns += views.SampleView.get_urls()
