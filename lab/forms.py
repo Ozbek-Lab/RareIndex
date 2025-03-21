@@ -92,23 +92,19 @@ class SampleForm(forms.ModelForm):
     class Meta:
         model = Sample
         fields = [
-            "individual",
-            "sample_type",
-            "receipt_date",
-            "processing_date",
-            "service_send_date",
-            "data_receipt_date",
-            "council_date",
-            "isolation_by",
-            "sample_measurements",
-            "status",
+            'individual',
+            'sample_type',
+            'receipt_date',
+            'processing_date',
+            'sending_institution',
+            'isolation_by',
+            'sample_measurements',
+            'status',
+            'created_by',
         ]
         widgets = {
-            "receipt_date": forms.DateInput(attrs={"type": "date"}),
-            "processing_date": forms.DateInput(attrs={"type": "date"}),
-            "service_send_date": forms.DateInput(attrs={"type": "date"}),
-            "data_receipt_date": forms.DateInput(attrs={"type": "date"}),
-            "council_date": forms.DateInput(attrs={"type": "date"}),
+            'receipt_date': forms.DateInput(attrs={'type': 'date'}),
+            'processing_date': forms.DateInput(attrs={'type': 'date'}),
         }
 
 
@@ -149,7 +145,16 @@ class SampleTypeForm(forms.ModelForm):
 class TestForm(forms.ModelForm):
     class Meta:
         model = Test
-        fields = ['test_type', 'performed_date', 'performed_by', 'status']
+        fields = [
+            'test_type',
+            'performed_date',
+            'performed_by',
+            'service_send_date',
+            'data_receipt_date',
+            'council_date',
+            'sample',
+            'created_by',
+        ]
         widgets = {
             'performed_date': forms.DateInput(attrs={'type': 'date'}),
         }
