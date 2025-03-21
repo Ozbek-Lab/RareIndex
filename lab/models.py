@@ -248,8 +248,9 @@ class Individual(StatusMixin, models.Model):
     full_name = models.CharField(max_length=255)
     tc_identity = models.CharField(max_length=11, blank=True)
     birth_date = models.DateField(null=True, blank=True)
-    icd11_code = models.CharField(max_length=255, blank=True)
+    icd11_code = models.TextField(blank=True)
     hpo_codes = models.TextField(blank=True)
+    council_date = models.DateField(null=True, blank=True)
     family = models.ForeignKey(
         Family,
         on_delete=models.PROTECT,
@@ -280,6 +281,7 @@ class Individual(StatusMixin, models.Model):
     status_logs = GenericRelation(StatusLog)
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
+    sending_institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
     tasks = GenericRelation("Task")
 
     @property
@@ -313,9 +315,6 @@ class Sample(StatusMixin, models.Model):
     # Dates
     receipt_date = models.DateField()
     processing_date = models.DateField(null=True, blank=True)
-    service_send_date = models.DateField(null=True, blank=True)
-    data_receipt_date = models.DateField(null=True, blank=True)
-    council_date = models.DateField(null=True, blank=True)
 
     # Relations
     sending_institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
@@ -344,25 +343,25 @@ class Sample(StatusMixin, models.Model):
 
 
 class Test(StatusMixin, models.Model):
-    """Through model for tracking tests performed on samples"""
-
-    sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name='tests')
     test_type = models.ForeignKey(TestType, on_delete=models.PROTECT)
-    performed_date = models.DateField()
-    performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    performed_date = models.DateField(null=True, blank=True)
+    performed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tests_performed')
+    service_send_date = models.DateField(null=True, blank=True, verbose_name='Service Send Date')
+    data_receipt_date = models.DateField(null=True, blank=True, verbose_name='Data Receipt Date')
+    council_date = models.DateField(null=True, blank=True, verbose_name='Council Date')
+    sample = models.ForeignKey('Sample', on_delete=models.CASCADE, related_name='tests')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='tests_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     status_logs = GenericRelation(StatusLog)
-    notes = GenericRelation("Note")
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(
-        User, 
-        on_delete=models.PROTECT, 
-        related_name="created_tests"
-    )
     tasks = GenericRelation("Task")
 
     def __str__(self):
-        return f"{self.test_type.name} - {self.performed_date}"
+        return f"{self.test_type} - {self.sample}"
+
+    class Meta:
+        ordering = ['-created_at']
 
 
 class AnalysisType(models.Model):
