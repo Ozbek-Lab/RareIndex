@@ -258,18 +258,18 @@ class Individual(StatusMixin, models.Model):
         related_name="individuals",
     )
     mother = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name='children_as_mother'
+        related_name="children_as_mother",
     )
     father = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name='children_as_father'
+        related_name="children_as_father",
     )
     notes = GenericRelation("Note")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -346,7 +346,7 @@ class Sample(StatusMixin, models.Model):
 class Test(StatusMixin, models.Model):
     """Through model for tracking tests performed on samples"""
 
-    sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name='tests')
+    sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name="tests")
     test_type = models.ForeignKey(TestType, on_delete=models.PROTECT)
     performed_date = models.DateField()
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
@@ -355,9 +355,7 @@ class Test(StatusMixin, models.Model):
     notes = GenericRelation("Note")
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
-        User, 
-        on_delete=models.PROTECT, 
-        related_name="created_tests"
+        User, on_delete=models.PROTECT, related_name="created_tests"
     )
     tasks = GenericRelation("Task")
 
@@ -367,35 +365,28 @@ class Test(StatusMixin, models.Model):
 
 class AnalysisType(models.Model):
     """Model for defining types of analyses that can be performed"""
-    
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    version = models.CharField(max_length=50,blank=True)
+    version = models.CharField(max_length=50, blank=True)
     parent_types = models.ManyToManyField(
-        'self',
-        blank=True,
-        symmetrical=False,
-        related_name='subtypes'
+        "self", blank=True, symmetrical=False, related_name="subtypes"
     )
     source_url = models.URLField(
-        max_length=500, 
-        blank=True, 
-        help_text="URL to the analysis source code or documentation"
-    )
-    results_url = models.URLField(
         max_length=500,
         blank=True,
-        help_text="URL to view analysis results"
+        help_text="URL to the analysis source code or documentation",
+    )
+    results_url = models.URLField(
+        max_length=500, blank=True, help_text="URL to view analysis results"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
-        User, 
-        on_delete=models.PROTECT, 
-        related_name="created_analysis_types"
+        User, on_delete=models.PROTECT, related_name="created_analysis_types"
     )
 
     class Meta:
-        ordering = ['name', '-version']
+        ordering = ["name", "-version"]
 
     def __str__(self):
         return f"{self.name} v{self.version}"
@@ -403,8 +394,8 @@ class AnalysisType(models.Model):
 
 class Analysis(StatusMixin, models.Model):
     """Model for tracking analyses performed on sample tests"""
-    
-    test = models.ForeignKey(Test, on_delete=models.PROTECT, related_name='analyses')
+
+    test = models.ForeignKey(Test, on_delete=models.PROTECT, related_name="analyses")
     performed_date = models.DateField()
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
     type = models.ForeignKey(AnalysisType, on_delete=models.PROTECT)

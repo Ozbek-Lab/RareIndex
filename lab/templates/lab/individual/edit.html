@@ -11,6 +11,7 @@
       hx-post="{% url 'lab:individual_edit' individual.pk %}"
       hx-target="main"
       hx-swap="innerHTML"
+      hx-push-url="{% url 'lab:individual_detail' individual.pk %}"
       class="p-6 space-y-6"
     >
       {% csrf_token %}

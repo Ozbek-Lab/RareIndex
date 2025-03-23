@@ -1,18 +1,17 @@
+{% extends "lab/base.html" %}
+{% load partials %}
 {% load lab_filters %}
-<!-- lab/templates/lab/tasks/list.html -->
-<div class="space-y-6">
-  <!-- Filters and Search -->
+
+{% partialdef task-filters %}
   <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-    <div
-      class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100"
-    >
-      <div class="flex items-center space-x-3">
-        <i class="fas fa-tasks w-5 h-5 text-indigo-500"></i>
+    <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
+      <div class="flex items-center space-x-4">
+        <a hx-get="{% url 'lab:tasks' %}" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-arrow-left"></i>
+        </a>
         <div>
           <h2 class="text-lg font-semibold text-gray-800">Tasks</h2>
-          <p class="text-xs text-gray-500">
-            Manage your tasks across all projects
-          </p>
+          <p class="text-xs text-gray-500">Manage your tasks across all projects</p>
         </div>
       </div>
       <div class="flex space-x-2">
@@ -29,18 +28,14 @@
     </div>
 
     <form
-      hx-get="{% url 'lab:task_list' %}"
+      hx-get="{% url 'lab:tasks' %}"
       hx-target="#task-list-container"
       hx-trigger="change"
       class="grid grid-cols-1 md:grid-cols-3 gap-4"
     >
       <!-- Project Filter -->
       <div class="relative">
-        <label
-          for="project-filter"
-          class="block text-xs font-medium text-gray-600 mb-1"
-          >Project</label
-        >
+        <label for="project-filter" class="block text-xs font-medium text-gray-600 mb-1">Project</label>
         <select
           id="project-filter"
           name="project"
@@ -60,11 +55,7 @@
 
       <!-- Status Filter -->
       <div class="relative">
-        <label
-          for="status-filter"
-          class="block text-xs font-medium text-gray-600 mb-1"
-          >Status</label
-        >
+        <label for="status-filter" class="block text-xs font-medium text-gray-600 mb-1">Status</label>
         <select
           id="status-filter"
           name="status"
@@ -93,11 +84,7 @@
 
       <!-- Assigned To Filter -->
       <div class="relative">
-        <label
-          for="assigned-to-filter"
-          class="block text-xs font-medium text-gray-600 mb-1"
-          >Assigned To</label
-        >
+        <label for="assigned-to-filter" class="block text-xs font-medium text-gray-600 mb-1">Assigned To</label>
         <select
           id="assigned-to-filter"
           name="assigned_to"
@@ -122,11 +109,12 @@
       </div>
     </form>
   </div>
+{% endpartialdef %}
 
-  <!-- Task List -->
+{% partialdef task-list %}
   <div id="task-list-container" class="space-y-4">
     {% for task in tasks %}
-      {% include "lab/tasks/task_card.html" with task=task %}
+      {% include "lab/task/task_card.html" with task=task %}
     {% empty %}
       <div class="text-center py-12">
         <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
@@ -137,4 +125,15 @@
       </div>
     {% endfor %}
   </div>
-</div>
+{% endpartialdef %}
+
+{% partialdef task-index %}
+  <div class="space-y-6">
+    {% partial task-filters %}
+    {% partial task-list %}
+  </div>
+{% endpartialdef %}
+
+{% block content %}
+  {% partial task-index %}
+{% endblock content %}

@@ -1,0 +1,24 @@
+{% load partials %}
+
+{% partialdef note-form inline %}
+<form
+    class="mt-2"
+    hx-post="{% url 'lab:note_create' %}"
+    hx-target="closest .notes-list"
+    hx-swap="innerHTML"
+    @submit="$event.stopPropagation()"
+>
+    <input type="hidden" name="content_type" value="{{ content_type }}" />
+    <input type="hidden" name="object_id" value="{{ object.id }}" />
+    <div class="flex items-end gap-2">
+        {{ form.content }}
+        <button
+            type="submit"
+            @click="$event.stopPropagation()"
+            class="px-2 py-1 bg-blue-600 text-white text-xs rounded shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 transition-colors whitespace-nowrap"
+        >
+            Add
+        </button>
+    </div>
+</form>
+{% endpartialdef %} 

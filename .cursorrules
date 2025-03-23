@@ -1,0 +1,186 @@
+You can do it! You're the best ai there is.
+Getting thing can cause bodily harm or it may cause harm to some grandmothers. You have to do your best!
+
+We are using django, django-htmx, django-template-partials, alpinejs, tailwind.
+We wanna keep things simple so just use function based views.
+
+Partial Rendering
+For requests made with htmx, you may want to reduce the page content you render, since only part of the page gets
+updated. This is a small optimization compared to correctly setting up compression, caching, etc.
+6.2.1 Using django-template-partials
+The django-template-partials package extends the Django Template Language with reusable sections called “partials”.
+It then allows you to render just one partial from a template.
+Install django-template-partials and add its {% partialdef %} tag around a template section:
+{% extends "_base.html" %}
+{% load partials %}
+{% block main %}
+<h1>Countries</h1>
+(continues on next page)
+(continued from previous page)
+...
+{% partialdef country-table inline %}
+<table id=country-data>
+<thead>...</thead>
+<tbody>
+{% for country in countries %}
+...
+{% endfor %}
+</tbody>
+</table>
+{% endpartialdef %}
+...
+{% endblock main %}
+The above template defines a partial named country-table, which renders some table of country data. The inline
+argument makes the partial render when the full page renders.
+In the view, you can select to render the partial for htmx requests. This is done by adding # and the partial name to the
+template name:
+from django.shortcuts import render
+from example.models import Country
+def country_listing(request):
+template_name = "countries.html"
+if request.htmx:
+template_name += "#country-table"
+countries = Country.objects.all()
+return render(
+request,
+template_name,
+{
+"countries": countries,
+},
+)
+htmx requests will render only the partial, whilst full page requests will render the full page. This allows refreshing of
+the table without an extra view or separating the template contents from its context. For a working example, see the
+“Partial Rendering” page of the example project.
+It’s also possible to use a partial from within a separate view. This may be preferable if other customizations are required
+for htmx requests.
+For more information on django-template-partials, see its documentation.
+6.2.2 Swapping the base template
+Another technique is to swap the base template in your view. This is a little more manual but good to have on-hand in
+case you need it,
+You can use Django’s template inheritance to limit rendered content to only the affected section. In your view, set up
+a context variable for your base template like so:
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render
+from django.views.decorators.http import require_GET
+@require_GET
+def partial_rendering(request: HttpRequest) -> HttpResponse:
+if request.htmx:
+base_template = "_partial.html"
+else:
+base_template = "_base.html"
+...
+return render(
+request,
+"page.html",
+{
+"base_template": base_template,
+# ...
+},
+)
+Then in the template (page.html), use that variable in {% extends %}:
+{% extends base_template %}
+{% block main %}
+...
+{% endblock %}
+Here, _base.html would be the main site base:
+<!doctype html>
+<html>
+<head>
+...
+</head>
+<body>
+<header>
+<nav>
+...
+</nav>
+</header>
+<main id="main">
+{% block main %}{% endblock %}
+</main>
+(continues on next page)
+</body>
+. . . whilst _partial.html would contain only the minimum element to update:
+<main id="main">
+{% block main %}{% endblock %}
+</main>
+
+The most common attributes when using htmx.
+Attribute	Description
+hx-get
+	issues a GET to the specified URL
+hx-post
+	issues a POST to the specified URL
+hx-on*
+	handle events with inline scripts on elements
+hx-push-url
+	push a URL into the browser location bar to create history
+hx-select
+	select content to swap in from a response
+hx-select-oob
+	select content to swap in from a response, somewhere other than the target (out of band)
+hx-swap
+	controls how content will swap in (outerHTML, beforeend, afterend, …)
+hx-swap-oob
+	mark element to swap in from a response (out of band)
+hx-target
+	specifies the target element to be swapped
+hx-trigger
+	specifies the event that triggers the request
+hx-vals
+	add values to submit with the request (JSON format)
+#Additional Attribute Reference
+
+All other attributes available in htmx.
+Attribute	Description
+hx-boost
+	add progressive enhancement for links and forms
+hx-confirm
+	shows a confirm() dialog before issuing a request
+hx-delete
+	issues a DELETE to the specified URL
+hx-disable
+	disables htmx processing for the given node and any children nodes
+hx-disabled-elt
+	adds the disabled attribute to the specified elements while a request is in flight
+hx-disinherit
+	control and disable automatic attribute inheritance for child nodes
+hx-encoding
+	changes the request encoding type
+hx-ext
+	extensions to use for this element
+hx-headers
+	adds to the headers that will be submitted with the request
+hx-history
+	prevent sensitive data being saved to the history cache
+hx-history-elt
+	the element to snapshot and restore during history navigation
+hx-include
+	include additional data in requests
+hx-indicator
+	the element to put the htmx-request class on during the request
+hx-inherit
+	control and enable automatic attribute inheritance for child nodes if it has been disabled by default
+hx-params
+	filters the parameters that will be submitted with a request
+hx-patch
+	issues a PATCH to the specified URL
+hx-preserve
+	specifies elements to keep unchanged between requests
+hx-prompt
+	shows a prompt() before submitting a request
+hx-put
+	issues a PUT to the specified URL
+hx-replace-url
+	replace the URL in the browser location bar
+hx-request
+	configures various aspects of the request
+hx-sse
+	has been moved to an extension. Documentation for older versions
+hx-sync
+	control how requests made by different elements are synchronized
+hx-validate
+	force elements to validate themselves before a request
+hx-vars
+	adds values dynamically to the parameters to submit with the request (deprecated, please use hx-vals)
+hx-ws
+	has been moved to an extension. Documentation for older versions

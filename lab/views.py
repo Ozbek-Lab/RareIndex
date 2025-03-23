@@ -18,6 +18,7 @@ from .models import (
     Project,
     Analysis,
     AnalysisType,
+    Institution,
 )
 from .forms import (
     IndividualForm,
@@ -209,32 +210,28 @@ def individual_edit(request, pk):
             # If it's an HTMX request, return the detail partial
             if request.headers.get("HX-Request"):
                 return TemplateResponse(
-                    request, 
-                    "lab/individual/detail.html#individual-detail", 
-                    {"individual": individual}
+                    request,
+                    "lab/individual/detail.html#individual-detail",
+                    {"individual": individual},
                 )
             # Otherwise return the card view
             return TemplateResponse(
-                request, 
-                "lab/individual/card.html", 
-                {"individual": individual}
+                request, "lab/individual/card.html", {"individual": individual}
             )
-    
+
     # For GET requests, return the edit form
     context = {
-        "individual": individual, 
+        "individual": individual,
         "families": Family.objects.all(),
-        "form": IndividualForm(instance=individual)
+        "form": IndividualForm(instance=individual),
     }
-    
+
     # If it's an HTMX request, return just the form partial
     if request.headers.get("HX-Request"):
         return TemplateResponse(
-            request, 
-            "lab/individual/edit.html#individual-edit-form", 
-            context
+            request, "lab/individual/edit.html#individual-edit-form", context
         )
-    
+
     # Otherwise return the full edit page
     return TemplateResponse(request, "lab/individual/edit.html", context)
 
@@ -375,104 +372,72 @@ def sample_list(request):
         ),
     }
 
-    # If it's an HTMX request, check what part the client is asking for
+    # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        # If they're requesting a specific part, return just that
-        requested_url = request.headers.get("HX-Request-URL", "")
-        if "/samples/search/" in requested_url:
-            return TemplateResponse(request, "lab/samples/list.html", context)
-        # Otherwise return the full index that includes the search
-        return TemplateResponse(request, "lab/samples/index.html", context)
+        # The specific partial to return depends on what was requested
+        if "search" in request.path:
+            return render(request, "lab/sample/index.html#sample-list", context)
+        return render(request, "lab/sample/index.html#sample-index", context)
 
-    # For regular requests, return via the main app
-    context["initial_view"] = "samples/index.html"
-    return app(request, page="samples", context=context)
+    # For regular requests, return the full page
+    return render(request, "lab/sample/index.html", context)
 
 
 @login_required
 def sample_search(request):
-    """Search and filter samples"""
-    queryset = (
-        Sample.objects.all()
-        .select_related("individual", "sample_type", "status", "isolation_by")
-        .prefetch_related("tests", "tasks", "notes")
-    )
+    """Search samples with filters."""
+    if request.headers.get("HX-Request"):
+        # Get filter parameters
+        status = request.POST.get("status")
+        sample_type = request.POST.get("sample_type")
+        individual = request.POST.get("individual")
+        date_from = request.POST.get("date_from")
+        date_to = request.POST.get("date_to")
+        page = request.POST.get("page", 1)
 
-    # Apply filters
-    # Status filter
-    status_id = request.POST.get("status")
-    if status_id:
-        queryset = queryset.filter(status_id=status_id)
+        # Build query
+        samples = Sample.objects.all()
 
-    # Sample Type filter - now supports multiple selection
-    sample_type_ids = request.POST.get("sample_type")
-    if sample_type_ids:
-        # Check if it's a comma-separated list
-        if "," in sample_type_ids:
-            sample_type_id_list = sample_type_ids.split(",")
-            queryset = queryset.filter(sample_type_id__in=sample_type_id_list)
-        else:
-            queryset = queryset.filter(sample_type_id=sample_type_ids)
+        if status:
+            samples = samples.filter(status_id=status)
+        if sample_type:
+            samples = samples.filter(sample_type_id=sample_type)
+        if individual:
+            samples = samples.filter(individual_id=individual)
+        if date_from:
+            samples = samples.filter(receipt_date__gte=date_from)
+        if date_to:
+            samples = samples.filter(receipt_date__lte=date_to)
 
-    # Individual filter - now supports multiple selection
-    individual_ids = request.POST.get("individual")
-    if individual_ids:
-        # Check if it's a comma-separated list
-        if "," in individual_ids:
-            individual_id_list = individual_ids.split(",")
-            queryset = queryset.filter(individual_id__in=individual_id_list)
-        else:
-            queryset = queryset.filter(individual_id=individual_ids)
+        # Order by created_at descending
+        samples = samples.order_by("-created_at")
 
-    # Test filter - added new filter for tests
-    test_ids = request.POST.get("test")
-    if test_ids:
-        # Check if it's a comma-separated list
-        if "," in test_ids:
-            test_id_list = test_ids.split(",")
-            queryset = queryset.filter(tests__id__in=test_id_list)
-        else:
-            queryset = queryset.filter(tests__id=test_ids)
+        # Paginate
+        paginator = Paginator(samples, 12)
+        samples = paginator.get_page(page)
 
-    # Date range (receipt date)
-    date_from = request.POST.get("date_from")
-    if date_from:
-        queryset = queryset.filter(receipt_date__gte=date_from)
-
-    date_to = request.POST.get("date_to")
-    if date_to:
-        queryset = queryset.filter(receipt_date__lte=date_to)
-
-    # Order results
-    queryset = queryset.order_by("-receipt_date")
-
-    # Get total count before pagination
-    total_count = queryset.count()
-
-    # Paginate results
-    page = request.POST.get("page", 1)
-    paginator = Paginator(queryset, 12)  # 12 items per page
-    samples = paginator.get_page(page)
-
-    return TemplateResponse(
-        request,
-        "lab/samples/list.html",
-        {
+        # Prepare context
+        context = {
             "samples": samples,
-            "total_count": total_count,
-            "sample_statuses": Status.objects.filter(
-                content_type=ContentType.objects.get_for_model(Sample)
-            ),
-            "filters": {  # Pass filters for subsequent page loads
-                "status": status_id,
-                "sample_type": sample_type_ids,
-                "individual": individual_ids,
-                "test": test_ids,
+            "filters": {
+                "status": status,
+                "sample_type": sample_type,
+                "individual": individual,
                 "date_from": date_from,
                 "date_to": date_to,
             },
-        },
-    )
+        }
+
+        # Return partial for HTMX request
+        return render(request, "lab/sample/list.html#sample-list", context)
+
+    # For regular requests, return the full search page
+    context = {
+        "sample_statuses": SampleStatus.objects.all(),
+        "sample_types": SampleType.objects.all(),
+        "individuals": Individual.objects.all(),
+    }
+    return render(request, "lab/sample/search.html", context)
 
 
 @login_required
@@ -506,14 +471,14 @@ def sample_detail(request, pk):
 
     # If card_only=true is in the query params, return just the card
     if request.GET.get("card_only") == "true":
-        return TemplateResponse(request, "lab/samples/card.html", {"sample": sample})
+        return TemplateResponse(request, "lab/sample/card.html", {"sample": sample})
 
     context = {
         "sample": sample,
         "activeTab": active_tab,
     }
 
-    return TemplateResponse(request, "lab/samples/detail.html", context)
+    return TemplateResponse(request, "lab/sample/detail.html", context)
 
 
 @login_required
@@ -537,50 +502,39 @@ def sample_create(request):
                 except Institution.DoesNotExist:
                     # Create a default institution if none exists
                     sample.sending_institution = Institution.objects.create(
-                        name="Default Institution", created_by=request.user
+                        name="Default Institution"
                     )
 
             sample.save()
+            form.save_m2m()  # Save many-to-many relationships
 
-            # Return the appropriate response based on context
-            individual_id = request.GET.get("individual")
-            if individual_id:
-                # If this was created from an individual detail page, return to that view
-                individual = get_object_or_404(Individual, pk=individual_id)
-                samples = individual.samples.all()
-                return TemplateResponse(
+            # If it's an HTMX request, return the detail partial
+            if request.headers.get("HX-Request"):
+                return render(
                     request,
-                    "lab/individual/detail.html",
-                    {"individual": individual, "active_tab": "samples"},
+                    "lab/sample/detail.html#sample-detail",
+                    {"sample": sample},
                 )
-            else:
-                # Return the add button template for a clean form reset
-                return TemplateResponse(request, "lab/samples/_add_button.html")
 
-    # For GET requests, prepare the form context
-    # If coming from individual detail, pre-select that individual
-    individual_id = request.GET.get("individual")
-    initial_data = {}
-    if individual_id:
-        initial_data["individual"] = individual_id
+            # Otherwise redirect to the detail page
+            return redirect("lab:sample_detail", pk=sample.pk)
 
-    # Get all the necessary data for the form
-    sample_content_type = ContentType.objects.get_for_model(Sample)
+    # For GET requests, prepare the form
     context = {
-        "sample": None,
+        "form": SampleForm(),
         "individuals": Individual.objects.all(),
         "sample_types": SampleType.objects.all(),
-        "statuses": Status.objects.filter(content_type=sample_content_type),
-        "users": User.objects.filter(is_active=True),
-        "initial_data": initial_data,
+        "sample_statuses": Status.objects.filter(
+            content_type=ContentType.objects.get_for_model(Sample)
+        ),
     }
 
-    # If button=true is in query params, return the add button instead of the form
-    if request.GET.get("button") == "true":
-        context["individual"] = individual_id
-        return TemplateResponse(request, "lab/samples/_add_button.html", context)
+    # If it's an HTMX request, return just the form partial
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/sample/create.html#sample-create", context)
 
-    return TemplateResponse(request, "lab/samples/edit.html", context)
+    # Otherwise return the full create page
+    return render(request, "lab/sample/create.html", context)
 
 
 @login_required
@@ -592,44 +546,68 @@ def sample_edit(request, pk):
     if request.method == "POST":
         form = SampleForm(request.POST, instance=sample)
         if form.is_valid():
-            sample = form.save()
+            sample = form.save(commit=False)
+            sample.updated_by = request.user
+            sample.save()
+            form.save_m2m()  # Save many-to-many relationships
 
-            # If return_to_detail is true, redirect to the detail view
-            if request.GET.get("return_to_detail") == "true":
-                return TemplateResponse(
-                    request, "lab/samples/detail.html", {"sample": sample}
+            # If it's an HTMX request, return the detail partial
+            if request.headers.get("HX-Request"):
+                return render(
+                    request,
+                    "lab/sample/detail.html#sample-detail",
+                    {"sample": sample},
                 )
 
-            # Otherwise return the card view
-            return TemplateResponse(
-                request, "lab/samples/card.html", {"sample": sample}
-            )
+            # Otherwise redirect to the detail page
+            return redirect("lab:sample_detail", pk=sample.pk)
 
-    # Get appropriate statuses for Samples
-    sample_content_type = ContentType.objects.get_for_model(Sample)
-    sample_statuses = Status.objects.filter(content_type=sample_content_type)
+    # For GET requests, prepare the form
+    context = {
+        "form": SampleForm(instance=sample),
+        "sample": sample,
+        "individuals": Individual.objects.all(),
+        "sample_types": SampleType.objects.all(),
+        "sample_statuses": Status.objects.filter(
+            content_type=ContentType.objects.get_for_model(Sample)
+        ),
+    }
 
-    return TemplateResponse(
-        request,
-        "lab/samples/edit.html",
-        {
-            "sample": sample,
-            "individuals": Individual.objects.all(),
-            "sample_types": SampleType.objects.all(),
-            "statuses": sample_statuses,
-            "users": User.objects.filter(is_active=True),
-        },
-    )
+    # If it's an HTMX request, return just the form partial
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/sample/edit.html#sample-edit", context)
+
+    # Otherwise return the full edit page
+    return render(request, "lab/sample/edit.html", context)
 
 
 @login_required
 @permission_required("lab.delete_sample")
-@require_http_methods(["DELETE"])
 def sample_delete(request, pk):
     """Delete a sample"""
     sample = get_object_or_404(Sample, pk=pk)
-    sample.delete()
-    return HttpResponse(status=200)
+
+    if request.method == "POST":
+        sample.delete()
+
+        # If it's an HTMX request, return an empty response to remove the element
+        if request.headers.get("HX-Request"):
+            return HttpResponse("")
+
+        # Otherwise redirect to the list page
+        return redirect("lab:samples")
+
+    # For GET requests, prepare the confirmation form
+    context = {
+        "sample": sample,
+    }
+
+    # If it's an HTMX request, return just the form partial
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/sample/delete.html#sample-delete", context)
+
+    # Otherwise return the full delete page
+    return render(request, "lab/sample/delete.html", context)
 
 
 # Sample Test Views
@@ -726,32 +704,7 @@ def note_list(request, model, pk):
     obj = content_type.get_object_for_this_type(pk=pk)
     notes = obj.notes.all()
     return TemplateResponse(
-        request, "lab/notes/note_list.html", {"notes": notes, "content_object": obj}
-    )
-
-
-@login_required
-def note_form(request, model=None, pk=None, note_pk=None):
-    note = None if note_pk is None else get_object_or_404(Note, pk=note_pk)
-
-    if request.method == "POST":
-        form = NoteForm(request.POST, instance=note)
-        if form.is_valid():
-            note = form.save(commit=False)
-            if model and pk:
-                content_type = ContentType.objects.get(app_label="lab", model=model)
-                note.content_type = content_type
-                note.object_id = pk
-            note.user = request.user
-            note.save()
-            return TemplateResponse(
-                request, "lab/notes/partials/note.html", {"note": note}
-            )
-    else:
-        form = NoteForm(instance=note)
-
-    return TemplateResponse(
-        request, "lab/notes/partials/note_form.html", {"form": form, "note": note}
+        request, "lab/note/note_list.html", {"notes": notes, "content_object": obj}
     )
 
 
@@ -783,11 +736,13 @@ def test_list(request):
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, "lab/tests/index.html", context)
+        # The specific partial to return depends on what was requested
+        if "search" in request.path:
+            return render(request, "lab/test/index.html#test-list", context)
+        return render(request, "lab/test/index.html#test-index", context)
 
-    context["initial_view"] = "tests/index.html"
-    # For regular requests, return via the main app
-    return app(request, page="tests", context=context)
+    # For regular requests, return the full page
+    return render(request, "lab/test/index.html", context)
 
 
 @login_required
@@ -839,10 +794,10 @@ def test_type_edit(request, pk):
         if form.is_valid():
             test_type = form.save()
             return TemplateResponse(
-                request, "lab/test_types/card.html", {"test_type": test_type}
+                request, "lab/test_type/card.html", {"test_type": test_type}
             )
     return TemplateResponse(
-        request, "lab/test_types/edit.html", {"test_type": test_type}
+        request, "lab/test_type/edit.html", {"test_type": test_type}
     )
 
 
@@ -860,21 +815,22 @@ def test_type_search(request):
     query = request.GET.get("q", "")
     test_types = TestType.objects.filter(name__icontains=query)
     return TemplateResponse(
-        request, "lab/test_types/list.html", {"test_types": test_types}
+        request, "lab/test_type/list.html", {"test_types": test_types}
     )
 
 
 @login_required
 def sample_type_list(request):
     sample_types = SampleType.objects.all()
-    template = "lab/sample_types/list.html"
+    template = "lab/sample_type/list.html"
+    context = {"sample_types": sample_types}
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, template, {"sample_types": sample_types})
+        return TemplateResponse(request, template, contenxt)
 
     # Otherwise, redirect to the main app with sample_types view
-    return app(request, page="sample_types")
+    return render(request, template, context)
 
 
 @login_required
@@ -888,7 +844,7 @@ def sample_type_create(request):
             sample_type.save()
             # Return the card view instead of the list
             return TemplateResponse(
-                request, "lab/sample_types/card.html", {"sample_type": sample_type}
+                request, "lab/sample_type/card.html", {"sample_type": sample_type}
             )
 
     # For GET requests, check if it's a cancel action
@@ -898,7 +854,7 @@ def sample_type_create(request):
 
     # For normal GET requests, return the form
     return TemplateResponse(
-        request, "lab/sample_types/edit.html", {"sample_type": None}
+        request, "lab/sample_type/edit.html", {"sample_type": None}
     )
 
 
@@ -911,10 +867,10 @@ def sample_type_edit(request, pk):
         if form.is_valid():
             sample_type = form.save()
             return TemplateResponse(
-                request, "lab/sample_types/card.html", {"sample_type": sample_type}
+                request, "lab/sample_type/card.html", {"sample_type": sample_type}
             )
     return TemplateResponse(
-        request, "lab/sample_types/edit.html", {"sample_type": sample_type}
+        request, "lab/sample_type/edit.html", {"sample_type": sample_type}
     )
 
 
@@ -934,76 +890,146 @@ def sample_type_search(request):
     sample_types = SampleType.objects.filter(name__icontains=query)
     # Return the same list template but only the grid will be swapped due to hx-select
     return TemplateResponse(
-        request, "lab/sample_types/list.html", {"sample_types": sample_types}
+        request, "lab/sample_type/list.html", {"sample_types": sample_types}
     )
 
 
 @login_required
 def task_index(request):
-    """Main task index view that shows all tasks"""
-    # Base queryset with related objects
+    """List all tasks with filtering options"""
+    # Get filter parameters
+    project_id = request.GET.get("project")
+    status = request.GET.get("status", "open")
+    assigned_to = request.GET.get("assigned_to")
+
+    # Base queryset
     tasks = Task.objects.select_related(
-        "assigned_to", "created_by", "project", "target_status", "content_type"
-    ).order_by("-created_at")
+        "project",
+        "assigned_to",
+        "created_by",
+    )
 
-    # Get projects for filter dropdown
-    projects = Project.objects.all().order_by("name")
+    # Apply filters
+    if project_id:
+        tasks = tasks.filter(project_id=project_id)
+    if status == "open":
+        tasks = tasks.filter(is_completed=False)
+    elif status == "completed":
+        tasks = tasks.filter(is_completed=True)
+    elif status == "all":
+        pass  # No filter needed
 
-    # Get users for assignment filter
-    users = User.objects.filter(is_active=True).order_by("username")
+    if assigned_to == "me":
+        tasks = tasks.filter(assigned_to=request.user)
+    elif assigned_to:
+        tasks = tasks.filter(assigned_to_id=assigned_to)
 
+    # Get all projects for the filter dropdown
+    projects = Project.objects.all()
+
+    # Get all users for the assigned to filter
+    users = User.objects.filter(is_active=True)
+
+    # Prepare context
     context = {
         "tasks": tasks,
         "projects": projects,
         "users": users,
         "current_filters": {
-            "status": "open",  # Default to showing open tasks
+            "project": project_id,
+            "status": status,
+            "assigned_to": assigned_to,
         },
     }
 
-    # If it's an HTMX request, return just the list content
+    # If it's an HTMX request, return just the list partial
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, "lab/tasks/list.html", context)
+        return render(request, "lab/task/list.html#task-list", context)
 
-    # For regular requests, return via the main app
-    return app(request, page="tasks", context=context)
+    # Otherwise return the full page
+    return render(request, "lab/task/list.html", context)
 
 
 @login_required
-def task_create(request, model, pk):
-    """Create a task for a specific object"""
-    content_type = get_object_or_404(ContentType, app_label="lab", model=model)
-    content_object = get_object_or_404(content_type.model_class(), pk=pk)
+def task_create(request, model=None, pk=None):
+    """Create a task, optionally associated with an object and/or project"""
+    content_object = None
+    content_type = None
+
+    # If model and pk provided, get the related object
+    if model and pk:
+        content_type = get_object_or_404(ContentType, app_label="lab", model=model)
+        content_object = get_object_or_404(content_type.model_class(), pk=pk)
 
     if request.method == "POST":
         form = TaskForm(request.POST, content_object=content_object)
         if form.is_valid():
             task = form.save(commit=False)
-            task.content_type = content_type
-            task.object_id = pk
             task.created_by = request.user
+
+            # Set the content object if we have one
+            if content_type and content_object:
+                task.content_type = content_type
+                task.object_id = pk
+
             task.save()
 
-            return TemplateResponse(request, "lab/tasks/task_card.html", {"task": task})
+            # Determine where to redirect based on the context
+            if request.headers.get("HX-Request"):
+                return TemplateResponse(
+                    request, "lab/task/task_card.html", {"task": task}
+                )
+
+            if task.project:
+                return redirect("lab:project_detail", pk=task.project.pk)
+
+            return redirect("lab:task_list")
     else:
-        form = TaskForm(content_object=content_object)
+        # Get the project_id from query params if it exists
+        project_id = request.GET.get("project")
+        initial_data = {}
+
+        if project_id:
+            initial_data["project"] = project_id
+
+        form = TaskForm(content_object=content_object, initial=initial_data)
+
+    # Determine template based on context
+    if request.headers.get("HX-Request"):
+        template = "lab/task/task_form.html"
+    else:
+        template = "lab/task/create.html"
 
     return TemplateResponse(
         request,
-        "lab/tasks/task_form.html",
-        {"form": form, "content_object": content_object, "model": model, "pk": pk},
+        template,
+        {
+            "form": form,
+            "content_object": content_object,
+            "model": model,
+            "pk": pk,
+            "projects": Project.objects.all(),
+        },
     )
 
 
 @login_required
 def task_create_standalone(request):
     """Create a task not associated with any specific object"""
+    # Handle cancel action
+    if request.headers.get("HX-Request") and request.GET.get("action") == "cancel":
+        return HttpResponse("")
+
     if request.method == "POST":
         form = TaskForm(request.POST)
         if form.is_valid():
             task = form.save(commit=False)
             task.created_by = request.user
             task.save()
+
+            # If it's an HTMX request, return the task card
+            if request.headers.get("HX-Request"):
+                return TemplateResponse(request, "lab/task/task_card.html", {"task": task})
 
             return redirect("lab:task_list")
 
@@ -1013,7 +1039,7 @@ def task_create_standalone(request):
     # Make sure target_status field shows all available statuses for standalone tasks
     form.fields["target_status"].queryset = Status.objects.all()
 
-    return TemplateResponse(request, "lab/tasks/create.html", {"form": form})
+    return TemplateResponse(request, "lab/task/create.html", {"form": form})
 
 
 @login_required
@@ -1026,7 +1052,7 @@ def task_complete(request, pk):
         success = task.complete(request.user, notes=notes)
 
         if success:
-            return TemplateResponse(request, "lab/tasks/task_card.html", {"task": task})
+            return TemplateResponse(request, "lab/task/task_card.html", {"task": task})
 
     return HttpResponse(status=400)
 
@@ -1038,7 +1064,7 @@ def my_tasks(request):
         assigned_to=request.user, is_completed=False
     ).select_related("content_type", "assigned_to", "target_status")
 
-    return TemplateResponse(request, "lab/tasks/my_tasks.html", {"tasks": tasks})
+    return TemplateResponse(request, "lab/task/my_tasks.html", {"tasks": tasks})
 
 
 @login_required
@@ -1062,43 +1088,59 @@ def task_search(request):
     )
 
     return TemplateResponse(
-        request, "lab/tasks/my_tasks.html", {"tasks": tasks, "query": query}
+        request, "lab/task/my_tasks.html", {"tasks": tasks, "query": query}
     )
 
 
 @login_required
 def note_create(request):
+    """Create a new note for a specific object"""
     if request.method == "POST":
-        content = request.POST.get("content")
         content_type_str = request.POST.get("content_type")
         object_id = request.POST.get("object_id")
 
-        # Get the content type
+        # Get the content type and object
         model = apps.get_model("lab", content_type_str.capitalize())
         content_type = ContentType.objects.get_for_model(model)
-
-        # Get the object
         obj = model.objects.get(id=object_id)
 
         # Create the note
         Note.objects.create(
-            content=content,
+            content=request.POST.get("content"),
             user=request.user,
             content_type=content_type,
             object_id=object_id,
         )
 
-        response = render(
+        # Return the updated list
+        return TemplateResponse(
             request,
-            "lab/notes/list.html",
+            "lab/note/list.html",
             {
                 "object": obj,
                 "content_type": content_type_str,
                 "user": request.user,
             },
         )
-        response["HX-Trigger"] = f"noteCountUpdate-{content_type_str}-{object_id}"
-        return response
+
+    # For GET requests, return the form
+    content_type_str = request.GET.get("content_type")
+    object_id = request.GET.get("object_id")
+
+    # Get the content type and object
+    model = apps.get_model("lab", content_type_str.capitalize())
+    content_type = ContentType.objects.get_for_model(model)
+    obj = model.objects.get(id=object_id)
+
+    return TemplateResponse(
+        request,
+        "lab/note/form.html",
+        {
+            "object": obj,
+            "content_type": content_type_str,
+            "form": NoteForm(),
+        },
+    )
 
 
 @login_required
@@ -1117,7 +1159,7 @@ def note_delete(request, pk):
 
             response = render(
                 request,
-                "lab/notes/list.html",
+                "lab/note/list.html",
                 {
                     "object": obj,
                     "content_type": content_type_str,
@@ -1142,7 +1184,7 @@ def note_count(request):
 
         return render(
             request,
-            "lab/notes/summary.html",
+            "lab/note/summary.html",
             context={
                 "object": obj,
                 "content_type": content_type_str,
@@ -1162,7 +1204,7 @@ def note_list(request):
 
         return render(
             request,
-            "lab/notes/list.html",
+            "lab/note/list.html",
             context={
                 "object": obj,
                 "content_type": content_type_str,
@@ -1173,7 +1215,7 @@ def note_list(request):
 
 # Project Views
 @login_required
-def project_list(request):
+def project_index(request):
     """List all projects"""
     projects = Project.objects.all()
 
@@ -1189,10 +1231,13 @@ def project_list(request):
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, "lab/projects/list.html", context)
+        # The specific partial to return depends on what was requested
+        if "search" in request.path:
+            return render(request, "lab/project/index.html#project-list", context)
+        return render(request, "lab/project/index.html#project-index", context)
 
-    # For regular requests, return via the main app
-    return app(request, page="projects", context=context)
+    # For regular requests, return the full page
+    return render(request, "lab/project/index.html", context)
 
 
 @login_required
@@ -1210,7 +1255,7 @@ def project_create(request):
             if request.headers.get("HX-Request"):
                 projects = Project.objects.all()
                 return TemplateResponse(
-                    request, "lab/projects/list.html", {"projects": projects}
+                    request, "lab/project/list.html", {"projects": projects}
                 )
 
             # Otherwise redirect to the detail view
@@ -1218,7 +1263,7 @@ def project_create(request):
 
     # Return the form for GET requests
     return TemplateResponse(
-        request, "lab/projects/create.html", {"form": ProjectForm()}
+        request, "lab/project/create.html", {"form": ProjectForm()}
     )
 
 
@@ -1242,11 +1287,16 @@ def project_detail(request, pk):
         "completed_tasks": completed_tasks,
     }
 
-    # If card_only=true is in the query params, return just the card
-    if request.GET.get("card_only") == "true":
-        return TemplateResponse(request, "lab/projects/card.html", {"project": project})
+    # If it's an HTMX request, return just the content
+    if request.headers.get("HX-Request"):
+        # If card_only=true is in the query params, return just the card
+        if request.GET.get("card_only") == "true":
+            return TemplateResponse(request, "lab/project/card.html", {"project": project})
+        # Otherwise return the main content
+        return TemplateResponse(request, "lab/project/detail.html#project-detail", context)
 
-    return TemplateResponse(request, "lab/projects/detail.html", context)
+    # For regular requests, return the full page
+    return TemplateResponse(request, "lab/project/detail.html", context)
 
 
 @login_required
@@ -1263,7 +1313,7 @@ def project_edit(request, pk):
             # If requested via HTMX, return to the card
             if request.headers.get("HX-Request"):
                 return TemplateResponse(
-                    request, "lab/projects/card.html", {"project": project}
+                    request, "lab/project/card.html", {"project": project}
                 )
 
             # Otherwise redirect to the detail view
@@ -1272,7 +1322,7 @@ def project_edit(request, pk):
     # Return the form for GET requests
     return TemplateResponse(
         request,
-        "lab/projects/edit.html",
+        "lab/project/edit.html",
         {"project": project, "form": ProjectForm(instance=project)},
     )
 
@@ -1299,7 +1349,7 @@ def project_toggle_complete(request, pk):
         # If requested via HTMX, return the updated card
         if request.headers.get("HX-Request"):
             return TemplateResponse(
-                request, "lab/projects/card.html", {"project": project}
+                request, "lab/project/card.html", {"project": project}
             )
 
     # Return 400 for anything other than POST
@@ -1331,7 +1381,7 @@ def project_search(request):
 
     return TemplateResponse(
         request,
-        "lab/projects/list.html",
+        "lab/project/list.html",
         {"projects": projects, "query": query, "status_filter": status_filter},
     )
 
@@ -1379,97 +1429,15 @@ def task_list(request):
         },
     }
 
-    # Return the list template for HTMX requests
+    # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, "lab/tasks/list.html", context)
+        # The specific partial to return depends on what was requested
+        if "search" in request.path:
+            return render(request, "lab/task/index.html#task-list", context)
+        return render(request, "lab/task/index.html#task-index", context)
 
-    # Otherwise return the full page
-    return app(request, page="tasks", context=context)
-
-
-@login_required
-def task_create_standalone(request):
-    """Create a task not associated with any specific object"""
-    if request.method == "POST":
-        form = TaskForm(request.POST)
-        if form.is_valid():
-            task = form.save(commit=False)
-            task.created_by = request.user
-            task.save()
-
-            return redirect("lab:task_list")
-
-    # For GET requests, prepare the form
-    form = TaskForm()
-
-    # Make sure target_status field shows all available statuses for standalone tasks
-    form.fields["target_status"].queryset = Status.objects.all()
-
-    return TemplateResponse(request, "lab/tasks/create.html", {"form": form})
-
-
-# Update the existing task_create view to support projects
-@login_required
-def task_create(request, model=None, pk=None):
-    """Create a task, optionally associated with an object and/or project"""
-    content_object = None
-    content_type = None
-
-    # If model and pk provided, get the related object
-    if model and pk:
-        content_type = get_object_or_404(ContentType, app_label="lab", model=model)
-        content_object = get_object_or_404(content_type.model_class(), pk=pk)
-
-    if request.method == "POST":
-        form = TaskForm(request.POST, content_object=content_object)
-        if form.is_valid():
-            task = form.save(commit=False)
-            task.created_by = request.user
-
-            # Set the content object if we have one
-            if content_type and content_object:
-                task.content_type = content_type
-                task.object_id = pk
-
-            task.save()
-
-            # Determine where to redirect based on the context
-            if request.headers.get("HX-Request"):
-                return TemplateResponse(
-                    request, "lab/tasks/task_card.html", {"task": task}
-                )
-
-            if task.project:
-                return redirect("lab:project_detail", pk=task.project.pk)
-
-            return redirect("lab:task_list")
-    else:
-        # Get the project_id from query params if it exists
-        project_id = request.GET.get("project")
-        initial_data = {}
-
-        if project_id:
-            initial_data["project"] = project_id
-
-        form = TaskForm(content_object=content_object, initial=initial_data)
-
-    # Determine template based on context
-    if request.headers.get("HX-Request"):
-        template = "lab/tasks/task_form.html"
-    else:
-        template = "lab/tasks/create.html"
-
-    return TemplateResponse(
-        request,
-        template,
-        {
-            "form": form,
-            "content_object": content_object,
-            "model": model,
-            "pk": pk,
-            "projects": Project.objects.all(),
-        },
-    )
+    # For regular requests, return the full page
+    return render(request, "lab/task/index.html", context)
 
 
 @login_required
@@ -1479,7 +1447,7 @@ def task_detail(request, pk):
     context = {
         "task": task,
     }
-    return render(request, "lab/tasks/detail.html", context)
+    return render(request, "lab/task/detail.html", context)
 
 
 @login_required
@@ -1493,7 +1461,7 @@ def task_reopen(request, pk):
         task.completed_by = None
         task.save()
 
-        return TemplateResponse(request, "lab/tasks/task_card.html", {"task": task})
+        return TemplateResponse(request, "lab/task/task_card.html", {"task": task})
 
     return HttpResponse(status=400)
 
@@ -1562,21 +1530,21 @@ def test_detail(request, pk):
 
     # If card_only=true is in the query params, return just the card
     if request.GET.get("card_only") == "true":
-        return TemplateResponse(request, "lab/tests/card.html", {"test": test})
+        return TemplateResponse(request, "lab/test/card.html", {"test": test})
 
     context = {
         "test": test,
         "activeTab": active_tab,
     }
 
-    return TemplateResponse(request, "lab/tests/detail.html", context)
+    return TemplateResponse(request, "lab/test/detail.html", context)
 
 
 # Add a new view for returning just the card
 @login_required
 def test_card(request, pk):
     test = get_object_or_404(Test, pk=pk)
-    return TemplateResponse(request, "lab/tests/card.html", {"test": test})
+    return TemplateResponse(request, "lab/test/card.html", {"test": test})
 
 
 @login_required
@@ -1634,7 +1602,7 @@ def test_search(request):
 
     return TemplateResponse(
         request,
-        "lab/tests/list.html",
+        "lab/test/list.html",
         {
             "tests": tests,
             "total_count": total_count,
@@ -1651,6 +1619,7 @@ def test_search(request):
     )
 
 
+@login_required
 def types_list(request):
     """View to display sample types, test types, and analysis types."""
     sample_types = SampleType.objects.all().order_by("name")
@@ -1665,11 +1634,13 @@ def types_list(request):
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return render(request, "lab/types/list.html", context)
+        # The specific partial to return depends on what was requested
+        if "search" in request.path:
+            return render(request, "lab/type/index.html#type-list", context)
+        return render(request, "lab/type/index.html#type-index", context)
 
-    # For regular requests, return via the main app
-    context["initial_view"] = "types/list.html"
-    return app(request, context=context)
+    # For regular requests, return the full page
+    return render(request, "lab/type/index.html", context)
 
 
 @login_required
@@ -1692,18 +1663,15 @@ def analysis_list(request):
         ),
     }
 
-    # If it's an HTMX request, check what part the client is asking for
+    # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        # If they're requesting a specific part, return just that
-        requested_url = request.headers.get("HX-Request-URL", "")
-        if "/analyses/search/" in requested_url:
-            return TemplateResponse(request, "lab/analyses/list.html", context)
-        # Otherwise return the full index that includes the search
-        return TemplateResponse(request, "lab/analyses/index.html", context)
+        # The specific partial to return depends on what was requested
+        if "search" in request.path:
+            return render(request, "lab/analysis/index.html#analysis-list", context)
+        return render(request, "lab/analysis/index.html#analysis-index", context)
 
-    # For regular requests, return via the main app
-    context["initial_view"] = "analyses/index.html"
-    return app(request, page="analyses", context=context)
+    # For regular requests, return the full page
+    return render(request, "lab/analysis/index.html", context)
 
 
 @login_required
@@ -1775,7 +1743,7 @@ def analysis_search(request):
 
     return TemplateResponse(
         request,
-        "lab/analyses/list.html",
+        "lab/analysis/list.html",
         {
             "analyses": analyses,
             "total_count": total_count,
@@ -1817,7 +1785,7 @@ def analysis_detail(request, pk):
     # If card_only=true is in the query params, return just the card
     if request.GET.get("card_only") == "true":
         return TemplateResponse(
-            request, "lab/analyses/card.html", {"analysis": analysis}
+            request, "lab/analysis/card.html", {"analysis": analysis}
         )
 
     context = {
@@ -1825,7 +1793,7 @@ def analysis_detail(request, pk):
         "activeTab": active_tab,
     }
 
-    return TemplateResponse(request, "lab/analyses/detail.html", context)
+    return TemplateResponse(request, "lab/analysis/detail.html", context)
 
 
 @login_required
@@ -1862,7 +1830,7 @@ def analysis_create(request):
                     {"test": test, "active_tab": "analyses"},
                 )
             else:
-                return TemplateResponse(request, "lab/analyses/_add_button.html")
+                return TemplateResponse(request, "lab/analysis/_add_button.html")
 
     # For GET requests
     analysis_content_type = ContentType.objects.get_for_model(Analysis)
@@ -1876,9 +1844,9 @@ def analysis_create(request):
     # If button=true is in query params, return the add button instead of the form
     if request.GET.get("button") == "true":
         context["test"] = test_id
-        return TemplateResponse(request, "lab/analyses/_add_button.html", context)
+        return TemplateResponse(request, "lab/analysis/_add_button.html", context)
 
-    return TemplateResponse(request, "lab/analyses/edit.html", context)
+    return TemplateResponse(request, "lab/analysis/edit.html", context)
 
 
 @login_required
@@ -1901,12 +1869,12 @@ def analysis_edit(request, pk):
             # If return_to_detail is true, redirect to the detail view
             if request.GET.get("return_to_detail") == "true":
                 return TemplateResponse(
-                    request, "lab/analyses/detail.html", {"analysis": analysis}
+                    request, "lab/analysis/detail.html", {"analysis": analysis}
                 )
 
             # Otherwise return the card view
             return TemplateResponse(
-                request, "lab/analyses/card.html", {"analysis": analysis}
+                request, "lab/analysis/card.html", {"analysis": analysis}
             )
 
     # Get appropriate statuses for Analyses
@@ -1915,7 +1883,7 @@ def analysis_edit(request, pk):
 
     return TemplateResponse(
         request,
-        "lab/analyses/edit.html",
+        "lab/analysis/edit.html",
         {
             "analysis": analysis,
             "analysis_types": AnalysisType.objects.all(),

@@ -1,3 +1,5 @@
+{% load partials %}
+
 <div class="notes-list space-y-1.5">
   {% if object.notes.all %}
     {% for note in object.notes.all %}
@@ -32,30 +34,16 @@
     <p class="text-gray-400 text-xs">No notes yet.</p>
   {% endif %}
 
-  <form
-    class="mt-2"
-    hx-post="{% url 'lab:note_create' %}"
-    hx-target="closest .notes-list"
-    hx-swap="innerHTML"
-    @submit="$event.stopPropagation()"
-  >
-    <input type="hidden" name="content_type" value="{{ content_type }}" />
-    <input type="hidden" name="object_id" value="{{ object.id }}" />
-    <div class="flex items-end gap-2">
-      <textarea
-        name="content"
-        placeholder="Add a note..."
-        required
-        @click="$event.stopPropagation()"
-        class="flex-1 px-2 py-1 text-xs shadow-sm rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none h-[32px]"
-      ></textarea>
-      <button
-        type="submit"
-        @click="$event.stopPropagation()"
-        class="px-2 py-1 bg-blue-600 text-white text-xs rounded shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 transition-colors whitespace-nowrap"
-      >
-        Add
-      </button>
-    </div>
-  </form>
+  <div class="mt-2">
+    <button
+      class="w-full px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded transition-colors"
+      hx-get="{% url 'lab:note_create' %}?content_type={{ content_type }}&object_id={{ object.id }}"
+      hx-target="closest .notes-list"
+      hx-swap="innerHTML"
+      @click="$event.stopPropagation()"
+    >
+      <i class="fa-solid fa-plus mr-1"></i>
+      Add a note...
+    </button>
+  </div>
 </div>

@@ -16,20 +16,24 @@
     <div class="px-3 space-y-1">
       <!-- Dashboard -->
       <a
-        href="{% url 'lab:dashboard' %}"
+        hx-get="{% url 'lab:dashboard' %}"
+        hx-target="main"
+        hx-push-url="true"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'dashboard' %}bg-indigo-50
         text-indigo-600{% endif %}"
       >
         <i
-          class="fas fa-chart-bar text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+          class="fas fa-home text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
         ></i>
         <span>Dashboard</span>
       </a>
 
       <!-- Individuals -->
       <a
-        href="{% url 'lab:individual_index' %}"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'individual_index' or request.resolver_match.url_name == 'individual_detail' %}bg-indigo-50
+        hx-get="{% url 'lab:individuals' %}"
+        hx-target="main"
+        hx-push-url="true"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'individuals' or request.resolver_match.url_name == 'individual_detail' %}bg-indigo-50
         text-indigo-600{% endif %}"
       >
         <i
@@ -40,44 +44,52 @@
 
       <!-- Samples -->
       <a
-        href="{% url 'lab:sample_list' %}"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'sample_list' or request.resolver_match.url_name == 'sample_detail' %}bg-indigo-50
+        hx-get="{% url 'lab:samples' %}"
+        hx-target="main"
+        hx-push-url="true"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'samples' or request.resolver_match.url_name == 'sample_detail' %}bg-indigo-50
         text-indigo-600{% endif %}"
       >
         <i
-          class="fas fa-vial text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+          class="fas fa-flask text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
         ></i>
         <span>Samples</span>
       </a>
 
       <!-- Tests -->
       <a
-        href="{% url 'lab:test_list' %}"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'test_list' or request.resolver_match.url_name == 'test_detail' %}bg-indigo-50
+        hx-get="{% url 'lab:tests' %}"
+        hx-target="main"
+        hx-push-url="true"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'tests' or request.resolver_match.url_name == 'test_detail' %}bg-indigo-50
         text-indigo-600{% endif %}"
       >
         <i
-          class="fas fa-flask text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+          class="fas fa-vial text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
         ></i>
         <span>Tests</span>
       </a>
 
       <!-- Analyses -->
       <a
-        href="{% url 'lab:analysis_list' %}"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'analysis_list' or request.resolver_match.url_name == 'analysis_detail' %}bg-indigo-50
+        hx-get="{% url 'lab:analyses' %}"
+        hx-target="main"
+        hx-push-url="true"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'analyses' or request.resolver_match.url_name == 'analysis_detail' %}bg-indigo-50
         text-indigo-600{% endif %}"
       >
         <i
-          class="fas fa-microscope text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+          class="fas fa-chart-bar text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
         ></i>
         <span>Analyses</span>
       </a>
 
       <!-- Projects -->
       <a
-        href="{% url 'lab:project_list' %}"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'project_list' or request.resolver_match.url_name == 'project_detail' %}bg-indigo-50
+        hx-get="{% url 'lab:projects' %}"
+        hx-target="main"
+        hx-push-url="true"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'projects' or request.resolver_match.url_name == 'project_detail' %}bg-indigo-50
         text-indigo-600{% endif %}"
       >
         <i
@@ -88,8 +100,10 @@
 
       <!-- Tasks -->
       <a
-        href="{% url 'lab:task_list' %}"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'task_list' %}bg-indigo-50
+        hx-get="{% url 'lab:tasks' %}"
+        hx-target="main"
+        hx-push-url="true"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'tasks' %}bg-indigo-50
         text-indigo-600{% endif %}"
       >
         <i
@@ -100,12 +114,14 @@
 
       <!-- Types -->
       <a
-        href="{% url 'lab:types_list' %}"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'types_list' %}bg-indigo-50
+        hx-get="{% url 'lab:types' %}"
+        hx-target="main"
+        hx-push-url="true"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {% if request.resolver_match.url_name == 'types' %}bg-indigo-50
         text-indigo-600{% endif %}"
       >
         <i
-          class="fas fa-list text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
+          class="fas fa-tags text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
         ></i>
         <span>Types</span>
       </a>
