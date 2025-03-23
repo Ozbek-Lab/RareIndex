@@ -1,0 +1,145 @@
+{% extends "lab/base.html" %}
+{% load partials %}
+
+{% partialdef sample-edit %}
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center space-x-2">
+      <a
+        href="{% url 'lab:sample_detail' sample.pk %}"
+        class="text-indigo-600 hover:text-indigo-900"
+        hx-get="{% url 'lab:sample_detail' sample.pk %}"
+        hx-target="#main-content"
+        hx-swap="innerHTML"
+      >
+        <i class="fas fa-arrow-left"></i>
+      </a>
+      <h1 class="text-2xl font-bold text-gray-900">Edit Sample</h1>
+    </div>
+
+    <!-- Edit Form -->
+    <div class="bg-white shadow rounded-lg p-6">
+      <form
+        hx-post="{% url 'lab:sample_edit' sample.pk %}"
+        hx-target="#main-content"
+        hx-swap="innerHTML"
+        class="space-y-6"
+      >
+        {% csrf_token %}
+
+        <!-- Basic Information -->
+        <div>
+          <h2 class="text-lg font-medium text-gray-900 mb-4">Basic Information</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Individual -->
+            <div>
+              <label for="individual" class="block text-sm font-medium text-gray-700">Individual</label>
+              <select
+                name="individual"
+                id="individual"
+                required
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value="">Select an individual</option>
+                {% for individual in individuals %}
+                  <option value="{{ individual.pk }}" {% if individual.pk == sample.individual.pk %}selected{% endif %}>
+                    {{ individual.lab_id }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Sample Type -->
+            <div>
+              <label for="sample_type" class="block text-sm font-medium text-gray-700">Sample Type</label>
+              <select
+                name="sample_type"
+                id="sample_type"
+                required
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value="">Select a sample type</option>
+                {% for type in sample_types %}
+                  <option value="{{ type.pk }}" {% if type.pk == sample.sample_type.pk %}selected{% endif %}>
+                    {{ type.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Status -->
+            <div>
+              <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+              <select
+                name="status"
+                id="status"
+                required
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value="">Select a status</option>
+                {% for status in sample_statuses %}
+                  <option value="{{ status.pk }}" {% if status.pk == sample.status.pk %}selected{% endif %}>
+                    {{ status.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Receipt Date -->
+            <div>
+              <label for="receipt_date" class="block text-sm font-medium text-gray-700">Receipt Date</label>
+              <input
+                type="date"
+                name="receipt_date"
+                id="receipt_date"
+                required
+                value="{{ sample.receipt_date|date:'Y-m-d' }}"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Additional Information -->
+        <div>
+          <h2 class="text-lg font-medium text-gray-900 mb-4">Additional Information</h2>
+          <div class="grid grid-cols-1 gap-6">
+            <!-- Notes -->
+            <div>
+              <label for="notes" class="block text-sm font-medium text-gray-700">Notes</label>
+              <textarea
+                name="notes"
+                id="notes"
+                rows="3"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >{{ sample.notes }}</textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex justify-end space-x-3">
+          <button
+            type="button"
+            class="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            hx-get="{% url 'lab:sample_detail' sample.pk %}"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          >
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% block content %}
+  {% partial sample-edit %}
+{% endblock content %} 

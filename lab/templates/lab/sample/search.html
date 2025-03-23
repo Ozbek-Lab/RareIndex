@@ -1,176 +1,95 @@
-<!-- Updated version of lab/templates/lab/samples/search.html with multi-select -->
+{% extends "lab/base.html" %}
+{% load partials %}
 
-<!-- Search Container with optimized styling -->
-<div
-  class="bg-white p-4 rounded-xl shadow-sm border border-gray-100"
-  x-data="{ showAdvanced: false }"
->
-  <div
-    class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100"
-  >
-    <div class="flex items-center space-x-3">
-      <i class="fas fa-search w-5 h-5 text-indigo-500"></i>
-      <div>
-        <h2 class="text-lg font-semibold text-gray-800">Sample Search</h2>
-        <p class="text-xs text-gray-500">
-          Search and filter samples by various criteria
-        </p>
-      </div>
+{% partialdef sample-search %}
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <h1 class="text-2xl font-bold text-gray-900">Search Samples</h1>
+      <button
+        class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        hx-get="{% url 'lab:sample_create' %}"
+        hx-target="#main-content"
+        hx-swap="innerHTML"
+      >
+        <i class="fas fa-plus mr-2"></i>
+        Add Sample
+      </button>
     </div>
-  </div>
 
-  <form
-    hx-post="{% url 'lab:sample_search' %}"
-    hx-target="next div"
-    hx-trigger="change delay:500ms, search delay:500ms, multiselect-change from:body"
-    class="space-y-4"
-  >
-    <!-- Basic Search Section -->
-    <div class="bg-gray-50 p-3 rounded-lg">
-      <div class="flex items-center mb-3">
-        <i class="fas fa-list w-4 h-4 mr-2 text-indigo-500"></i>
-        <h3 class="text-sm font-medium text-gray-700">Basic Search</h3>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        <!-- Individual Search - Using Multi-Select -->
-        <div class="relative">
-          <label
-            class="text-xs font-medium text-gray-600 mb-1 flex items-center"
-          >
-            <i class="fas fa-user w-3 h-3 mr-1 text-gray-400"></i>
-            Individual
-          </label>
+    <!-- Search Form -->
+    <div class="bg-white shadow rounded-lg p-4">
+      <form
+        hx-post="{% url 'lab:sample_search' %}"
+        hx-target="#sample-list"
+        class="space-y-4"
+      >
+        {% csrf_token %}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Status Filter -->
+          <div>
+            <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+            <select
+              name="status"
+              id="status"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="">All Statuses</option>
+              {% for status in sample_statuses %}
+                <option value="{{ status.id }}">{{ status.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-          <!-- Multi-Select Component for Individual -->
-          {% include "lab/components/multi_select.html" with component_id="individual-select" name="individual" model="Individual" field="lab_id" placeholder="Select Individual..." result_container_id="individual-results" loading_indicator_id="individual-loading" allow_multiple=True %}
-        </div>
+          <!-- Sample Type Filter -->
+          <div>
+            <label for="sample_type" class="block text-sm font-medium text-gray-700">Sample Type</label>
+            <select
+              name="sample_type"
+              id="sample_type"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="">All Types</option>
+              {% for type in sample_types %}
+                <option value="{{ type.id }}">{{ type.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-        <!-- Status Filter -->
-        <div class="relative">
-          <label
-            class="text-xs font-medium text-gray-600 mb-1 flex items-center"
-          >
-            <i class="fas fa-check-circle w-3 h-3 mr-1 text-gray-400"></i>
-            Status
-          </label>
-          <select
-            name="status"
-            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm appearance-none pr-8"
-          >
-            <option value="">All Statuses</option>
-            {% for status in sample_statuses %}
-              <option value="{{ status.id }}">{{ status.name }}</option>
-            {% endfor %}
-          </select>
-          <div
-            class="absolute inset-y-0 right-0 flex items-center pr-2 mt-5 pointer-events-none"
-          >
-            <i class="fas fa-chevron-down w-4 h-4 text-gray-400"></i>
+          <!-- Individual Filter -->
+          <div>
+            <label for="individual" class="block text-sm font-medium text-gray-700">Individual</label>
+            <select
+              name="individual"
+              id="individual"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="">All Individuals</option>
+              {% for individual in individuals %}
+                <option value="{{ individual.id }}">{{ individual.lab_id }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
 
-        <!-- Sample Type Filter - Using Multi-Select -->
-        <div class="relative">
-          <label
-            class="text-xs font-medium text-gray-600 mb-1 flex items-center"
+        <div class="flex justify-end">
+          <button
+            type="submit"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           >
-            <i class="fas fa-vial w-3 h-3 mr-1 text-gray-400"></i>
-            Sample Type
-          </label>
-
-          {% include "lab/components/multi_select.html" with component_id="sample-type-select" name="sample_type" model="SampleType" field="name" placeholder="Select Sample Type..." result_container_id="sample-type-results" loading_indicator_id="sample-type-loading" allow_multiple=True %}
+            Search
+          </button>
         </div>
-      </div>
+      </form>
     </div>
 
-    <!-- Advanced Search Toggle Button -->
-    <button
-      type="button"
-      @click="showAdvanced = !showAdvanced"
-      class="flex items-center text-sm text-gray-600 hover:text-indigo-600 focus:outline-none group"
-    >
-      <i
-        class="fas fa-chevron-down w-4 h-4 mr-1 transition-transform duration-200"
-        :class="{ 'rotate-180': showAdvanced }"
-      ></i>
-      <span class="group-hover:underline">Advanced Search Options</span>
-    </button>
-
-    <!-- Advanced Search Section -->
-    <div
-      x-show="showAdvanced"
-      x-transition:enter="transition ease-out duration-200"
-      x-transition:enter-start="opacity-0 transform -translate-y-2"
-      x-transition:enter-end="opacity-100 transform translate-y-0"
-      x-transition:leave="transition ease-in duration-150"
-      x-transition:leave-start="opacity-100 transform translate-y-0"
-      x-transition:leave-end="opacity-0 transform -translate-y-2"
-      class="bg-gray-50 p-3 rounded-lg"
-    >
-      <div class="flex items-center mb-3">
-        <i class="fas fa-sliders-h w-4 h-4 mr-2 text-indigo-500"></i>
-        <h3 class="text-sm font-medium text-gray-700">Advanced Search</h3>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <!-- Date Range - From -->
-        <div class="relative">
-          <label
-            class="text-xs font-medium text-gray-600 mb-1 flex items-center"
-          >
-            <i class="fas fa-calendar-alt w-3 h-3 mr-1 text-gray-400"></i>
-            Receipt Date From
-          </label>
-          <input
-            type="date"
-            name="date_from"
-            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm"
-          />
-        </div>
-
-        <!-- Date Range - To -->
-        <div class="relative">
-          <label
-            class="text-xs font-medium text-gray-600 mb-1 flex items-center"
-          >
-            <i class="fas fa-calendar-alt w-3 h-3 mr-1 text-gray-400"></i>
-            Receipt Date To
-          </label>
-          <input
-            type="date"
-            name="date_to"
-            class="block w-full h-9 rounded-md border-gray-300 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 hover:border-gray-400 transition-colors shadow-sm"
-          />
-        </div>
-
-        <!-- Test Filter - Using Multi-Select -->
-        <div class="relative">
-          <label
-            class="text-xs font-medium text-gray-600 mb-1 flex items-center"
-          >
-            <i class="fas fa-flask w-3 h-3 mr-1 text-gray-400"></i>
-            Test
-          </label>
-
-          {% include "lab/components/multi_select.html" with component_id="test-select" name="test" model="Test" field="name" placeholder="Select Test..." result_container_id="test-results" loading_indicator_id="test-loading" allow_multiple=True %}
-        </div>
-      </div>
+    <!-- Sample List -->
+    <div id="sample-list">
+      {% partial sample-list %}
     </div>
-  </form>
-</div>
+  </div>
+{% endpartialdef %}
 
-<div>{% include "lab/samples/list.html" %}</div>
-
-<!-- Add this JavaScript to handle the multi-select change event -->
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    // Listen for changes to hidden inputs in multi-select components
-    document
-      .querySelectorAll('[id^="multi-select"] input[type="hidden"]')
-      .forEach((input) => {
-        input.addEventListener("change", function () {
-          // Dispatch a custom event that the form is listening for
-          document.body.dispatchEvent(new CustomEvent("multiselect-change"));
-        });
-      });
-  });
-</script>
+{% block content %}
+  {% partial sample-search %}
+{% endblock content %}

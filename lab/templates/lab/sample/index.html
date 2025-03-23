@@ -1,21 +1,135 @@
-<!-- Sample List/Detail View Container with Alpine.js -->
-<div x-data="{ showDetail: false }">
-  <!-- Detail View - Shown when a sample is selected -->
-  <div x-show="showDetail" x-cloak>
-    <!-- Back button -->
-    <div class="flex items-center space-x-2 mb-4">
+{% extends "lab/base.html" %}
+{% load partials %}
+
+{% partialdef sample-index %}
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <h1 class="text-2xl font-bold text-gray-900">Samples</h1>
       <button
-        class="flex items-center text-blue-600 hover:text-blue-800"
-        @click="showDetail = false"
+        class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        hx-get="{% url 'lab:sample_create' %}"
+        hx-target="#main-content"
+        hx-swap="innerHTML"
       >
-        <i class="fas fa-arrow-left mr-1"></i> Back to Samples
+        <i class="fas fa-plus mr-2"></i>
+        Add Sample
       </button>
     </div>
 
-    <!-- Sample detail container loaded by HTMX -->
-    <div id="sample-detail-container"></div>
-  </div>
+    <!-- Search and Filters -->
+    <div class="bg-white shadow rounded-lg p-4">
+      <form
+        hx-post="{% url 'lab:sample_search' %}"
+        hx-target="#sample-list"
+        class="space-y-4"
+      >
+        {% csrf_token %}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Status Filter -->
+          <div>
+            <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+            <select
+              name="status"
+              id="status"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="">All Statuses</option>
+              {% for status in sample_statuses %}
+                <option value="{{ status.id }}">{{ status.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-  <!-- List View - Hidden when detail is shown -->
-  <div x-show="!showDetail">{% include "lab/samples/search.html" %}</div>
-</div>
+          <!-- Sample Type Filter -->
+          <div>
+            <label for="sample_type" class="block text-sm font-medium text-gray-700">Sample Type</label>
+            <select
+              name="sample_type"
+              id="sample_type"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="">All Types</option>
+              {% for type in sample_types %}
+                <option value="{{ type.id }}">{{ type.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Individual Filter -->
+          <div>
+            <label for="individual" class="block text-sm font-medium text-gray-700">Individual</label>
+            <select
+              name="individual"
+              id="individual"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="">All Individuals</option>
+              {% for individual in individuals %}
+                <option value="{{ individual.id }}">{{ individual.lab_id }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <button
+            type="submit"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          >
+            Search
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Sample List -->
+    <div id="sample-list">
+      {% partial sample-list %}
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef sample-list %}
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for sample in samples %}
+      <div
+        class="bg-white rounded-lg shadow p-4 border-l-4 {% if sample.status.name == 'Complete' %}border-green-500{% elif sample.status.name == 'In Progress' %}border-yellow-500{% else %}border-gray-500{% endif %}"
+      >
+        <div class="flex justify-between items-start">
+          <h3 class="text-lg font-medium text-gray-900">{{ sample.lab_id }}</h3>
+          <span
+            class="px-2 py-1 text-xs rounded-full font-medium {% if sample.status.name == 'Complete' %}bg-green-100 text-green-800{% elif sample.status.name == 'In Progress' %}bg-yellow-100 text-yellow-800{% else %}bg-gray-100 text-gray-800{% endif %}"
+          >
+            {{ sample.status.name }}
+          </span>
+        </div>
+        <p class="text-sm text-gray-500 mt-1">{{ sample.sample_type.name }}</p>
+        <div class="mt-2 text-xs text-gray-500">
+          <div>Individual: {{ sample.individual.lab_id }}</div>
+          <div>Received: {{ sample.receipt_date|date:"d M Y" }}</div>
+        </div>
+        <div class="mt-3 flex justify-end space-x-2">
+          <button
+            class="text-indigo-600 hover:text-indigo-900"
+            hx-get="{% url 'lab:sample_detail' sample.pk %}"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+          >
+            View Details
+          </button>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-span-full text-center py-8 bg-gray-50 rounded-lg">
+        <i class="fas fa-flask text-gray-300 text-5xl mb-3"></i>
+        <h3 class="text-lg font-medium text-gray-700">No samples found</h3>
+        <p class="text-gray-500 mt-1">Try adjusting your search criteria.</p>
+      </div>
+    {% endfor %}
+  </div>
+{% endpartialdef %}
+
+{% block content %}
+  {% partial sample-index %}
+{% endblock content %}

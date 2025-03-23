@@ -117,7 +117,13 @@ class NoteForm(forms.ModelForm):
         model = Note
         fields = ["content"]
         widgets = {
-            "content": forms.Textarea(attrs={"rows": 3}),
+            "content": forms.Textarea(
+                attrs={
+                    "class": "flex-1 px-2 py-1 text-xs shadow-sm rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none h-[32px]",
+                    "placeholder": "Add a note...",
+                    "required": True,
+                }
+            ),
         }
 
 
@@ -149,7 +155,7 @@ class SampleTypeForm(forms.ModelForm):
 class TestForm(forms.ModelForm):
     class Meta:
         model = Test
-        fields = ['test_type', 'performed_date', 'performed_by', 'status']
+        fields = ["test_type", "performed_date", "performed_by", "status"]
         widgets = {
-            'performed_date': forms.DateInput(attrs={'type': 'date'}),
+            "performed_date": forms.DateInput(attrs={"type": "date"}),
         }

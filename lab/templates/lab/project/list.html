@@ -1,90 +1,8 @@
-<!-- lab/templates/lab/projects/list.html -->
-<!-- Project List View with Filters and Search -->
-<div class="space-y-6">
+<div
+
+    id="project-list-container"
+ class="space-y-6">
   <!-- Filters and Search -->
-  <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-    <div
-      class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100"
-    >
-      <div class="flex items-center space-x-3">
-        <i class="fas fa-project-diagram w-5 h-5 text-indigo-500"></i>
-        <div>
-          <h2 class="text-lg font-semibold text-gray-800">Projects</h2>
-          <p class="text-xs text-gray-500">
-            Manage and organize your team's work
-          </p>
-        </div>
-      </div>
-      <button
-        class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 flex items-center"
-        hx-get="{% url 'lab:project_create' %}"
-        hx-target="#main-content"
-        hx-push-url="true"
-      >
-        <i class="fas fa-plus mr-2"></i>
-        New Project
-      </button>
-    </div>
-
-    <form
-      hx-get="{% url 'lab:project_search' %}"
-      hx-target="#project-list-container"
-      hx-trigger="submit, change"
-      class="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4"
-    >
-      <!-- Search Box -->
-      <div class="relative flex-1">
-        <div
-          class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
-        >
-          <i class="fas fa-search text-gray-400"></i>
-        </div>
-        <input
-          type="text"
-          name="q"
-          placeholder="Search projects..."
-          class="pl-10 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-          hx-trigger="keyup changed delay:500ms"
-          value="{{ query|default:'' }}"
-        />
-      </div>
-
-      <!-- Status Filter -->
-      <div class="flex items-center space-x-1">
-        <select
-          name="status"
-          class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-        >
-          <option
-            value="all"
-            {% if status_filter == 'all' %}selected{% endif %}
-          >
-            All Projects
-          </option>
-          <option
-            value="open"
-            {% if status_filter == 'open' or not status_filter %}selected{% endif %}
-          >
-            Open Only
-          </option>
-          <option
-            value="completed"
-            {% if status_filter == 'completed' %}selected{% endif %}
-          >
-            Completed Only
-          </option>
-        </select>
-        <button
-          type="submit"
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          <i class="fas fa-filter mr-2"></i>
-          Filter
-        </button>
-      </div>
-    </form>
-  </div>
-
   <!-- Project Count Info -->
   <div class="flex flex-wrap gap-3 mb-4">
     <div
@@ -109,11 +27,10 @@
 
   <!-- Project List Grid -->
   <div
-    id="project-list-container"
     class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
   >
     {% for project in projects %}
-      {% include "lab/projects/card.html" with project=project %}
+      {% include "lab/project/card.html" with project=project %}
       {% empty %}
       <div class="col-span-3 bg-white p-8 rounded-lg shadow text-center">
         <i class="fas fa-folder-open text-gray-300 text-5xl mb-3"></i>
@@ -126,7 +43,7 @@
         <button
           class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           hx-get="{% url 'lab:project_create' %}"
-          hx-target="#main-content"
+          hx-target="#main"
           hx-push-url="true"
         >
           <i class="fas fa-plus mr-2"></i>
