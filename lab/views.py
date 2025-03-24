@@ -42,7 +42,6 @@ from django.http import QueryDict
 @login_required
 def dashboard(request):
     """Dashboard view that serves as the main landing page"""
-
     # Gather some summary statistics for the dashboard
     context = {
         "individual_count": Individual.objects.count(),
@@ -52,6 +51,19 @@ def dashboard(request):
         "pending_tasks": Task.objects.filter(is_completed=False).count(),
     }
 
+    # If it's an HTMX request, return just the requested partial
+    if request.headers.get("HX-Request"):
+        partial = request.GET.get("partial", "dashboard-index")
+        if partial == "dashboard-stats":
+            return render(request, "lab/dashboard.html#dashboard-stats", context)
+        elif partial == "dashboard-activity":
+            return render(request, "lab/dashboard.html#dashboard-activity", context)
+        elif partial == "dashboard-charts":
+            return render(request, "lab/dashboard.html#dashboard-charts", context)
+        else:
+            return render(request, "lab/dashboard.html#dashboard-index", context)
+
+    # For regular requests, return the full page
     return render(request, "lab/dashboard.html", context)
 
 

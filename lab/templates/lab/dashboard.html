@@ -1,85 +1,97 @@
 {% extends "lab/base.html" %}
+{% load partials %}
 
-{% block content %}
-  <div class="container mx-auto px-4 py-8">
-    <h1 class="text-2xl font-bold mb-6">RareIndex Dashboard</h1>
-
-    <!-- Summary Statistics Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-      <!-- Individuals Card -->
-      <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
-        <div class="text-indigo-500 text-4xl mb-2">
-          <i class="fas fa-users"></i>
-        </div>
-        <div class="text-3xl font-bold">{{ individual_count }}</div>
-        <div class="text-gray-500 text-sm">Individuals</div>
+{% partialdef dashboard-stats %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+    <!-- Individuals Card -->
+    <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
+      <div class="text-indigo-500 text-4xl mb-2">
+        <i class="fas fa-users"></i>
       </div>
+      <div class="text-3xl font-bold">{{ individual_count }}</div>
+      <div class="text-gray-500 text-sm">Individuals</div>
+    </div>
 
-      <!-- Samples Card -->
-      <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
-        <div class="text-blue-500 text-4xl mb-2">
-          <i class="fas fa-vial"></i>
-        </div>
-        <div class="text-3xl font-bold">{{ sample_count }}</div>
-        <div class="text-gray-500 text-sm">Samples</div>
+    <!-- Samples Card -->
+    <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
+      <div class="text-blue-500 text-4xl mb-2">
+        <i class="fas fa-vial"></i>
       </div>
+      <div class="text-3xl font-bold">{{ sample_count }}</div>
+      <div class="text-gray-500 text-sm">Samples</div>
+    </div>
 
-      <!-- Tests Card -->
-      <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
-        <div class="text-green-500 text-4xl mb-2">
-          <i class="fas fa-flask"></i>
-        </div>
-        <div class="text-3xl font-bold">{{ test_count }}</div>
-        <div class="text-gray-500 text-sm">Tests</div>
+    <!-- Tests Card -->
+    <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
+      <div class="text-green-500 text-4xl mb-2">
+        <i class="fas fa-flask"></i>
       </div>
+      <div class="text-3xl font-bold">{{ test_count }}</div>
+      <div class="text-gray-500 text-sm">Tests</div>
+    </div>
 
-      <!-- Analyses Card -->
-      <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
-        <div class="text-purple-500 text-4xl mb-2">
-          <i class="fas fa-microscope"></i>
-        </div>
-        <div class="text-3xl font-bold">{{ analysis_count }}</div>
-        <div class="text-gray-500 text-sm">Analyses</div>
+    <!-- Analyses Card -->
+    <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
+      <div class="text-purple-500 text-4xl mb-2">
+        <i class="fas fa-microscope"></i>
       </div>
+      <div class="text-3xl font-bold">{{ analysis_count }}</div>
+      <div class="text-gray-500 text-sm">Analyses</div>
+    </div>
 
-      <!-- Tasks Card -->
-      <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
-        <div class="text-yellow-500 text-4xl mb-2">
-          <i class="fas fa-tasks"></i>
-        </div>
-        <div class="text-3xl font-bold">{{ pending_tasks }}</div>
-        <div class="text-gray-500 text-sm">Pending Tasks</div>
+    <!-- Tasks Card -->
+    <div class="bg-white rounded-lg shadow p-6 flex flex-col items-center">
+      <div class="text-yellow-500 text-4xl mb-2">
+        <i class="fas fa-tasks"></i>
+      </div>
+      <div class="text-3xl font-bold">{{ pending_tasks }}</div>
+      <div class="text-gray-500 text-sm">Pending Tasks</div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef dashboard-activity %}
+  <div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-semibold mb-4">Recent Activity</h2>
+    <p class="text-gray-500">
+      This section will show recent activity in the system.
+    </p>
+  </div>
+{% endpartialdef %}
+
+{% partialdef dashboard-charts %}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Placeholder for charts/reports -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold mb-4">Sample Types Distribution</h2>
+      <div class="h-64 flex items-center justify-center bg-gray-50">
+        <p class="text-gray-400">
+          Sample type distribution chart will be displayed here
+        </p>
       </div>
     </div>
 
-    <!-- Placeholder for future dashboard content -->
-    <div class="bg-white rounded-lg shadow p-6 mb-6">
-      <h2 class="text-lg font-semibold mb-4">Recent Activity</h2>
-      <p class="text-gray-500">
-        This section will show recent activity in the system.
-      </p>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- Placeholder for charts/reports -->
-      <div class="bg-white rounded-lg shadow p-6">
-        <h2 class="text-lg font-semibold mb-4">Sample Types Distribution</h2>
-        <div class="h-64 flex items-center justify-center bg-gray-50">
-          <p class="text-gray-400">
-            Sample type distribution chart will be displayed here
-          </p>
-        </div>
-      </div>
-
-      <!-- Placeholder for charts/reports -->
-      <div class="bg-white rounded-lg shadow p-6">
-        <h2 class="text-lg font-semibold mb-4">Test Status Summary</h2>
-        <div class="h-64 flex items-center justify-center bg-gray-50">
-          <p class="text-gray-400">
-            Test status summary chart will be displayed here
-          </p>
-        </div>
+    <!-- Placeholder for charts/reports -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold mb-4">Test Status Summary</h2>
+      <div class="h-64 flex items-center justify-center bg-gray-50">
+        <p class="text-gray-400">
+          Test status summary chart will be displayed here
+        </p>
       </div>
     </div>
   </div>
-{% endblock %}
+{% endpartialdef %}
+
+{% partialdef dashboard-index %}
+  <div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">RareIndex Dashboard</h1>
+    {% partial dashboard-stats %}
+    {% partial dashboard-activity %}
+    {% partial dashboard-charts %}
+  </div>
+{% endpartialdef %}
+
+{% block content %}
+  {% partial dashboard-index %}
+{% endblock content %}
