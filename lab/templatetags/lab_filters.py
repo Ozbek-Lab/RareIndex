@@ -36,7 +36,11 @@ def get_all_tests(individual):
 @register.filter
 def pending_tasks(tasks):
     """Filter tasks to only show incomplete ones"""
-    return tasks.filter(is_completed=False)
+    if tasks is None:
+        return []
+    if hasattr(tasks, 'all'):
+        tasks = tasks.all()
+    return [task for task in tasks if not task.is_completed]
 
 
 @register.filter
