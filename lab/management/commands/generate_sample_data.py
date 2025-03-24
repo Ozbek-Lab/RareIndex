@@ -55,7 +55,7 @@ class Command(BaseCommand):
 
         # Generate families and their members
         for i in range(options['families']):
-            family_id = f"RB_{i+1:03d}_001"
+            family_id = f"RB_2025_{i+1:03d}"
             family = self._create_family(family_id, user)
             
             # Create tasks for family

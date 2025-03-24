@@ -165,6 +165,7 @@ class SampleType(models.Model):
 
 class Institution(models.Model):
     name = models.CharField(max_length=255)
+    contact = models.TextField(blank=True)
     notes = GenericRelation("Note")
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
@@ -313,11 +314,8 @@ class Sample(StatusMixin, models.Model):
     status_logs = GenericRelation(StatusLog)
 
     # Dates
-    receipt_date = models.DateField()
+    receipt_date = models.DateField(null=True, blank=True)
     processing_date = models.DateField(null=True, blank=True)
-
-    # Relations
-    sending_institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
 
     # Sample details
     isolation_by = models.ForeignKey(
