@@ -1,271 +1,117 @@
 import csv
-import os
-import re
-from django.core.management.base import BaseCommand
-from django.apps import apps
-from django.contrib.auth.models import User
-from django.db import transaction
 from datetime import datetime
-from django.db.models.fields.related import ForeignKey
+from django.core.management.base import BaseCommand
+from django.contrib.auth.models import User
+from django.utils import timezone
+from lab.models import (
+    Family,
+    Individual,
+    Sample,
+    Test,
+    Status,
+    SampleType,
+    Institution,
+    TestType,
+    Note,
+)
 
 class Command(BaseCommand):
-    help = 'Import data from TSV files into the database'
+    help = 'Import data from TSV file'
 
     def add_arguments(self, parser):
-        parser.add_argument('directory', type=str, help='Directory containing TSV files')
-        parser.add_argument('--app', type=str, default='lab', help='App name (default: lab)')
+        parser.add_argument('file_path', type=str, help='Path to the TSV file')
 
-    def get_model_dependencies(self, model):
-        """Get all models that this model depends on through ForeignKey relationships"""
-        dependencies = set()
-        for field in model._meta.get_fields():
-            if isinstance(field, ForeignKey) and field.related_model != model:
-                # Exclude self-referential dependencies (like mother/father in Individual)
-                dependencies.add(field.related_model)
-        return dependencies
-
-    def sort_models_by_dependency(self, models_dict):
-        """Sort models based on their dependencies, ensuring Family is processed first"""
-        sorted_models = []
-        visited = set()
-        visiting = set()
-
-        def visit(model_name):
-            if model_name in visited:
-                return
-            if model_name in visiting:
-                raise ValueError(f"Circular dependency detected for {model_name}")
-
-            visiting.add(model_name)
-            model = models_dict[model_name]
-            dependencies = self.get_model_dependencies(model)
-
-            for dep in dependencies:
-                dep_name = dep.__name__
-                if dep_name in models_dict and dep_name not in visited:
-                    visit(dep_name)
-
-            visiting.remove(model_name)
-            visited.add(model_name)
-            sorted_models.append(model_name)
-
-        # Process Family first if it exists
-        if 'Family' in models_dict:
-            visit('Family')
-
-        # Process remaining models
-        for model_name in models_dict:
-            if model_name not in visited:
-                visit(model_name)
-
-        return sorted_models
-
-    def parse_family_id(self, lab_id):
-        """Parse family ID from lab_id"""
-        match = re.match(r'(RB_\d+_\d+)(?:\.\d+(?:\.\d+)?)?$', lab_id)
-        return match.group(1) if match else None
-
-    def get_individual_role(self, lab_id):
-        """Determine individual's role based on lab_id pattern"""
-        match = re.match(r'RB_\d+_\d+\.(\d+(?:\.\d+)?)', lab_id)
-        if not match:
+    def _parse_date(self, date_str):
+        """Parse date string in various formats"""
+        if not date_str:
             return None
-        
-        suffix = match.group(1)
-        if suffix == '1' or suffix.startswith('1.'):
-            return 'proband'
-        elif suffix == '2':
-            return 'mother'
-        elif suffix == '3':
-            return 'father'
-        else:
-            return 'relative'
+
+        formats = ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y']
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str.strip(), fmt).date()
+            except ValueError:
+                continue
         return None
 
-    def import_model_data(self, model, file_path, default_user):
-        """Import data for a single model from a TSV file"""
-        self.stdout.write(f"Importing {model.__name__} from {file_path}")
+    def _get_family_id(self, lab_id):
+        """Extract family ID from lab_id"""
+        if not lab_id:
+            return None
+        return lab_id.split('.')[0]
+
+    def _get_or_create_user(self, full_name, default_user):
+        """Get or create a user from a full name"""
+        if not full_name:
+            return default_user
+
+        # Clean the name
+        full_name = full_name.strip()
+        if not full_name:
+            return default_user
+
+        # Create username from full name
+        username = full_name.lower().replace(' ', '_')
+        email = f"{username}@example.com"
+
+        # Get or create the user
+        user, created = User.objects.get_or_create(
+            username=username,
+            defaults={
+                'email': email,
+                'first_name': full_name.split()[0] if ' ' in full_name else full_name,
+                'last_name': ' '.join(full_name.split()[1:]) if ' ' in full_name else '',
+            }
+        )
+        return user
+
+    def _create_tests_from_text(self, text, individual, test_types, status, user):
+        """Create Test objects from comma or newline separated text"""
+        if not text:
+            return
+
+        # Split by either comma or newline
+        test_names = [t.strip() for t in text.replace('\n', ',').split(',')]
         
-        try:
-            with open(file_path, 'r') as file:
-                reader = csv.DictReader(file, delimiter='\t')
-                
-                field_names = reader.fieldnames
-                if not field_names:
-                    self.stdout.write(self.style.ERROR(f'No headers found in {file_path}'))
-                    return False
+        # Create a default sample if none exists
+        default_sample = None
 
-                model_fields = [f.name for f in model._meta.get_fields()]
-                invalid_fields = [f for f in field_names if f not in model_fields]
-                if invalid_fields:
-                    self.stdout.write(
-                        self.style.WARNING(
-                            f'Following fields in {file_path} are not in model: {", ".join(invalid_fields)}'
-                        )
+        for test_name in test_names:
+            if not test_name:
+                continue
+
+            # Try to find matching test type
+            test_type = None
+            test_name_lower = test_name.lower()
+            for existing_name, existing_type in test_types.items():
+                if test_name_lower in existing_name.lower() or existing_name.lower() in test_name_lower:
+                    test_type = existing_type
+                    break
+
+            if test_type:
+                # Create default sample if needed
+                if not default_sample:
+                    default_sample = Sample.objects.create(
+                        individual=individual,
+                        sample_type=SampleType.objects.first(),  # Get the first sample type as default
+                        status=status,
+                        created_by=user,
+                        isolation_by=user  # Use the same user as isolation_by for default sample
                     )
 
-                # Store family objects for linking individuals
-                families = {}
-                individuals = {}
-                objects_to_create = []
-                row_number = 1
-
-                for row in reader:
-                    row_number += 1
-                    try:
-                        cleaned_data = {}
-                        for field, value in row.items():
-                            if field not in model_fields or not value:
-                                continue
-
-                            field_instance = model._meta.get_field(field)
-
-                            # Special handling for lab_id in Individual model
-                            if model.__name__ == 'Individual' and field == 'lab_id':
-                                family_id = self.parse_family_id(value)
-                                if family_id:
-                                    # Get or create family
-                                    if family_id not in families:
-                                        family_model = apps.get_model(options['app'], 'Family')
-                                        family, _ = family_model.objects.get_or_create(
-                                            name=family_id,
-                                            defaults={'created_by': default_user}
-                                        )
-                                        families[family_id] = family
-                                    cleaned_data['family'] = families[family_id]
-
-                            if field_instance.is_relation:
-                                related_model = field_instance.related_model
-                                if value.isdigit():
-                                    try:
-                                        related_obj = related_model.objects.get(id=value)
-                                        cleaned_data[field] = related_obj
-                                    except related_model.DoesNotExist:
-                                        self.stdout.write(
-                                            self.style.WARNING(
-                                                f'Related object with id {value} not found for field {field} in row {row_number}'
-                                            )
-                                        )
-                                else:
-                                    try:
-                                        if field in ['mother', 'father']:
-                                            # For parent fields, look up by lab_id
-                                            related_obj = related_model.objects.get(lab_id=value)
-                                        else:
-                                            lookup_fields = ['name', 'lab_id', 'id']
-                                            for lookup_field in lookup_fields:
-                                                if hasattr(related_model, lookup_field):
-                                                    try:
-                                                        related_obj = related_model.objects.get(**{lookup_field: value})
-                                                        break
-                                                    except related_model.DoesNotExist:
-                                                        continue
-                                            else:
-                                                raise related_model.DoesNotExist
-                                        cleaned_data[field] = related_obj
-                                    except related_model.DoesNotExist:
-                                        if field in ['mother', 'father']:
-                                            # Store for later processing
-                                            cleaned_data[f'_{field}_id'] = value
-                                        else:
-                                            self.stdout.write(
-                                                self.style.WARNING(
-                                                    f'Related object "{value}" not found for field {field} in row {row_number}'
-                                                )
-                                            )
-                            elif isinstance(field_instance, models.DateTimeField):
-                                try:
-                                    cleaned_data[field] = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
-                                except ValueError:
-                                    try:
-                                        cleaned_data[field] = datetime.strptime(value, '%Y-%m-%d')
-                                    except ValueError:
-                                        self.stdout.write(
-                                            self.style.WARNING(
-                                                f'Invalid datetime format for field {field} in row {row_number}'
-                                            )
-                                        )
-                            elif isinstance(field_instance, models.DateField):
-                                try:
-                                    cleaned_data[field] = datetime.strptime(value, '%Y-%m-%d').date()
-                                except ValueError:
-                                    self.stdout.write(
-                                        self.style.WARNING(
-                                            f'Invalid date format for field {field} in row {row_number}'
-                                        )
-                                    )
-                            else:
-                                cleaned_data[field] = value
-
-                        # Add required fields if missing
-                        if hasattr(model, 'created_by') and 'created_by' not in cleaned_data:
-                            cleaned_data['created_by'] = default_user
-                        if hasattr(model, 'performed_by') and 'performed_by' not in cleaned_data:
-                            cleaned_data['performed_by'] = default_user
-                        if hasattr(model, 'isolation_by') and 'isolation_by' not in cleaned_data:
-                            cleaned_data['isolation_by'] = default_user
-
-                        # Create the object
-                        obj = model(**cleaned_data)
-                        objects_to_create.append(obj)
-
-                        # Store Individual objects for later parent linking
-                        if model.__name__ == 'Individual' and 'lab_id' in cleaned_data:
-                            individuals[cleaned_data['lab_id']] = obj
-
-                    except Exception as e:
-                        self.stdout.write(
-                            self.style.ERROR(
-                                f'Error processing row {row_number} in {file_path}: {str(e)}'
-                            )
-                        )
-                        continue
-
-                # Bulk create objects
-                try:
-                    with transaction.atomic():
-                        created_objects = model.objects.bulk_create(objects_to_create)
-                        
-                        # Update parent relationships for Individual objects
-                        if model.__name__ == 'Individual':
-                            for obj in created_objects:
-                                mother_id = getattr(obj, '_mother_id', None)
-                                father_id = getattr(obj, '_father_id', None)
-                                
-                                if mother_id and mother_id in individuals:
-                                    obj.mother = individuals[mother_id]
-                                if father_id and father_id in individuals:
-                                    obj.father = individuals[father_id]
-                                
-                                if mother_id or father_id:
-                                    obj.save()
-
-                        self.stdout.write(
-                            self.style.SUCCESS(
-                                f'Successfully imported {len(created_objects)} {model.__name__} objects'
-                            )
-                        )
-                        return True
-                except Exception as e:
-                    self.stdout.write(
-                        self.style.ERROR(
-                            f'Error bulk creating {model.__name__} objects: {str(e)}'
-                        )
-                    )
-                    return False
-
-        except FileNotFoundError:
-            self.stdout.write(self.style.WARNING(f'File not found: {file_path}'))
-            return False
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Error reading {file_path}: {str(e)}'))
-            return False
+                # Create the test
+                Test.objects.create(
+                    sample=default_sample,
+                    test_type=test_type,
+                    status=status,
+                    performed_by=user,
+                    created_by=user
+                )
 
     def handle(self, *args, **options):
-        print("Handle")
-        print(f"options: {options}")
-        directory = options['directory']
-        app_name = 'lab'
+        file_path = options['file_path']
+
+        # Header mapping
         header_mapper = {
             'Özbek Lab. ID': 'individual__lab_id',
             "Biyobanka ID": "individual__biobank_id",
@@ -275,11 +121,11 @@ class Command(BaseCommand):
             "ICD11": "individual__icd11_code",
             "HPO kodları": "individual__hpo_codes",
             "Geliş Tarihi/ay/gün/yıl": "individual__receipt_date",
-            "Gönderen Kurum/Birim": "individual__sending_institution",
-            "Klinisyen & İletişim Bilgileri": "clinician__contact_info",
+            "Gönderen Kurum/Birim": "individual__sending_institution__name",
+            "Klinisyen & İletişim Bilgileri": "individual__sending_institution__contact",
             "Örnek Tipi": "sample__sample_type",
             "İzolasyonu yapan": "sample__isolated_by",
-            "Örnek gön.& OD değ.": "sample__QC",
+            "Örnek gön.& OD değ.": "sample__sample_measurements",
             "Çalışılan Test Adı": "test__test_type",
             "Çalışılma Tarihi": "test__performed_date",
             "Hiz.Alım.Gön. Tarihi": "test__service_send_date",
@@ -290,46 +136,212 @@ class Command(BaseCommand):
             "İleri tetkik / planlanan": "individual__planned_tests",
             "Tamamlanan Tetkik": "individual__completed_tests"
         }
+        # Get or create default user
+        user = User.objects.first()
+        if not user:
+            self.stdout.write('Creating default superuser...')
+            user = User.objects.create_superuser('admin', 'admin@example.com', 'admin')
 
-        # Get default user for foreign key relationships if needed
-        default_user = User.objects.first()
-        if not default_user:
-            self.stdout.write(self.style.ERROR('No user found in the database'))
-            return
+        # Get or create statuses
+        registered_status, _ = Status.objects.get_or_create(
+            name='Registered',
+            defaults={
+                'color': 'gray',
+                'created_by': user
+            }
+        )
+        completed_status, _ = Status.objects.get_or_create(
+            name='Completed',
+            defaults={
+                'color': 'green',
+                'created_by': user
+            }
+        )
+        in_progress_status, _ = Status.objects.get_or_create(
+            name='In Progress',
+            defaults={
+                'color': 'blue',
+                'created_by': user
+            }
+        )
 
-        # Get all TSV files in the directory
-        try:
-            files = [f for f in os.listdir(directory) if f.endswith('.tsv')]
-        except FileNotFoundError:
-            self.stdout.write(self.style.ERROR(f'Directory not found: {directory}'))
-            return
+        # First pass: Collect unique values and institution details
+        unique_test_types = set()
+        unique_sample_types = set()
+        unique_family_ids = set()
+        institution_details = {}  # Store both name and contact info
 
-        # Map model names to their classes
-        models_dict = {}
-        for file_name in files:
-            print(file_name)
-            model_name = file_name[:-4]  # Remove .tsv extension
-            try:
-                model = apps.get_model(app_name, model_name)
-                models_dict[model_name] = model
-            except LookupError:
-                self.stdout.write(
-                    self.style.WARNING(f'Model {model_name} not found in app {app_name}, skipping {file_name}')
-                )
+        self.stdout.write('First pass: Collecting unique values...')
+        with open(file_path, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file, delimiter='\t')
+            for row in reader:
+                # Collect test types
+                test_type = row.get('Çalışılan Test Adı')
+                if test_type:
+                    unique_test_types.add(test_type)
 
-        if not models_dict:
-            self.stdout.write(self.style.ERROR('No valid models found to import'))
-            return
+                # Collect sample types
+                sample_type = row.get('Örnek Tipi')
+                if sample_type:
+                    unique_sample_types.add(sample_type)
 
-        # Sort models by dependency
-        try:
-            sorted_models = self.sort_models_by_dependency(models_dict)
-        except ValueError as e:
-            self.stdout.write(self.style.ERROR(str(e)))
-            return
+                # Collect family IDs
+                lab_id = row.get('Özbek Lab. ID')
+                if lab_id:
+                    family_id = self._get_family_id(lab_id)
+                    if family_id:
+                        unique_family_ids.add(family_id)
 
-        # Import data for each model in order
-        for model_name in sorted_models:
-            model = models_dict[model_name]
-            file_path = os.path.join(directory, f"{model_name}.tsv")
-            self.import_model_data(model, file_path, default_user) 
+                # Collect institution details
+                institution_name = row.get('Gönderen Kurum/Birim')
+                contact_info = row.get('Klinisyen & İletişim Bilgileri')
+                if institution_name:
+                    if institution_name not in institution_details:
+                        institution_details[institution_name] = set()
+                    if contact_info:
+                        institution_details[institution_name].add(contact_info)
+
+        # Create TestTypes
+        self.stdout.write('Creating TestTypes...')
+        test_types = {}
+        for name in unique_test_types:
+            test_type, _ = TestType.objects.get_or_create(
+                name=name,
+                defaults={'created_by': user}
+            )
+            test_types[name] = test_type
+
+        # Create SampleTypes
+        self.stdout.write('Creating SampleTypes...')
+        sample_types = {}
+        for name in unique_sample_types:
+            sample_type, _ = SampleType.objects.get_or_create(
+                name=name,
+                defaults={'created_by': user}
+            )
+            sample_types[name] = sample_type
+
+        # Create Families
+        self.stdout.write('Creating Families...')
+        families = {}
+        for family_id in unique_family_ids:
+            family, _ = Family.objects.get_or_create(
+                family_id=family_id,
+                defaults={'created_by': user}
+            )
+            families[family_id] = family
+
+        # Create Institutions with contact information
+        self.stdout.write('Creating Institutions...')
+        institutions = {}
+        for name, contacts in institution_details.items():
+            institution, _ = Institution.objects.get_or_create(
+                name=name,
+                defaults={
+                    'contact': '\n'.join(contacts) if contacts else '',
+                    'created_by': user
+                }
+            )
+            # Update contact information if institution exists and has new contacts
+            if not _ and contacts:
+                existing_contacts = set(institution.contact.split('\n')) if institution.contact else set()
+                all_contacts = existing_contacts.union(contacts)
+                institution.contact = '\n'.join(all_contacts)
+                institution.save()
+            institutions[name] = institution
+
+        # Second pass: Create objects
+        self.stdout.write('Second pass: Creating objects...')
+        with open(file_path, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file, delimiter='\t')
+            for row in reader:
+                try:
+                    lab_id = row.get('Özbek Lab. ID')
+                    if not lab_id:
+                        continue
+
+                    family_id = self._get_family_id(lab_id)
+                    if not family_id or family_id not in families:
+                        continue
+
+                    # Get institution
+                    institution_name = row.get('Gönderen Kurum/Birim')
+                    institution = institutions.get(institution_name)
+
+                    # Create Individual
+                    individual, created = Individual.objects.get_or_create(
+                        lab_id=lab_id,
+                        defaults={
+                            'family': families[family_id],
+                            'biobank_id': row.get('Biyobanka ID'),
+                            'full_name': row.get('Ad-Soyad'),
+                            'tc_identity': row.get('TC Kimlik No'),
+                            'birth_date': self._parse_date(row.get('Doğum Tarihi')),
+                            'icd11_code': row.get('ICD11'),
+                            'hpo_codes': row.get('HPO kodları'),
+                            'sending_institution': institution,
+                            'status': registered_status,
+                            'created_by': user
+                        }
+                    )
+
+                    # Concatenate and create notes if either exists
+                    notes_text = []
+                    if row.get('Takip Notları'):
+                        notes_text.append(row.get('Takip Notları'))
+                    if row.get('Genel Notlar/Sonuçlar'):
+                        notes_text.append(row.get('Genel Notlar/Sonuçlar'))
+                    
+                    if notes_text:
+                        Note.objects.create(
+                            content='\n\n'.join(notes_text),
+                            content_object=individual,
+                            created_by=user
+                        )
+
+                    # Create completed tests
+                    completed_tests = row.get('Tamamlanan Tetkik')
+                    self._create_tests_from_text(completed_tests, individual, test_types, completed_status, user)
+
+                    # Create planned tests
+                    planned_tests = row.get('İleri tetkik / planlanan')
+                    self._create_tests_from_text(planned_tests, individual, test_types, in_progress_status, user)
+
+                    # Create Sample if sample type exists
+                    sample_type_name = row.get('Örnek Tipi')
+                    if sample_type_name and sample_type_name in sample_types:
+                        # Get or create user for isolation_by
+                        isolation_by = self._get_or_create_user(row.get('İzolasyonu yapan'), user)
+                        
+                        sample = Sample.objects.create(
+                            individual=individual,
+                            sample_type=sample_types[sample_type_name],
+                            sample_measurements=row.get('Örnek gön.& OD değ.'),
+                            status=registered_status,
+                            isolation_by=isolation_by,
+                            created_by=user
+                        )
+
+                        # Create Test if test type exists
+                        test_type_name = row.get('Çalışılan Test Adı')
+                        if test_type_name and test_type_name in test_types:
+                            Test.objects.create(
+                                sample=sample,
+                                test_type=test_types[test_type_name],
+                                performed_date=self._parse_date(row.get('Çalışılma Tarihi')),
+                                service_send_date=self._parse_date(row.get('Hiz.Alım.Gön. Tarihi')),
+                                data_receipt_date=self._parse_date(row.get('Data Geliş tarihi')),
+                                council_date=self._parse_date(row.get('Konsey Tarihi')),
+                                status=registered_status,
+                                performed_by=user,
+                                created_by=user
+                            )
+
+                except Exception as e:
+                    self.stdout.write(
+                        self.style.ERROR(f'Error processing row for {lab_id}: {str(e)}')
+                    )
+                    continue
+            
+
+        self.stdout.write(self.style.SUCCESS('Data import completed successfully')) 

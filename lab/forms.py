@@ -96,7 +96,6 @@ class SampleForm(forms.ModelForm):
             'sample_type',
             'receipt_date',
             'processing_date',
-            'sending_institution',
             'isolation_by',
             'sample_measurements',
             'status',
