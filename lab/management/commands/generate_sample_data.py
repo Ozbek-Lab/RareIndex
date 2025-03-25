@@ -249,7 +249,6 @@ class Command(BaseCommand):
                 sample_type=random.choice(sample_types),
                 status=statuses['registered'],
                 receipt_date=timezone.now() - timedelta(days=random.randint(1, 30)),
-                sending_institution=individual.sending_institution,
                 isolation_by=user,
                 created_by=user
             )
