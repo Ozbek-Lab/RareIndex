@@ -359,20 +359,14 @@ class Test(StatusMixin, models.Model):
     data_receipt_date = models.DateField(
         null=True, blank=True, verbose_name="Data Receipt Date"
     )
-    council_date = models.DateField(null=True, blank=True, verbose_name="Council Date")
-    sample = models.ForeignKey("Sample", on_delete=models.CASCADE, related_name="tests")
     created_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, related_name="tests_created"
+        User, on_delete=models.PROTECT, related_name="created_tests"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     status_logs = GenericRelation(StatusLog)
     notes = GenericRelation("Note")
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="created_tests"
-    )
     tasks = GenericRelation("Task")
 
     def __str__(self):

@@ -331,7 +331,6 @@ class Command(BaseCommand):
                                 performed_date=self._parse_date(row.get('Çalışılma Tarihi')),
                                 service_send_date=self._parse_date(row.get('Hiz.Alım.Gön. Tarihi')),
                                 data_receipt_date=self._parse_date(row.get('Data Geliş tarihi')),
-                                council_date=self._parse_date(row.get('Konsey Tarihi')),
                                 status=registered_status,
                                 performed_by=user,
                                 created_by=user

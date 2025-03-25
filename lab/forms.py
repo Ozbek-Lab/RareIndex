@@ -156,7 +156,6 @@ class TestForm(forms.ModelForm):
             "performed_by",
             "service_send_date",
             "data_receipt_date",
-            "council_date",
             "sample",
             "created_by",
         ]
