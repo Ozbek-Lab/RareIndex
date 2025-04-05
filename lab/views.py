@@ -461,7 +461,6 @@ def sample_detail(request, pk):
             "individual",
             "sample_type",
             "status",
-            "sending_institution",
             "isolation_by",
             "created_by",
         )
@@ -490,6 +489,10 @@ def sample_detail(request, pk):
         "activeTab": active_tab,
     }
 
+    if request.headers.get("HX-Request"):
+        return TemplateResponse(
+            request, "lab/sample/detail.html#sample-detail", context
+        )
     return TemplateResponse(request, "lab/sample/detail.html", context)
 
 
@@ -730,20 +733,16 @@ def note_delete(request, pk):
 
 @login_required
 def test_list(request):
-    """List view for all tests"""
-    tests = (
-        Test.objects.select_related("created_by")
-        .prefetch_related(
-            "test_type", "sample", "sample__individual", "sample__sample_type"
-        )
-        .order_by("-created_at")
-    )
+    tests = Test.objects.all()
 
+    # Get all the necessary data for filters
     context = {
         "tests": tests,
         "test_statuses": Status.objects.filter(
             content_type=ContentType.objects.get_for_model(Test)
         ),
+        "test_types": TestType.objects.all(),
+        "individuals": Individual.objects.all(),
     }
 
     # If it's an HTMX request, return just the list content
@@ -865,9 +864,7 @@ def sample_type_create(request):
         return HttpResponse("")
 
     # For normal GET requests, return the form
-    return TemplateResponse(
-        request, "lab/sample_type/edit.html", {"sample_type": None}
-    )
+    return TemplateResponse(request, "lab/sample_type/edit.html", {"sample_type": None})
 
 
 @login_required
@@ -1041,7 +1038,9 @@ def task_create_standalone(request):
 
             # If it's an HTMX request, return the task card
             if request.headers.get("HX-Request"):
-                return TemplateResponse(request, "lab/task/task_card.html", {"task": task})
+                return TemplateResponse(
+                    request, "lab/task/task_card.html", {"task": task}
+                )
 
             return redirect("lab:task_list")
 
@@ -1274,9 +1273,7 @@ def project_create(request):
             return redirect("lab:project_detail", pk=project.pk)
 
     # Return the form for GET requests
-    return TemplateResponse(
-        request, "lab/project/create.html", {"form": ProjectForm()}
-    )
+    return TemplateResponse(request, "lab/project/create.html", {"form": ProjectForm()})
 
 
 @login_required
@@ -1303,9 +1300,13 @@ def project_detail(request, pk):
     if request.headers.get("HX-Request"):
         # If card_only=true is in the query params, return just the card
         if request.GET.get("card_only") == "true":
-            return TemplateResponse(request, "lab/project/card.html", {"project": project})
+            return TemplateResponse(
+                request, "lab/project/card.html", {"project": project}
+            )
         # Otherwise return the main content
-        return TemplateResponse(request, "lab/project/detail.html#project-detail", context)
+        return TemplateResponse(
+            request, "lab/project/detail.html#project-detail", context
+        )
 
     # For regular requests, return the full page
     return TemplateResponse(request, "lab/project/detail.html", context)
@@ -1561,74 +1562,53 @@ def test_card(request, pk):
 
 @login_required
 def test_search(request):
-    """Search and filter tests"""
-    queryset = Test.objects.select_related(
-        "sample", "test_type", "status", "performed_by"
-    ).prefetch_related("tasks", "notes")
-
-    # Apply filters
-    # Status filter
-    status_id = request.POST.get("status")
-    if status_id:
-        queryset = queryset.filter(status_id=status_id)
-
-    # Test Type filter - now supports multiple selection
-    test_type_ids = request.POST.get("test_type")
-    if test_type_ids:
-        # Check if it's a comma-separated list
-        if "," in test_type_ids:
-            test_type_id_list = test_type_ids.split(",")
-            queryset = queryset.filter(test_type_id__in=test_type_id_list)
-        else:
-            queryset = queryset.filter(test_type_id=test_type_ids)
-
-    # Individual filter - now supports multiple selection
-    sample_ids = request.POST.get("sample")
-    if sample_ids:
-        # Check if it's a comma-separated list
-        if "," in sample_ids:
-            sample_id_list = sample_ids.split(",")
-            queryset = queryset.filter(sample_id__in=sample_id_list)
-        else:
-            queryset = queryset.filter(sample_id=sample_ids)
-
-    # Date range (performed date)
-    date_from = request.POST.get("performed_date")
-    if date_from:
-        queryset = queryset.filter(performed_date__gte=date_from)
-
-    date_to = request.POST.get("performed_date")
-    if date_to:
-        queryset = queryset.filter(performed_date__lte=date_to)
-
-    # Order results
-    queryset = queryset.order_by("-performed_date")
-
-    # Get total count before pagination
-    total_count = queryset.count()
-
-    # Paginate results
+    """Search view for tests with filters"""
+    # Get filter parameters
+    status = request.POST.getlist("status", [])
+    test_type = request.POST.getlist("test_type", [])
+    individual = request.POST.getlist("individual", [])
+    date_from = request.POST.get("date_from", "")
+    date_to = request.POST.get("date_to", "")
     page = request.POST.get("page", 1)
-    paginator = Paginator(queryset, 12)  # 12 items per page
-    tests = paginator.get_page(page)
 
-    return TemplateResponse(
-        request,
-        "lab/test/list.html",
-        {
-            "tests": tests,
-            "total_count": total_count,
-            "test_statuses": Status.objects.filter(
-                content_type=ContentType.objects.get_for_model(Test)
-            ),
-            "filters": {  # Pass filters for subsequent page loads
-                "status": status_id,
-                "test_type": test_type_ids,
-                "date_from": date_from,
-                "date_to": date_to,
-            },
+    # Build the query
+    query = Q()
+    if status:
+        query &= Q(status__in=status)
+    if test_type:
+        query &= Q(test_type__in=test_type)
+    if individual:
+        query &= Q(sample__individual__in=individual)
+    if date_from:
+        query &= Q(created_at__gte=date_from)
+    if date_to:
+        query &= Q(created_at__lte=date_to)
+
+    # Get filtered tests
+    tests = Test.objects.filter(query).order_by("-created_at")
+
+    # Apply pagination
+    paginator = Paginator(tests, 12)  # 12 items per page
+    page_obj = paginator.get_page(page)
+
+    context = {
+        "tests": page_obj,
+        "total_count": tests.count(),
+        "filters": {
+            "status": status,
+            "test_type": test_type,
+            "individual": individual,
+            "date_from": date_from,
+            "date_to": date_to,
         },
-    )
+    }
+
+    # If it's an HTMX request, return just the list content
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/test/list.html", context)
+
+    # For regular requests, return the full page
+    return render(request, "lab/test/index.html", context)
 
 
 @login_required

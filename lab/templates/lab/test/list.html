@@ -1,3 +1,4 @@
+{% partialdef test-list inline %}
 <!-- Show result count on first page -->
 {% if tests.number == 1 %}
   <div class="mb-4">
@@ -6,7 +7,7 @@
       text-green-800{% else %}bg-red-100 text-red-800{% endif %}"
     >
       Found {{ total_count|default:tests.count }}
-      sample{{ total_count|default:tests.count|pluralize }}
+      test{{ total_count|default:tests.count|pluralize }}
     </span>
   </div>
 {% endif %}
@@ -24,7 +25,7 @@
         "date_to": "{{ filters.date_to }}"}'
       {% endif %}
     >
-      {% include "lab/tests/card.html" with test=test %}
+      {% include "lab/test/card.html" with test=test %}
     </div>
     {% empty %}
     <div class="col-span-full text-center py-8 text-gray-500">
@@ -41,3 +42,4 @@
     </span>
   </div>
 {% endif %}
+{% endpartialdef %}
