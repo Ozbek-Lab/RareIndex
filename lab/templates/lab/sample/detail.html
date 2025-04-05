@@ -9,10 +9,11 @@
         href="{% url 'lab:samples' %}"
         class="text-indigo-600 hover:text-indigo-900"
         hx-get="{% url 'lab:samples' %}"
-        hx-target="#main-content"
-        hx-swap="innerHTML"
+        hx-target="main"
+        hx-push-url="true"
       >
         <i class="fas fa-arrow-left"></i>
+        Back to samples
       </a>
       <h1 class="text-2xl font-bold text-gray-900">{{ sample.lab_id }}</h1>
     </div>
@@ -22,13 +23,21 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Basic Information -->
         <div>
-          <h2 class="text-lg font-medium text-gray-900 mb-4">Basic Information</h2>
+          <h2 class="text-lg font-medium text-gray-900 mb-4">
+            Basic Information
+          </h2>
           <dl class="space-y-4">
             <div>
               <dt class="text-sm font-medium text-gray-500">Status</dt>
               <dd class="mt-1">
                 <span
-                  class="px-2 py-1 text-xs rounded-full font-medium {% if sample.status.name == 'Complete' %}bg-green-100 text-green-800{% elif sample.status.name == 'In Progress' %}bg-yellow-100 text-yellow-800{% else %}bg-gray-100 text-gray-800{% endif %}"
+                  class="px-2 py-1 text-xs rounded-full font-medium {% if sample.status.name == 'Complete' %}
+                    bg-green-100 text-green-800
+                  {% elif sample.status.name == 'In Progress' %}
+                    bg-yellow-100 text-yellow-800
+                  {% else %}
+                    bg-gray-100 text-gray-800
+                  {% endif %}"
                 >
                   {{ sample.status.name }}
                 </span>
@@ -36,7 +45,9 @@
             </div>
             <div>
               <dt class="text-sm font-medium text-gray-500">Sample Type</dt>
-              <dd class="mt-1 text-sm text-gray-900">{{ sample.sample_type.name }}</dd>
+              <dd class="mt-1 text-sm text-gray-900">
+                {{ sample.sample_type.name }}
+              </dd>
             </div>
             <div>
               <dt class="text-sm font-medium text-gray-500">Individual</dt>
@@ -54,26 +65,36 @@
             </div>
             <div>
               <dt class="text-sm font-medium text-gray-500">Receipt Date</dt>
-              <dd class="mt-1 text-sm text-gray-900">{{ sample.receipt_date|date:"d M Y" }}</dd>
+              <dd class="mt-1 text-sm text-gray-900">
+                {{ sample.receipt_date|date:"d M Y" }}
+              </dd>
             </div>
           </dl>
         </div>
 
         <!-- Additional Information -->
         <div>
-          <h2 class="text-lg font-medium text-gray-900 mb-4">Additional Information</h2>
+          <h2 class="text-lg font-medium text-gray-900 mb-4">
+            Additional Information
+          </h2>
           <dl class="space-y-4">
             <div>
               <dt class="text-sm font-medium text-gray-500">Notes</dt>
-              <dd class="mt-1 text-sm text-gray-900">{{ sample.notes|default:"No notes" }}</dd>
+              <dd class="mt-1 text-sm text-gray-900">
+                {% include "lab/note/list.html" with object=sample content_type="sample" %}
+              </dd>
             </div>
             <div>
               <dt class="text-sm font-medium text-gray-500">Created At</dt>
-              <dd class="mt-1 text-sm text-gray-900">{{ sample.created_at|date:"d M Y H:i" }}</dd>
+              <dd class="mt-1 text-sm text-gray-900">
+                {{ sample.created_at|date:"d M Y H:i" }}
+              </dd>
             </div>
             <div>
               <dt class="text-sm font-medium text-gray-500">Updated At</dt>
-              <dd class="mt-1 text-sm text-gray-900">{{ sample.updated_at|date:"d M Y H:i" }}</dd>
+              <dd class="mt-1 text-sm text-gray-900">
+                {{ sample.updated_at|date:"d M Y H:i" }}
+              </dd>
             </div>
           </dl>
         </div>
@@ -113,9 +134,17 @@
               class="bg-gray-50 rounded-lg p-4 border-l-4 {% if test.status.name == 'Complete' %}border-green-500{% elif test.status.name == 'In Progress' %}border-yellow-500{% else %}border-gray-500{% endif %}"
             >
               <div class="flex justify-between items-start">
-                <h3 class="text-lg font-medium text-gray-900">{{ test.test_type.name }}</h3>
+                <h3 class="text-lg font-medium text-gray-900">
+                  {{ test.test_type.name }}
+                </h3>
                 <span
-                  class="px-2 py-1 text-xs rounded-full font-medium {% if test.status.name == 'Complete' %}bg-green-100 text-green-800{% elif test.status.name == 'In Progress' %}bg-yellow-100 text-yellow-800{% else %}bg-gray-100 text-gray-800{% endif %}"
+                  class="px-2 py-1 text-xs rounded-full font-medium {% if test.status.name == 'Complete' %}
+                    bg-green-100 text-green-800
+                  {% elif test.status.name == 'In Progress' %}
+                    bg-yellow-100 text-yellow-800
+                  {% else %}
+                    bg-gray-100 text-gray-800
+                  {% endif %}"
                 >
                   {{ test.status.name }}
                 </span>

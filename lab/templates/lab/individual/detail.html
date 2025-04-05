@@ -4,10 +4,13 @@
 
 {% partialdef individual-detail %}
   <div class="flex items-center space-x-4">
-    <a hx-get="{% url 'lab:individuals' %}" class="text-gray-500 hover:text-gray-700">
-        <i class="fas fa-arrow-left"></i>
+    <a
+      hx-get="{% url 'lab:individuals' %}"
+      class="text-gray-500 hover:text-gray-700"
+    >
+      <i class="fas fa-arrow-left"></i>
+      Back to individuals
     </a>
-    <h1 class="text-2xl font-bold text-gray-900">{{ individual.lab_id }}</h1>
   </div>
 
   <div id="individual-detail" class="space-y-6" x-data="{ activeTab: 'notes' }">
@@ -343,8 +346,8 @@
                           <button
                             class="text-blue-600 hover:text-blue-900 text-sm"
                             hx-get="{% url 'lab:individual_detail' member.pk %}"
-                            hx-target="#individual-detail"
-                            hx-swap="outerHTML"
+                            hx-target="main"
+                            hx-push-url="true"
                           >
                             View Details <i class="fas fa-arrow-right ml-1"></i>
                           </button>
