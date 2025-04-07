@@ -37,6 +37,7 @@ urlpatterns = [
     path("analysis/search/", views.analysis_search, name="analysis_search"),
     # Type routes
     path("types/", views.types_list, name="types"),
+    path("types/search/", views.type_search, name="type_search"),
     path("test-type/create/", views.test_type_create, name="test_type_create"),
     path("test-type/<int:pk>/edit/", views.test_type_edit, name="test_type_edit"),
     path("test-type/<int:pk>/delete/", views.test_type_delete, name="test_type_delete"),

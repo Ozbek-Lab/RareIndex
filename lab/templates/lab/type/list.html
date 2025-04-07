@@ -1,20 +1,39 @@
-{% extends "lab/base.html" %}
 {% load partials %}
 
 {% partialdef type-index %}
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex items-center space-x-2">
-      <a
-        href="{% url 'lab:types' %}"
-        class="text-indigo-600 hover:text-indigo-900"
-        hx-get="{% url 'lab:types' %}"
-        hx-target="#main-content"
-        hx-swap="innerHTML"
-      >
-        <i class="fas fa-arrow-left"></i>
-      </a>
-      <h1 class="text-2xl font-bold text-gray-900">Types</h1>
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold text-gray-800">Types</h2>
+      <div class="flex space-x-2">
+        {% if perms.lab.add_sampletype %}
+          <button
+            hx-get="{% url 'lab:sample_type_create' %}"
+            hx-target="#main-content"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded"
+          >
+            Add Sample Type
+          </button>
+        {% endif %}
+        {% if perms.lab.add_testtype %}
+          <button
+            hx-get="{% url 'lab:test_type_create' %}"
+            hx-target="#main-content"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded"
+          >
+            Add Test Type
+          </button>
+        {% endif %}
+        {% if perms.lab.add_analysistype %}
+          <button
+            hx-get="{% url 'lab:analysis_type_create' %}"
+            hx-target="#main-content"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded"
+          >
+            Add Analysis Type
+          </button>
+        {% endif %}
+      </div>
     </div>
 
     <!-- Types Grid -->
@@ -30,48 +49,43 @@
   <div class="bg-white rounded-lg shadow p-6">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-semibold">Sample Types</h2>
-      {% if perms.lab.add_sampletype %}
-      <button 
-        hx-get="{% url 'lab:sample_type_create' %}"
-        hx-target="#main-content"
-        class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded"
-      >
-        Add Type
-      </button>
-      {% endif %}
     </div>
-    
+
     <div class="space-y-4">
       {% for type in sample_types %}
-      <div class="flex justify-between items-start p-3 bg-gray-50 rounded">
-        <div>
-          <h3 class="font-medium">{{ type.name }}</h3>
-          <p class="text-sm text-gray-600">{{ type.description }}</p>
-        </div>
-        {% if perms.lab.change_sampletype or perms.lab.delete_sampletype %}
-        <div class="flex space-x-2">
-          {% if perms.lab.change_sampletype %}
-          <button 
-            hx-get="{% url 'lab:sample_type_edit' type.id %}"
-            hx-target="#main-content"
-            class="text-indigo-600 hover:text-indigo-800"
-          >
-            <i class="fas fa-edit"></i>
-          </button>
+        <div
+          class="flex justify-between items-start p-3 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+        >
+          <div>
+            <h3 class="font-medium">{{ type.name }}</h3>
+            <p class="text-sm text-gray-600">{{ type.description }}</p>
+          </div>
+          {% if perms.lab.change_sampletype or perms.lab.delete_sampletype %}
+            <div class="flex space-x-2">
+              {% if perms.lab.change_sampletype %}
+                <button
+                  hx-get="{% url 'lab:sample_type_edit' type.id %}"
+                  hx-target="#main-content"
+                  class="text-indigo-600 hover:text-indigo-800"
+                >
+                  <i class="fas fa-edit"></i>
+                </button>
+              {% endif %}
+              {% if perms.lab.delete_sampletype %}
+                <button
+                  hx-delete="{% url 'lab:sample_type_delete' type.id %}"
+                  hx-target="closest div"
+                  hx-confirm="Are you sure you want to delete this sample type?"
+                  class="text-red-600 hover:text-red-800"
+                >
+                  <i class="fas fa-trash"></i>
+                </button>
+              {% endif %}
+            </div>
           {% endif %}
-          {% if perms.lab.delete_sampletype %}
-          <button 
-            hx-delete="{% url 'lab:sample_type_delete' type.id %}"
-            hx-target="closest div"
-            hx-confirm="Are you sure you want to delete this sample type?"
-            class="text-red-600 hover:text-red-800"
-          >
-            <i class="fas fa-trash"></i>
-          </button>
-          {% endif %}
         </div>
-        {% endif %}
-      </div>
+        {% empty %}
+        <div class="text-center text-gray-500 py-4">No sample types found</div>
       {% endfor %}
     </div>
   </div>
@@ -81,48 +95,43 @@
   <div class="bg-white rounded-lg shadow p-6">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-semibold">Test Types</h2>
-      {% if perms.lab.add_testtype %}
-      <button 
-        hx-get="{% url 'lab:test_type_create' %}"
-        hx-target="#main-content"
-        class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded"
-      >
-        Add Type
-      </button>
-      {% endif %}
     </div>
-    
+
     <div class="space-y-4">
       {% for type in test_types %}
-      <div class="flex justify-between items-start p-3 bg-gray-50 rounded">
-        <div>
-          <h3 class="font-medium">{{ type.name }}</h3>
-          <p class="text-sm text-gray-600">{{ type.description }}</p>
-        </div>
-        {% if perms.lab.change_testtype or perms.lab.delete_testtype %}
-        <div class="flex space-x-2">
-          {% if perms.lab.change_testtype %}
-          <button 
-            hx-get="{% url 'lab:test_type_edit' type.id %}"
-            hx-target="#main-content"
-            class="text-indigo-600 hover:text-indigo-800"
-          >
-            <i class="fas fa-edit"></i>
-          </button>
+        <div
+          class="flex justify-between items-start p-3 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+        >
+          <div>
+            <h3 class="font-medium">{{ type.name }}</h3>
+            <p class="text-sm text-gray-600">{{ type.description }}</p>
+          </div>
+          {% if perms.lab.change_testtype or perms.lab.delete_testtype %}
+            <div class="flex space-x-2">
+              {% if perms.lab.change_testtype %}
+                <button
+                  hx-get="{% url 'lab:test_type_edit' type.id %}"
+                  hx-target="#main-content"
+                  class="text-indigo-600 hover:text-indigo-800"
+                >
+                  <i class="fas fa-edit"></i>
+                </button>
+              {% endif %}
+              {% if perms.lab.delete_testtype %}
+                <button
+                  hx-delete="{% url 'lab:test_type_delete' type.id %}"
+                  hx-target="closest div"
+                  hx-confirm="Are you sure you want to delete this test type?"
+                  class="text-red-600 hover:text-red-800"
+                >
+                  <i class="fas fa-trash"></i>
+                </button>
+              {% endif %}
+            </div>
           {% endif %}
-          {% if perms.lab.delete_testtype %}
-          <button 
-            hx-delete="{% url 'lab:test_type_delete' type.id %}"
-            hx-target="closest div"
-            hx-confirm="Are you sure you want to delete this test type?"
-            class="text-red-600 hover:text-red-800"
-          >
-            <i class="fas fa-trash"></i>
-          </button>
-          {% endif %}
         </div>
-        {% endif %}
-      </div>
+        {% empty %}
+        <div class="text-center text-gray-500 py-4">No test types found</div>
       {% endfor %}
     </div>
   </div>
@@ -132,56 +141,53 @@
   <div class="bg-white rounded-lg shadow p-6">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-semibold">Analysis Types</h2>
-      {% if perms.lab.add_analysistype %}
-      <button 
-        hx-get="{% url 'lab:analysis_type_create' %}"
-        hx-target="#main-content"
-        class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded"
-      >
-        Add Type
-      </button>
-      {% endif %}
     </div>
-    
+
     <div class="space-y-4">
       {% for type in analysis_types %}
-      <div class="flex justify-between items-start p-3 bg-gray-50 rounded">
-        <div>
-          <h3 class="font-medium">{{ type.name }}</h3>
-          <p class="text-sm text-gray-600">{{ type.description }}</p>
-          {% if type.version %}
-          <p class="text-xs text-gray-500">Version: {{ type.version }}</p>
-          {% endif %}
+        <div
+          class="flex justify-between items-start p-3 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+        >
+          <div>
+            <h3 class="font-medium">{{ type.name }}</h3>
+            <p class="text-sm text-gray-600">{{ type.description }}</p>
+            {% if type.version %}
+              <p class="text-xs text-gray-500">Version: {{ type.version }}</p>
+            {% endif %}
+          </div>
+          <div class="flex items-center space-x-2">
+            <button
+              hx-get="{% url 'lab:analysis_type_edit' type.id %}?view=true"
+              hx-target="#main-content"
+              class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <i class="fas fa-eye mr-1"></i> View
+            </button>
+            {% if perms.lab.change_analysistype %}
+              <button
+                hx-get="{% url 'lab:analysis_type_edit' type.id %}"
+                hx-target="#main-content"
+                class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                <i class="fas fa-edit mr-1"></i> Edit
+              </button>
+            {% endif %}
+            {% if perms.lab.delete_analysistype %}
+              <button
+                hx-delete="{% url 'lab:analysis_type_delete' type.id %}"
+                hx-target="closest div"
+                hx-confirm="Are you sure you want to delete this analysis type?"
+                class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                <i class="fas fa-trash mr-1"></i> Delete
+              </button>
+            {% endif %}
+          </div>
         </div>
-        <div class="flex items-center space-x-2">
-          <button 
-            hx-get="{% url 'lab:analysis_type_edit' type.id %}?view=true"
-            hx-target="#main-content"
-            class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <i class="fas fa-eye mr-1"></i> View
-          </button>
-          {% if perms.lab.change_analysistype %}
-          <button 
-            hx-get="{% url 'lab:analysis_type_edit' type.id %}"
-            hx-target="#main-content"
-            class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <i class="fas fa-edit mr-1"></i> Edit
-          </button>
-          {% endif %}
-          {% if perms.lab.delete_analysistype %}
-          <button 
-            hx-delete="{% url 'lab:analysis_type_delete' type.id %}"
-            hx-target="closest div"
-            hx-confirm="Are you sure you want to delete this analysis type?"
-            class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-          >
-            <i class="fas fa-trash mr-1"></i> Delete
-          </button>
-          {% endif %}
+        {% empty %}
+        <div class="text-center text-gray-500 py-4">
+          No analysis types found
         </div>
-      </div>
       {% endfor %}
     </div>
   </div>
@@ -189,4 +195,4 @@
 
 {% block content %}
   {% partial type-index %}
-{% endblock content %} 
+{% endblock content %}

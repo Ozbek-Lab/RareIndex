@@ -31,7 +31,7 @@ from .forms import (
     TestForm,
 )
 from django.db.models import Q
-from django.core.paginator import Paginator
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.contrib.auth.models import User
 from django.views.generic import ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -910,6 +910,7 @@ def task_index(request):
     project_id = request.GET.get("project")
     status = request.GET.get("status", "open")
     assigned_to = request.GET.get("assigned_to")
+    page = request.GET.get("page", 1)
 
     # Base queryset
     tasks = Task.objects.select_related(
@@ -938,6 +939,15 @@ def task_index(request):
 
     # Get all users for the assigned to filter
     users = User.objects.filter(is_active=True)
+
+    # Paginate tasks
+    paginator = Paginator(tasks, 10)  # Show 10 tasks per page
+    try:
+        tasks = paginator.page(page)
+    except PageNotAnInteger:
+        tasks = paginator.page(1)
+    except EmptyPage:
+        tasks = paginator.page(paginator.num_pages)
 
     # Prepare context
     context = {
@@ -1971,3 +1981,53 @@ def analysis_type_delete(request, pk):
     analysis_type = get_object_or_404(AnalysisType, pk=pk)
     analysis_type.delete()
     return HttpResponse(status=200)
+
+
+@login_required
+def type_search(request):
+    """
+    Search for types (sample, test, and analysis types) based on various criteria.
+    """
+    # Get search parameters
+    name = request.POST.get("name", "").strip()
+    category = request.POST.get("category", "")
+    version = request.POST.get("version", "").strip()
+    source_url = request.POST.get("source_url", "").strip()
+    results_url = request.POST.get("results_url", "").strip()
+
+    # Build query for each type
+    sample_types = SampleType.objects.all()
+    test_types = TestType.objects.all()
+    analysis_types = AnalysisType.objects.all()
+
+    if name:
+        sample_types = sample_types.filter(name__icontains=name)
+        test_types = test_types.filter(name__icontains=name)
+        analysis_types = analysis_types.filter(name__icontains=name)
+
+    if category:
+        sample_types = sample_types.filter(category_id=category)
+        test_types = test_types.filter(category_id=category)
+        analysis_types = analysis_types.filter(category_id=category)
+
+    if version:
+        analysis_types = analysis_types.filter(version__icontains=version)
+
+    if source_url:
+        analysis_types = analysis_types.filter(source_url__icontains=source_url)
+
+    if results_url:
+        analysis_types = analysis_types.filter(results_url__icontains=results_url)
+
+    context = {
+        "sample_types": sample_types,
+        "test_types": test_types,
+        "analysis_types": analysis_types,
+    }
+
+    # If it's an HTMX request, return just the list partial
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/type/list.html#type-list", context)
+
+    # For regular requests, return the full page
+    return render(request, "lab/type/index.html", context)
