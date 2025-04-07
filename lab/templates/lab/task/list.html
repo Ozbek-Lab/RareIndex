@@ -115,6 +115,16 @@
   <div id="task-list-container" class="space-y-4">
     {% for task in tasks %}
       {% include "lab/task/task_card.html" with task=task %}
+      {% if forloop.last and tasks.has_next %}
+        <div
+          hx-get="{% url 'lab:tasks' %}?page={{ tasks.next_page_number }}{% if current_filters.project %}&project={{ current_filters.project }}{% endif %}{% if current_filters.status %}&status={{ current_filters.status }}{% endif %}{% if current_filters.assigned_to %}&assigned_to={{ current_filters.assigned_to }}{% endif %}"
+          hx-trigger="intersect once"
+          hx-swap="afterend"
+          hx-target="this"
+          hx-push-url="true"
+          hx-history="false"
+        ></div>
+      {% endif %}
     {% empty %}
       <div class="text-center py-12">
         <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
@@ -124,6 +134,13 @@
         <p class="text-gray-500">Try adjusting your filters or create a new task.</p>
       </div>
     {% endfor %}
+    {% if not tasks.has_next and tasks %}
+      <div class="text-center py-4">
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
+          No more items
+        </span>
+      </div>
+    {% endif %}
   </div>
 {% endpartialdef %}
 

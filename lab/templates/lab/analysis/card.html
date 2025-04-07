@@ -1,48 +1,65 @@
-<div class="bg-white rounded-lg shadow p-4">
-    <div class="flex justify-between items-start">
-        <div>
-            <h3 class="text-lg font-semibold text-gray-800">{{ analysis.type.name }}</h3>
-            <p class="text-sm text-gray-600">{{ analysis.test.test_type.name }} - {{ analysis.test.sample.individual.lab_id }}</p>
-        </div>
-        <span class="px-2 py-1 text-sm rounded-full" style="background-color: {{ analysis.status.color }}20; color: {{ analysis.status.color }}">
-            {{ analysis.status.name }}
-        </span>
-    </div>
-    
-    <div class="mt-4 space-y-2">
-        <p class="text-sm text-gray-600">
-            <span class="font-medium">Performed:</span> {{ analysis.performed_date }}
-        </p>
-        <p class="text-sm text-gray-600">
-            <span class="font-medium">By:</span> {{ analysis.performed_by.get_full_name|default:analysis.performed_by.username }}
-        </p>
-        <p class="text-sm text-gray-600">
-            <span class="font-medium">Created:</span> {{ analysis.created_at|date:"Y-m-d H:i" }}
-        </p>
-        <p class="text-sm text-gray-600">
-            <span class="font-medium">Created By:</span> {{ analysis.created_by.get_full_name|default:analysis.created_by.username }}
-        </p>
-    </div>
+{% load lab_filters %}
 
-    <div class="mt-4 flex justify-end space-x-2">
-        {% if perms.lab.change_analysis %}
-        <button hx-get="{% url 'lab:analysis_edit' analysis.id %}"
-                hx-target="closest div.bg-white"
-                class="text-indigo-600 hover:text-indigo-800">
-            Edit
-        </button>
-        {% endif %}
-        {% if perms.lab.delete_analysis %}
-        <button hx-delete="{% url 'lab:analysis_delete' analysis.id %}"
-                hx-confirm="Are you sure you want to delete this analysis?"
-                hx-target="closest div.bg-white"
-                class="text-red-600 hover:text-red-800">
-            Delete
-        </button>
-        {% endif %}
-        <a href="{% url 'lab:analysis_detail' analysis.id %}"
-           class="text-gray-600 hover:text-gray-800">
-            View
-        </a>
+<div
+  id="analysis-{{ analysis.id }}"
+  class="bg-white rounded-lg shadow p-4 h-full flex flex-col"
+>
+  <!-- Header with ID and status -->
+  <div class="flex justify-between items-center mb-2">
+    <div>
+      <h3 class="text-lg font-semibold text-gray-900">{{ analysis.type.name }}</h3>
+      <p class="text-sm text-gray-600">
+        {{ analysis.test.test_type.name }} - {{ analysis.test.sample.individual.lab_id }}
+      </p>
     </div>
+    <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" style="background-color: {{ analysis.status.color }}20; color: {{ analysis.status.color }}">
+      {{ analysis.status.name }}
+    </span>
+  </div>
+
+  <!-- Analysis basic info -->
+  <div class="space-y-2 text-sm text-gray-600 mb-3 flex-grow">
+    <p>
+      <span class="font-medium">Performed:</span> {{ analysis.performed_date|date:"d M Y" }}
+    </p>
+    <p>
+      <span class="font-medium">By:</span> {{ analysis.performed_by.get_full_name|default:analysis.performed_by.username }}
+    </p>
+    <p>
+      <span class="font-medium">Created:</span> {{ analysis.created_at|date:"d M Y" }}
+    </p>
+  </div>
+
+  <!-- Actions -->
+  <div class="pt-3 border-t flex justify-end space-x-2 mt-auto">
+    <button
+      class="text-blue-600 hover:text-blue-900 text-sm"
+      hx-get="{% url 'lab:analysis_detail' analysis.pk %}"
+      hx-target="#analysis-detail-container"
+      @click="showDetail = true"
+    >
+      <i class="fas fa-eye"></i> View
+    </button>
+    {% if perms.lab.change_analysis %}
+    <button
+      class="text-green-600 hover:text-green-900 text-sm"
+      hx-get="{% url 'lab:analysis_edit' analysis.pk %}"
+      hx-target="closest div.bg-white"
+      hx-swap="outerHTML"
+    >
+      <i class="fas fa-edit"></i> Edit
+    </button>
+    {% endif %}
+    {% if perms.lab.delete_analysis %}
+    <button
+      class="text-red-600 hover:text-red-900 text-sm"
+      hx-delete="{% url 'lab:analysis_delete' analysis.pk %}"
+      hx-target="closest div.bg-white"
+      hx-confirm="Are you sure you want to delete this analysis?"
+      hx-swap="outerHTML swap:1s"
+    >
+      <i class="fas fa-trash-alt"></i> Delete
+    </button>
+    {% endif %}
+  </div>
 </div> 

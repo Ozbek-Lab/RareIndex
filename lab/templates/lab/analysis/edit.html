@@ -1,0 +1,144 @@
+{% extends "lab/base.html" %}
+{% load lab_filters %}
+
+{% partialdef analysis-edit-form %}
+  <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+    <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
+      <h2 class="text-2xl font-bold text-white">
+        {% if analysis %}Edit{% else %}New{% endif %} Analysis
+      </h2>
+    </div>
+
+    <form
+      {% if analysis %}
+        hx-put="{% url 'lab:analysis_edit' analysis.pk %}"
+      {% else %}
+        hx-post="{% url 'lab:analysis_create' %}"
+      {% endif %}
+      hx-target="main"
+      hx-swap="innerHTML"
+      class="p-6 space-y-6"
+    >
+      {% csrf_token %}
+
+      <!-- Basic Information -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h3 class="text-lg font-medium text-gray-900 mb-4">
+            Basic Information
+          </h3>
+          <div class="space-y-4">
+            <!-- Analysis Type -->
+            <div>
+              <label for="type" class="block text-sm font-medium text-gray-700">Analysis Type</label>
+              <select name="type" required
+                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">Select Type</option>
+                {% for type in analysis_types %}
+                <option value="{{ type.id }}" {% if analysis.type_id == type.id %}selected{% endif %}>
+                  {{ type.name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Status -->
+            <div>
+              <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+              <select name="status" required
+                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">Select Status</option>
+                {% for status in statuses %}
+                <option value="{{ status.id }}" {% if analysis.status_id == status.id %}selected{% endif %}>
+                  {{ status.name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Performed Date -->
+            <div>
+              <label for="performed_date" class="block text-sm font-medium text-gray-700">Performed Date</label>
+              <input type="date" name="performed_date" required
+                     value="{{ analysis.performed_date|date:'Y-m-d' }}"
+                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            </div>
+          </div>
+        </div>
+
+        <!-- Test Information -->
+        <div>
+          <h3 class="text-lg font-medium text-gray-900 mb-4">
+            Test Information
+          </h3>
+          <div class="space-y-4">
+            {% if test %}
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Test</label>
+                <p class="mt-1 text-sm text-gray-900">{{ test.test_type.name }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Sample</label>
+                <p class="mt-1 text-sm text-gray-900">{{ test.sample.sample_type.name }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Individual</label>
+                <p class="mt-1 text-sm text-gray-900">{{ test.sample.individual.lab_id }}</p>
+                {% if perms.lab.view_individual_sensitive_data %}
+                  <p class="text-sm text-gray-600">{{ test.sample.individual.full_name }}</p>
+                {% endif %}
+              </div>
+            {% else %}
+              <div>
+                <label for="test" class="block text-sm font-medium text-gray-700">Test</label>
+                <select name="test" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                  <option value="">Select Test</option>
+                  {% for t in tests %}
+                  <option value="{{ t.id }}" {% if analysis.test_id == t.id %}selected{% endif %}>
+                    {{ t.test_type.name }} - {{ t.sample.individual.lab_id }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="flex justify-end space-x-3 pt-6 border-t">
+        <button
+          type="button"
+          class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          hx-get="{% if analysis %}{% url 'lab:analysis_detail' analysis.pk %}{% else %}{% url 'lab:analyses' %}{% endif %}"
+          hx-target="main"
+          hx-push-url="true"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          {% if analysis %}Update{% else %}Create{% endif %} Analysis
+        </button>
+      </div>
+    </form>
+  </div>
+{% endpartialdef %}
+
+{% block content %}
+  <div class="flex items-center space-x-2 mb-4">
+    <button
+      hx-get="{% if analysis %}{% url 'lab:analysis_detail' analysis.pk %}{% else %}{% url 'lab:analyses' %}{% endif %}"
+      hx-target="main"
+      hx-push-url="true"
+      class="flex items-center text-blue-600 hover:text-blue-800"
+    >
+      <i class="fas fa-arrow-left mr-1"></i> Back to {% if analysis %}Analysis{% else %}Analyses{% endif %}
+    </button>
+  </div>
+
+  {% partial analysis-edit-form %}
+{% endblock content %} 
