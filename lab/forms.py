@@ -77,14 +77,21 @@ class IndividualForm(forms.ModelForm):
             "tc_identity",
             "birth_date",
             "icd11_code",
-            "hpo_codes",
+            "hpo_terms",
+            "council_date",
             "family",
             "mother",
             "father",
+            "diagnosis",
+            "diagnosis_date",
+            "sending_institution",
+            "status",
         ]
         widgets = {
             "birth_date": forms.DateInput(attrs={"type": "date"}),
-            "hpo_codes": forms.Textarea(attrs={"rows": 3}),
+            "council_date": forms.DateInput(attrs={"type": "date"}),
+            "diagnosis_date": forms.DateInput(attrs={"type": "date"}),
+            "hpo_terms": forms.SelectMultiple(attrs={"class": "form-select"}),
         }
 
 
