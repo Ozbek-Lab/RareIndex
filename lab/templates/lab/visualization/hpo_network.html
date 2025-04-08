@@ -1,0 +1,67 @@
+{% extends "lab/base.html" %}
+{% load partials %}
+
+{% partialdef hpo-network %}
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <h1 class="text-2xl font-bold text-gray-900">HPO Term Network</h1>
+    </div>
+
+    {% if error %}
+      <div class="bg-red-100 p-4 rounded-lg text-red-800">
+        <h3 class="font-medium">Error generating visualization:</h3>
+        <p>{{ error }}</p>
+      </div>
+    {% else %}
+      <!-- Controls -->
+      <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <form method="get" class="flex items-end space-x-4">
+          <div>
+            <label for="threshold" class="block text-sm font-medium text-gray-700">Consolidation Threshold</label>
+            <p class="text-xs text-gray-500 mb-1">HPO terms with fewer occurrences than this threshold will be consolidated</p>
+            <input
+              type="number"
+              name="threshold"
+              id="threshold"
+              value="{{ threshold }}"
+              min="1"
+              max="10"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+          </div>
+          <button
+            type="submit"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          >
+            Update Visualization
+          </button>
+        </form>
+      </div>
+
+      <!-- Stats -->
+      <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <h2 class="text-lg font-medium text-gray-900 mb-2">Visualization Statistics</h2>
+        <p>Number of consolidated terms: <span class="font-bold">{{ term_count }}</span></p>
+      </div>
+
+      <!-- Visualization -->
+      <div class="bg-white shadow rounded-lg p-4 overflow-hidden">
+        <div id="plotly-div" style="width: 100%; height: 800px;"></div>
+      </div>
+
+      <!-- Plotly JS -->
+      <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+      <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          var plotJson = {{ plot_json|safe }};
+          Plotly.newPlot('plotly-div', plotJson.data, plotJson.layout);
+        });
+      </script>
+    {% endif %}
+  </div>
+{% endpartialdef %}
+
+{% block content %}
+  {% partial hpo-network %}
+{% endblock content %}
