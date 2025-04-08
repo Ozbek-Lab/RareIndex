@@ -11,7 +11,9 @@ urlpatterns = [
     path("individual/create/", views.individual_create, name="individual_create"),
     path("individual/<int:pk>/", views.individual_detail, name="individual_detail"),
     path("individual/<int:pk>/edit/", views.individual_edit, name="individual_edit"),
-    path("individual/<int:pk>/delete/", views.individual_delete, name="individual_delete"),
+    path(
+        "individual/<int:pk>/delete/", views.individual_delete, name="individual_delete"
+    ),
     path("individual/search/", views.individual_search, name="individual_search"),
     # Sample routes
     path("samples/", views.sample_list, name="samples"),
@@ -43,11 +45,25 @@ urlpatterns = [
     path("test-type/<int:pk>/delete/", views.test_type_delete, name="test_type_delete"),
     path("sample-type/create/", views.sample_type_create, name="sample_type_create"),
     path("sample-type/<int:pk>/edit/", views.sample_type_edit, name="sample_type_edit"),
-    path("sample-type/<int:pk>/delete/", views.sample_type_delete, name="sample_type_delete"),
+    path(
+        "sample-type/<int:pk>/delete/",
+        views.sample_type_delete,
+        name="sample_type_delete",
+    ),
     path("sample-type/search/", views.sample_type_search, name="sample_type_search"),
-    path("analysis-type/create/", views.analysis_type_create, name="analysis_type_create"),
-    path("analysis-type/<int:pk>/edit/", views.analysis_type_edit, name="analysis_type_edit"),
-    path("analysis-type/<int:pk>/delete/", views.analysis_type_delete, name="analysis_type_delete"),
+    path(
+        "analysis-type/create/", views.analysis_type_create, name="analysis_type_create"
+    ),
+    path(
+        "analysis-type/<int:pk>/edit/",
+        views.analysis_type_edit,
+        name="analysis_type_edit",
+    ),
+    path(
+        "analysis-type/<int:pk>/delete/",
+        views.analysis_type_delete,
+        name="analysis_type_delete",
+    ),
     # Notes
     path("notes/", views.note_list, name="notes"),
     path("note/count/", views.note_count, name="note_count"),
@@ -59,7 +75,11 @@ urlpatterns = [
     path("project/<int:pk>/", views.project_detail, name="project_detail"),
     path("project/<int:pk>/edit/", views.project_edit, name="project_edit"),
     path("project/<int:pk>/delete/", views.project_delete, name="project_delete"),
-    path("project/<int:pk>/toggle-complete/", views.project_toggle_complete, name="project_toggle_complete"),
+    path(
+        "project/<int:pk>/toggle-complete/",
+        views.project_toggle_complete,
+        name="project_toggle_complete",
+    ),
     path("project/search/", views.project_search, name="project_search"),
     # Task routes
     path("tasks/", views.task_index, name="tasks"),
@@ -69,5 +89,8 @@ urlpatterns = [
     path("task/<int:pk>/reopen/", views.task_reopen, name="task_reopen"),
     path("task/<int:pk>/", views.task_detail, name="task_detail"),
     path("task/search/", views.task_search, name="task_search"),
-    path('search-hpo-terms/', views.search_hpo_terms, name='search_hpo_terms'),
+    path("search-hpo-terms/", views.search_hpo_terms, name="search_hpo_terms"),
+    path(
+        "visualization/hpo-network/", views.hpo_visualization, name="hpo_visualization"
+    ),
 ]

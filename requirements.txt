@@ -6,3 +6,11 @@ django-compressor
 django-allauth
 whitenoise
 django-template-partials
+
+pronto
+
+networkx
+plotly
+fastobo
+pygraphviz
+kaleido
