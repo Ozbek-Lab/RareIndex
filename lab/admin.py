@@ -28,10 +28,15 @@ class InstitutionAdmin(admin.ModelAdmin):
 
 @admin.register(models.Individual)
 class IndividualAdmin(admin.ModelAdmin):
-    list_display = ['lab_id', 'biobank_id', 'full_name', 'status', 'family', 'mother', 'father', 'created_by', 'created_at']
+    list_display = ['lab_id', 'biobank_id', 'full_name', 'status', 'family', 'mother', 'father', 'created_by', 'created_at', 'get_hpo_terms']
     list_filter = ['status', 'created_at', 'family', 'mother', 'father']
     search_fields = ['lab_id', 'biobank_id', 'full_name', 'tc_identity']
     date_hierarchy = 'created_at'
+    filter_horizontal = ['hpo_terms']
+
+    def get_hpo_terms(self, obj):
+        return ", ".join([term.label for term in obj.hpo_terms.all()])
+    get_hpo_terms.short_description = 'HPO Terms'
 
 @admin.register(models.Sample)
 class SampleAdmin(admin.ModelAdmin):

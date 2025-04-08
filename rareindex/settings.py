@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "django_htmx",
     "template_partials",
     "lab",
+    "ontologies",
 ]
 
 MIDDLEWARE = [

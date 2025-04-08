@@ -17,6 +17,7 @@ from lab.models import (
     Project,
     Task
 )
+from ontologies.models import Term
 
 class Command(BaseCommand):
     help = 'Generate sample data for testing'
@@ -53,6 +54,13 @@ class Command(BaseCommand):
         # Create a project
         project = self._create_project(user)
 
+        # Get a random selection of HPO terms to use
+        hpo_terms = list(Term.objects.filter(ontology__type=1).order_by('?')[:50])  # Get 50 random HPO terms
+        self.stdout.write(f"Found {len(hpo_terms)} HPO terms to use")
+        if not hpo_terms:
+            self.stdout.write(self.style.WARNING('No HPO terms found in database!'))
+            return
+
         # Generate families and their members
         for i in range(options['families']):
             family_id = f"RB_2025_{i+1:03d}"
@@ -62,8 +70,8 @@ class Command(BaseCommand):
             self._create_tasks(family, user, statuses['completed'], project, options['tasks_per_object'])
             
             # Create family members
-            mother = self._create_individual(f"{family_id}.2", "Mother", family, user, institution, statuses['registered'])
-            father = self._create_individual(f"{family_id}.3", "Father", family, user, institution, statuses['registered'])
+            mother = self._create_individual(f"{family_id}.2", "Mother", family, user, institution, statuses['registered'], hpo_terms)
+            father = self._create_individual(f"{family_id}.3", "Father", family, user, institution, statuses['registered'], hpo_terms)
             
             # Create proband (sick child)
             proband = self._create_individual(
@@ -73,6 +81,7 @@ class Command(BaseCommand):
                 user,
                 institution,
                 statuses['active'],
+                hpo_terms,
                 mother=mother,
                 father=father
             )
@@ -209,7 +218,7 @@ class Command(BaseCommand):
         )
         return family
 
-    def _create_individual(self, lab_id, role, family, user, institution, status, mother=None, father=None):
+    def _create_individual(self, lab_id, role, family, user, institution, status, hpo_terms, mother=None, father=None):
         birth_date = timezone.now() - timedelta(days=random.randint(365*20, 365*50))
         
         individual = Individual.objects.create(
@@ -224,6 +233,14 @@ class Command(BaseCommand):
             status=status,
             sending_institution=institution
         )
+        
+        # Add random HPO terms (5-20 terms per individual)
+        num_terms = random.randint(5, 20)
+        selected_terms = random.sample(hpo_terms, min(num_terms, len(hpo_terms)))
+        individual.hpo_terms.add(*selected_terms)
+        
+        self.stdout.write(f"Added {len(selected_terms)} HPO terms to {individual.lab_id}")
+        
         return individual
 
     def _create_tasks(self, obj, user, target_status, project, num_tasks):

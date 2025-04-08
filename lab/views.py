@@ -3,7 +3,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required, permission_required
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_GET
 from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual,
@@ -37,6 +37,7 @@ from django.views.generic import ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils import timezone
 from django.http import QueryDict
+from ontologies.models import Term
 
 
 @login_required
@@ -2031,3 +2032,18 @@ def type_search(request):
 
     # For regular requests, return the full page
     return render(request, "lab/type/index.html", context)
+
+
+@login_required
+@require_GET
+def search_hpo_terms(request):
+    """Search for HPO terms with autocomplete functionality"""
+    query = request.GET.get('q', '')
+    terms = Term.objects.filter(
+        ontology__type=2,  # HP ontology
+        label__icontains=query
+    ).select_related('ontology')[:10]
+    
+    return render(request, 'lab/partials/hpo_term_results.html', {
+        'terms': terms
+    })
