@@ -2113,9 +2113,13 @@ def hpo_visualization(request):
         # Convert the figure to JSON for embedding in the template
         plot_json = json.dumps(fig.to_dict())
 
+        template_name = "lab/visualization/hpo_network.html"
+        if request.headers.get("HX-Request"):
+            template_name += "#hpo-network"
+
         return render(
             request,
-            "lab/visualization/hpo_network.html",
+            template_name,
             {
                 "plot_json": plot_json,
                 "threshold": threshold,
@@ -2124,9 +2128,13 @@ def hpo_visualization(request):
         )
 
     except Exception as e:
+        template_name = "lab/visualization/hpo_network.html"
+        if request.headers.get("HX-Request"):
+            template_name += "#hpo-network"
+            
         return render(
             request,
-            "lab/visualization/hpo_network.html",
+            template_name,
             {
                 "error": str(e),
             },
