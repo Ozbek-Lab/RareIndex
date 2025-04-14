@@ -91,3 +91,23 @@ class AnalysisAdmin(admin.ModelAdmin):
     list_filter = ['type', 'status', 'performed_date']
     search_fields = ['test__sample__individual__lab_id', 'type__name']
     date_hierarchy = 'performed_date'
+
+@admin.register(models.Task)
+class TaskAdmin(admin.ModelAdmin):
+    list_display = ['title', 'project', 'assigned_to', 'created_by', 'priority', 'is_completed', 'due_date', 'created_at']
+    list_filter = ['is_completed', 'priority', 'created_at', 'due_date', 'assigned_to', 'created_by']
+    search_fields = ['title', 'description', 'project__name']
+    date_hierarchy = 'created_at'
+    raw_id_fields = ['project', 'assigned_to', 'created_by', 'completed_by']
+
+@admin.register(models.Project)
+class ProjectAdmin(admin.ModelAdmin):
+    list_display = ['name', 'created_by', 'priority', 'is_completed', 'due_date', 'created_at', 'get_completion_percentage']
+    list_filter = ['is_completed', 'priority', 'created_at', 'due_date', 'created_by']
+    search_fields = ['name', 'description']
+    date_hierarchy = 'created_at'
+    raw_id_fields = ['created_by']
+
+    def get_completion_percentage(self, obj):
+        return f"{obj.get_completion_percentage()}%"
+    get_completion_percentage.short_description = 'Completion %'
