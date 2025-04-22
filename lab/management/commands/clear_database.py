@@ -18,7 +18,7 @@ from lab.models import (
 )
 
 class Command(BaseCommand):
-    help = 'Clear all entries from the database except the superuser'
+    help = 'Clear all entries from the database except the superuser and default statuses'
 
     def handle(self, *args, **options):
         self.stdout.write('Clearing database...')
@@ -49,8 +49,10 @@ class Command(BaseCommand):
         self.stdout.write('Deleting StatusLog entries...')
         StatusLog.objects.all().delete()
         
-        self.stdout.write('Deleting Status entries...')
-        Status.objects.all().delete()
+        # Preserve default statuses
+        default_statuses = ['Registered', 'Completed', 'In Progress']
+        self.stdout.write('Preserving default statuses...')
+        Status.objects.exclude(name__in=default_statuses).delete()
         
         self.stdout.write('Deleting Institution entries...')
         Institution.objects.all().delete()
