@@ -20,3 +20,11 @@ python manage.py import path/to/file (not operational yet)
 #+begin_src shell
 python manage.py sync_ontology --ontology HP
 #+end_src
+
+** import from excel
+#+begin_src shell
+python manage.py import_ids '..\..\RareIndex_Real_Sample_Data\OZBEK_Lab. Örnek Takip Çizelgesi - OZBEK LAB.tsv' --admin-username emre
+python manage.py import_biobank '..\..\RareIndex_Real_Sample_Data\OZBEK_Lab. Örnek Takip Çizelgesi - Biyobankada kayıtlı RB örnekler.tsv' --admin-username emre
+python manage.py import_ozbek_lab '..\..\RareIndex_Real_Sample_Data\OZBEK_Lab. Örnek Takip Çizelgesi - OZBEK LAB.tsv' --admin-user emre
+python manage.py import_analiz_takip '..\..\RareIndex_Real_Sample_Data\OZBEK_Lab. Örnek Takip Çizelgesi - Analiz Takip.tsv' --admin-user emre
+#+end_src
