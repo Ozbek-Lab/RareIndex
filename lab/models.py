@@ -245,7 +245,7 @@ class StatusMixin:
 
 class Individual(StatusMixin, models.Model):
     lab_id = models.CharField(max_length=100, unique=True)
-    biobank_id = models.CharField(max_length=100, blank=True)
+    biobank_id = models.CharField(max_length=100, blank=True, null=True)
     full_name = models.CharField(max_length=255)
     tc_identity = models.CharField(max_length=11, blank=True)
     birth_date = models.DateField(null=True, blank=True)
@@ -254,7 +254,7 @@ class Individual(StatusMixin, models.Model):
         'ontologies.Term',
         related_name='individuals',
         blank=True,
-        limit_choices_to={'ontology__type': 2}  # 2 is HP in ONTOLOGY_CHOICES
+        limit_choices_to={'ontology__type': 1}  # 1 is HP in ONTOLOGY_CHOICES
     )
     council_date = models.DateField(null=True, blank=True)
     family = models.ForeignKey(
@@ -385,18 +385,22 @@ class AnalysisType(models.Model):
     """Model for defining types of analyses that can be performed"""
 
     name = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    version = models.CharField(max_length=50, blank=True)
+    description = models.TextField(null=True, blank=True)
+    version = models.CharField(max_length=50, null=True, blank=True)
     parent_types = models.ManyToManyField(
-        "self", blank=True, symmetrical=False, related_name="subtypes"
+        "self", null=True, blank=True, symmetrical=False, related_name="subtypes"
     )
     source_url = models.URLField(
         max_length=500,
+        null=True,
         blank=True,
         help_text="URL to the analysis source code or documentation",
     )
     results_url = models.URLField(
-        max_length=500, blank=True, help_text="URL to view analysis results"
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="URL to view analysis results",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
