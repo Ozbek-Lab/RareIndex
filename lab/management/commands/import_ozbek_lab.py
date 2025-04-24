@@ -123,9 +123,18 @@ class Command(BaseCommand):
                 ).first()
                 
                 if term:
+                    self.stdout.write(self.style.SUCCESS(f'Found HPO term: {term.label} (HP:{code})'))
                     terms.append(term)
                 else:
                     self.stdout.write(self.style.WARNING(f'HPO term not found: {description} (HP:{code})'))
+                    # Try to find by label as fallback
+                    term = Term.objects.filter(
+                        ontology=hp_ontology,
+                        label__icontains=description
+                    ).first()
+                    if term:
+                        self.stdout.write(self.style.SUCCESS(f'Found HPO term by label: {term.label} (HP:{term.identifier})'))
+                        terms.append(term)
                 
                 # Reset for next term
                 current_term = []
@@ -133,8 +142,7 @@ class Command(BaseCommand):
                 # This is part of the description
                 current_term.append(word)
         
-        #self.stdout.write(self.style.SUCCESS(f'Found HPO terms: {terms})'))
-
+        self.stdout.write(self.style.SUCCESS(f'Total HPO terms found: {len(terms)}'))
         return terms
 
     def _create_tests_from_text(self, text, individual, test_types, status, user):
@@ -242,6 +250,12 @@ class Command(BaseCommand):
                 individual.sending_institution = institution if institution else individual.sending_institution
                 individual.status = default_status
                 individual.save()
+                
+                # Get and link HPO terms
+                hpo_terms = self._get_hpo_terms(row.get('HPO kodları'))
+                if hpo_terms:
+                    individual.hpo_terms.add(*hpo_terms)
+                    self.stdout.write(self.style.SUCCESS(f'Added {len(hpo_terms)} HPO terms to {individual.full_name}'))
                 
                 self.stdout.write(self.style.SUCCESS(f'Updated individual: {individual.full_name}'))
                 
