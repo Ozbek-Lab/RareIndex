@@ -891,7 +891,7 @@ def sample_type_list(request):
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        return TemplateResponse(request, template, contenxt)
+        return TemplateResponse(request, template, context)
 
     # Otherwise, redirect to the main app with sample_types view
     return render(request, template, context)
