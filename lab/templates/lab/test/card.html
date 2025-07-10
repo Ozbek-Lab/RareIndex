@@ -18,7 +18,7 @@
 
     <p>
       Performed by:
-      {{ test.performed_by.get_full_name|default:test.performed_by.username }}
+      {{ test.performed_by.get_full_name| default:"Unknown" }}
     </p>
 
     <p>

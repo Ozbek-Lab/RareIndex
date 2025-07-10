@@ -6,8 +6,8 @@
       class="px-3 py-1 text-sm rounded-full {% if total_count > 0 %}bg-green-100
       text-green-800{% else %}bg-red-100 text-red-800{% endif %}"
     >
-      Found {{ total_count|default:tests.count }}
-      test{{ total_count|default:tests.count|pluralize }}
+      Found {{ total_count|default:"Unknown"}}
+      test{{ total_count|default:"Unknown"|pluralize }}
     </span>
   </div>
 {% endif %}

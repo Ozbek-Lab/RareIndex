@@ -158,7 +158,7 @@
               <div class="flex-1">
                 <p class="text-sm text-gray-900">{{ note.content }}</p>
                 <p class="mt-1 text-xs text-gray-500">
-                  Added by {{ note.user.get_full_name|default:note.user.username }} on {{ note.created_at|date:"Y-m-d H:i" }}
+                  Added by {{ note.user.get_full_name|default:"Unknown"}} on {{ note.created_at|date:"Y-m-d H:i" }}
                 </p>
               </div>
               <button

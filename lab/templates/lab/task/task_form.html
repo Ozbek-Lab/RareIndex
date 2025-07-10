@@ -139,7 +139,7 @@
                   selected
                 {% endif %}
               >
-                {{ user.get_full_name|default:user.username }}
+                {{ user.get_full_name|default:"Unknown"}}
               </option>
             {% endfor %}
           </select>

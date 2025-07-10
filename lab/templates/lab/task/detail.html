@@ -114,7 +114,7 @@
                             <div class="p-4 bg-gray-50 rounded-lg">
                                 <p class="text-gray-600">{{ note.content }}</p>
                                 <div class="mt-2 text-sm text-gray-500">
-                                    By {{ note.user.get_full_name|default:note.user.username }} on {{ note.created_at|date:"F j, Y, g:i a" }}
+                                    By {{ note.user.get_full_name|default:"Unknown"}} on {{ note.created_at|date:"F j, Y, g:i a" }}
                                 </div>
                             </div>
                             {% empty %}
