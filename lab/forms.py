@@ -106,7 +106,6 @@ class SampleForm(forms.ModelForm):
             "isolation_by",
             "sample_measurements",
             "status",
-            "created_by",
         ]
         widgets = {
             "receipt_date": forms.DateInput(attrs={"type": "date"}),

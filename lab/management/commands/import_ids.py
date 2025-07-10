@@ -2,6 +2,7 @@ import csv
 from datetime import datetime
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from lab.models import (
     Family,
     Individual,
@@ -63,7 +64,8 @@ class Command(BaseCommand):
                 defaults={
                     'description': status_data['description'],
                     'color': status_data['color'],
-                    'created_by': admin_user
+                    'created_by': admin_user,
+                    'content_type': ContentType.objects.get(app_label='lab', model='individual'),
                 }
             )
             if created:

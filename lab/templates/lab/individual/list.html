@@ -17,17 +17,7 @@
   <!-- Grid of individual cards -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for individual in individuals %}
-      <div
-        {% if forloop.last and individuals.has_next %}
-          hx-post="{% url 'lab:individual_search' %}" hx-trigger="intersect
-          once" hx-swap="afterend" hx-target="this" hx-vals='{"page":
-          "{{ individuals.next_page_number }}", "status":
-          "{{ filters.status }}", "test": "{{ filters.test }}", "test_status":
-          "{{ filters.test_status }}", "lab_id": "{{ filters.lab_id }}",
-          "family": "{{ filters.family }}", "icd11_code":
-          "{{ filters.icd11_code }}", "hpo_codes": "{{ filters.hpo_codes }}"}'
-        {% endif %}
-      >
+      <div>
         {% include "lab/individual/card.html" with individual=individual %}
       </div>
       {% empty %}
@@ -37,12 +27,22 @@
     {% endfor %}
   </div>
 
-  <!-- End of results message -->
-  {% if not individuals.has_next and total_count > 0 %}
-    <div class="mt-4 text-center">
-      <span
-        class="px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-800"
+  <!-- Load more button -->
+  {% if individuals.has_next %}
+    <div class="mt-4 text-center" id="load-more-container">
+      <button
+        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        hx-post="{% url 'lab:individual_search' %}"
+        hx-target="#load-more-container"
+        hx-swap="beforeend"
+        hx-vals='{"page": "{{ individuals.next_page_number }}", "status": "{{ filters.status }}", "test": "{{ filters.test }}", "test_status": "{{ filters.test_status }}", "lab_id": "{{ filters.lab_id }}", "family": "{{ filters.family }}", "icd11_code": "{{ filters.icd11_code }}", "hpo_codes": "{{ filters.hpo_codes }}"}'
       >
+        Load More
+      </button>
+    </div>
+  {% elif total_count > 0 %}
+    <div class="mt-4 text-center">
+      <span class="px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-800">
         No more individuals to load
       </span>
     </div>

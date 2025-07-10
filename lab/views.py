@@ -322,6 +322,28 @@ def individual_search(request):
     page = request.POST.get("page", 1)
     paginator = Paginator(queryset, 12)  # 12 items per page
     individuals = paginator.get_page(page)
+
+    # If it's a "load more" request (page > 1), return just the new content
+    if int(page) > 1:
+        return TemplateResponse(
+            request,
+            "lab/individual/list_more.html",
+            {
+                "individuals": individuals,
+                "total_count": total_count,
+                "filters": {
+                    "status": status_id,
+                    "test": request.POST.get("test"),
+                    "test_status": request.POST.get("test_status"),
+                    "lab_id": request.POST.get("lab_id"),
+                    "family": request.POST.get("family"),
+                    "icd11_code": request.POST.get("icd11_code"),
+                    "hpo_codes": request.POST.get("hpo_codes"),
+                },
+            },
+        )
+
+    # For initial search, return the full list
     return TemplateResponse(
         request,
         "lab/individual/index.html#individual-list",
@@ -334,7 +356,7 @@ def individual_search(request):
             "test_statuses": Status.objects.filter(
                 content_type=ContentType.objects.get_for_model(Test)
             ),
-            "filters": {  # Pass filters for subsequent page loads
+            "filters": {
                 "status": status_id,
                 "test": request.POST.get("test"),
                 "test_status": request.POST.get("test_status"),
@@ -566,24 +588,46 @@ def sample_edit(request, pk):
     """Edit an existing sample"""
     sample = get_object_or_404(Sample, pk=pk)
 
-    if request.method == "POST":
-        form = SampleForm(request.POST, instance=sample)
+    if request.method == "PUT":
+        # Parse the PUT data
+        put_data = QueryDict(request.body)
+        # Add the CSRF token to the data
+        put_data = put_data.copy()
+        put_data['csrfmiddlewaretoken'] = request.headers.get('X-CSRFToken')
+        
+        form = SampleForm(put_data, instance=sample)
         if form.is_valid():
-            sample = form.save(commit=False)
-            sample.updated_by = request.user
-            sample.save()
+            sample = form.save()
             form.save_m2m()  # Save many-to-many relationships
 
-            # If it's an HTMX request, return the detail partial
-            if request.headers.get("HX-Request"):
-                return render(
-                    request,
-                    "lab/sample/detail.html#sample-detail",
-                    {"sample": sample},
-                )
-
-            # Otherwise redirect to the detail page
-            return redirect("lab:sample_detail", pk=sample.pk)
+            # Return the detail partial
+            context = {
+                "sample": sample,
+                "individuals": Individual.objects.all(),
+                "sample_types": SampleType.objects.all(),
+                "sample_statuses": Status.objects.filter(
+                    content_type=ContentType.objects.get_for_model(Sample)
+                ),
+                "users": User.objects.all(),
+            }
+            return render(
+                request,
+                "lab/sample/detail.html",
+                context,
+            )
+        else:
+            # Return the form with errors
+            context = {
+                "form": form,
+                "sample": sample,
+                "individuals": Individual.objects.all(),
+                "sample_types": SampleType.objects.all(),
+                "sample_statuses": Status.objects.filter(
+                    content_type=ContentType.objects.get_for_model(Sample)
+                ),
+                "users": User.objects.all(),
+            }
+            return render(request, "lab/sample/edit.html#sample-edit", context, status=422)
 
     # For GET requests, prepare the form
     context = {
@@ -594,6 +638,7 @@ def sample_edit(request, pk):
         "sample_statuses": Status.objects.filter(
             content_type=ContentType.objects.get_for_model(Sample)
         ),
+        "users": User.objects.all(),
     }
 
     # If it's an HTMX request, return just the form partial
@@ -1675,10 +1720,7 @@ def analysis_list(request):
 
     # If it's an HTMX request, return just the list content
     if request.headers.get("HX-Request"):
-        # The specific partial to return depends on what was requested
-        if "search" in request.path:
-            return render(request, "lab/analysis/index.html#analysis-list", context)
-        return render(request, "lab/analysis/index.html#analysis-index", context)
+        return render(request, "lab/analysis/list.html", context)
 
     # For regular requests, return the full page
     return render(request, "lab/analysis/index.html", context)
@@ -1751,25 +1793,29 @@ def analysis_search(request):
     paginator = Paginator(queryset, 12)  # 12 items per page
     analyses = paginator.get_page(page)
 
-    return TemplateResponse(
-        request,
-        "lab/analysis/list.html",
-        {
-            "analyses": analyses,
-            "total_count": total_count,
-            "analysis_statuses": Status.objects.filter(
-                content_type=ContentType.objects.get_for_model(Analysis)
-            ),
-            "filters": {
-                "status": status_id,
-                "analysis_type": analysis_type_ids,
-                "individual": individual_ids,
-                "test": test_ids,
-                "date_from": date_from,
-                "date_to": date_to,
-            },
+    context = {
+        "analyses": analyses,
+        "total_count": total_count,
+        "analysis_types": AnalysisType.objects.all(),
+        "analysis_statuses": Status.objects.filter(
+            content_type=ContentType.objects.get_for_model(Analysis)
+        ),
+        "filters": {
+            "status": status_id,
+            "analysis_type": analysis_type_ids,
+            "individual": individual_ids,
+            "test": test_ids,
+            "date_from": date_from,
+            "date_to": date_to,
         },
-    )
+    }
+
+    # For HTMX requests, return just the list content
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/analysis/list.html", context)
+
+    # For regular requests, return the full page
+    return render(request, "lab/analysis/index.html", context)
 
 
 @login_required
@@ -1840,7 +1886,24 @@ def analysis_create(request):
                     {"test": test, "active_tab": "analyses"},
                 )
             else:
-                return TemplateResponse(request, "lab/analysis/_add_button.html")
+                # Return the full index template with the list
+                analyses = Analysis.objects.select_related(
+                    "test",
+                    "test__sample",
+                    "test__sample__individual",
+                    "type",
+                    "status",
+                    "performed_by",
+                ).order_by("-created_at")
+                
+                context = {
+                    "analyses": analyses,
+                    "analysis_types": AnalysisType.objects.all(),
+                    "analysis_statuses": Status.objects.filter(
+                        content_type=ContentType.objects.get_for_model(Analysis)
+                    ),
+                }
+                return TemplateResponse(request, "lab/analysis/index.html", context)
 
     # For GET requests
     analysis_content_type = ContentType.objects.get_for_model(Analysis)
@@ -1850,11 +1913,6 @@ def analysis_create(request):
         "analysis_types": AnalysisType.objects.all(),
         "statuses": Status.objects.filter(content_type=analysis_content_type),
     }
-
-    # If button=true is in query params, return the add button instead of the form
-    if request.GET.get("button") == "true":
-        context["test"] = test_id
-        return TemplateResponse(request, "lab/analysis/_add_button.html", context)
 
     return TemplateResponse(request, "lab/analysis/edit.html", context)
 

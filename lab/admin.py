@@ -54,9 +54,9 @@ class TestAdmin(admin.ModelAdmin):
 
 @admin.register(models.Status)
 class StatusAdmin(admin.ModelAdmin):
-    list_display = ['name', 'color', 'created_by', 'created_at']
+    list_display = ['name', 'content_type', 'color', 'created_by', 'created_at']
     search_fields = ['name', 'description']
-    list_filter = ['created_at']
+    list_filter = ['created_at', 'content_type']
 
 @admin.register(models.StatusLog)
 class StatusLogAdmin(admin.ModelAdmin):

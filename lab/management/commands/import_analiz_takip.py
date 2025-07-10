@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from lab.models import (
     Individual, Test, TestType, Analysis, AnalysisType,
     Status, Sample, SampleType, Institution
@@ -38,15 +39,16 @@ class Command(BaseCommand):
         except User.DoesNotExist:
             return admin_user
 
-    def _get_or_create_status(self, name, description, color, admin_user):
+    def _get_or_create_status(self, name, description, color, admin_user, content_type=None):
         if not name:
             return None
         status, created = Status.objects.get_or_create(
             name=name,
+            content_type=content_type,
             defaults={
                 'description': description or '',
                 'color': color or '#000000',
-                'created_by': admin_user
+                'created_by': admin_user,
             }
         )
         return status
@@ -113,7 +115,8 @@ class Command(BaseCommand):
             'Completed',
             'Analysis completed',
             '#00FF00',
-            admin_user
+            admin_user,
+            ContentType.objects.get_for_model(Analysis)
         )
 
         # Get or create Gennext analysis type
@@ -160,15 +163,14 @@ class Command(BaseCommand):
 
                 test_types[veri_kaynagi] = test_type
 
-                # Get or create status from PLAN
-                plan = row.get('PLAN')
-                if plan:
-                    status = self._get_or_create_status(
-                        plan,
-                        f'Status for {plan}',
-                        '#0000FF',
-                        admin_user
-                    )
+                # Create default status for analysis
+                status = self._get_or_create_status(
+                    'In Progress',
+                    'Analysis is in progress',
+                    '#0000FF',
+                    admin_user,
+                    ContentType.objects.get_for_model(Analysis)
+                )
 
                 # Get first sample or create placeholder
                 sample = individual.samples.first()
@@ -189,7 +191,7 @@ class Command(BaseCommand):
                 if data_upload_date:
                     analysis = Analysis.objects.create(
                         type=gennext_type,
-                        status=status if plan else completed_status,
+                        status=status,
                         performed_date=data_upload_date,
                         performed_by=admin_user,
                         test=test,
