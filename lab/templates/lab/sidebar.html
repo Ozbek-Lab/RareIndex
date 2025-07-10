@@ -7,11 +7,13 @@
   <div class="p-4 border-b border-gray-100">
     <h1 class="text-xl font-bold text-gray-800 flex items-center">
       <i class="fas fa-dna text-indigo-500 mr-2"></i>
-      <span
-        class="bg-gradient-to-r from-indigo-600 to-indigo-500 bg-clip-text text-transparent"
-      >
-        RareIndex
-      </span>
+      <a href="{% url 'lab:dashboard' %}">
+        <span
+          class="bg-gradient-to-r from-indigo-600 to-indigo-500 bg-clip-text text-transparent"
+        >
+          RareIndex
+        </span>
+      </a>
     </h1>
   </div>
 
@@ -23,6 +25,7 @@
         hx-get="{% url 'lab:dashboard' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:dashboard' %}"
         @click="activeItem = 'dashboard'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'dashboard' }"
@@ -38,6 +41,7 @@
         hx-get="{% url 'lab:individuals' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:individuals' %}"
         @click="activeItem = 'individuals'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'individuals' || activeItem === 'individual_detail' }"
@@ -53,6 +57,7 @@
         hx-get="{% url 'lab:samples' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:samples' %}"
         @click="activeItem = 'samples'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'samples' || activeItem === 'sample_detail' }"
@@ -68,6 +73,7 @@
         hx-get="{% url 'lab:tests' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:tests' %}"
         @click="activeItem = 'tests'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'tests' || activeItem === 'test_detail' }"
@@ -83,6 +89,7 @@
         hx-get="{% url 'lab:analyses' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:analyses' %}"
         @click="activeItem = 'analyses'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'analyses' || activeItem === 'analysis_detail' }"
@@ -98,6 +105,7 @@
         hx-get="{% url 'lab:projects' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:projects' %}"
         @click="activeItem = 'projects'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'projects' || activeItem === 'project_detail' }"
@@ -113,6 +121,7 @@
         hx-get="{% url 'lab:tasks' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:tasks' %}"
         @click="activeItem = 'tasks'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'tasks' }"
@@ -128,6 +137,7 @@
         hx-get="{% url 'lab:types' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:types' %}"
         @click="activeItem = 'types'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'types' }"
@@ -142,6 +152,7 @@
         hx-get="{% url 'lab:hpo_visualization' %}"
         hx-target="main"
         hx-push-url="true"
+        href="{% url 'lab:hpo_visualization' %}"
         @click="activeItem = 'hpo_visualization'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'hpo_visualization' }"

@@ -56,7 +56,7 @@
                   href="{% url 'lab:individual_detail' sample.individual.pk %}"
                   class="text-indigo-600 hover:text-indigo-900"
                   hx-get="{% url 'lab:individual_detail' sample.individual.pk %}"
-                  hx-target="#main-content"
+                  hx-target="main"
                   hx-swap="innerHTML"
                 >
                   {{ sample.individual.lab_id }}
@@ -105,7 +105,7 @@
         <button
           class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           hx-get="{% url 'lab:sample_edit' sample.pk %}"
-          hx-target="#main-content"
+          hx-target="main"
           hx-swap="innerHTML"
         >
           Edit Sample
@@ -120,7 +120,7 @@
         <button
           class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           hx-get="{% url 'lab:test_create' %}?sample={{ sample.pk }}"
-          hx-target="#main-content"
+          hx-target="main"
           hx-swap="innerHTML"
         >
           Add Test
@@ -159,7 +159,7 @@
                 <button
                   class="text-indigo-600 hover:text-indigo-900"
                   hx-get="{% url 'lab:test_detail' test.pk %}"
-                  hx-target="#main-content"
+                  hx-target="main"
                   hx-swap="innerHTML"
                 >
                   View Details

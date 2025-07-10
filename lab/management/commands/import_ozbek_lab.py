@@ -2,6 +2,7 @@ import csv
 from datetime import datetime
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 from lab.models import (
     Family,
@@ -171,10 +172,16 @@ class Command(BaseCommand):
             if test_type:
                 # Create default sample if needed
                 if not default_sample:
+                    # Get the received status
+                    received_status = Status.objects.filter(
+                        name='Received',
+                        content_type=ContentType.objects.get(app_label='lab', model='sample')
+                    ).first()
+                    
                     default_sample = Sample.objects.create(
                         individual=individual,
                         sample_type=SampleType.objects.first(),  # Get the first sample type as default
-                        status=status,
+                        status=received_status,
                         created_by=user,
                         isolation_by=user  # Use the same user as isolation_by for default sample
                     )
@@ -203,12 +210,54 @@ class Command(BaseCommand):
             return
 
         # Get or create default status
-        default_status = Status.objects.filter(name='Registered').first()
-        if not default_status:
-            default_status = Status.objects.create(
+        default_individual_status = Status.objects.filter(name='Registered').first()
+        if not default_individual_status:
+            default_individual_status = Status.objects.create(
                 name='Registered',
                 description='Sample is registered in the system',
-                created_by=admin_user
+                created_by=admin_user,
+                content_type=ContentType.objects.get(app_label='lab', model='individual'),
+            )
+        
+        # Get or create sample statuses
+        sample_statuses = {
+            'registered': Status.objects.filter(name='Registered').first(),
+            'received': Status.objects.filter(name='Received').first(),
+            'in_progress': Status.objects.filter(name='In Progress').first(),
+            'completed': Status.objects.filter(name='Completed').first(),
+        }
+        
+        # Create sample statuses if they don't exist
+        if not sample_statuses['registered']:
+            sample_statuses['registered'] = Status.objects.create(
+                name='Registered',
+                description='Sample is registered in the system',
+                created_by=admin_user,
+                content_type=ContentType.objects.get(app_label='lab', model='sample'),
+            )
+            
+        if not sample_statuses['received']:
+            sample_statuses['received'] = Status.objects.create(
+                name='Received',
+                description='Sample has been received in the lab',
+                created_by=admin_user,
+                content_type=ContentType.objects.get(app_label='lab', model='sample'),
+            )
+            
+        if not sample_statuses['in_progress']:
+            sample_statuses['in_progress'] = Status.objects.create(
+                name='In Progress',
+                description='Sample is currently being processed',
+                created_by=admin_user,
+                content_type=ContentType.objects.get(app_label='lab', model='sample'),
+            )
+            
+        if not sample_statuses['completed']:
+            sample_statuses['completed'] = Status.objects.create(
+                name='Completed',
+                description='Sample processing has been completed',
+                created_by=admin_user,
+                content_type=ContentType.objects.get(app_label='lab', model='sample'),
             )
 
         # Create leftovers file in the same directory as input file
@@ -248,7 +297,7 @@ class Command(BaseCommand):
                 individual.birth_date = self._parse_date(row.get('Doğum Tarihi')) or individual.birth_date
                 individual.icd11_code = row.get('ICD11', individual.icd11_code)
                 individual.sending_institution = institution if institution else individual.sending_institution
-                individual.status = default_status
+                individual.status = default_individual_status
                 individual.save()
                 
                 # Get and link HPO terms
@@ -291,21 +340,26 @@ class Command(BaseCommand):
                         # Update existing sample with missing information
                         if not existing_sample.receipt_date:
                             existing_sample.receipt_date = self._parse_date(row.get('Geliş Tarihi/ay/gün/yıl'))
+                            if existing_sample.receipt_date:
+                                existing_sample.status = sample_statuses['received']
                         if not existing_sample.isolation_by:
                             existing_sample.isolation_by = isolation_by
                         if not existing_sample.status:
-                            existing_sample.status = default_status
+                            existing_sample.status = sample_statuses['registered']
                         existing_sample.save()
                         self.stdout.write(self.style.SUCCESS(f'Updated existing sample: {existing_sample}'))
                     else:
+                        # Determine initial status based on receipt date
+                        initial_status = sample_statuses['received'] if self._parse_date(row.get('Geliş Tarihi/ay/gün/yıl')) else sample_statuses['registered']
+                        
                         # Create new sample
                         sample = Sample.objects.create(
                             individual=individual,
                             sample_type=sample_type,
-                            status=default_status,
+                            status=initial_status,
                             receipt_date=self._parse_date(row.get('Geliş Tarihi/ay/gün/yıl')),
                             isolation_by=isolation_by,
-                            created_by=admin_user
+                            created_by=admin_user,
                         )
                         self.stdout.write(self.style.SUCCESS(f'Created new sample: {sample}'))
 
