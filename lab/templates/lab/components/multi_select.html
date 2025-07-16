@@ -102,6 +102,7 @@
     <input
       x-ref="searchInput"
       x-model="search"
+      name="search"
       @click.stop
       @focus="open = true"
       @keydown.enter.prevent="$refs.results.querySelector('button')?.click()"

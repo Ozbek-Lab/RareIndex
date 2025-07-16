@@ -16,6 +16,7 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+FIELD_ENCRYPTION_KEY = b"4B3JfhEn0rSFtdf1fhlLZK1iMJUuL0SCFnNgvjQ2ToE="
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -39,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",  # Required by allauth
+    "encrypted_model_fields",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
