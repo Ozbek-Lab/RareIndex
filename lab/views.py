@@ -37,6 +37,7 @@ from django.views.generic import ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils import timezone
 from django.http import QueryDict
+from django.conf import settings
 from ontologies.models import Term
 
 import networkx as nx
@@ -93,6 +94,7 @@ def select_search(request):
     model_name = request.GET.get("model", "")
     field_name = request.GET.get("field", "name")
     page = request.GET.get("page", 1)
+    print(f'Search query: {search_query}')
 
     # Protect against 'undefined' values coming from JavaScript
     if search_query == "undefined":
@@ -112,6 +114,7 @@ def select_search(request):
 
         # Build the query for the specified field
         filter_kwargs = {}
+        print(f'Search query: {search_query}')
         if search_query:
             filter_kwargs[f"{field_name}__icontains"] = search_query
             queryset = model.objects.filter(**filter_kwargs)
@@ -168,7 +171,7 @@ def select_search(request):
         return render(
             request, "lab/components/search_results.html", {"error": error_message}
         )
-
+    
 
 @login_required
 def individual_index(request):
@@ -266,6 +269,72 @@ def individual_delete(request, pk):
 
 
 @login_required
+@permission_required("lab.view_individual")
+def individual_searchbar(request):
+    search_query = request.GET.get("search", "").strip()
+    model = apps.get_model(app_label="lab", model_name="Individual")
+    model_name = "Individual"
+    field_name = request.GET.get("field", "name")
+    page = request.GET.get("page", 1)
+
+    # Protect against 'undefined' values coming from JavaScript
+    if search_query == "undefined":
+        search_query = ""
+    if field_name == "undefined":
+        field_name = "name"  # Default to name field
+
+    try:
+        # Build the query for the specified field
+        filter_kwargs = {}
+        if search_query:
+            filter_kwargs[f"{field_name}__icontains"] = search_query
+            queryset = model.objects.filter(**filter_kwargs)
+        else:
+            queryset = model.objects.all()
+
+        # Customize queryset based on model
+        queryset = queryset.order_by("lab_id")
+
+        # Apply pagination
+        paginator = Paginator(queryset, 10)  # 10 items per page
+        page_obj = paginator.get_page(page)
+
+        # Format items for the response
+        items = []
+        for item in page_obj:
+            # Handle different models - customize the text display based on model
+            if model_name == "Individual":
+                text = item.lab_id
+                if hasattr(request.user, "has_perm") and request.user.has_perm(
+                    "lab.view_individual_sensitive_data"
+                ):
+                    text = f"{item.lab_id} ({item.full_name})"
+                items.append({"id": item.id, "text": text})
+            elif hasattr(item, "name"):
+                items.append({"id": item.id, "text": item.name})
+            elif model_name == "Family" and hasattr(item, "family_id"):
+                items.append({"id": item.id, "text": item.family_id})
+            else:
+                # Default fallback
+                items.append({"id": item.id, "text": str(item)})
+
+        context = {
+            "items": items,
+            "query": search_query,
+            "paginator": paginator,
+            "page_obj": page_obj,
+        }
+
+        return render(request, "lab/components/search_results.html", context)
+
+    except (LookupError, ValueError, AttributeError) as e:
+        error_message = "An error occurred while searching."
+        return render(
+            request, "lab/components/search_results.html", {"error": error_message}
+        )
+
+@login_required
+@permission_required("lab.view_individual")
 def individual_search(request):
     queryset = Individual.objects.all()
 
@@ -370,6 +439,7 @@ def individual_search(request):
 
 
 @login_required
+@permission_required("lab.view_individual")
 def individual_detail(request, pk):
     """Detailed view for an individual with all related data"""
     individual = get_object_or_404(Individual, pk=pk)
@@ -395,6 +465,7 @@ def individual_detail(request, pk):
 
 
 @login_required
+@permission_required("lab.view_sample")
 def sample_list(request):
     """Sample list view"""
     # Get all samples with related data
@@ -426,6 +497,7 @@ def sample_list(request):
 
 
 @login_required
+@permission_required("lab.view_sample")
 def sample_search(request):
     """Search samples with filters."""
     if request.headers.get("HX-Request"):

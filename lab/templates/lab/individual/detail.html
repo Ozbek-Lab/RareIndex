@@ -3,17 +3,18 @@
 {% load partials %}
 
 {% partialdef individual-detail %}
-  <div class="flex items-center space-x-4">
-    <a
-      hx-get="{% url 'lab:individuals' %}"
+  <div id="individual-detail" class="space-y-6" x-data="{ activeTab: 'notes' }">
+    <button
       class="text-gray-500 hover:text-gray-700"
-    >
+      hx-get="{% url 'lab:individuals' %}"
+      hx-target="#individual-detail"
+      hx-swap="outerHTML"
+      hx-push-url="true"
+    > 
       <i class="fas fa-arrow-left"></i>
       Back to individuals
-    </a>
-  </div>
+    </button>
 
-  <div id="individual-detail" class="space-y-6" x-data="{ activeTab: 'notes' }">
     <!-- Individual card -->
     <div class="bg-white rounded-lg shadow-lg overflow-hidden">
       <!-- Header with individual info -->
