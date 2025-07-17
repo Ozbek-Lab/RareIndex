@@ -71,8 +71,7 @@ class IndividualForm(forms.ModelForm):
     class Meta:
         model = Individual
         fields = [
-            "lab_id",
-            "biobank_id",
+            "id",
             "full_name",
             "tc_identity",
             "birth_date",

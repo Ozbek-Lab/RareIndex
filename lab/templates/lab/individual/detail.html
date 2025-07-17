@@ -27,7 +27,7 @@
             {{ individual.status.name }}
           </span>
         </div>
-        <p class="text-blue-100 mt-1">{{ individual.biobank_id }}</p>
+        <p class="text-blue-100 mt-1">{{ individual.all_ids|join:' - ' }}</p>
       </div>
 
       <!-- Individual details -->
@@ -35,23 +35,39 @@
         <!-- First column -->
         <div class="space-y-4">
           {% if perms.lab.view_individual_sensitive_data %}
-            <div>
-              <h3 class="text-sm font-medium text-gray-500">Full Name</h3>
-              <p class="text-gray-900 font-medium">
-                {{ individual.full_name }}
-              </p>
-            </div>
-            <div>
-              <h3 class="text-sm font-medium text-gray-500">TC Identity</h3>
-              <p class="text-gray-900">
-                {{ individual.tc_identity|default:"—" }}
-              </p>
-            </div>
-            <div>
-              <h3 class="text-sm font-medium text-gray-500">Birth Date</h3>
-              <p class="text-gray-900">
-                {{ individual.birth_date|date:"d M Y"|default:"—" }}
-              </p>
+            <div x-data="{ showSensitive: false }">
+              <button
+                type="button"
+                class="mb-2 px-3 py-1 rounded bg-blue-100 text-blue-800 text-xs font-medium hover:bg-blue-200 transition"
+                @click="showSensitive = !showSensitive"
+              >
+                <template x-if="!showSensitive">
+                  <span><i class="fas fa-eye"></i> Show Sensitive Info</span>
+                </template>
+                <template x-if="showSensitive">
+                  <span><i class="fas fa-eye-slash"></i> Hide Sensitive Info</span>
+                </template>
+              </button>
+              <div x-show="showSensitive" x-transition class="space-y-2">
+                <div>
+                  <h3 class="text-sm font-medium text-gray-500">Full Name</h3>
+                  <p class="text-gray-900 font-medium">
+                    {{ individual.full_name }}
+                  </p>
+                </div>
+                <div>
+                  <h3 class="text-sm font-medium text-gray-500">TC Identity</h3>
+                  <p class="text-gray-900">
+                    {{ individual.tc_identity|default:"—" }}
+                  </p>
+                </div>
+                <div>
+                  <h3 class="text-sm font-medium text-gray-500">Birth Date</h3>
+                  <p class="text-gray-900">
+                    {{ individual.birth_date|date:"d M Y"|default:"—" }}
+                  </p>
+                </div>
+              </div>
             </div>
           {% endif %}
           <div>
