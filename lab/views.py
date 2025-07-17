@@ -77,6 +77,103 @@ def dashboard(request):
 
 
 @login_required
+def query_search(request): # TODO: NOT USED
+    """
+    Generic search endpoint for select2-like dropdown functionality.
+
+    Parameters:
+    - model: The model name to search (e.g., 'Individual', 'SampleType')
+    - field: The field to search (default is 'name')
+    - search: The search query
+    - page: The page number for pagination (optional)
+
+    Returns:
+    - Rendered HTML with search results
+    """
+    search_query = request.GET.get("search", "").strip()
+    model_name = request.GET.get("model", "")
+    field_name = request.GET.get("field", "name")
+    page = request.GET.get("page", 1)
+    print(f'Search query: {search_query}')
+
+    # Protect against 'undefined' values coming from JavaScript
+    if search_query == "undefined":
+        search_query = ""
+    if model_name == "undefined":
+        return render(
+            request,
+            "lab/components/search_results.html",
+            {"error": "Invalid model parameter"},
+        )
+    if field_name == "undefined":
+        field_name = "name"  # Default to name field
+
+    try:
+        # Get the model class dynamically
+        model = apps.get_model(app_label="lab", model_name=model_name)
+
+        # Build the query for the specified field
+        filter_kwargs = {}
+        print(f'Search query: {search_query}')
+        if search_query:
+            filter_kwargs[f"{field_name}__icontains"] = search_query
+            queryset = model.objects.filter(**filter_kwargs)
+        else:
+            queryset = model.objects.all()
+
+        # Customize queryset based on model
+        if model_name == "Individual":
+            # Apply any specific filtering for Individual model
+            queryset = queryset.order_by("cross_ids__id_value")
+        else:
+            # Default ordering
+            queryset = queryset.order_by(field_name)
+
+        # Apply pagination
+        paginator = Paginator(queryset, 10)  # 10 items per page
+        page_obj = paginator.get_page(page)
+
+        # Format items for the response
+        items = []
+        for item in page_obj:
+            # Handle different models - customize the text display based on model
+            if model_name == "Individual":
+                text = item.individual_id
+                if hasattr(request.user, "has_perm") and request.user.has_perm(
+                    "lab.view_individual_sensitive_data"
+                ):
+                    text = f"{item.individual_id}"
+                items.append({"id": item.id, "text": text})
+            elif hasattr(item, "name"):
+                items.append({"id": item.id, "text": item.name})
+            elif model_name == "Family" and hasattr(item, "family_id"):
+                items.append({"id": item.id, "text": item.family_id})
+            else:
+                # Default fallback
+                items.append({"id": item.id, "text": str(item)})
+
+        context = {
+            "items": items,
+            "query": search_query,
+            "paginator": paginator,
+            "page_obj": page_obj,
+        }
+
+        return render(request, "lab/components/search_results.html", context)
+
+    except (LookupError, ValueError, AttributeError) as e:
+        # Return error in development, generic message in production
+        if settings.DEBUG:
+            error_message = str(e)
+        else:
+            error_message = "An error occurred while searching."
+
+        return render(
+            request, "lab/components/search_results.html", {"error": error_message}
+        )
+
+
+@login_required
 def select_search(request):
     """
     Generic search endpoint for select2-like dropdown functionality.
@@ -124,7 +221,7 @@ def select_search(request):
         # Customize queryset based on model
         if model_name == "Individual":
             # Apply any specific filtering for Individual model
-            queryset = queryset.order_by("lab_id")
+            queryset = queryset.order_by("cross_ids__id_value")
         else:
             # Default ordering
             queryset = queryset.order_by(field_name)
@@ -138,11 +235,11 @@ def select_search(request):
         for item in page_obj:
             # Handle different models - customize the text display based on model
             if model_name == "Individual":
-                text = item.lab_id
+                text = item.individual_id
                 if hasattr(request.user, "has_perm") and request.user.has_perm(
                     "lab.view_individual_sensitive_data"
                 ):
-                    text = f"{item.lab_id} ({item.full_name})"
+                    text = f"{item.individual_id}"
                 items.append({"id": item.id, "text": text})
             elif hasattr(item, "name"):
                 items.append({"id": item.id, "text": item.name})
@@ -171,7 +268,7 @@ def select_search(request):
         return render(
             request, "lab/components/search_results.html", {"error": error_message}
         )
-    
+
 
 @login_required
 def individual_index(request):
@@ -267,72 +364,6 @@ def individual_delete(request, pk):
     individual.delete()
     return HttpResponse(status=200)
 
-
-@login_required
-@permission_required("lab.view_individual")
-def individual_searchbar(request):
-    search_query = request.GET.get("search", "").strip()
-    model = apps.get_model(app_label="lab", model_name="Individual")
-    model_name = "Individual"
-    field_name = request.GET.get("field", "name")
-    page = request.GET.get("page", 1)
-
-    # Protect against 'undefined' values coming from JavaScript
-    if search_query == "undefined":
-        search_query = ""
-    if field_name == "undefined":
-        field_name = "name"  # Default to name field
-
-    try:
-        # Build the query for the specified field
-        filter_kwargs = {}
-        if search_query:
-            filter_kwargs[f"{field_name}__icontains"] = search_query
-            queryset = model.objects.filter(**filter_kwargs)
-        else:
-            queryset = model.objects.all()
-
-        # Customize queryset based on model
-        queryset = queryset.order_by("lab_id")
-
-        # Apply pagination
-        paginator = Paginator(queryset, 10)  # 10 items per page
-        page_obj = paginator.get_page(page)
-
-        # Format items for the response
-        items = []
-        for item in page_obj:
-            # Handle different models - customize the text display based on model
-            if model_name == "Individual":
-                text = item.lab_id
-                if hasattr(request.user, "has_perm") and request.user.has_perm(
-                    "lab.view_individual_sensitive_data"
-                ):
-                    text = f"{item.lab_id} ({item.full_name})"
-                items.append({"id": item.id, "text": text})
-            elif hasattr(item, "name"):
-                items.append({"id": item.id, "text": item.name})
-            elif model_name == "Family" and hasattr(item, "family_id"):
-                items.append({"id": item.id, "text": item.family_id})
-            else:
-                # Default fallback
-                items.append({"id": item.id, "text": str(item)})
-
-        context = {
-            "items": items,
-            "query": search_query,
-            "paginator": paginator,
-            "page_obj": page_obj,
-        }
-
-        return render(request, "lab/components/search_results.html", context)
-
-    except (LookupError, ValueError, AttributeError) as e:
-        error_message = "An error occurred while searching."
-        return render(
-            request, "lab/components/search_results.html", {"error": error_message}
-        )
-
 @login_required
 @permission_required("lab.view_individual")
 def individual_search(request):
@@ -344,11 +375,11 @@ def individual_search(request):
         queryset = queryset.filter(status_id=status_id)
 
     # Lab ID filter - now supports multiple IDs
-    lab_ids = request.POST.get("lab_id", "")
-    if lab_ids:
+    individual_ids = request.POST.get("individual_id", "")
+    if individual_ids:
         # Split comma-separated IDs
-        lab_id_list = lab_ids.split(",")
-        queryset = queryset.filter(id__in=lab_id_list)
+        individual_id_list = individual_ids.split(",")
+        queryset = queryset.filter(id__in=individual_id_list)
 
     # Test filter
     test_id = request.POST.get("test")
@@ -382,10 +413,11 @@ def individual_search(request):
         queryset = queryset.filter(hpo_codes__icontains=hpo_codes)
 
     # Remove duplicates and order results
-    queryset = queryset.distinct().order_by("lab_id")
+    tmp = list(queryset.distinct())
+    queryset = sorted(tmp, key=lambda ind: ind.individual_id)
 
     # Get total count before pagination
-    total_count = queryset.count()
+    total_count = len(queryset)
 
     # Paginate results
     page = request.POST.get("page", 1)
@@ -404,7 +436,7 @@ def individual_search(request):
                     "status": status_id,
                     "test": request.POST.get("test"),
                     "test_status": request.POST.get("test_status"),
-                    "lab_id": request.POST.get("lab_id"),
+                    "individual_id": request.POST.get("individual_id"),
                     "family": request.POST.get("family"),
                     "icd11_code": request.POST.get("icd11_code"),
                     "hpo_codes": request.POST.get("hpo_codes"),
@@ -429,7 +461,7 @@ def individual_search(request):
                 "status": status_id,
                 "test": request.POST.get("test"),
                 "test_status": request.POST.get("test_status"),
-                "lab_id": request.POST.get("lab_id"),
+                "individual_id": request.POST.get("individual_id"),
                 "family": request.POST.get("family"),
                 "icd11_code": request.POST.get("icd11_code"),
                 "hpo_codes": request.POST.get("hpo_codes"),
@@ -1632,7 +1664,7 @@ class TestListView(LoginRequiredMixin, ListView):
         search_query = self.request.GET.get("search", "")
         if search_query:
             queryset = queryset.filter(
-                models.Q(sample__individual__lab_id__icontains=search_query)
+                models.Q(sample__individual__individual_id__icontains=search_query)
                 | models.Q(test__name__icontains=search_query)
             )
 
@@ -2215,7 +2247,7 @@ def hpo_visualization(request):
         for individual in individuals:
             terms = [term.term for term in individual.hpo_terms.all()]
             if terms:  # Only include if there are terms
-                sample_terms[individual.lab_id] = terms
+                sample_terms[individual.individual_id] = terms
 
         # Count terms
         term_counts = {}

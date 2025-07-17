@@ -14,7 +14,9 @@ from lab.models import (
     Sample,
     Test,
     AnalysisType,
-    Analysis
+    Analysis,
+    IdentifierType,
+    CrossIdentifier,
 )
 
 class Command(BaseCommand):
@@ -40,6 +42,10 @@ class Command(BaseCommand):
         self.stdout.write('Nullifying Individual self-references...')
         Individual.objects.all().update(mother=None, father=None)
         
+        # Delete CrossIdentifiers before Individuals
+        self.stdout.write('Deleting CrossIdentifier entries...')
+        CrossIdentifier.objects.all().delete()
+        
         self.stdout.write('Deleting Individual entries...')
         Individual.objects.all().delete()
         
@@ -62,6 +68,10 @@ class Command(BaseCommand):
         
         self.stdout.write('Deleting TestType entries...')
         TestType.objects.all().delete()
+        
+        # Delete IdentifierTypes after CrossIdentifiers
+        self.stdout.write('Deleting IdentifierType entries...')
+        IdentifierType.objects.all().delete()
         
         self.stdout.write('Deleting Note entries...')
         Note.objects.all().delete()

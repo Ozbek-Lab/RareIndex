@@ -39,7 +39,7 @@
           </label>
 
           <!-- Multi-Select Component for Lab ID -->
-          {% include "lab/components/multi_select.html" with component_id="lab-id-select" name="lab_id" model="Individual" field="lab_id" placeholder="Select Individual..." result_container_id="lab-id-results" loading_indicator_id="lab-id-loading" allow_multiple=True %}
+          {% include "lab/components/search_field.html" with component_id="individual-id-select" name="individual_id" model="Individual" field="cross_ids__id_value" placeholder="Select Individual..." result_container_id="individual-id-results" loading_indicator_id="individual-id-loading" allow_multiple=True %}
         </div>
 
         <!-- Status Filter -->

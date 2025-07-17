@@ -243,19 +243,11 @@ class StatusMixin:
             self.status = new_status
             self.save()
 
-
 class Individual(StatusMixin, models.Model):
-    lab_id = models.CharField(max_length=100, unique=True)
-    biobank_id = models.CharField(max_length=100, blank=True, null=True)
+    id = models.AutoField(primary_key=True)
     full_name = EncryptedCharField(max_length=255)
-    tc_identity = EncryptedCharField(max_length=11, blank=True)
-
-    class Meta:
-        permissions = [
-            ("view_sensitive_data", "Can view sensitive data"),
-        ]
-
-    birth_date = models.DateField(null=True, blank=True)
+    tc_identity = EncryptedBigIntegerField(null=True, blank=True)
+    birth_date = EncryptedDateField(null=True, blank=True)
     icd11_code = models.TextField(blank=True)
     hpo_terms = models.ManyToManyField(
         'ontologies.Term',
@@ -287,21 +279,45 @@ class Individual(StatusMixin, models.Model):
     )
     notes = GenericRelation("Note")
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="created_individuals"
-    )
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="created_individuals")
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     status_logs = GenericRelation(StatusLog)
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
     sending_institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
     tasks = GenericRelation("Task")
+    class Meta:
+        permissions = [
+            ("view_sensitive_data", "Can view sensitive data"),
+        ]
+    @property
+    def all_ids(self):
+        return [f"{id_temp.id_type.name}: {id_temp.id_value}" for id_temp in self.cross_ids.all()]
 
-    def get_individual_id(self, id_type):
-        return IdentifierType.objects.get(id=self, id_type=id_type)
-    def get_individual_id_find_id_type(self, id_type):
-        id_type_object = IdentifierType.objects.get(id_name=id_type)
-        return IdentifierType.objects.get(id=self, id_type=id_type_object)
+    @property
+    def lab_id(self):
+        if(self.cross_ids.filter(id_type__name='RareBoost').exists()):
+            return self.cross_ids.get(id_type__name='RareBoost').id_value
+        else:
+            return f"No Lab ID"
+
+    @property
+    def biobank_id(self):
+        if(self.cross_ids.filter(id_type__name='Biobank').exists()):
+            return self.cross_ids.get(id_type__name='Biobank').id_value
+        else:
+            return f"No Biobank ID"
+
+    @property
+    def individual_id(self):
+        if(self.cross_ids.filter(id_type__name='RareBoost').exists()):
+            return self.cross_ids.filter(id_type__name='RareBoost').first().id_value
+        elif(self.cross_ids.filter(id_type__name='Biobank').exists()):
+            return self.cross_ids.filter(id_type__name='Biobank').first().id_value
+        elif(self.cross_ids.filter(individual=self).exists()):
+            return f"{self.cross_ids.filter(individual=self).first().id_value} - {self.full_name}"
+        else:
+            return f"{self.id} - {self.full_name}"
 
     @property
     def sensitive_fields(self):
@@ -320,7 +336,7 @@ class Individual(StatusMixin, models.Model):
         return Test.objects.filter(sample_id__in=sample_ids).distinct()
 
     def __str__(self):
-        return f"{self.lab_id}"
+        return f"{self.individual_id}"
 
 
 class Sample(StatusMixin, models.Model):
@@ -438,29 +454,22 @@ class Analysis(StatusMixin, models.Model):
         return f"{self.test} - {self.type} - {self.performed_date}"
 
 class IdentifierType(models.Model):
-    id_name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="created_id_types")
     def __str__(self):
         return self.name
 
-class CrossIdentifiers(models.Model):
+class CrossIdentifier(models.Model):
     individual = models.ForeignKey(Individual, on_delete=models.PROTECT, related_name="cross_ids")
     id_type = models.ForeignKey(IdentifierType, on_delete=models.PROTECT)
     id_value = models.CharField(max_length=100)
     id_description = models.TextField(blank=True)
     institute = models.ForeignKey(Institution, on_delete=models.PROTECT, blank=True, null=True)
+    link = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
         return f"{self.individual} - {self.id_type} - {self.id_value}"
-
-class PersonalInformation(models.Model):
-    individual = models.ForeignKey(Individual, on_delete=models.PROTECT, related_name="personal_information")
-    name = EncryptedCharField(max_length=100)
-    identity = EncryptedBigIntegerField()
-    birth_date = EncryptedDateField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT)

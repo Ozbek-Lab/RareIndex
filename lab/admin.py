@@ -28,9 +28,9 @@ class InstitutionAdmin(admin.ModelAdmin):
 
 @admin.register(models.Individual)
 class IndividualAdmin(admin.ModelAdmin):
-    list_display = ['lab_id', 'biobank_id', 'full_name', 'status', 'family', 'mother', 'father', 'created_by', 'created_at', 'get_hpo_terms']
+    list_display = ['full_name', 'status', 'family', 'mother', 'father', 'created_by', 'created_at', 'get_hpo_terms']
     list_filter = ['status', 'created_at', 'family', 'mother', 'father']
-    search_fields = ['lab_id', 'biobank_id', 'full_name', 'tc_identity']
+    search_fields = ['full_name', 'tc_identity']
     date_hierarchy = 'created_at'
     filter_horizontal = ['hpo_terms']
 
@@ -111,3 +111,17 @@ class ProjectAdmin(admin.ModelAdmin):
     def get_completion_percentage(self, obj):
         return f"{obj.get_completion_percentage()}%"
     get_completion_percentage.short_description = 'Completion %'
+
+@admin.register(models.IdentifierType)
+class IdentifierTypeAdmin(admin.ModelAdmin):
+    list_display = ['name', 'description', 'created_at', 'created_by']
+    list_filter = ['name', 'description', 'created_by']
+    search_fields = ['name', 'description']
+    date_hierarchy = 'created_at'
+
+@admin.register(models.CrossIdentifier)
+class CrossIdentifierAdmin(admin.ModelAdmin):
+    list_display = ['individual', 'id_type', 'id_value', 'id_description', 'institute', 'created_at', 'created_by']
+    list_filter = ['individual', 'id_type', 'id_value', 'institute', 'created_by']
+    search_fields = ['individual__id', 'id_type__name']
+    date_hierarchy = 'created_at'
