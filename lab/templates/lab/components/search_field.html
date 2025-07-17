@@ -110,12 +110,32 @@
       class="flex-1 min-w-[80px] outline-none text-sm p-1"
       :placeholder="selected.length === 0 ? placeholder : ''"
       autocomplete="off"
-      hx-get="{% url 'lab:select_search' %}"
+      hx-get="{% url 'lab:query_search' %}"
       hx-trigger="keyup changed delay:300ms, search-ready from:body"
       hx-target="#{{ result_container_id|default:'search-results' }}"
       hx-vals='{"model": "{{ model }}", "field": "{{ field|default:'name' }}"}'
       hx-include="this"
       hx-indicator="#{{ loading_indicator_id|default:'search-loading' }}"
     />
+
+  </div>
+
+  <!-- Dropdown results -->
+  <div
+    x-show="open"
+    x-transition
+    @click.outside="open = false"
+    class="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md max-h-60 overflow-y-auto border border-gray-200"
+    x-ref="dropdown"
+    x-cloak
+  >
+    <div
+      id="{{ result_container_id|default:'search-results' }}"
+      x-ref="results"
+      class="py-1"
+    >
+      <!-- Initial state - will be replaced by HTMX -->
+      <div class="px-4 py-2 text-sm text-gray-500">HERE Type to search...</div>
+    </div>
   </div>
 </div>
