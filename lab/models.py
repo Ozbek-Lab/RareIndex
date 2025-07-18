@@ -246,7 +246,7 @@ class StatusMixin:
 class Individual(StatusMixin, models.Model):
     id = models.AutoField(primary_key=True)
     full_name = EncryptedCharField(max_length=255)
-    tc_identity = EncryptedBigIntegerField(null=True, blank=True)
+    tc_identity = EncryptedCharField(max_length=20, null=True, blank=True)
     birth_date = EncryptedDateField(null=True, blank=True)
     icd11_code = models.TextField(blank=True)
     hpo_terms = models.ManyToManyField(
