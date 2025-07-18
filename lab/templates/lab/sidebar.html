@@ -7,7 +7,7 @@
   <div class="p-4 border-b border-gray-100">
     <h1 class="text-xl font-bold text-gray-800 flex items-center">
       <i class="fas fa-dna text-indigo-500 mr-2"></i>
-      <a href="{% url 'lab:dashboard' %}">
+      <a href="{% url 'lab:index' %}">
         <span
           class="bg-gradient-to-r from-indigo-600 to-indigo-500 bg-clip-text text-transparent"
         >
@@ -20,151 +20,20 @@
   <!-- Navigation Section -->
   <div class="flex-1 overflow-y-auto py-4">
     <div class="px-3 space-y-1">
-      <!-- Dashboard -->
       <a
-        hx-get="{% url 'lab:dashboard' %}"
+        hx-get="{% url 'lab:index' %}"
         hx-target="main"
         hx-push-url="true"
-        href="{% url 'lab:dashboard' %}"
-        @click="activeItem = 'dashboard'"
+        href="{% url 'lab:index' %}"
+        @click="activeItem = 'index'"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'dashboard' }"
+        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'index' }"
       >
         <i
           class="fas fa-home text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
         ></i>
-        <span>Dashboard</span>
+        <span>Home</span>
       </a>
-
-      <!-- Individuals -->
-      <a
-        hx-get="{% url 'lab:individuals' %}"
-        hx-target="main"
-        hx-push-url="true"
-        href="{% url 'lab:individuals' %}"
-        @click="activeItem = 'individuals'"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'individuals' || activeItem === 'individual_detail' }"
-      >
-        <i
-          class="fas fa-users text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
-        ></i>
-        <span>Individuals</span>
-      </a>
-
-      <!-- Samples -->
-      <a
-        hx-get="{% url 'lab:samples' %}"
-        hx-target="main"
-        hx-push-url="true"
-        href="{% url 'lab:samples' %}"
-        @click="activeItem = 'samples'"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'samples' || activeItem === 'sample_detail' }"
-      >
-        <i
-          class="fas fa-flask text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
-        ></i>
-        <span>Samples</span>
-      </a>
-
-      <!-- Tests -->
-      <a
-        hx-get="{% url 'lab:tests' %}"
-        hx-target="main"
-        hx-push-url="true"
-        href="{% url 'lab:tests' %}"
-        @click="activeItem = 'tests'"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'tests' || activeItem === 'test_detail' }"
-      >
-        <i
-          class="fas fa-vial text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
-        ></i>
-        <span>Tests</span>
-      </a>
-
-      <!-- Analyses -->
-      <a
-        hx-get="{% url 'lab:analyses' %}"
-        hx-target="main"
-        hx-push-url="true"
-        href="{% url 'lab:analyses' %}"
-        @click="activeItem = 'analyses'"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'analyses' || activeItem === 'analysis_detail' }"
-      >
-        <i
-          class="fas fa-chart-bar text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
-        ></i>
-        <span>Analyses</span>
-      </a>
-
-      <!-- Projects -->
-      <a
-        hx-get="{% url 'lab:projects' %}"
-        hx-target="main"
-        hx-push-url="true"
-        href="{% url 'lab:projects' %}"
-        @click="activeItem = 'projects'"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'projects' || activeItem === 'project_detail' }"
-      >
-        <i
-          class="fas fa-project-diagram text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
-        ></i>
-        <span>Projects</span>
-      </a>
-
-      <!-- Tasks -->
-      <a
-        hx-get="{% url 'lab:tasks' %}"
-        hx-target="main"
-        hx-push-url="true"
-        href="{% url 'lab:tasks' %}"
-        @click="activeItem = 'tasks'"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'tasks' }"
-      >
-        <i
-          class="fas fa-tasks text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
-        ></i>
-        <span>Tasks</span>
-      </a>
-
-      <!-- Types -->
-      <a
-        hx-get="{% url 'lab:types' %}"
-        hx-target="main"
-        hx-push-url="true"
-        href="{% url 'lab:types' %}"
-        @click="activeItem = 'types'"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'types' }"
-      >
-        <i
-          class="fas fa-tags text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
-        ></i>
-        <span>Types</span>
-      </a>
-      <!-- Add this after the Types link -->
-      <a
-        hx-get="{% url 'lab:hpo_visualization' %}"
-        hx-target="main"
-        hx-push-url="true"
-        href="{% url 'lab:hpo_visualization' %}"
-        @click="activeItem = 'hpo_visualization'"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        :class="{ 'bg-indigo-50 text-indigo-600': activeItem === 'hpo_visualization' }"
-      >
-        <i
-          class="fas fa-project-diagram text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors"
-        ></i>
-        <span>HPO Network</span>
-      </a>
-    </div>
-  </div>
-
   <!-- User Section -->
   <div class="p-4 border-t border-gray-200">
     <div class="flex items-center space-x-3 mb-3">
