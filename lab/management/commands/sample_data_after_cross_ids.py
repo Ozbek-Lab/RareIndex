@@ -38,9 +38,10 @@ class Command(BaseCommand):
         if not user:
             self.stdout.write('Creating default superuser...')
             user = User.objects.create_superuser('admin', 'admin@example.com', 'admin')
-            self.stdout.write('Creating pleb and normal users...')
-            User.objects.create_user('pleb', 'pleb@example.com', 'pleb')
-            User.objects.create_user('normal', 'normal@example.com', 'normal')
+            self.stdout.write('Creating pleb user...')
+            pleb = User.objects.create_user('pleb', 'pleb@example.com', 'pleb')
+            self.stdout.write('Creating normal user...')
+            normal = User.objects.create_user('normal', 'normal@example.com', 'normal')
 
         # Create statuses if they don't exist
         statuses = self._create_statuses(user)

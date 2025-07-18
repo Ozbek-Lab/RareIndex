@@ -19,6 +19,8 @@ from .models import (
     Analysis,
     AnalysisType,
     Institution,
+    CrossIdentifier,
+    IdentifierType
 )
 from .forms import (
     IndividualForm,
@@ -374,12 +376,15 @@ def individual_search(request):
     if status_id:
         queryset = queryset.filter(status_id=status_id)
 
-    # Lab ID filter - now supports multiple IDs
-    individual_ids = request.POST.get("individual_id", "")
-    if individual_ids:
-        # Split comma-separated IDs
-        individual_id_list = individual_ids.split(",")
-        queryset = queryset.filter(id__in=individual_id_list)
+    # Cross ID filter - now supports multiple IDs
+    cross_ids = request.POST.get("cross_ids", "")
+    print("cross_ids: ", cross_ids)
+    if cross_ids:
+        cross_id_list = [cid.strip() for cid in cross_ids.split(",") if cid.strip()]
+        q = Q()
+        for cid in cross_id_list:
+            q |= Q(cross_ids__id_value__icontains=cid)
+        queryset = queryset.filter(q).distinct()
 
     # Test filter
     test_id = request.POST.get("test")
@@ -436,7 +441,7 @@ def individual_search(request):
                     "status": status_id,
                     "test": request.POST.get("test"),
                     "test_status": request.POST.get("test_status"),
-                    "individual_id": request.POST.get("individual_id"),
+                    "cross_ids": request.POST.get("cross_ids"),
                     "family": request.POST.get("family"),
                     "icd11_code": request.POST.get("icd11_code"),
                     "hpo_codes": request.POST.get("hpo_codes"),
@@ -461,7 +466,7 @@ def individual_search(request):
                 "status": status_id,
                 "test": request.POST.get("test"),
                 "test_status": request.POST.get("test_status"),
-                "individual_id": request.POST.get("individual_id"),
+                "cross_ids": request.POST.get("cross_ids"),
                 "family": request.POST.get("family"),
                 "icd11_code": request.POST.get("icd11_code"),
                 "hpo_codes": request.POST.get("hpo_codes"),

@@ -29,17 +29,33 @@
         <h3 class="text-sm font-medium text-gray-700">Basic Search</h3>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        <!-- Lab ID Search - Using Multi-Select Component -->
         <div class="relative">
           <label
             class="text-xs font-medium text-gray-600 mb-1 flex items-center"
           >
             <i class="fas fa-id-card w-3 h-3 mr-1 text-gray-400"></i>
-            Lab ID
+            ID
           </label>
 
-          <!-- Multi-Select Component for Lab ID -->
-          {% include "lab/components/search_field.html" with component_id="individual-id-select" name="individual_id" model="Individual" field="cross_ids__id_value" placeholder="Select Individual..." result_container_id="individual-id-results" loading_indicator_id="individual-id-loading" allow_multiple=True %}
+          <form
+            id="individual-search-form"
+            hx-post="{% url 'lab:individual_search' %}"
+            hx-target="#search-results"
+            hx-swap="innerHTML"
+            class="flex gap-2 items-center"
+          >
+            <!-- Simple Input for Lab ID with auto-search -->
+            <input
+              type="text"
+              name="cross_ids"
+              placeholder="Enter Individual ID(s)..."
+              class="border border-gray-300 rounded px-3 py-2"
+              hx-post="{% url 'lab:individual_search' %}"
+              hx-trigger="keyup changed delay:300ms rea"
+              hx-target="#search-results"
+              hx-swap="innerHTML"
+            />
+          </form>
         </div>
 
         <!-- Status Filter -->
