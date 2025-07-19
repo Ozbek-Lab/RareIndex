@@ -2,54 +2,83 @@
 {% load partials %}
 
 {% partialdef indicator %}
-  <div class="htmx-indicator"></div>
+  <div x-show="isLoading" x-transition>
+    <div class="flex justify-center py-4">
+      <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
+    </div>
+  </div>
 {% endpartialdef %}
 
 {% partialdef generic-search %}
-  <input
-    class="form-control"
-    type="search"
-    name="search"
-    placeholder="{{ model }} search"
-    hx-get="{% url 'lab:generic_search' %}"
-    hx-trigger="input changed delay:200ms, keyup[key=='Enter'], load"
-    hx-target="#{{ model|lower }}"
-    hx-indicator=".htmx-indicator"
-    hx-vals='{"model": "{{ model }}", "field": "{{ field }}"}'
-  />
+  <div
+    x-data="{ isLoading: false }"
+    @htmx:before-request="isLoading = true"
+    @htmx:after-request="isLoading = false"
+  >
+    <input
+      class="form-control w-full"
+      type="search"
+      name="search"
+      placeholder="{{ model }} search"
+      hx-get="{% url 'lab:generic_search' %}"
+      hx-trigger="input changed delay:200ms, keyup[key=='Enter'], load, {{ model }} from:body"
+      hx-target="#{{ model|lower }}"
+      x-model.debounce.300ms="search.{{ model|lower }}"
+      hx-vals='{
+        "model": "{{ model }}",
+        "field": "{{ field }}"
+        {% if trigger %}
+        , "trigger": {{ trigger }}
+      {% endif %}
+      }'
+    />
+    {% partial indicator %}
+  </div>
 {% endpartialdef %}
 
 {% partialdef generic-search-results %}
-  {% if items.number == 1 %}
-    <div
-      class=""
-      :class="{'bg-green-500': {{ num_items }} > 0,
+  {% if num_items > 0 %}
+    {% if items.number == 1 %}
+      <div
+        class=""
+        :class="{'bg-green-500': {{ num_items }} > 0,
                 'bg-red-500': {{ num_items }} == 0}"
-    >
-      Found {{ num_items }} {{ model|lower }}{{ num_items|pluralize }}.
-    </div>
-  {% endif %}
-  {% for item in items %}
-    <div
-      x-init="
+      >
+        Found {{ num_items }} {{ model|lower }}{{ num_items|pluralize }}.
+      </div>
+    {% endif %}
+    {% for item in items %}
+      <div
+        x-init="
             document.dispatchEvent(new Event('{{ model }}'));
         "
-      {% if forloop.last and items.has_next %}
-        hx-get="{% url 'lab:generic_search' %}" hx-trigger="intersect once"
-        hx-swap="afterend" hx-target="this" hx-vals='{"page":
-        "{{ items.next_page_number }}", "model":"{{ model }}", "field":
-        "{{ field }}", "search": "{{ search }}"}'
-      {% endif %}
-    >
-      {% include "lab/"|add:model|lower|add:".html" with item=item %}
-    </div>
-  {% endfor %}
+        {% if forloop.last and items.has_next %}
+          hx-get="{% url 'lab:generic_search' %}" hx-trigger="intersect once"
+          hx-swap="afterend" hx-target="this" hx-vals='{"page":
+          "{{ items.next_page_number }}", "model":"{{ model }}", "field":
+          "{{ field }}", "search": "{{ search }}"}'
+        {% endif %}
+      >
+        {% include "lab/"|add:model|lower|add:".html" with item=item %}
+      </div>
+    {% endfor %}
 
-  {% if not items.has_next %}
-    {% if num_items != 0 %}
-      <div class="bg-orange-300">No more {{ model|lower }}s.</div>
+    {% if not items.has_next %}
+      {% if num_items != 0 %}
+        <div class="bg-orange-300">No more {{ model|lower }}s.</div>
+      {% endif %}
     {% endif %}
   {% endif %}
+{% endpartialdef %}
+
+{% partialdef individual-section %}
+  <div id="individual-section">
+    <h2>Individuals</h2>
+    {% with model='Individual' field='cross_ids__id_value' trigger='["Sample", "Institution"]' %}
+      {% partial generic-search %}
+    {% endwith %}
+    <div id="individual">{% partial generic-search-results %}</div>
+  </div>
 {% endpartialdef %}
 
 {% partialdef samples-section %}
@@ -59,16 +88,6 @@
       {% partial generic-search %}
     {% endwith %}
     <div id="sample">{% partial generic-search-results %}</div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef individual-section %}
-  <div id="individual-section">
-    <h2>Individuals</h2>
-    {% with model='Individual' field='cross_ids__id_value' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="individual">{% partial generic-search-results %}</div>
   </div>
 {% endpartialdef %}
 
@@ -87,12 +106,43 @@
 {% endpartialdef %}
 
 {% block content %}
-  {% partial indicator %}
   {% partial index %}
 
-  <div class="grid grid-cols-4 gap-4">
+  <div x-data="searchController()" class="grid grid-cols-4 gap-4">
     {% partial individual-section %}
     {% partial samples-section %}
     {% partial institution-section %}
   </div>
+
+  <script>
+    function searchController() {
+      return {
+        // The state is now a generic object that will be populated automatically.
+        search: {},
+
+        init() {
+          // 1. Dynamically read any `*_search` parameter from the URL on load.
+          const params = new URLSearchParams(window.location.search);
+          for (const [key, value] of params.entries()) {
+            if (key.endsWith("_search")) {
+              const modelName = key.replace("_search", "");
+              this.search[modelName] = value;
+            }
+          }
+
+          // 2. Watch the entire search object for any changes.
+          this.$watch("search", () => {
+            const newParams = new URLSearchParams();
+            // 3. Dynamically build the URL from all current search terms.
+            for (const modelName in this.search) {
+              if (this.search[modelName]) {
+                newParams.set(`${modelName}_search`, this.search[modelName]);
+              }
+            }
+            history.pushState({}, "", `?${newParams.toString()}`);
+          });
+        },
+      };
+    }
+  </script>
 {% endblock content %}
