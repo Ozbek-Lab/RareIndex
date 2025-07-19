@@ -19,54 +19,58 @@
       class="form-control w-full"
       type="search"
       name="search"
-      placeholder="{{ model }} search"
+      placeholder="Search {{ model }}"
+      {# Bind the input's value directly to the Alpine controller #}
+      x-model.debounce.300ms="filters.{{ model|lower }}"
+      {# Trigger on input change OR the global event from other filters #}
       hx-get="{% url 'lab:generic_search' %}"
-      hx-trigger="input changed delay:200ms, keyup[key=='Enter'], load, {{ model }} from:body"
+      hx-trigger="input changed delay:200ms, filters-updated from:window, load"
       hx-target="#{{ model|lower }}"
-      x-model.debounce.300ms="search.{{ model|lower }}"
-      hx-vals='{
-        "model": "{{ model }}",
-        "field": "{{ field }}"
-        {% if trigger %}
-        , "trigger": {{ trigger }}
-      {% endif %}
-      }'
+      {# Dynamically generate hx-vals from the Alpine controller #}
+      :hx-vals="getHxVals('{{ model }}')"
     />
     {% partial indicator %}
   </div>
 {% endpartialdef %}
 
 {% partialdef generic-search-results %}
-  {% if num_items > 0 %}
-    {% if items.number == 1 %}
-      <div
-        class=""
-        :class="{'bg-green-500': {{ num_items }} > 0,
+  {% if items.number == 1 %}
+    <div
+      class=""
+      :class="{'bg-green-500': {{ num_items }} > 0,
                 'bg-red-500': {{ num_items }} == 0}"
-      >
-        Found {{ num_items }} {{ model|lower }}{{ num_items|pluralize }}.
-      </div>
-    {% endif %}
+    >
+      Found {{ num_items }} {{ model|lower }}{{ num_items|pluralize }}.
+    </div>
+
+    <div class="h-96 overflow-y-auto">
+  {% endif %}
     {% for item in items %}
       <div
-        x-init="
-            document.dispatchEvent(new Event('{{ model }}'));
-        "
         {% if forloop.last and items.has_next %}
           hx-get="{% url 'lab:generic_search' %}" hx-trigger="intersect once"
-          hx-swap="afterend" hx-target="this" hx-vals='{"page":
-          "{{ items.next_page_number }}", "model":"{{ model }}", "field":
-          "{{ field }}", "search": "{{ search }}"}'
+          hx-swap="afterend" hx-target="this" hx-vals='{ "page":
+          "{{ items.next_page_number }}", "model": "{{ model }}", "search":
+          "{{ search }}"
+          {% if all_filters %}
+            {% for key, value in all_filters.items %}
+              {% if forloop.first %},{% else %},{% endif %}
+              "{{ key }}": "{{ value }}"
+            {% endfor %}
+          {% endif %}
+          }'
         {% endif %}
       >
         {% include "lab/"|add:model|lower|add:".html" with item=item %}
       </div>
     {% endfor %}
 
-    {% if not items.has_next %}
-      {% if num_items != 0 %}
-        <div class="bg-orange-300">No more {{ model|lower }}s.</div>
-      {% endif %}
+  {% if items.number == 1 %}
+  </div>
+  {% endif %}
+  {% if not items.has_next and items.number > 1 %}
+    {% if num_items != 0 %}
+      <div class="bg-orange-300">No more {{ model|lower }}s.</div>
     {% endif %}
   {% endif %}
 {% endpartialdef %}
@@ -81,7 +85,7 @@
   </div>
 {% endpartialdef %}
 
-{% partialdef samples-section %}
+{% partialdef sample-section %}
   <div id="samples-section">
     <h2>Samples</h2>
     {% with model='Sample' field='sample_type__name' %}
@@ -101,6 +105,26 @@
   </div>
 {% endpartialdef %}
 
+{% partialdef task-section %}
+  <div id="task-section">
+    <h2>Tasks</h2>
+    {% with model='Task' field='name' %}
+      {% partial generic-search %}
+    {% endwith %}
+    <div id="task">{% partial generic-search-results %}</div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef test-section %}
+  <div id="test-section">
+    <h2>Tests</h2>
+    {% with model='Test' field='name' %}
+      {% partial generic-search %}
+    {% endwith %}
+    <div id="test">{% partial generic-search-results %}</div>
+  </div>
+{% endpartialdef %}
+
 {% partialdef index %}
   <h1>INDEX PAGE</h1>
 {% endpartialdef %}
@@ -110,37 +134,57 @@
 
   <div x-data="searchController()" class="grid grid-cols-4 gap-4">
     {% partial individual-section %}
-    {% partial samples-section %}
+    {% partial sample-section %}
     {% partial institution-section %}
+    {% partial test-section %}
+    {% partial task-section %}
   </div>
 
   <script>
     function searchController() {
       return {
-        // The state is now a generic object that will be populated automatically.
-        search: {},
+        // A single object to hold the search term for every model
+        filters: {},
 
         init() {
-          // 1. Dynamically read any `*_search` parameter from the URL on load.
+          // Populate state from URL on page load
           const params = new URLSearchParams(window.location.search);
-          for (const [key, value] of params.entries()) {
-            if (key.endsWith("_search")) {
-              const modelName = key.replace("_search", "");
-              this.search[modelName] = value;
+          params.forEach((value, key) => {
+            if (key.startsWith("filter_")) {
+              const modelName = key.replace("filter_", "");
+              this.filters[modelName] = value;
             }
-          }
+          });
 
-          // 2. Watch the entire search object for any changes.
-          this.$watch("search", () => {
+          // Watch for any change in the filters object
+          this.$watch("filters", (newFilters) => {
             const newParams = new URLSearchParams();
-            // 3. Dynamically build the URL from all current search terms.
-            for (const modelName in this.search) {
-              if (this.search[modelName]) {
-                newParams.set(`${modelName}_search`, this.search[modelName]);
+            for (const modelName in newFilters) {
+              if (newFilters[modelName]) {
+                // Only add non-empty filters
+                newParams.set(`filter_${modelName}`, newFilters[modelName]);
               }
             }
+            // Update URL without reloading the page
             history.pushState({}, "", `?${newParams.toString()}`);
+            // Dispatch a global event that all search boxes can listen to
+            window.dispatchEvent(new CustomEvent("filters-updated"));
           });
+        },
+
+        // Helper function to build the hx-vals object dynamically
+        getHxVals(modelName) {
+          let vals = { model: modelName };
+          // The search term for the current model is passed as 'search'
+          vals.search = this.filters[modelName.toLowerCase()] || "";
+
+          // All other model filters are passed as 'filter_*'
+          for (const filterKey in this.filters) {
+            if (filterKey !== modelName.toLowerCase()) {
+              vals[`filter_${filterKey}`] = this.filters[filterKey];
+            }
+          }
+          return JSON.stringify(vals);
         },
       };
     }

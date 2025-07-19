@@ -1,11 +1,77 @@
 from django.apps import apps
-from django.shortcuts import render, redirect
+from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django_htmx.http import trigger_client_event
-from .models import (
-    Individual,
-)
+from django.db.models import Q
+from django.contrib.contenttypes.models import ContentType
+
+
+FILTER_CONFIG = {
+    "Individual": {
+        "search_fields": ["full_name", "cross_ids__id_value", "family__family_id"],
+        "filters": {
+            "Institution": "sending_institution__pk",
+        },
+    },
+    "Sample": {
+        "search_fields": ["sample_type__name", "id"],
+        "filters": {
+            "Individual": "individual__pk",
+            # This demonstrates a multi-step relationship
+            "Institution": "individual__sending_institution__pk",
+        },
+    },
+    "Institution": {
+        "search_fields": ["name", "contact"],
+        "filters": {},  # Nothing filters an Institution in this example
+    },
+    "Test": {
+        "search_fields": ["test_type__name"],
+        "filters": {
+            "Individual": "sample__individual__pk",
+            "Sample": "sample__pk",
+            "Institution": "sample__individual__sending_institution__pk",
+        },
+    },
+    "Project": {
+        "search_fields": ["name", "description"],
+        # Projects are a top-level item in this schema and are not filtered by other models.
+        "filters": {},
+    },
+    "Task": {
+        "search_fields": ["title", "description"],
+        "filters": {
+            # Standard foreign key relationship
+            "Project": "project__pk",
+            
+            # Direct GenericForeignKey relationship (represented by a tuple)
+            "Individual": ("content_type", "object_id"),
+            "Sample": ("content_type", "object_id"),
+            "Test": ("content_type", "object_id"),
+
+            # NEW: Multi-path chained relationship (represented by a list of dictionaries)
+            # This will find all tasks related to an institution via any of these paths.
+            "Institution": [
+                {
+                    # Path 1: Institution -> Individual -> Task
+                    "link_model": "Individual",
+                    "path_from_link_model": "sending_institution__pk"
+                },
+                {
+                    # Path 2: Institution -> Sample -> Task
+                    "link_model": "Sample",
+                    "path_from_link_model": "individual__sending_institution__pk"
+                },
+                {
+                    # Path 3: Institution -> Test -> Task
+                    "link_model": "Test",
+                    "path_from_link_model": "sample__individual__sending_institution__pk"
+                }
+            ]
+        }
+    },
+}
 
 
 @login_required
@@ -22,38 +88,109 @@ def index(request):
 
 @login_required
 def generic_search(request):
-    search = request.GET.get("search", "").strip()
-    model_name = request.GET.get("model", "").strip()
-    field = request.GET.get("field", "").strip()
-    trigger_names = request.GET.getlist("trigger")
+    # The model we are currently fetching results for
+    target_model_name = request.GET.get("model", "").strip()
+    if not target_model_name:
+        return HttpResponseBadRequest("Model not specified.")
+
+    target_model = apps.get_model(app_label="lab", model_name=target_model_name)
+    queryset = target_model.objects.all()
+
+    # Apply chained filters from other models
+    for filter_model_name, orm_path in (
+        FILTER_CONFIG.get(target_model_name, {}).get("filters", {}).items()
+    ):
+        filter_search_term = request.GET.get(
+            f"filter_{filter_model_name.lower()}", ""
+        ).strip()
+
+        if filter_search_term:
+            # First, find the primary keys of the filtering model that match its search term
+            filter_model = apps.get_model(app_label="lab", model_name=filter_model_name)
+            filter_model_config = FILTER_CONFIG.get(filter_model_name, {})
+            search_fields = filter_model_config.get("search_fields", [])
+
+            if not search_fields:
+                continue
+
+            # Build a Q object for searching across multiple fields in the filtering model
+            q_objects = Q()
+            for field in search_fields:
+                q_objects |= Q(**{f"{field}__icontains": filter_search_term})
+
+            # Get the list of relevant primary keys
+            pks_to_filter_by = list(filter_model.objects.filter(q_objects).values_list("pk", flat=True).distinct())
+
+            # --- FINAL UPGRADED LOGIC ---
+
+            if isinstance(orm_path, list):
+                # Handles a list of chained paths, combining results with OR
+                combined_q = Q()
+                for path_config in orm_path:
+                    link_model = apps.get_model(app_label="lab", model_name=path_config['link_model'])
+                    path_from_link = path_config['path_from_link_model']
+                    
+                    link_model_pks = link_model.objects.filter(
+                        **{f"{path_from_link}__in": pks_to_filter_by}
+                    ).values_list('pk', flat=True)
+                    
+                    content_type = ContentType.objects.get_for_model(link_model)
+                    combined_q |= Q(content_type=content_type, object_id__in=list(link_model_pks))
+                
+                if combined_q:
+                    queryset = queryset.filter(combined_q)
+
+            elif isinstance(orm_path, tuple):
+                # Handles a direct GFK filter
+                content_type_field, object_id_field = orm_path
+                content_type = ContentType.objects.get_for_model(filter_model)
+                queryset = queryset.filter(**{
+                    content_type_field: content_type,
+                    f"{object_id_field}__in": pks_to_filter_by
+                })
+
+            else:
+                # Handles a standard ForeignKey filter (string path)
+                queryset = queryset.filter(**{f"{orm_path}__in": pks_to_filter_by})
+
+    # Apply the search term for the target model itself
+    own_search_term = request.GET.get("search", "").strip()
+    if own_search_term:
+        own_search_fields = FILTER_CONFIG.get(target_model_name, {}).get(
+            "search_fields", []
+        )
+        if own_search_fields:
+            q_objects = Q()
+            for field in own_search_fields:
+                q_objects |= Q(**{f"{field}__icontains": own_search_term})
+            queryset = queryset.filter(q_objects)
+
+    # Distinct to avoid duplicates from joins
+    items = queryset.distinct()
+    num_items = items.count()
+
+    # Pagination
     page = request.GET.get("page")
-    print(request.GET.get)
-    print(f"{model_name=} {field=} {page=}")
-    model = apps.get_model(app_label="lab", model_name=model_name)
-    print(model)
-
-    filter_kwargs = {f"{field}__icontains": search}
-    items = model.objects.filter(**filter_kwargs).distinct()
-
-    num_items = len(items)
-    print(num_items)
-    print(items)
-
     paginator = Paginator(items, 12)
-    items = paginator.get_page(page)
+    paged_items = paginator.get_page(page)
 
     response = render(
         request,
         "lab/index.html#generic-search-results",
         {
-            "items": items,
+            "items": paged_items,
             "num_items": num_items,
-            "search": search,
-            "model": model_name,
-            "field": field,
+            "search": own_search_term,
+            "model": target_model_name,
+            # Pass all filters back to the template for pagination links
+            "all_filters": {
+                k: v for k, v in request.GET.items() if k.startswith("filter_")
+            },
         },
     )
-    for name in trigger_names:
+
+    # Trigger client events if any were requested
+    for name in request.GET.getlist("trigger"):
         trigger_client_event(response, name=name)
 
     return response
