@@ -2,6 +2,7 @@ from django.apps import apps
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django_htmx.http import trigger_client_event
 from .models import (
     Individual,
 )
@@ -24,6 +25,7 @@ def generic_search(request):
     search = request.GET.get("search", "").strip()
     model_name = request.GET.get("model", "").strip()
     field = request.GET.get("field", "").strip()
+    trigger_names = request.GET.getlist("trigger")
     page = request.GET.get("page")
     print(request.GET.get)
     print(f"{model_name=} {field=} {page=}")
@@ -40,7 +42,7 @@ def generic_search(request):
     paginator = Paginator(items, 12)
     items = paginator.get_page(page)
 
-    return render(
+    response = render(
         request,
         "lab/index.html#generic-search-results",
         {
@@ -51,6 +53,10 @@ def generic_search(request):
             "field": field,
         },
     )
+    for name in trigger_names:
+        trigger_client_event(response, name=name)
+
+    return response
 
 
 # from django.apps import apps
