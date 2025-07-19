@@ -20,44 +20,22 @@ def index(request):
 
 
 @login_required
-def individuals(request):
-    page = request.GET.get("page")
-    search = request.GET.get("search", "").strip()
-    individuals = Individual.objects.filter(
-        cross_ids__id_value__icontains=search
-    ).distinct()
-    len_items = len(individuals)
-    paginator = Paginator(individuals, 10)
-    individuals = paginator.get_page(page)
-
-    context = {
-        "individuals": individuals,
-        "len_items": len_items,
-        "search": search,
-    }
-    if request.headers.get("HX-Request"):
-        print("individuals 01")
-        return render(request, "lab/index.html#individuals", context)
-    print("individuals 02")
-    return redirect("lab:index")
-
-
-@login_required
 def generic_search(request):
     search = request.GET.get("search", "").strip()
     model_name = request.GET.get("model", "").strip()
-    field_name = request.GET.get("field", "").strip()
+    field = request.GET.get("field", "").strip()
     page = request.GET.get("page")
     print(request.GET.get)
-    print(f"{model_name=} {field_name=} {page=}")
-
+    print(f"{model_name=} {field=} {page=}")
     model = apps.get_model(app_label="lab", model_name=model_name)
+    print(model)
 
-    filter_kwargs = {f"{field_name}__icontains": search}
+    filter_kwargs = {f"{field}__icontains": search}
     items = model.objects.filter(**filter_kwargs).distinct()
 
-    items = items.order_by(field_name)
-    len_items = len(items)
+    num_items = len(items)
+    print(num_items)
+    print(items)
 
     paginator = Paginator(items, 12)
     items = paginator.get_page(page)
@@ -67,10 +45,10 @@ def generic_search(request):
         "lab/index.html#generic-search-results",
         {
             "items": items,
-            "len_items": len_items,
+            "num_items": num_items,
             "search": search,
             "model": model_name,
-            "field": field_name,
+            "field": field,
         },
     )
 

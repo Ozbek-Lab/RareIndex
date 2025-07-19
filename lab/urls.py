@@ -5,7 +5,6 @@ app_name = "lab"
 
 urlpatterns = [
     path("", views.index, name="index"),
-    path("individuals/", views.individuals, name="individuals"),
     path(
         "search/",
         views.generic_search,
