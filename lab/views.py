@@ -15,13 +15,21 @@ from .visualization.hpo import process_hpo_data, plotly_hpo_network
 
 
 FILTER_CONFIG = {
+    "Term": {
+        "app_label": "ontologies",
+        "search_fields": [
+            "identifier",
+            "label",
+        ],
+        "filters": {},
+    },
     "Individual": {
+        "app_label": "lab",
         "search_fields": ["full_name", "cross_ids__id_value", "family__family_id"],
-        "filters": {
-            "Institution": "sending_institution__pk",
-        },
+        "filters": {"Institution": "sending_institution__pk", "Term": "hpo_terms__pk"},
     },
     "Sample": {
+        "app_label": "lab",
         "search_fields": ["sample_type__name", "id"],
         "filters": {
             "Individual": "individual__pk",
@@ -30,10 +38,12 @@ FILTER_CONFIG = {
         },
     },
     "Institution": {
+        "app_label": "lab",
         "search_fields": ["name", "contact"],
         "filters": {},  # Nothing filters an Institution in this example
     },
     "Test": {
+        "app_label": "lab",
         "search_fields": ["test_type__name"],
         "filters": {
             "Individual": "sample__individual__pk",
@@ -42,11 +52,13 @@ FILTER_CONFIG = {
         },
     },
     "Project": {
+        "app_label": "lab",
         "search_fields": ["name", "description"],
         # Projects are a top-level item in this schema and are not filtered by other models.
         "filters": {},
     },
     "Task": {
+        "app_label": "lab",
         "search_fields": ["title", "description"],
         "filters": {
             # Standard foreign key relationship
@@ -104,14 +116,19 @@ def apply_filters(request, target_model_name, queryset):
     Applies search and cross-model filters to a given queryset based on GET parameters.
     """
     filter_config = FILTER_CONFIG.get(target_model_name, {})
+
     for filter_model_name, orm_path in filter_config.get("filters", {}).items():
         filter_search_term = request.GET.get(
             f"filter_{filter_model_name.lower()}", ""
         ).strip()
 
         if filter_search_term:
-            filter_model = apps.get_model(app_label="lab", model_name=filter_model_name)
             filter_model_config = FILTER_CONFIG.get(filter_model_name, {})
+            filter_app_label = filter_model_config.get("app_label", "lab")
+            filter_model = apps.get_model(
+                app_label=filter_app_label, model_name=filter_model_name
+            )
+
             search_fields = filter_model_config.get("search_fields", [])
             if not search_fields:
                 continue
@@ -126,25 +143,32 @@ def apply_filters(request, target_model_name, queryset):
                 .distinct()
             )
 
-            if not pks_to_filter_by:
-                return queryset.none()
-
             if isinstance(orm_path, list):
                 combined_q = Q()
                 for path_config in orm_path:
-                    link_model = apps.get_model(
-                        app_label="lab", model_name=path_config["link_model"]
+                    link_model_name = path_config["link_model"]
+                    link_model_app_label = FILTER_CONFIG.get(link_model_name, {}).get(
+                        "app_label", "lab"
                     )
+                    link_model = apps.get_model(
+                        app_label=link_model_app_label, model_name=link_model_name
+                    )
+
                     path_from_link = path_config["path_from_link_model"]
+
                     link_model_pks = link_model.objects.filter(
                         **{f"{path_from_link}__in": pks_to_filter_by}
                     ).values_list("pk", flat=True)
+
                     content_type = ContentType.objects.get_for_model(link_model)
                     combined_q |= Q(
                         content_type=content_type, object_id__in=list(link_model_pks)
                     )
+
                 if combined_q:
                     queryset = queryset.filter(combined_q)
+                else:
+                    queryset = queryset.none()
 
             elif isinstance(orm_path, tuple):
                 content_type_field, object_id_field = orm_path
@@ -172,11 +196,15 @@ def apply_filters(request, target_model_name, queryset):
 
 @login_required
 def generic_search(request):
-    target_model_name = request.GET.get("model", "").strip()
+    target_model_name = request.GET.get("model_name", "").strip()
+    target_app_label = request.GET.get("app_label", "lab").strip()  # Get app_label
     if not target_model_name:
         return HttpResponseBadRequest("Model not specified.")
 
-    target_model = apps.get_model(app_label="lab", model_name=target_model_name)
+    print(target_app_label, target_model_name)
+    target_model = apps.get_model(
+        app_label=target_app_label, model_name=target_model_name
+    )
 
     filtered_items = apply_filters(
         request, target_model_name, target_model.objects.all()
@@ -198,7 +226,8 @@ def generic_search(request):
             "items": paged_items,
             "num_items": num_items,
             "search": own_search_term,
-            "model": target_model_name,
+            "app_label": target_app_label,
+            "model_name": target_model_name,
             "all_filters": {
                 k: v for k, v in request.GET.items() if k.startswith("filter_")
             },
@@ -221,11 +250,6 @@ def hpo_network_visualization(request):
     )
     fig, _ = plotly_hpo_network(graph, hpo, consolidated_counts, min_count=1)
     plot_json = json.dumps(fig.to_dict())
-    print(filtered_individuals)
-    for individual in filtered_individuals:
-        for hpo_term in individual.hpo_terms.all():
-            print(hpo_term)
-
     return render(
         request,
         "lab/index.html#hpo-network-visualization",
