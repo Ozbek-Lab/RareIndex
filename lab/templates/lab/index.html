@@ -241,6 +241,8 @@
     {% partial hpo-section %}
 
   <script>
+
+
   function searchController() {
     return {
       filters: {},
@@ -248,17 +250,17 @@
         const params = new URLSearchParams(window.location.search);
         params.forEach((value, key) => { if (key.startsWith("filter_")) this.filters[key.replace("filter_", "")] = value; });
 
+
         this.$watch("filters", (newFilters) => {
           const newParams = new URLSearchParams();
           for (const modelName in newFilters) {
             if (newFilters[modelName]) newParams.set(`filter_${modelName}`, newFilters[modelName]);
           }
           history.pushState({}, "", `?${newParams.toString()}`);
-
-          // Broadcast the event with the filter data in the 'detail' property
           window.dispatchEvent(new CustomEvent("filters-updated", { detail: { filters: newFilters } }));
         });
       },
+
       getHxVals(modelName) {
         let vals = { model: modelName, search: this.filters[modelName.toLowerCase()] || "" };
         for (const key in this.filters) {
@@ -274,32 +276,36 @@
   function hpoController() {
     return {
       hpoThreshold: 3,
-      isThresholdValid: true, // Add this new property to track validity
       isLoading: false,
-      mainFilters: {},
+      isThresholdValid: true,
+      mainFilters: {}, // This will hold the filters.
       init() {
-        // Listen for the broadcast and grab the data from the event detail
+        // **FIX 1**: Load its state AND the shared filters directly from the URL.
+        const params = new URLSearchParams(window.location.search);
+        params.forEach((value, key) => {
+            if (key.startsWith("filter_")) {
+                this.mainFilters[key.replace("filter_", "")] = value;
+            } else if (key === 'threshold') {
+                this.hpoThreshold = parseInt(params.get('threshold'), 10);
+            }
+        });
+
+        // For SUBSEQUENT updates, it listens for events from the searchController.
         window.addEventListener('filters-updated', (event) => {
             if (event.detail && event.detail.filters) {
                 this.mainFilters = event.detail.filters;
             }
         });
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('threshold')) this.hpoThreshold = parseInt(params.get('threshold'), 3);
 
+        // When its own threshold changes, it triggers an update.
         this.$watch('hpoThreshold', () => {
-          // First, update the validity state
-          this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
-
-          // Only dispatch the update event if the input is valid
-          if (this.isThresholdValid) {
-              window.dispatchEvent(new CustomEvent("filters-updated"));
-          }
+            this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
+            if (this.isThresholdValid) {
+                // We still need to dispatch an event to trigger the htmx request.
+                window.dispatchEvent(new CustomEvent("filters-updated"));
+            }
         });
 
-
-        // Trigger initial sync after all components have loaded
-        setTimeout(() => window.dispatchEvent(new CustomEvent('filters-updated')), 50);
       },
       getHpoVals() {
           let vals = { model: 'Individual', threshold: this.hpoThreshold };
