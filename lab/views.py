@@ -44,32 +44,43 @@ FILTER_CONFIG = {
         "filters": {
             # Standard foreign key relationship
             "Project": "project__pk",
-            
-            # Direct GenericForeignKey relationship (represented by a tuple)
-            "Individual": ("content_type", "object_id"),
+            # Converted to a multi-path list to find all related tasks
+            "Individual": [
+                {
+                    # Path 1: Tasks directly linked to the Individual
+                    "link_model": "Individual",
+                    "path_from_link_model": "pk",
+                },
+                {
+                    # Path 2: Tasks linked via the Individual's Samples
+                    "link_model": "Sample",
+                    "path_from_link_model": "individual__pk",
+                },
+                {
+                    # Path 3: Tasks linked via the Individual's Tests
+                    "link_model": "Test",
+                    "path_from_link_model": "sample__individual__pk",
+                },
+            ],
+            # Direct links for these are still fine
             "Sample": ("content_type", "object_id"),
             "Test": ("content_type", "object_id"),
-
-            # NEW: Multi-path chained relationship (represented by a list of dictionaries)
-            # This will find all tasks related to an institution via any of these paths.
+            # The multi-path config for Institution remains correct
             "Institution": [
                 {
-                    # Path 1: Institution -> Individual -> Task
                     "link_model": "Individual",
-                    "path_from_link_model": "sending_institution__pk"
+                    "path_from_link_model": "sending_institution__pk",
                 },
                 {
-                    # Path 2: Institution -> Sample -> Task
                     "link_model": "Sample",
-                    "path_from_link_model": "individual__sending_institution__pk"
+                    "path_from_link_model": "individual__sending_institution__pk",
                 },
                 {
-                    # Path 3: Institution -> Test -> Task
                     "link_model": "Test",
-                    "path_from_link_model": "sample__individual__sending_institution__pk"
-                }
-            ]
-        }
+                    "path_from_link_model": "sample__individual__sending_institution__pk",
+                },
+            ],
+        },
     },
 }
 
@@ -119,7 +130,11 @@ def generic_search(request):
                 q_objects |= Q(**{f"{field}__icontains": filter_search_term})
 
             # Get the list of relevant primary keys
-            pks_to_filter_by = list(filter_model.objects.filter(q_objects).values_list("pk", flat=True).distinct())
+            pks_to_filter_by = list(
+                filter_model.objects.filter(q_objects)
+                .values_list("pk", flat=True)
+                .distinct()
+            )
 
             # --- FINAL UPGRADED LOGIC ---
 
@@ -127,16 +142,20 @@ def generic_search(request):
                 # Handles a list of chained paths, combining results with OR
                 combined_q = Q()
                 for path_config in orm_path:
-                    link_model = apps.get_model(app_label="lab", model_name=path_config['link_model'])
-                    path_from_link = path_config['path_from_link_model']
-                    
+                    link_model = apps.get_model(
+                        app_label="lab", model_name=path_config["link_model"]
+                    )
+                    path_from_link = path_config["path_from_link_model"]
+
                     link_model_pks = link_model.objects.filter(
                         **{f"{path_from_link}__in": pks_to_filter_by}
-                    ).values_list('pk', flat=True)
-                    
+                    ).values_list("pk", flat=True)
+
                     content_type = ContentType.objects.get_for_model(link_model)
-                    combined_q |= Q(content_type=content_type, object_id__in=list(link_model_pks))
-                
+                    combined_q |= Q(
+                        content_type=content_type, object_id__in=list(link_model_pks)
+                    )
+
                 if combined_q:
                     queryset = queryset.filter(combined_q)
 
@@ -144,10 +163,12 @@ def generic_search(request):
                 # Handles a direct GFK filter
                 content_type_field, object_id_field = orm_path
                 content_type = ContentType.objects.get_for_model(filter_model)
-                queryset = queryset.filter(**{
-                    content_type_field: content_type,
-                    f"{object_id_field}__in": pks_to_filter_by
-                })
+                queryset = queryset.filter(
+                    **{
+                        content_type_field: content_type,
+                        f"{object_id_field}__in": pks_to_filter_by,
+                    }
+                )
 
             else:
                 # Handles a standard ForeignKey filter (string path)
