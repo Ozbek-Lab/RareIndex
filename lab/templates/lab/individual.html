@@ -1,0 +1,8 @@
+<div class="bg-white p-4 rounded-lg shadow border" data-item-id="{{ item.id }}">
+  <h3 class="font-semibold text-lg">{{ item.individual_id }}</h3>
+  <p class="text-gray-600">{{ item.full_name }}</p>
+  {% if item.icd11_code %}
+    <p class="text-sm text-gray-500">ICD11: {{ item.icd11_code }}</p>
+  {% endif %}
+  <p class="text-sm text-gray-500">Status: {{ item.status.name }}</p>
+</div>
