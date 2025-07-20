@@ -3,6 +3,12 @@
 
 {% partialdef indicator %}
   <div x-show="isLoading" x-transition>
+    {% if text %}
+    <div class="text-center text-gray-500 p-8">{{ text }}</div>
+    {% endif %}
+    {% if model %}
+    <div class="text-center text-gray-500 p-8">Updating {{ model|lower }} results...</div>
+    {% endif %}
     <div class="flex justify-center py-4">
       <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
     </div>
@@ -29,6 +35,7 @@
       {# Dynamically generate hx-vals from the Alpine controller #}
       :hx-vals="getHxVals('{{ model }}')"
     />
+
     {% partial indicator %}
   </div>
 {% endpartialdef %}
@@ -135,6 +142,87 @@
   </div>
 {% endpartialdef %}
 
+
+{% partialdef hpo-section %}
+  <div id="hpo-section-wrapper" x-data="hpoController()">
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="text-2xl font-bold">HPO Visualization</h2>
+      {# Use the indicator partial, controlled by the hpoController #}
+    </div>
+    <div
+      id="hpo-visualization-container"
+      @htmx:before-request="isLoading = true"
+      @htmx:after-request="isLoading = false"
+      hx-get="{% url 'lab:hpo_network_visualization' %}"
+      hx-trigger="load, filters-updated from:window"
+      hx-swap="innerHTML"
+      :hx-vals="getHpoVals()"
+    >
+      {% with text="Initilazing visualization..." %}
+        {% partial indicator %}
+      {% endwith %}
+
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef hpo-network-visualization %}
+
+  {% with text="Updating visualization..." %}
+    {% partial indicator %}
+  {% endwith %}
+  <div class="grid grid-cols-12">
+    <div class="col-span-2 h-96 overflow-y-auto">
+      {% for individual in individuals %}
+        <h3 class="font-semibold text-lg">{{ individual.individual_id }}</h3>
+        <ul>
+          {% for hpo_term in individual.hpo_terms.all %}
+          <li>
+            {{ hpo_term }} {{ hpo_term.label }}
+          </li>
+          {% endfor %}
+        </ul>
+      {% endfor %}
+    </div>
+    <div class="col-span-10 space-y-4">
+      {% if error %}
+        <div class="bg-red-100 p-4 rounded-lg text-red-800"><b>Error:</b> {{ error }}</div>
+      {% else %}
+        <div class="bg-white shadow rounded-lg p-4">
+          <label for="threshold" class="block text-sm font-medium text-gray-700">Consolidation Threshold
+            <span x-show="!isThresholdValid" x-transition class="text-red-500 text-sm mt-1">
+              Please enter a number between 1 and 24.
+            </span>
+          </label>
+          <input
+            type="number" id="threshold" name="threshold"
+            placeholder="{{ threshold }}"
+            x-model.debounce.500ms="hpoThreshold"
+            x-ref="hpoThresholdInput"
+            min="1" max="24"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+          >
+
+        </div>
+        <div class="bg-white shadow rounded-lg p-4">
+          <p class="text-sm">Found <span class="font-bold">{{ term_count }}</span> terms for <span class="font-bold">{{ individual_count }} individuals</span> .</p>
+          <div id="plotly-div" style="width: 100%; height: 800px;" class="mt-4"></div>
+        </div>
+  {# prettier-ignore-start #}
+        <script>
+          var plotData = {{ plot_json|safe }};
+          var plotlyDiv = document.getElementById('plotly-div');
+          if (plotlyDiv) { Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout); }
+        </script>
+  {# prettier-ignore-end #}
+      {% endif %}
+    </div>
+  </div>
+{% endpartialdef %}
+
+
+
+
 {% partialdef index %}
   <h1>INDEX PAGE</h1>
 {% endpartialdef %}
@@ -150,54 +238,79 @@
     {% partial project-section %}
     {% partial task-section %}
   </div>
+    {% partial hpo-section %}
 
   <script>
-    function searchController() {
-      return {
-        // A single object to hold the search term for every model
-        filters: {},
+  function searchController() {
+    return {
+      filters: {},
+      init() {
+        const params = new URLSearchParams(window.location.search);
+        params.forEach((value, key) => { if (key.startsWith("filter_")) this.filters[key.replace("filter_", "")] = value; });
 
-        init() {
-          // Populate state from URL on page load
-          const params = new URLSearchParams(window.location.search);
-          params.forEach((value, key) => {
-            if (key.startsWith("filter_")) {
-              const modelName = key.replace("filter_", "");
-              this.filters[modelName] = value;
+        this.$watch("filters", (newFilters) => {
+          const newParams = new URLSearchParams();
+          for (const modelName in newFilters) {
+            if (newFilters[modelName]) newParams.set(`filter_${modelName}`, newFilters[modelName]);
+          }
+          history.pushState({}, "", `?${newParams.toString()}`);
+
+          // Broadcast the event with the filter data in the 'detail' property
+          window.dispatchEvent(new CustomEvent("filters-updated", { detail: { filters: newFilters } }));
+        });
+      },
+      getHxVals(modelName) {
+        let vals = { model: modelName, search: this.filters[modelName.toLowerCase()] || "" };
+        for (const key in this.filters) {
+          if (key !== modelName.toLowerCase() && this.filters[key]) {
+            vals[`filter_${key}`] = this.filters[key];
+          }
+        }
+        return JSON.stringify(vals);
+      },
+    };
+  }
+
+  function hpoController() {
+    return {
+      hpoThreshold: 3,
+      isThresholdValid: true, // Add this new property to track validity
+      isLoading: false,
+      mainFilters: {},
+      init() {
+        // Listen for the broadcast and grab the data from the event detail
+        window.addEventListener('filters-updated', (event) => {
+            if (event.detail && event.detail.filters) {
+                this.mainFilters = event.detail.filters;
             }
-          });
+        });
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('threshold')) this.hpoThreshold = parseInt(params.get('threshold'), 3);
 
-          // Watch for any change in the filters object
-          this.$watch("filters", (newFilters) => {
-            const newParams = new URLSearchParams();
-            for (const modelName in newFilters) {
-              if (newFilters[modelName]) {
-                // Only add non-empty filters
-                newParams.set(`filter_${modelName}`, newFilters[modelName]);
+        this.$watch('hpoThreshold', () => {
+          // First, update the validity state
+          this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
+
+          // Only dispatch the update event if the input is valid
+          if (this.isThresholdValid) {
+              window.dispatchEvent(new CustomEvent("filters-updated"));
+          }
+        });
+
+
+        // Trigger initial sync after all components have loaded
+        setTimeout(() => window.dispatchEvent(new CustomEvent('filters-updated')), 50);
+      },
+      getHpoVals() {
+          let vals = { model: 'Individual', threshold: this.hpoThreshold };
+          for (const key in this.mainFilters) {
+              if (this.mainFilters[key]) {
+                  vals[key === 'individual' ? 'search' : `filter_${key}`] = this.mainFilters[key];
               }
-            }
-            // Update URL without reloading the page
-            history.pushState({}, "", `?${newParams.toString()}`);
-            // Dispatch a global event that all search boxes can listen to
-            window.dispatchEvent(new CustomEvent("filters-updated"));
-          });
-        },
-
-        // Helper function to build the hx-vals object dynamically
-        getHxVals(modelName) {
-          let vals = { model: modelName };
-          // The search term for the current model is passed as 'search'
-          vals.search = this.filters[modelName.toLowerCase()] || "";
-
-          // All other model filters are passed as 'filter_*'
-          for (const filterKey in this.filters) {
-            if (filterKey !== modelName.toLowerCase()) {
-              vals[`filter_${filterKey}`] = this.filters[filterKey];
-            }
           }
           return JSON.stringify(vals);
-        },
-      };
-    }
+      }
+    };
+  }
   </script>
 {% endblock content %}
