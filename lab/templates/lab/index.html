@@ -22,8 +22,10 @@
     @htmx:before-request="isLoading = true"
     @htmx:after-request="isLoading = false"
   >
+<div class="relative w-full">
+    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
     <input
-      class="form-control w-full"
+      class="form-control w-full pl-10 rounded-full"
       type="search"
       name="search"
       placeholder="Search {{ model_name }}"
@@ -36,6 +38,7 @@
       {# Dynamically generate hx-vals from the Alpine controller #}
       :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
     />
+</div>
 
     {% partial indicator %}
   </div>
@@ -45,8 +48,8 @@
   {% if items.number == 1 %}
     <div
       class=""
-      :class="{'bg-green-500': {{ num_items }} > 0,
-                'bg-red-500': {{ num_items }} == 0}"
+      :class="{'text-green-500': {{ num_items }} > 0,
+                'text-red-500': {{ num_items }} == 0}"
     >
       Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
     </div>
@@ -78,16 +81,17 @@
   {% if items.number == 1 %}
   </div>
   {% endif %}
-  {% if not items.has_next and items.number > 1 %}
-    {% if num_items != 0 %}
-      <div class="bg-orange-300">No more {{ model_name|lower }}s.</div>
-    {% endif %}
+  {% if not items.has_next %}
+      <div class="text-orange-300">No more {{ model_name|lower }}s.</div>
   {% endif %}
 {% endpartialdef %}
 
 {% partialdef individual-section %}
   <div id="individual-section">
-    <h2>Individuals</h2>
+    <h2>
+      <i class="fa-solid fa-person fa-lg mx-2"></i>
+      Individuals
+    </h2>
     {% with app_label='lab' model_name='Individual' %}
       {% partial generic-search %}
     {% endwith %}
@@ -97,7 +101,7 @@
 
 {% partialdef sample-section %}
   <div id="samples-section">
-    <h2>Samples</h2>
+    <h2><i class="fa-solid fa-vial fa-lg mx-2"></i>Samples</h2>
     {% with app_label='lab' model_name='Sample' %}
       {% partial generic-search %}
     {% endwith %}
@@ -107,7 +111,7 @@
 
 {% partialdef institution-section %}
   <div id="institution-section">
-    <h2>Institutions</h2>
+    <h2><i class="fa-solid fa-building-columns fa-lg mx-2"></i>Institutions</h2>
     {% with app_label='lab' model_name='Institution' %}
       {% partial generic-search %}
     {% endwith %}
@@ -117,7 +121,7 @@
 
 {% partialdef test-section %}
   <div id="test-section">
-    <h2>Tests</h2>
+    <h2><i class="fa-solid fa-flask-vial fa-lg mx-2"></i>Tests</h2>
     {% with app_label='lab' model_name='Test' %}
       {% partial generic-search %}
     {% endwith %}
@@ -127,7 +131,7 @@
 
 {% partialdef project-section %}
   <div id="project-section">
-    <h2>Projects</h2>
+    <h2><i class="fa-solid fa-diagram-project fa-lg mx-2"></i>Projects</h2>
     {% with app_label='lab' model_name='Project' %}
       {% partial generic-search %}
     {% endwith %}
@@ -137,7 +141,7 @@
 
 {% partialdef task-section %}
   <div id="task-section">
-    <h2>Tasks</h2>
+    <h2><i class="fa-solid fa-list-check fa-lg mx-2"></i>Tasks</h2>
     {% with app_label='lab' model_name='Task' %}
       {% partial generic-search %}
     {% endwith %}
@@ -148,7 +152,7 @@
 
 {% partialdef hpo-term-section %}
   <div id="hpo-term-section">
-    <h2>HPO Terms</h2>
+    <h2><i class="fa-solid fa-stethoscope" fa-lg mx-2"></i>HPO Terms</h2>
     {# Note the app_label being passed #}
     {% with model_name='Term' app_label='ontologies' %}
       {% partial generic-search %}
@@ -220,7 +224,7 @@
 
         </div>
         <div class="bg-white shadow rounded-lg p-4">
-          <p class="text-sm">Found <span class="font-bold">{{ term_count }}</span> terms for <span class="font-bold">{{ individual_count }} individuals</span> .</p>
+          <p class="text-sm">Plotting <span class="font-bold">{{ term_count }}</span> terms for <span class="font-bold">{{ individual_count }} individuals</span> .</p>
           <div id="plotly-div" style="width: 100%; height: 800px;" class="mt-4"></div>
         </div>
   {# prettier-ignore-start #}
