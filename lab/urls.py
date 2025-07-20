@@ -10,6 +10,11 @@ urlpatterns = [
         views.generic_search,
         name="generic_search",
     ),
+    path(
+        "hpo_network_visualization/",
+        views.hpo_network_visualization,
+        name="hpo_network_visualization",
+    ),
     # path("", views.dashboard, name="dashboard"),
     # path("select/search/", views.select_search, name="select_search"),
     # # Individual routes

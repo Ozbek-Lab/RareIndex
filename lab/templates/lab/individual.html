@@ -6,3 +6,20 @@
   {% endif %}
   <p class="text-sm text-gray-500">Status: {{ item.status.name }}</p>
 </div>
+
+{% partialdef timeline %}
+  <div class="bg-white shadow rounded-lg p-4">
+    <p class="text-sm">
+      Found <span class="font-bold">{{ term_count }}</span> terms for
+      <span class="font-bold">{{ individual_count }} individuals</span> .
+    </p>
+    <div id="plotly-div" style="width: 100%; height: 800px;" class="mt-4"></div>
+  </div>
+  {# prettier-ignore-start #}
+  <script>
+    var plotData = {{ plot_json|safe }};
+    var plotlyDiv = document.getElementById('plotly-div');
+    if (plotlyDiv) { Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout); }
+  </script>
+{# prettier-ignore-end #}
+{% endpartialdef %}
