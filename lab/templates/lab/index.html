@@ -1,13 +1,14 @@
 {% extends "lab/base.html" %}
 {% load partials %}
 
+
 {% partialdef indicator %}
   <div x-show="isLoading" x-transition>
     {% if text %}
     <div class="text-center text-gray-500 p-8">{{ text }}</div>
     {% endif %}
-    {% if model %}
-    <div class="text-center text-gray-500 p-8">Updating {{ model|lower }} results...</div>
+    {% if model_name %}
+    <div class="text-center text-gray-500 p-8">Updating {{ model_name|lower }} results...</div>
     {% endif %}
     <div class="flex justify-center py-4">
       <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
@@ -25,15 +26,15 @@
       class="form-control w-full"
       type="search"
       name="search"
-      placeholder="Search {{ model }}"
+      placeholder="Search {{ model_name }}"
       {# Bind the input's value directly to the Alpine controller #}
-      x-model.debounce.300ms="filters.{{ model|lower }}"
+      x-model.debounce.300ms="filters.{{ model_name|lower }}"
       {# Trigger on input change OR the global event from other filters #}
       hx-get="{% url 'lab:generic_search' %}"
       hx-trigger="input changed delay:200ms, filters-updated from:window, load"
-      hx-target="#{{ model|lower }}"
+      hx-target="#{{ model_name|lower }}"
       {# Dynamically generate hx-vals from the Alpine controller #}
-      :hx-vals="getHxVals('{{ model }}')"
+      :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
     />
 
     {% partial indicator %}
@@ -47,7 +48,7 @@
       :class="{'bg-green-500': {{ num_items }} > 0,
                 'bg-red-500': {{ num_items }} == 0}"
     >
-      Found {{ num_items }} {{ model|lower }}{{ num_items|pluralize }}.
+      Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
     </div>
 
     <div class="h-96 overflow-y-auto">
@@ -57,8 +58,10 @@
         {% if forloop.last and items.has_next %}
           hx-get="{% url 'lab:generic_search' %}" hx-trigger="intersect once"
           hx-swap="afterend" hx-target="this" hx-vals='{ "page":
-          "{{ items.next_page_number }}", "model": "{{ model }}", "search":
-          "{{ search }}"
+          "{{ items.next_page_number }}",
+          "app_label": "{{ app_label }}",
+          "model_name": "{{ model_name }}",
+          "search": "{{ search }}"
           {% if all_filters %}
             {% for key, value in all_filters.items %}
               {% if forloop.first %},{% else %},{% endif %}
@@ -68,7 +71,7 @@
           }'
         {% endif %}
       >
-        {% include "lab/"|add:model|lower|add:".html" with item=item %}
+        {% include "lab/"|add:model_name|lower|add:".html" with item=item %}
       </div>
     {% endfor %}
 
@@ -77,7 +80,7 @@
   {% endif %}
   {% if not items.has_next and items.number > 1 %}
     {% if num_items != 0 %}
-      <div class="bg-orange-300">No more {{ model|lower }}s.</div>
+      <div class="bg-orange-300">No more {{ model_name|lower }}s.</div>
     {% endif %}
   {% endif %}
 {% endpartialdef %}
@@ -85,7 +88,7 @@
 {% partialdef individual-section %}
   <div id="individual-section">
     <h2>Individuals</h2>
-    {% with model='Individual' field='cross_ids__id_value' trigger='["Sample", "Institution"]' %}
+    {% with app_label='lab' model_name='Individual' %}
       {% partial generic-search %}
     {% endwith %}
     <div id="individual">{% partial generic-search-results %}</div>
@@ -95,7 +98,7 @@
 {% partialdef sample-section %}
   <div id="samples-section">
     <h2>Samples</h2>
-    {% with model='Sample' field='sample_type__name' %}
+    {% with app_label='lab' model_name='Sample' %}
       {% partial generic-search %}
     {% endwith %}
     <div id="sample">{% partial generic-search-results %}</div>
@@ -105,7 +108,7 @@
 {% partialdef institution-section %}
   <div id="institution-section">
     <h2>Institutions</h2>
-    {% with model='Institution' field='name' %}
+    {% with app_label='lab' model_name='Institution' %}
       {% partial generic-search %}
     {% endwith %}
     <div id="institution">{% partial generic-search-results %}</div>
@@ -115,7 +118,7 @@
 {% partialdef test-section %}
   <div id="test-section">
     <h2>Tests</h2>
-    {% with model='Test' field='name' %}
+    {% with app_label='lab' model_name='Test' %}
       {% partial generic-search %}
     {% endwith %}
     <div id="test">{% partial generic-search-results %}</div>
@@ -125,7 +128,7 @@
 {% partialdef project-section %}
   <div id="project-section">
     <h2>Projects</h2>
-    {% with model='Project' field='name' %}
+    {% with app_label='lab' model_name='Project' %}
       {% partial generic-search %}
     {% endwith %}
     <div id="project">{% partial generic-search-results %}</div>
@@ -135,7 +138,7 @@
 {% partialdef task-section %}
   <div id="task-section">
     <h2>Tasks</h2>
-    {% with model='Task' field='name' %}
+    {% with app_label='lab' model_name='Task' %}
       {% partial generic-search %}
     {% endwith %}
     <div id="task">{% partial generic-search-results %}</div>
@@ -143,7 +146,19 @@
 {% endpartialdef %}
 
 
-{% partialdef hpo-section %}
+{% partialdef hpo-term-section %}
+  <div id="hpo-term-section">
+    <h2>HPO Terms</h2>
+    {# Note the app_label being passed #}
+    {% with model_name='Term' app_label='ontologies' %}
+      {% partial generic-search %}
+    {% endwith %}
+    <div id="term">{% partial generic-search-results %}</div>
+  </div>
+{% endpartialdef %}
+
+
+{% partialdef hpo-network-visualization-section %}
   <div id="hpo-section-wrapper" x-data="hpoController()">
     <div class="flex justify-between items-center mb-2">
       <h2 class="text-2xl font-bold">HPO Visualization</h2>
@@ -220,9 +235,6 @@
   </div>
 {% endpartialdef %}
 
-
-
-
 {% partialdef index %}
   <h1>INDEX PAGE</h1>
 {% endpartialdef %}
@@ -237,20 +249,17 @@
     {% partial test-section %}
     {% partial project-section %}
     {% partial task-section %}
+    {% partial hpo-term-section %}
   </div>
-    {% partial hpo-section %}
+    {% partial hpo-network-visualization-section %}
 
   <script>
-
-
   function searchController() {
     return {
       filters: {},
       init() {
         const params = new URLSearchParams(window.location.search);
         params.forEach((value, key) => { if (key.startsWith("filter_")) this.filters[key.replace("filter_", "")] = value; });
-
-
         this.$watch("filters", (newFilters) => {
           const newParams = new URLSearchParams();
           for (const modelName in newFilters) {
@@ -261,8 +270,9 @@
         });
       },
 
-      getHxVals(modelName) {
-        let vals = { model: modelName, search: this.filters[modelName.toLowerCase()] || "" };
+      getHxVals(appLabel, modelName) {
+        let vals = { app_label: appLabel, model_name: modelName};
+        vals.search = this.filters[modelName.toLowerCase()] || '';
         for (const key in this.filters) {
           if (key !== modelName.toLowerCase() && this.filters[key]) {
             vals[`filter_${key}`] = this.filters[key];
@@ -308,7 +318,7 @@
 
       },
       getHpoVals() {
-          let vals = { model: 'Individual', threshold: this.hpoThreshold };
+          let vals = { model_name: 'Individual', threshold: this.hpoThreshold };
           for (const key in this.mainFilters) {
               if (this.mainFilters[key]) {
                   vals[key === 'individual' ? 'search' : `filter_${key}`] = this.mainFilters[key];
