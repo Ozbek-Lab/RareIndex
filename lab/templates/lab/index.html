@@ -105,16 +105,6 @@
   </div>
 {% endpartialdef %}
 
-{% partialdef task-section %}
-  <div id="task-section">
-    <h2>Tasks</h2>
-    {% with model='Task' field='name' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="task">{% partial generic-search-results %}</div>
-  </div>
-{% endpartialdef %}
-
 {% partialdef test-section %}
   <div id="test-section">
     <h2>Tests</h2>
@@ -122,6 +112,26 @@
       {% partial generic-search %}
     {% endwith %}
     <div id="test">{% partial generic-search-results %}</div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef project-section %}
+  <div id="project-section">
+    <h2>Projects</h2>
+    {% with model='Project' field='name' %}
+      {% partial generic-search %}
+    {% endwith %}
+    <div id="project">{% partial generic-search-results %}</div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef task-section %}
+  <div id="task-section">
+    <h2>Tasks</h2>
+    {% with model='Task' field='name' %}
+      {% partial generic-search %}
+    {% endwith %}
+    <div id="task">{% partial generic-search-results %}</div>
   </div>
 {% endpartialdef %}
 
@@ -137,6 +147,7 @@
     {% partial sample-section %}
     {% partial institution-section %}
     {% partial test-section %}
+    {% partial project-section %}
     {% partial task-section %}
   </div>
 

@@ -5,6 +5,13 @@ from django.core.paginator import Paginator
 from django_htmx.http import trigger_client_event
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
+import json
+
+# Import models
+from .models import Individual
+
+# Import HPO visualization functions
+from .visualization.hpo import process_hpo_data, plotly_hpo_network
 
 
 FILTER_CONFIG = {
@@ -217,6 +224,59 @@ def generic_search(request):
     return response
 
 
+@login_required
+def hpo_visualization(request):
+    """View for displaying HPO term visualization"""
+
+    try:
+        # Get HPO terms from all individuals in the database
+        individuals = Individual.objects.all()
+
+        # Process HPO data using the new module
+        threshold = int(request.GET.get("threshold", 3))
+        consolidated_counts, graph, hpo = process_hpo_data(
+            individuals, threshold=threshold
+        )
+
+        # Generate the Plotly figure
+        fig, subgraph = plotly_hpo_network(
+            graph,
+            hpo,
+            consolidated_counts,
+            min_count=1,
+        )
+
+        # Convert the figure to JSON for embedding in the template
+        plot_json = json.dumps(fig.to_dict())
+
+        template_name = "lab/visualization/hpo_network.html"
+        if request.headers.get("HX-Request"):
+            template_name += "#hpo-network"
+
+        return render(
+            request,
+            template_name,
+            {
+                "plot_json": plot_json,
+                "threshold": threshold,
+                "term_count": len(consolidated_counts),
+            },
+        )
+
+    except Exception as e:
+        template_name = "lab/visualization/hpo_network.html"
+        if request.headers.get("HX-Request"):
+            template_name += "#hpo-network"
+
+        return render(
+            request,
+            template_name,
+            {
+                "error": str(e),
+            },
+        )
+
+
 # from django.apps import apps
 # from django.shortcuts import render, get_object_or_404, redirect
 # from django.contrib.auth.decorators import login_required, permission_required
@@ -258,13 +318,6 @@ def generic_search(request):
 # from django.http import QueryDict
 # from django.conf import settings
 # from ontologies.models import Term
-
-# import networkx as nx
-# import urllib.request
-# import fastobo
-# import warnings
-# import plotly.graph_objects as go
-# import json
 
 
 # @login_required
@@ -2432,415 +2485,3 @@ def generic_search(request):
 #     ).select_related("ontology")[:10]
 
 #     return render(request, "lab/partials/hpo_term_results.html", {"terms": terms})
-
-
-# @login_required
-# def hpo_visualization(request):
-#     """View for displaying HPO term visualization"""
-
-#     # Load HPO ontology
-#     try:
-#         # Check if we have cached the graph
-#         if not hasattr(hpo_visualization, "graph"):
-#             obo_url = "https://purl.obolibrary.org/obo/hp.obo"
-#             graph = nx.DiGraph()
-
-#             with urllib.request.urlopen(obo_url) as response:
-#                 hpo = fastobo.load(response)
-
-#             for frame in hpo:
-#                 if isinstance(frame, fastobo.term.TermFrame):
-#                     graph.add_node(str(frame.id))
-#                     for clause in frame:
-#                         if isinstance(clause, fastobo.term.IsAClause):
-#                             graph.add_edge(str(frame.id), str(clause.term))
-
-#             hpo_visualization.graph = graph
-#             hpo_visualization.hpo = hpo
-
-#         # Get HPO terms from all individuals in the database
-#         individuals = Individual.objects.all()
-
-#         # Create a dictionary of sample_id -> list of HPO terms
-#         sample_terms = {}
-#         for individual in individuals:
-#             terms = [term.term for term in individual.hpo_terms.all()]
-#             if terms:  # Only include if there are terms
-#                 sample_terms[individual.individual_id] = terms
-
-#         # Count terms
-#         term_counts = {}
-#         for sample_id, terms in sample_terms.items():
-#             for term in terms:
-#                 if term in term_counts:
-#                     term_counts[term] += 1
-#                 else:
-#                     term_counts[term] = 1
-
-#         # Consolidate terms for better visualization
-#         threshold = int(request.GET.get("threshold", 3))
-#         consolidated_counts = consolidate_terms(
-#             hpo_visualization.graph, term_counts, threshold=threshold
-#         )
-
-#         # Generate the Plotly figure
-#         fig, subgraph = plotly_hpo_network(
-#             hpo_visualization.graph,
-#             hpo_visualization.hpo,
-#             consolidated_counts,
-#             min_count=1,
-#         )
-
-#         # Convert the figure to JSON for embedding in the template
-#         plot_json = json.dumps(fig.to_dict())
-
-#         template_name = "lab/visualization/hpo_network.html"
-#         if request.headers.get("HX-Request"):
-#             template_name += "#hpo-network"
-
-#         return render(
-#             request,
-#             template_name,
-#             {
-#                 "plot_json": plot_json,
-#                 "threshold": threshold,
-#                 "term_count": len(consolidated_counts),
-#             },
-#         )
-
-#     except Exception as e:
-#         template_name = "lab/visualization/hpo_network.html"
-#         if request.headers.get("HX-Request"):
-#             template_name += "#hpo-network"
-
-#         return render(
-#             request,
-#             template_name,
-#             {
-#                 "error": str(e),
-#             },
-#         )
-
-
-# def consolidate_terms(graph, terms, threshold=3):
-#     # Create a working copy of the counts
-#     working_counts = terms.copy()
-
-#     # Check if all terms exist in the graph, remove those that don't
-#     invalid_terms = []
-#     for term in working_counts:
-#         if term not in graph:
-#             warnings.warn(
-#                 f"The node {term} is not in the graph. Removing from consolidation."
-#             )
-#             invalid_terms.append(term)
-
-#     for term in invalid_terms:
-#         working_counts.pop(term, None)
-
-#     # Keep track of consolidation history
-#     consolidated_terms = {}  # Maps original term -> ancestor that replaced it
-
-#     # Continue until we can't consolidate further
-#     iteration = 0
-#     while True:
-#         iteration += 1
-
-#         # Get all current terms that are below threshold
-#         rare_terms = [
-#             term for term, count in working_counts.items() if count < threshold
-#         ]
-
-#         # If we have less than 2 rare terms, we can't consolidate further
-#         if len(rare_terms) < 2:
-#             break
-
-#         # Try to find a pair to consolidate
-#         consolidated_pair = False
-
-#         for i in range(len(rare_terms)):
-#             for j in range(i + 1, len(rare_terms)):
-#                 term1 = rare_terms[i]
-#                 term2 = rare_terms[j]
-
-#                 # Find their closest common ancestor
-#                 ancestor = find_closest_ancestor(graph, term1, term2)
-
-#                 if ancestor:
-#                     # Calculate the combined count
-#                     combined_count = working_counts.get(term1, 0) + working_counts.get(
-#                         term2, 0
-#                     )
-
-#                     # Remove the consolidated terms from working counts
-#                     count1 = working_counts.pop(term1)
-#                     count2 = working_counts.pop(term2)
-
-#                     # Add or update the ancestor count
-#                     if ancestor in working_counts:
-#                         working_counts[ancestor] += combined_count
-#                     else:
-#                         working_counts[ancestor] = combined_count
-
-#                     # Update consolidation history
-#                     consolidated_terms[term1] = ancestor
-#                     consolidated_terms[term2] = ancestor
-
-#                     consolidated_pair = True
-#                     break
-
-#             if consolidated_pair:
-#                 break
-
-#         # If we couldn't find any pair to consolidate, we're done
-#         if not consolidated_pair:
-#             break
-
-#     return working_counts
-
-
-# def find_closest_ancestor(graph, term1, term2):
-#     # Check if both terms exist in the graph
-#     if term1 not in graph:
-#         warnings.warn(f"The node {term1} is not in the graph. Skipping this term.")
-#         return None
-#     if term2 not in graph:
-#         warnings.warn(f"The node {term2} is not in the graph. Skipping this term.")
-#         return None
-
-#     try:
-#         # Get all ancestors for each term
-#         ancestors1 = nx.descendants(graph, term1)
-#         ancestors1.add(term1)  # Include the term itself
-
-#         ancestors2 = nx.descendants(graph, term2)
-#         ancestors2.add(term2)  # Include the term itself
-
-#         # Find common ancestors
-#         common_ancestors = ancestors1.intersection(ancestors2)
-#         if not common_ancestors:
-#             return None
-
-#         common_ancestors = list(common_ancestors)
-#         try:
-#             common_ancestors.remove("HP:0000118")
-#             common_ancestors.remove("HP:0000001")
-#         except:
-#             pass
-
-#         # Find the closest common ancestor
-#         # (The one with the longest path from the root)
-#         root = "HP:0000118"  # HPO root term
-
-#         closest_ancestor = None
-#         max_distance = -1
-
-#         for ancestor in common_ancestors:
-#             try:
-#                 distance = len(nx.shortest_path(graph, ancestor, root)) - 1
-#                 if distance > max_distance:
-#                     max_distance = distance
-#                     closest_ancestor = ancestor
-#             except nx.NetworkXNoPath:
-#                 continue
-
-#         return closest_ancestor
-
-#     except nx.NetworkXError as e:
-#         warnings.warn(f"NetworkX error: {e}. Skipping this pair.")
-#         return None
-
-
-# def plotly_hpo_network(graph, hpo, term_counts, output_file=None, min_count=1):
-#     # Function to extract term name from the HPO ontology
-#     def get_term_name(term_id):
-#         for frame in hpo:
-#             if isinstance(frame, fastobo.term.TermFrame) and str(frame.id) == term_id:
-#                 for clause in frame:
-#                     if isinstance(clause, fastobo.term.NameClause):
-#                         return str(clause.name)
-#         return term_id
-
-#     # Root node for phenotypic abnormality
-#     root_node = "HP:0000118"  # Phenotypic abnormality
-
-#     # Create a subgraph with terms and paths to root
-#     subgraph = nx.DiGraph()
-
-#     # Add nodes with their counts
-#     for term_id, count in term_counts.items():
-#         if term_id in graph and count >= min_count:
-#             name = get_term_name(term_id)
-#             name = name.replace("system", "sys.")
-#             name = name.replace("morphology", "morph.")
-#             name = name.replace("Abnormality of the", "")
-#             name = name.replace("abnormality", "")
-#             name = name.replace("Abnormality of", "")
-#             name = name.replace("Abnormal", "")
-
-#             if len(name) > 30:
-#                 name = name[:27] + "..."
-#             subgraph.add_node(term_id, name=name, count=count, term_id=term_id)
-
-#             # Add path from this term to the root node
-#             try:
-#                 path = nx.shortest_path(graph, term_id, root_node)
-#                 for i in range(len(path) - 1):
-#                     source = path[i]
-#                     target = path[i + 1]
-
-#                     if source not in subgraph:
-#                         subgraph.add_node(
-#                             source,
-#                             name=get_term_name(source),
-#                             count=term_counts.get(source, 0),
-#                             term_id=source,
-#                         )
-#                     if target not in subgraph:
-#                         subgraph.add_node(
-#                             target,
-#                             name=get_term_name(target),
-#                             count=term_counts.get(target, 0),
-#                             term_id=target,
-#                         )
-
-#                     subgraph.add_edge(source, target)
-#             except nx.NetworkXNoPath:
-#                 print(f"No path from {term_id} to root node {root_node}")
-
-#     # Add the root node if not already in the graph
-#     if root_node not in subgraph:
-#         subgraph.add_node(
-#             root_node,
-#             name=get_term_name(root_node),
-#             count=term_counts.get(root_node, 0),
-#             term_id=root_node,
-#         )
-
-#     # Use Graphviz layout - need to have graphviz installed
-#     try:
-#         pos = nx.nx_agraph.graphviz_layout(subgraph, prog="twopi", args="")
-#     except ImportError:
-#         print("Graphviz not available, falling back to spring layout")
-#         pos = nx.spring_layout(subgraph, seed=42, k=2.0, iterations=500)
-
-#     # Create edges as lines
-#     edge_x = []
-#     edge_y = []
-#     for edge in subgraph.edges():
-#         x0, y0 = pos[edge[0]]
-#         x1, y1 = pos[edge[1]]
-#         edge_x.append(x0)
-#         edge_x.append(x1)
-#         edge_x.append(None)
-#         edge_y.append(y0)
-#         edge_y.append(y1)
-#         edge_y.append(None)
-
-#     edge_trace = go.Scatter(
-#         x=edge_x,
-#         y=edge_y,
-#         line=dict(width=0.5, color="rgba(150, 150, 150, 0.6)"),
-#         hoverinfo="none",
-#         mode="lines",
-#     )
-
-#     # Create nodes
-#     node_x = []
-#     node_y = []
-#     for node in subgraph.nodes():
-#         x, y = pos[node]
-#         node_x.append(x)
-#         node_y.append(y)
-
-#     # Get node counts and names for hover text
-#     node_counts = []
-#     node_text = []
-#     node_sizes = []
-
-#     # Separate arrays for labels (only for nodes with count > 0)
-#     label_x = []
-#     label_y = []
-#     label_text = []
-
-#     for i, node in enumerate(subgraph.nodes()):
-#         count = subgraph.nodes[node]["count"]
-#         name = subgraph.nodes[node]["name"]
-#         term_id = subgraph.nodes[node]["term_id"]
-
-#         node_counts.append(count)
-#         node_text.append(f"{name}<br>{term_id}<br>Count: {count}")
-
-#         # Simple scaling for node sizes
-#         size = min(100, count) if count > 0 else 8
-#         node_sizes.append(size)
-
-#         # Only add labels for nodes with count > 0
-#         if count > 0:
-#             label_x.append(node_x[i])
-#             label_y.append(node_y[i])
-#             short_name = name if len(name) < 20 else name[:17] + "..."
-#             label_text.append(f"{short_name}<br>({count})")
-
-#     # Create node trace with a small colorbar
-#     node_trace = go.Scatter(
-#         x=node_x,
-#         y=node_y,
-#         mode="markers",
-#         hoverinfo="text",
-#         marker=dict(
-#             showscale=True,
-#             colorscale="Jet",
-#             reversescale=False,
-#             color=node_counts,
-#             size=node_sizes,
-#             colorbar=dict(
-#                 thickness=10,
-#                 title="Count",
-#                 len=0.3,
-#                 y=0.5,
-#                 yanchor="middle",
-#                 outlinewidth=0,
-#                 tickfont=dict(size=8),
-#                 nticks=4,
-#             ),
-#             line=dict(width=0.5, color="#888"),
-#         ),
-#         text=node_text,
-#     )
-
-#     # Add text labels
-#     labels_trace = go.Scatter(
-#         x=label_x,
-#         y=label_y,
-#         mode="text",
-#         text=label_text,
-#         textposition="bottom center",
-#         textfont=dict(family="Arial, sans-serif", size=14, color="rgba(0, 0, 0, 0.7)"),
-#         hoverinfo="none",
-#     )
-
-#     # Create a simple, clean figure
-#     fig = go.Figure(
-#         data=[edge_trace, node_trace, labels_trace],
-#         layout=go.Layout(
-#             title="HPO Term Network",
-#             showlegend=False,
-#             hovermode="closest",
-#             margin=dict(b=20, l=20, r=20, t=40),
-#             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-#             yaxis=dict(
-#                 showgrid=False,
-#                 zeroline=False,
-#                 showticklabels=False,
-#                 scaleanchor="x",
-#                 scaleratio=1,
-#             ),
-#             paper_bgcolor="white",
-#             plot_bgcolor="white",
-#             width=1000,
-#             height=1000,
-#         ),
-#     )
-
-#     return fig, subgraph
