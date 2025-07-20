@@ -1,7 +1,12 @@
-<div class="bg-white p-4 rounded-lg shadow border" data-item-id="{{ item.id }}">
+<div
+  class="bg-white p-4 rounded-lg shadow border m-2"
+  data-item-id="{{ item.id }}"
+>
   <h3 class="font-semibold text-lg">{{ item.name }}</h3>
   {% if item.contact %}
     <p class="text-gray-600">{{ item.contact }}</p>
   {% endif %}
-  <p class="text-sm text-gray-500">Created: {{ item.created_at|date:"M d, Y" }}</p>
+  <p class="text-sm text-gray-500">
+    Created: {{ item.created_at|date:"M d, Y" }}
+  </p>
 </div>
