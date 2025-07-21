@@ -1,14 +1,15 @@
 {% extends "lab/base.html" %}
 {% load partials %}
 
-
 {% partialdef indicator %}
   <div x-show="isLoading" x-transition>
     {% if text %}
-    <div class="text-center text-gray-500 p-8">{{ text }}</div>
+      <div class="text-center text-gray-500 p-8">{{ text }}</div>
     {% endif %}
     {% if model_name %}
-    <div class="text-center text-gray-500 p-8">Updating {{ model_name|lower }} results...</div>
+      <div class="text-center text-gray-500 p-8">
+        Updating {{ model_name|lower }} results...
+      </div>
     {% endif %}
     <div class="flex justify-center py-4">
       <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
@@ -22,23 +23,25 @@
     @htmx:before-request="isLoading = true"
     @htmx:after-request="isLoading = false"
   >
-<div class="relative w-full">
-    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-    <input
-      class="form-control w-full pl-10 rounded-full"
-      type="search"
-      name="search"
-      placeholder="Search {{ model_name }}"
-      {# Bind the input's value directly to the Alpine controller #}
-      x-model.debounce.300ms="filters.{{ model_name|lower }}"
-      {# Trigger on input change OR the global event from other filters #}
-      hx-get="{% url 'lab:generic_search' %}"
-      hx-trigger="input changed delay:200ms, filters-updated from:window, load"
-      hx-target="#{{ model_name|lower }}"
-      {# Dynamically generate hx-vals from the Alpine controller #}
-      :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
-    />
-</div>
+    <div class="relative w-full">
+      <i
+        class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+      ></i>
+      <input
+        class="form-control w-full pl-10 rounded-full"
+        type="search"
+        name="search"
+        placeholder="Search {{ model_name }}"
+        {# Bind the input's value directly to the Alpine controller #}
+        x-model.debounce.300ms="filters.{{ model_name|lower }}"
+        {# Trigger on input change OR the global event from other filters #}
+        hx-get="{% url 'lab:generic_search' %}"
+        hx-trigger="input changed delay:200ms, filters-updated from:window, load"
+        hx-target="#{{ model_name|lower }}"
+        {# Dynamically generate hx-vals from the Alpine controller #}
+        :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
+      />
+    </div>
 
     {% partial indicator %}
   </div>
@@ -56,33 +59,31 @@
 
     <div class="h-96 overflow-y-auto">
   {% endif %}
-    {% for item in items %}
-      <div
-        {% if forloop.last and items.has_next %}
-          hx-get="{% url 'lab:generic_search' %}" hx-trigger="intersect once"
-          hx-swap="afterend" hx-target="this" hx-vals='{ "page":
-          "{{ items.next_page_number }}",
-          "app_label": "{{ app_label }}",
-          "model_name": "{{ model_name }}",
-          "search": "{{ search }}"
-          {% if all_filters %}
-            {% for key, value in all_filters.items %}
-              {% if forloop.first %},{% else %},{% endif %}
-              "{{ key }}": "{{ value }}"
-            {% endfor %}
-          {% endif %}
-          }'
+  {% for item in items %}
+    <div
+      {% if forloop.last and items.has_next %}
+        hx-get="{% url 'lab:generic_search' %}" hx-trigger="intersect once"
+        hx-swap="afterend" hx-target="this" hx-vals='{ "page":
+        "{{ items.next_page_number }}", "app_label": "{{ app_label }}",
+        "model_name": "{{ model_name }}", "search": "{{ search }}"
+        {% if all_filters %}
+          {% for key, value in all_filters.items %}
+            {% if forloop.first %},{% else %},{% endif %}
+            "{{ key }}": "{{ value }}"
+          {% endfor %}
         {% endif %}
-      >
-        {% include "lab/"|add:model_name|lower|add:".html" with item=item %}
-      </div>
-    {% endfor %}
+        }'
+      {% endif %}
+    >
+      {% include "lab/"|add:model_name|lower|add:".html" with item=item %}
+    </div>
+  {% endfor %}
 
   {% if items.number == 1 %}
-  </div>
+    </div>
   {% endif %}
   {% if not items.has_next %}
-      <div class="text-orange-300">No more {{ model_name|lower }}s.</div>
+    <div class="text-orange-300">No more {{ model_name|lower }}s.</div>
   {% endif %}
 {% endpartialdef %}
 
@@ -94,8 +95,10 @@
     </h2>
     {% with app_label='lab' model_name='Individual' %}
       {% partial generic-search %}
+      <div id="{{ model_name|lower }}">
+        {% partial generic-search-results %}
+      </div>
     {% endwith %}
-    <div id="individual">{% partial generic-search-results %}</div>
   </div>
 {% endpartialdef %}
 
@@ -149,10 +152,9 @@
   </div>
 {% endpartialdef %}
 
-
 {% partialdef hpo-term-section %}
   <div id="hpo-term-section">
-    <h2><i class="fa-solid fa-stethoscope" fa-lg mx-2"></i>HPO Terms</h2>
+    <h2><i class="fa-solid fa-stethoscope fa-lg mx-2"></i>HPO Terms</h2>
     {# Note the app_label being passed #}
     {% with model_name='Term' app_label='ontologies' %}
       {% partial generic-search %}
@@ -160,7 +162,6 @@
     <div id="term">{% partial generic-search-results %}</div>
   </div>
 {% endpartialdef %}
-
 
 {% partialdef hpo-network-visualization-section %}
   <div id="hpo-section-wrapper" x-data="hpoController()">
@@ -180,7 +181,6 @@
       {% with text="Initilazing visualization..." %}
         {% partial indicator %}
       {% endwith %}
-
     </div>
   </div>
 {% endpartialdef %}
@@ -196,38 +196,52 @@
         <h3 class="font-semibold text-lg">{{ individual.individual_id }}</h3>
         <ul>
           {% for hpo_term in individual.hpo_terms.all %}
-          <li>
-            {{ hpo_term }} {{ hpo_term.label }}
-          </li>
+            <li>{{ hpo_term }} {{ hpo_term.label }}</li>
           {% endfor %}
         </ul>
       {% endfor %}
     </div>
     <div class="col-span-10 space-y-4">
       {% if error %}
-        <div class="bg-red-100 p-4 rounded-lg text-red-800"><b>Error:</b> {{ error }}</div>
+        <div class="bg-red-100 p-4 rounded-lg text-red-800">
+          <b>Error:</b> {{ error }}
+        </div>
       {% else %}
         <div class="bg-white shadow rounded-lg p-4">
-          <label for="threshold" class="block text-sm font-medium text-gray-700">Consolidation Threshold
-            <span x-show="!isThresholdValid" x-transition class="text-red-500 text-sm mt-1">
+          <label for="threshold" class="block text-sm font-medium text-gray-700"
+            >Consolidation Threshold
+            <span
+              x-show="!isThresholdValid"
+              x-transition
+              class="text-red-500 text-sm mt-1"
+            >
               Please enter a number between 1 and 24.
             </span>
           </label>
           <input
-            type="number" id="threshold" name="threshold"
+            type="number"
+            id="threshold"
+            name="threshold"
             placeholder="{{ threshold }}"
             x-model.debounce.500ms="hpoThreshold"
             x-ref="hpoThresholdInput"
-            min="1" max="24"
+            min="1"
+            max="24"
             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-          >
-
+          />
         </div>
         <div class="bg-white shadow rounded-lg p-4">
-          <p class="text-sm">Plotting <span class="font-bold">{{ term_count }}</span> terms for <span class="font-bold">{{ individual_count }} individuals</span> .</p>
-          <div id="plotly-div" style="width: 100%; height: 800px;" class="mt-4"></div>
+          <p class="text-sm">
+            Plotting <span class="font-bold">{{ term_count }}</span> terms for
+            <span class="font-bold">{{ individual_count }} individuals</span> .
+          </p>
+          <div
+            id="plotly-div"
+            style="width: 100%; height: 800px;"
+            class="mt-4"
+          ></div>
         </div>
-  {# prettier-ignore-start #}
+        {# prettier-ignore-start #}
         <script>
           var plotData = {{ plot_json|safe }};
           var plotlyDiv = document.getElementById('plotly-div');
@@ -255,82 +269,91 @@
     {% partial task-section %}
     {% partial hpo-term-section %}
   </div>
-    {% partial hpo-network-visualization-section %}
+  {% partial hpo-network-visualization-section %}
 
   <script>
-  function searchController() {
-    return {
-      filters: {},
-      init() {
-        const params = new URLSearchParams(window.location.search);
-        params.forEach((value, key) => { if (key.startsWith("filter_")) this.filters[key.replace("filter_", "")] = value; });
-        this.$watch("filters", (newFilters) => {
-          const newParams = new URLSearchParams();
-          for (const modelName in newFilters) {
-            if (newFilters[modelName]) newParams.set(`filter_${modelName}`, newFilters[modelName]);
-          }
-          history.pushState({}, "", `?${newParams.toString()}`);
-          window.dispatchEvent(new CustomEvent("filters-updated", { detail: { filters: newFilters } }));
-        });
-      },
-
-      getHxVals(appLabel, modelName) {
-        let vals = { app_label: appLabel, model_name: modelName};
-        vals.search = this.filters[modelName.toLowerCase()] || '';
-        for (const key in this.filters) {
-          if (key !== modelName.toLowerCase() && this.filters[key]) {
-            vals[`filter_${key}`] = this.filters[key];
-          }
-        }
-        return JSON.stringify(vals);
-      },
-    };
-  }
-
-  function hpoController() {
-    return {
-      hpoThreshold: 3,
-      isLoading: false,
-      isThresholdValid: true,
-      mainFilters: {}, // This will hold the filters.
-      init() {
-        // **FIX 1**: Load its state AND the shared filters directly from the URL.
-        const params = new URLSearchParams(window.location.search);
-        params.forEach((value, key) => {
-            if (key.startsWith("filter_")) {
-                this.mainFilters[key.replace("filter_", "")] = value;
-            } else if (key === 'threshold') {
-                this.hpoThreshold = parseInt(params.get('threshold'), 10);
+    function searchController() {
+      return {
+        filters: {},
+        init() {
+          const params = new URLSearchParams(window.location.search);
+          params.forEach((value, key) => {
+            if (key.startsWith("filter_"))
+              this.filters[key.replace("filter_", "")] = value;
+          });
+          this.$watch("filters", (newFilters) => {
+            const newParams = new URLSearchParams();
+            for (const modelName in newFilters) {
+              if (newFilters[modelName])
+                newParams.set(`filter_${modelName}`, newFilters[modelName]);
             }
-        });
+            history.pushState({}, "", `?${newParams.toString()}`);
+            window.dispatchEvent(
+              new CustomEvent("filters-updated", {
+                detail: { filters: newFilters },
+              }),
+            );
+          });
+        },
 
-        // For SUBSEQUENT updates, it listens for events from the searchController.
-        window.addEventListener('filters-updated', (event) => {
-            if (event.detail && event.detail.filters) {
-                this.mainFilters = event.detail.filters;
+        getHxVals(appLabel, modelName) {
+          let vals = { app_label: appLabel, model_name: modelName };
+          vals.search = this.filters[modelName.toLowerCase()] || "";
+          for (const key in this.filters) {
+            if (key !== modelName.toLowerCase() && this.filters[key]) {
+              vals[`filter_${key}`] = this.filters[key];
             }
-        });
-
-        // When its own threshold changes, it triggers an update.
-        this.$watch('hpoThreshold', () => {
-            this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
-            if (this.isThresholdValid) {
-                // We still need to dispatch an event to trigger the htmx request.
-                window.dispatchEvent(new CustomEvent("filters-updated"));
-            }
-        });
-
-      },
-      getHpoVals() {
-          let vals = { model_name: 'Individual', threshold: this.hpoThreshold };
-          for (const key in this.mainFilters) {
-              if (this.mainFilters[key]) {
-                  vals[key === 'individual' ? 'search' : `filter_${key}`] = this.mainFilters[key];
-              }
           }
           return JSON.stringify(vals);
-      }
-    };
-  }
+        },
+      };
+    }
+
+    function hpoController() {
+      return {
+        hpoThreshold: 3,
+        isLoading: false,
+        isThresholdValid: true,
+        mainFilters: {}, // This will hold the filters.
+        init() {
+          // **FIX 1**: Load its state AND the shared filters directly from the URL.
+          const params = new URLSearchParams(window.location.search);
+          params.forEach((value, key) => {
+            if (key.startsWith("filter_")) {
+              this.mainFilters[key.replace("filter_", "")] = value;
+            } else if (key === "threshold") {
+              this.hpoThreshold = parseInt(params.get("threshold"), 10);
+            }
+          });
+
+          // For SUBSEQUENT updates, it listens for events from the searchController.
+          window.addEventListener("filters-updated", (event) => {
+            if (event.detail && event.detail.filters) {
+              this.mainFilters = event.detail.filters;
+            }
+          });
+
+          // When its own threshold changes, it triggers an update.
+          this.$watch("hpoThreshold", () => {
+            this.isThresholdValid =
+              this.$refs.hpoThresholdInput.checkValidity();
+            if (this.isThresholdValid) {
+              // We still need to dispatch an event to trigger the htmx request.
+              window.dispatchEvent(new CustomEvent("filters-updated"));
+            }
+          });
+        },
+        getHpoVals() {
+          let vals = { model_name: "Individual", threshold: this.hpoThreshold };
+          for (const key in this.mainFilters) {
+            if (this.mainFilters[key]) {
+              vals[key === "individual" ? "search" : `filter_${key}`] =
+                this.mainFilters[key];
+            }
+          }
+          return JSON.stringify(vals);
+        },
+      };
+    }
   </script>
 {% endblock content %}

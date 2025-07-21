@@ -11,7 +11,10 @@ import json
 from .models import Individual
 
 # Import HPO visualization functions
-from .visualization.hpo import process_hpo_data, plotly_hpo_network
+from .visualization.hpo_network_visualization import (
+    process_hpo_data,
+    plotly_hpo_network,
+)
 
 
 FILTER_CONFIG = {
@@ -26,15 +29,20 @@ FILTER_CONFIG = {
     "Individual": {
         "app_label": "lab",
         "search_fields": ["full_name", "cross_ids__id_value", "family__family_id"],
-        "filters": {"Institution": "sending_institution__pk", "Term": "hpo_terms__pk"},
+        "filters": {
+            "Institution": "sending_institution__pk",
+            "Term": "hpo_terms__pk",
+            "Sample": "samples__pk",
+        },
     },
     "Sample": {
         "app_label": "lab",
         "search_fields": ["sample_type__name", "id"],
         "filters": {
             "Individual": "individual__pk",
-            # This demonstrates a multi-step relationship
             "Institution": "individual__sending_institution__pk",
+            "Term": "individual__hpo_terms__pk",
+            "Test": "tests",
         },
     },
     "Institution": {
@@ -63,7 +71,20 @@ FILTER_CONFIG = {
         "filters": {
             # Standard foreign key relationship
             "Project": "project__pk",
-            # Converted to a multi-path list to find all related tasks
+            "Institution": [
+                {
+                    "link_model": "Individual",
+                    "path_from_link_model": "sending_institution__pk",
+                },
+                {
+                    "link_model": "Sample",
+                    "path_from_link_model": "individual__sending_institution__pk",
+                },
+                {
+                    "link_model": "Test",
+                    "path_from_link_model": "sample__individual__sending_institution__pk",
+                },
+            ],
             "Individual": [
                 {
                     "link_model": "Individual",
@@ -78,20 +99,20 @@ FILTER_CONFIG = {
                     "path_from_link_model": "sample__individual__pk",
                 },
             ],
-            "Sample": ("content_type", "object_id"),
-            "Test": ("content_type", "object_id"),
-            "Institution": [
-                {
-                    "link_model": "Individual",
-                    "path_from_link_model": "sending_institution__pk",
-                },
+            "Sample": [
                 {
                     "link_model": "Sample",
-                    "path_from_link_model": "individual__sending_institution__pk",
+                    "path_from_link_model": "pk",
                 },
                 {
                     "link_model": "Test",
-                    "path_from_link_model": "sample__individual__sending_institution__pk",
+                    "path_from_link_model": "pk",
+                },
+            ],
+            "Test": [
+                {
+                    "link_model": "Test",
+                    "path_from_link_model": "pk",
                 },
             ],
         },
@@ -196,12 +217,11 @@ def apply_filters(request, target_model_name, queryset):
 
 @login_required
 def generic_search(request):
-    target_model_name = request.GET.get("model_name", "").strip()
     target_app_label = request.GET.get("app_label", "lab").strip()  # Get app_label
+    target_model_name = request.GET.get("model_name", "").strip()
     if not target_model_name:
         return HttpResponseBadRequest("Model not specified.")
 
-    print(target_app_label, target_model_name)
     target_model = apps.get_model(
         app_label=target_app_label, model_name=target_model_name
     )

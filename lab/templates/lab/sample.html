@@ -2,6 +2,7 @@
   class="bg-white p-4 rounded-lg shadow border m-2"
   data-item-id="{{ item.id }}"
 >
+  {{ item.pk }}
   {% with float="float-right" color=item.status.color text=item.status.name %}
     {% include 'lab/partials/badge.html' %}
   {% endwith %}

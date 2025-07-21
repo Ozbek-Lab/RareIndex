@@ -5,6 +5,7 @@
   {% with float="float-right" color=item.status.color text=item.status.name %}
     {% include 'lab/partials/badge.html' %}
   {% endwith %}
+
   <h3 class="font-semibold text-lg">{{ item.individual_id }}</h3>
   <div class="float-right">
     <i class="fa-solid fa-stethoscope"></i>
@@ -13,6 +14,31 @@
   {% if item.icd11_code %}
     <p class="text-sm text-gray-500">ICD11: {{ item.icd11_code }}</p>
   {% endif %}
+
+  {% for sample in item.samples.all %}
+    {{ sample.pk }}
+  {% endfor %}
+
+  <div x-data="{ open: false }" class="relative">
+    <button
+      @click="open = ! open"
+      type="button"
+      class="inline-flex items-center gap-x-1 text-sm/6 font-semibold text-gray-900"
+    >
+      <span> <i class="fa-solid fa-comment"></i> Notes </span>
+      <i class="fa-solid fa-chevron-down"></i>
+    </button>
+    <div
+      x-show="open"
+      class="absolute left-1/2 z-10 mt-5 flex w-full max-w-max -translate-x-1/2 px-4"
+    >
+      <div
+        class="w-full max-w-md flex-auto overflow-hidden rounded-3xl bg-white text-sm/6 shadow-lg ring-1 ring-gray-900/5"
+      >
+        Test
+      </div>
+    </div>
+  </div>
 </div>
 
 {% partialdef timeline %}
