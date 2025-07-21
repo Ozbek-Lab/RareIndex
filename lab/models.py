@@ -58,6 +58,7 @@ class Task(models.Model):
 
     def complete(self, user, notes=""):
         from django.utils import timezone
+
         # Set status to a 'completed' Status instance
         completed_status = Status.objects.filter(name__iexact="completed").first()
         if not completed_status:
@@ -92,17 +93,22 @@ class Project(models.Model):
     )
     # Notes for the project
     notes = GenericRelation("Note")
+
     class Meta:
         ordering = ["-created_at"]
+
     def __str__(self):
         return self.name
+
     def get_task_count(self):
         return self.tasks.count()
+
     def get_completed_task_count(self):
         completed_status = Status.objects.filter(name__iexact="completed").first()
         if not completed_status:
             return 0
         return self.tasks.filter(status=completed_status).count()
+
     def get_completion_percentage(self):
         total = self.get_task_count()
         if total == 0:
@@ -272,7 +278,7 @@ class Individual(StatusMixin, models.Model):
     status_logs = GenericRelation(StatusLog)
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
-    sending_institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
+    institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
     tasks = GenericRelation("Task")
 
     class Meta:
@@ -478,7 +484,7 @@ class CrossIdentifier(models.Model):
     id_type = models.ForeignKey(IdentifierType, on_delete=models.PROTECT)
     id_value = models.CharField(max_length=100)
     id_description = models.TextField(blank=True)
-    institute = models.ForeignKey(
+    institution = models.ForeignKey(
         Institution, on_delete=models.PROTECT, blank=True, null=True
     )
     link = models.URLField(blank=True, null=True)

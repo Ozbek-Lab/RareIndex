@@ -17,7 +17,6 @@
   </div>
 {% endpartialdef %}
 
-
 {% partialdef generic-search %}
   <div class="relative w-full mb-2">
     <i
@@ -108,10 +107,7 @@
           class="absolute inset-0 bg-gray-400/20 flex items-center justify-center rounded-md z-10"
           style="display: none;"
         >
-          <div class="text-center text-gray-600">
-            <p class="mb-4">Updating {{ model_name|lower }} results...</p>
-            <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
-          </div>
+          {% partial indicator %}
         </div>
 
       </div>
