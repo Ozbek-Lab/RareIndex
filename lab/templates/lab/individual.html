@@ -15,9 +15,10 @@
     <p class="text-sm text-gray-500">ICD11: {{ item.icd11_code }}</p>
   {% endif %}
 
-  {% for sample in item.samples.all %}
-    {{ sample.pk }}
-  {% endfor %}
+  <span>
+    <i class="fa-solid fa-building-columns mr-1"></i>
+    {{ item.institution }}
+  </span>
 
   <div x-data="{ open: false }" class="relative">
     <button

@@ -30,7 +30,7 @@ FILTER_CONFIG = {
         "app_label": "lab",
         "search_fields": ["full_name", "cross_ids__id_value", "family__family_id"],
         "filters": {
-            "Institution": "sending_institution__pk",
+            "Institution": "institution__pk",
             "Term": "hpo_terms__pk",
             "Sample": "samples__pk",
         },
@@ -40,7 +40,7 @@ FILTER_CONFIG = {
         "search_fields": ["sample_type__name", "id"],
         "filters": {
             "Individual": "individual__pk",
-            "Institution": "individual__sending_institution__pk",
+            "Institution": "individual__institution__pk",
             "Term": "individual__hpo_terms__pk",
             "Test": "tests",
         },
@@ -56,7 +56,16 @@ FILTER_CONFIG = {
         "filters": {
             "Individual": "sample__individual__pk",
             "Sample": "sample__pk",
-            "Institution": "sample__individual__sending_institution__pk",
+            "Institution": "sample__individual__institution__pk",
+        },
+    },
+    "Analysis": {
+        "app_label": "lab",
+        "search_fields": ["type__name", "test__sample__individual__full_name"],
+        "filters": {
+            "Test": "test__pk",
+            "Sample": "test__sample__sample_type__pk",  # Filter by SampleType
+            "Individual": "test__sample__individual__pk",
         },
     },
     "Project": {
@@ -74,15 +83,15 @@ FILTER_CONFIG = {
             "Institution": [
                 {
                     "link_model": "Individual",
-                    "path_from_link_model": "sending_institution__pk",
+                    "path_from_link_model": "institution__pk",
                 },
                 {
                     "link_model": "Sample",
-                    "path_from_link_model": "individual__sending_institution__pk",
+                    "path_from_link_model": "individual__institution__pk",
                 },
                 {
                     "link_model": "Test",
-                    "path_from_link_model": "sample__individual__sending_institution__pk",
+                    "path_from_link_model": "sample__individual__institution__pk",
                 },
             ],
             "Individual": [
@@ -134,75 +143,85 @@ def index(request):
 
 def apply_filters(request, target_model_name, queryset):
     """
-    Applies search and cross-model filters to a given queryset based on GET parameters.
+    Applies filters. Now handles direct field filtering (e.g., by name)
+    in addition to PK and text-based searches.
     """
     filter_config = FILTER_CONFIG.get(target_model_name, {})
-
     for filter_model_name, orm_path in filter_config.get("filters", {}).items():
         filter_search_term = request.GET.get(
             f"filter_{filter_model_name.lower()}", ""
         ).strip()
 
         if filter_search_term:
-            filter_model_config = FILTER_CONFIG.get(filter_model_name, {})
-            filter_app_label = filter_model_config.get("app_label", "lab")
-            filter_model = apps.get_model(
-                app_label=filter_app_label, model_name=filter_model_name
-            )
-
-            search_fields = filter_model_config.get("search_fields", [])
-            if not search_fields:
-                continue
-
-            q_objects = Q()
-            for field in search_fields:
-                q_objects |= Q(**{f"{field}__icontains": filter_search_term})
-
-            pks_to_filter_by = list(
-                filter_model.objects.filter(q_objects)
-                .values_list("pk", flat=True)
-                .distinct()
-            )
-
-            if isinstance(orm_path, list):
-                combined_q = Q()
-                for path_config in orm_path:
-                    link_model_name = path_config["link_model"]
-                    link_model_app_label = FILTER_CONFIG.get(link_model_name, {}).get(
-                        "app_label", "lab"
-                    )
-                    link_model = apps.get_model(
-                        app_label=link_model_app_label, model_name=link_model_name
-                    )
-
-                    path_from_link = path_config["path_from_link_model"]
-
-                    link_model_pks = link_model.objects.filter(
-                        **{f"{path_from_link}__in": pks_to_filter_by}
-                    ).values_list("pk", flat=True)
-
-                    content_type = ContentType.objects.get_for_model(link_model)
-                    combined_q |= Q(
-                        content_type=content_type, object_id__in=list(link_model_pks)
-                    )
-
-                if combined_q:
-                    queryset = queryset.filter(combined_q)
-                else:
-                    queryset = queryset.none()
-
-            elif isinstance(orm_path, tuple):
-                content_type_field, object_id_field = orm_path
-                content_type = ContentType.objects.get_for_model(filter_model)
-                queryset = queryset.filter(
-                    **{
-                        content_type_field: content_type,
-                        f"{object_id_field}__in": pks_to_filter_by,
-                    }
-                )
+            source_filter_config = FILTER_CONFIG.get(filter_model_name, {})
+            # NEW: Check if the filter comes from a field-based select dropdown
+            if "select_options_from_field" in source_filter_config:
+                # Apply a direct, exact filter using the term and path
+                queryset = queryset.filter(**{orm_path: filter_search_term})
             else:
-                queryset = queryset.filter(**{f"{orm_path}__in": pks_to_filter_by})
+                # Fallback to the original logic for PK or text searches
+                pks_to_filter_by = []
+                if filter_search_term.isdigit():
+                    pks_to_filter_by = [int(filter_search_term)]
+                else:
+                    filter_model_config = FILTER_CONFIG.get(filter_model_name, {})
+                    filter_app_label = filter_model_config.get("app_label", "lab")
+                    filter_model = apps.get_model(
+                        app_label=filter_app_label, model_name=filter_model_name
+                    )
+                    search_fields = filter_model_config.get("search_fields", [])
 
+                    if search_fields:
+                        q_objects = Q()
+                        for field in search_fields:
+                            q_objects |= Q(
+                                **{f"{field}__icontains": filter_search_term}
+                            )
+                        pks_to_filter_by = list(
+                            filter_model.objects.filter(q_objects)
+                            .values_list("pk", flat=True)
+                            .distinct()
+                        )
+
+                if not pks_to_filter_by:
+                    return queryset.none()
+
+                if isinstance(orm_path, list):
+                    combined_q = Q()
+                    for path_config in orm_path:
+                        link_model_name = path_config["link_model"]
+                        link_model_app_label = FILTER_CONFIG.get(
+                            link_model_name, {}
+                        ).get("app_label", "lab")
+                        link_model = apps.get_model(
+                            app_label=link_model_app_label, model_name=link_model_name
+                        )
+                        path_from_link = path_config["path_from_link_model"]
+                        link_model_pks = link_model.objects.filter(
+                            **{f"{path_from_link}__in": pks_to_filter_by}
+                        ).values_list("pk", flat=True)
+                        content_type = ContentType.objects.get_for_model(link_model)
+                        combined_q |= Q(
+                            content_type=content_type,
+                            object_id__in=list(link_model_pks),
+                        )
+                    if combined_q:
+                        queryset = queryset.filter(combined_q)
+                    else:
+                        queryset = queryset.none()
+                elif isinstance(orm_path, tuple):
+                    content_type_field, object_id_field = orm_path
+                    content_type = ContentType.objects.get_for_model(filter_model)
+                    queryset = queryset.filter(
+                        **{
+                            content_type_field: content_type,
+                            f"{object_id_field}__in": pks_to_filter_by,
+                        }
+                    )
+                else:
+                    queryset = queryset.filter(**{f"{orm_path}__in": pks_to_filter_by})
+
+    # Apply the model's own search filter
     own_search_term = request.GET.get("search", "").strip()
     if own_search_term:
         own_search_fields = filter_config.get("search_fields", [])
