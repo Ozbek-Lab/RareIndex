@@ -54,11 +54,11 @@ class Command(BaseCommand):
         # Create analysis types if they don't exist
         analysis_types = self._create_analysis_types(user)
 
-        # Create institution if it doesn't exist
-        institution = self._get_or_create_institution(user)
+        # Create institutions
+        institutions = self._create_institutions(user)
 
         # Create a project
-        project = self._create_project(user)
+        project = self._create_project(user, statuses)
 
         # Create identifier types if they don't exist
         identifier_types = self._create_identifier_types(user)
@@ -76,12 +76,12 @@ class Command(BaseCommand):
             family = self._create_family(family_id, user)
             
             # Create tasks for family
-            self._create_tasks(family, user, statuses['completed'], project, options['tasks_per_object'])
+            self._create_tasks(family, user, statuses['Individual']['completed'], project, options['tasks_per_object'], statuses)
             
             # Create family members
-            mother = self._create_individual("Mother", family, user, institution, statuses['registered'], hpo_terms)
+            mother = self._create_individual("Mother", family, user, random.choice(institutions), statuses['Individual']['registered'], hpo_terms)
             self._create_identifiers(mother, identifier_types, f"{family_id}.2", f"RD3.F{i+1:02d}.2", user )
-            father = self._create_individual("Father", family, user, institution, statuses['registered'], hpo_terms)
+            father = self._create_individual("Father", family, user, random.choice(institutions), statuses['Individual']['registered'], hpo_terms)
             self._create_identifiers(father, identifier_types, f"{family_id}.3", f"RD3.F{i+1:02d}.3", user)
 
             # Create proband (sick child)
@@ -89,8 +89,8 @@ class Command(BaseCommand):
                 "Proband",
                 family,
                 user,
-                institution,
-                statuses['active'],
+                random.choice(institutions),
+                statuses['Individual']['active'],
                 hpo_terms,
                 mother=mother,
                 father=father
@@ -99,7 +99,7 @@ class Command(BaseCommand):
 
             # Create tasks for individuals
             for individual in [proband, mother, father]:
-                self._create_tasks(individual, user, statuses['completed'], project, options['tasks_per_object'])
+                self._create_tasks(individual, user, statuses['Individual']['completed'], project, options['tasks_per_object'], statuses)
 
             # Create samples for each individual
             for individual in [proband, mother, father]:
@@ -120,28 +120,29 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('Successfully generated sample data'))
 
     def _create_statuses(self, user):
-        for type in [Individual, Sample, Test, Analysis]:
-            status_data = {
-                'registered': ('Registered', 'gray'),
-                'active': ('Active', 'green'),
-                'completed': ('Completed', 'blue'),
-                'cancelled': ('Cancelled', 'red'),
-                'pending': ('Pending', 'yellow'),
-            }
-            
-            statuses = {}
+        model_types = [Individual, Sample, Test, Analysis, Project, Task]
+        status_data = {
+            'registered': ('Registered', 'gray'),
+            'active': ('Active', 'green'),
+            'completed': ('Completed', 'blue'),
+            'cancelled': ('Cancelled', 'red'),
+            'pending': ('Pending', 'yellow'),
+        }
+        all_statuses = {}
+        for model in model_types:
+            model_statuses = {}
             for key, (name, color) in status_data.items():
                 status, _ = Status.objects.get_or_create(
                     name=name,
-                    content_type=ContentType.objects.get_for_model(type),
+                    content_type=ContentType.objects.get_for_model(model),
                     defaults={
                         'color': color,
                         'created_by': user
                     }
                 )
-                statuses[key] = status
-            
-            return statuses
+                model_statuses[key] = status
+            all_statuses[model.__name__] = model_statuses
+        return all_statuses
 
     def _create_sample_types(self, user):
         sample_type_names = ['Blood', 'Tissue', 'Saliva', 'Urine']
@@ -201,22 +202,39 @@ class Command(BaseCommand):
         
         return analysis_types
 
-    def _get_or_create_institution(self, user):
-        institution, _ = Institution.objects.get_or_create(
-            name='Test Hospital',
-            defaults={
-                'created_by': user
-            }
-        )
-        return institution
+    def _create_institutions(self, user):
+        institution_names = [
+            'Test Hospital',
+            'City Medical Center',
+            'Rare Disease Clinic',
+            'Genomics Institute',
+            'Children\'s Health Center',
+            'University Hospital',
+            'Regional Medical Lab',
+            'Precision Medicine Center',
+            'Family Health Clinic',
+            'Specialty Diagnostics Lab'
+        ]
+        institutions = []
+        for name in institution_names:
+            institution, _ = Institution.objects.get_or_create(
+                name=name,
+                defaults={
+                    'created_by': user
+                }
+            )
+            institutions.append(institution)
+        return institutions
 
-    def _create_project(self, user):
+    def _create_project(self, user, statuses):
         project, _ = Project.objects.get_or_create(
             name='Sample Data Project',
             defaults={
                 'description': 'Project created by sample data generator',
                 'created_by': user,
-                'due_date': timezone.now() + timedelta(days=90)
+                'due_date': timezone.now() + timedelta(days=90),
+                'status': statuses['Project']['active'],
+                'priority': 'medium',
             }
         )
         return project
@@ -255,7 +273,7 @@ class Command(BaseCommand):
         
         return individual
 
-    def _create_tasks(self, obj, user, target_status, project, num_tasks):
+    def _create_tasks(self, obj, user, target_status, project, num_tasks, statuses=None):
         priorities = ['low', 'medium', 'high', 'urgent']
         for i in range(num_tasks):
             Task.objects.create(
@@ -266,8 +284,8 @@ class Command(BaseCommand):
                 created_by=user,
                 due_date=timezone.now() + timedelta(days=random.randint(1, 30)),
                 priority=random.choice(priorities),
-                target_status=target_status,
-                project=project
+                project=project,
+                status=(statuses['Task']['pending'] if statuses else target_status),
             )
 
     def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, statuses, project):
@@ -276,14 +294,14 @@ class Command(BaseCommand):
             sample = Sample.objects.create(
                 individual=individual,
                 sample_type=random.choice(sample_types),
-                status=statuses['registered'],
+                status=statuses['Sample']['registered'],
                 receipt_date=timezone.now() - timedelta(days=random.randint(1, 30)),
                 isolation_by=user,
                 created_by=user
             )
 
             # Create tasks for sample
-            self._create_tasks(sample, user, statuses['completed'], project, tasks_per_object)
+            self._create_tasks(sample, user, statuses['Sample']['completed'], project, tasks_per_object, statuses)
 
             # Create tests for sample
             for j in range(tests_per_sample):
@@ -293,11 +311,11 @@ class Command(BaseCommand):
                     performed_by=user,
                     sample=sample,
                     created_by=user,
-                    status=statuses['active']
+                    status=statuses['Test']['active']
                 )
 
                 # Create tasks for test
-                self._create_tasks(test, user, statuses['completed'], project, tasks_per_object)
+                self._create_tasks(test, user, statuses['Test']['completed'], project, tasks_per_object, statuses)
 
                 # Create analyses for test
                 for k in range(analyses_per_test):
@@ -306,12 +324,12 @@ class Command(BaseCommand):
                         performed_date=timezone.now() - timedelta(days=random.randint(1, 10)),
                         performed_by=user,
                         type=random.choice(analysis_types),
-                        status=statuses['active'],
+                        status=statuses['Analysis']['active'],
                         created_by=user
                     )
 
                     # Create tasks for analysis
-                    self._create_tasks(analysis, user, statuses['completed'], project, tasks_per_object)
+                    self._create_tasks(analysis, user, statuses['Analysis']['completed'], project, tasks_per_object, statuses)
 
     def _create_identifier_types(self, user):
         identifier_type_data = {

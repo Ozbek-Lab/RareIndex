@@ -17,35 +17,26 @@
   </div>
 {% endpartialdef %}
 
-{% partialdef generic-search %}
-  <div
-    x-data="{ isLoading: false }"
-    @htmx:before-request="isLoading = true"
-    @htmx:after-request="isLoading = false"
-  >
-    <div class="relative w-full">
-      <i
-        class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-      ></i>
-      <input
-        class="form-control w-full pl-10 rounded-full"
-        type="search"
-        name="search"
-        placeholder="Search {{ model_name }}"
-        {# Bind the input's value directly to the Alpine controller #}
-        x-model.debounce.300ms="filters.{{ model_name|lower }}"
-        {# Trigger on input change OR the global event from other filters #}
-        hx-get="{% url 'lab:generic_search' %}"
-        hx-trigger="input changed delay:200ms, filters-updated from:window, load"
-        hx-target="#{{ model_name|lower }}"
-        {# Dynamically generate hx-vals from the Alpine controller #}
-        :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
-      />
-    </div>
 
-    {% partial indicator %}
+{% partialdef generic-search %}
+  <div class="relative w-full mb-2">
+    <i
+      class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+    ></i>
+    <input
+      class="form-control w-full pl-10 rounded-full"
+      type="search"
+      name="search"
+      placeholder="Search {{ model_name }}"
+      x-model.debounce.300ms="filters.{{ model_name|lower }}"
+      hx-get="{% url 'lab:generic_search' %}"
+      hx-trigger="input changed delay:200ms, filters-updated from:window, load"
+      hx-target="#{{ model_name|lower }}"
+      :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
+    />
   </div>
 {% endpartialdef %}
+
 
 {% partialdef generic-search-results %}
   {% if items.number == 1 %}
@@ -87,119 +78,144 @@
   {% endif %}
 {% endpartialdef %}
 
-{% partialdef individual-section %}
-  <div id="individual-section">
+{% partialdef search-section %}
+  <div id="{{ model_name|lower }}-section-wrapper"
+    x-data="{ isLoading: false }"
+    @htmx:before-request="isLoading = true"
+    @htmx:after-request="isLoading = false"
+  >
     <h2>
-      <i class="fa-solid fa-person fa-lg mx-2"></i>
-      Individuals
+      <i class="fa-solid {{ icon_class }} fa-lg mx-2"></i>
+      {{ title }}
     </h2>
-    {% with app_label='lab' model_name='Individual' %}
+
+    {% with app_label=app_label model_name=model_name %}
+      {# The search input field partial #}
       {% partial generic-search %}
-      <div id="{{ model_name|lower }}">
-        {% partial generic-search-results %}
+
+      {# The container for results and the loading overlay #}
+      <div class="relative min-h-[24rem]">
+
+        {# Results will be loaded into this div #}
+        <div id="{{ model_name|lower }}" class="transition" :class="{ 'opacity-50 blur-sm': isLoading }">
+          {% partial generic-search-results %}
+        </div>
+
+        {# The loading overlay with spinner #}
+        <div
+          x-show="isLoading"
+          x-transition
+          class="absolute inset-0 bg-gray-400/20 flex items-center justify-center rounded-md z-10"
+          style="display: none;"
+        >
+          <div class="text-center text-gray-600">
+            <p class="mb-4">Updating {{ model_name|lower }} results...</p>
+            <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
+          </div>
+        </div>
+
       </div>
     {% endwith %}
   </div>
 {% endpartialdef %}
 
-{% partialdef sample-section %}
-  <div id="samples-section">
-    <h2><i class="fa-solid fa-vial fa-lg mx-2"></i>Samples</h2>
-    {% with app_label='lab' model_name='Sample' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="sample">{% partial generic-search-results %}</div>
-  </div>
+{% partialdef individual-section %}
+  {% with title='Individuals' icon_class='fa-person' model_name='Individual' app_label='lab' %}
+    {% partial search-section %}
+  {% endwith %}
 {% endpartialdef %}
 
-{% partialdef institution-section %}
-  <div id="institution-section">
-    <h2><i class="fa-solid fa-building-columns fa-lg mx-2"></i>Institutions</h2>
-    {% with app_label='lab' model_name='Institution' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="institution">{% partial generic-search-results %}</div>
-  </div>
+{% partialdef sample-section %}
+  {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' %}
+    {% partial search-section %}
+  {% endwith %}
+{% endpartialdef %}
+
+{% partialdef sample-section %}
+  {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' %}
+    {% partial search-section %}
+  {% endwith %}
 {% endpartialdef %}
 
 {% partialdef test-section %}
-  <div id="test-section">
-    <h2><i class="fa-solid fa-flask-vial fa-lg mx-2"></i>Tests</h2>
-    {% with app_label='lab' model_name='Test' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="test">{% partial generic-search-results %}</div>
-  </div>
+  {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' %}
+    {% partial search-section %}
+  {% endwith %}
 {% endpartialdef %}
 
 {% partialdef analysis-section %}
-  <div id="analysis-section">
-    <h2><i class="fa-solid fa-laptop fa-lg mx-2"></i>Analysiss</h2>
-    {% with app_label='lab' model_name='Analysis' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="analysis">{% partial generic-search-results %}</div>
-  </div>
+  {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' %}
+    {% partial search-section %}
+  {% endwith %}
+{% endpartialdef %}
+
+{% partialdef institution-section %}
+  {% with title='Institutions' icon_class='fa-building-columns' model_name='Institution' app_label='lab' %}
+    {% partial search-section %}
+  {% endwith %}
 {% endpartialdef %}
 
 {% partialdef project-section %}
-  <div id="project-section">
-    <h2><i class="fa-solid fa-diagram-project fa-lg mx-2"></i>Projects</h2>
-    {% with app_label='lab' model_name='Project' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="project">{% partial generic-search-results %}</div>
-  </div>
+  {% with title='Projects' icon_class='fa-diagram-project' model_name='Project' app_label='lab' %}
+    {% partial search-section %}
+  {% endwith %}
 {% endpartialdef %}
 
 {% partialdef task-section %}
-  <div id="task-section">
-    <h2><i class="fa-solid fa-list-check fa-lg mx-2"></i>Tasks</h2>
-    {% with app_label='lab' model_name='Task' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="task">{% partial generic-search-results %}</div>
-  </div>
+  {% with title='Tasks' icon_class='fa-list-check' model_name='Task' app_label='lab' %}
+    {% partial search-section %}
+  {% endwith %}
 {% endpartialdef %}
 
 {% partialdef hpo-term-section %}
-  <div id="hpo-term-section">
-    <h2><i class="fa-solid fa-stethoscope fa-lg mx-2"></i>HPO Terms</h2>
-    {# Note the app_label being passed #}
-    {% with model_name='Term' app_label='ontologies' %}
-      {% partial generic-search %}
-    {% endwith %}
-    <div id="term">{% partial generic-search-results %}</div>
-  </div>
+  {% with title='HPO Terms' icon_class='fa-stethoscope' model_name='Term' app_label='ontologies' %}
+    {% partial search-section %}
+  {% endwith %}
 {% endpartialdef %}
+
 
 {% partialdef hpo-network-visualization-section %}
   <div id="hpo-section-wrapper" x-data="hpoController()">
     <div class="flex justify-between items-center mb-2">
       <h2 class="text-2xl font-bold">HPO Visualization</h2>
-      {# Use the indicator partial, controlled by the hpoController #}
     </div>
-    <div
-      id="hpo-visualization-container"
-      @htmx:before-request="isLoading = true"
-      @htmx:after-request="isLoading = false"
-      hx-get="{% url 'lab:hpo_network_visualization' %}"
-      hx-trigger="load, filters-updated from:window"
-      hx-swap="innerHTML"
-      :hx-vals="getHpoVals()"
-    >
-      {% with text="Initilazing visualization..." %}
-        {% partial indicator %}
-      {% endwith %}
+
+    <div class="relative min-h-[30rem]">
+
+      <div
+        id="hpo-visualization-container"
+        class="transition"
+        :class="{ 'opacity-50 blur-sm': isLoading }"
+        @htmx:before-request="isLoading = true"
+        @htmx:after-request="isLoading = false"
+        hx-get="{% url 'lab:hpo_network_visualization' %}"
+        hx-trigger="load, filters-updated from:window"
+        hx-swap="innerHTML"
+        :hx-vals="getHpoVals()"
+      >
+        {% with text="Initializing visualization..." %}
+          {% partial indicator %}
+        {% endwith %}
+      </div>
+
+      <div
+        x-show="isLoading"
+        x-transition
+        class="absolute inset-0 bg-gray-400/20 flex items-center justify-center rounded-md z-10"
+        style="display: none;"
+      >
+        <div class="text-center text-gray-600">
+          <p class="mb-4">Updating visualization...</p>
+          <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
+        </div>
+      </div>
+
     </div>
   </div>
-{% endpartialdef %}
+{% endpartialdef hpo-network-visualization-section %}
+
 
 {% partialdef hpo-network-visualization %}
-
-  {% with text="Updating visualization..." %}
-    {% partial indicator %}
-  {% endwith %}
   <div class="grid grid-cols-12">
     <div class="col-span-2 h-96 overflow-y-auto">
       {% for individual in individuals %}
@@ -218,8 +234,8 @@
         </div>
       {% else %}
         <div class="bg-white shadow rounded-lg p-4">
-          <label for="threshold" class="block text-sm font-medium text-gray-700"
-            >Consolidation Threshold
+          <label for="threshold" class="block text-sm font-medium text-gray-700">
+            Consolidation Threshold
             <span
               x-show="!isThresholdValid"
               x-transition
@@ -243,7 +259,7 @@
         <div class="bg-white shadow rounded-lg p-4">
           <p class="text-sm">
             Plotting <span class="font-bold">{{ term_count }}</span> terms for
-            <span class="font-bold">{{ individual_count }} individuals</span> .
+            <span class="font-bold">{{ individual_count }} individuals</span>.
           </p>
           <div
             id="plotly-div"
@@ -257,11 +273,11 @@
           var plotlyDiv = document.getElementById('plotly-div');
           if (plotlyDiv) { Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout); }
         </script>
-  {# prettier-ignore-end #}
+        {# prettier-ignore-end #}
       {% endif %}
     </div>
   </div>
-{% endpartialdef %}
+{% endpartialdef hpo-network-visualization %}
 
 {% partialdef index %}
   <h1>INDEX PAGE</h1>
