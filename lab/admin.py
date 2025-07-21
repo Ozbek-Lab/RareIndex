@@ -94,16 +94,16 @@ class AnalysisAdmin(admin.ModelAdmin):
 
 @admin.register(models.Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ['title', 'project', 'assigned_to', 'created_by', 'priority', 'is_completed', 'due_date', 'created_at']
-    list_filter = ['is_completed', 'priority', 'created_at', 'due_date', 'assigned_to', 'created_by']
+    list_display = ['title', 'project', 'assigned_to', 'created_by', 'priority', 'status', 'due_date', 'created_at']
+    list_filter = ['status', 'priority', 'created_at', 'due_date', 'assigned_to', 'created_by']
     search_fields = ['title', 'description', 'project__name']
     date_hierarchy = 'created_at'
-    raw_id_fields = ['project', 'assigned_to', 'created_by', 'completed_by']
+    raw_id_fields = ['project', 'assigned_to', 'created_by']
 
 @admin.register(models.Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ['name', 'created_by', 'priority', 'is_completed', 'due_date', 'created_at', 'get_completion_percentage']
-    list_filter = ['is_completed', 'priority', 'created_at', 'due_date', 'created_by']
+    list_display = ['name', 'created_by', 'priority', 'status', 'due_date', 'created_at', 'get_completion_percentage']
+    list_filter = ['status', 'priority', 'created_at', 'due_date', 'created_by']
     search_fields = ['name', 'description']
     date_hierarchy = 'created_at'
     raw_id_fields = ['created_by']
