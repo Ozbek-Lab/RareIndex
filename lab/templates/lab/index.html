@@ -20,10 +20,10 @@
 {% partialdef generic-search %}
   <div class="relative w-full mb-2">
     <i
-      class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+      class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-300"
     ></i>
     <input
-      class="form-control w-full pl-10 rounded-full"
+      class="form-control w-full pl-10 rounded-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 border border-gray-300 dark:border-gray-700"
       type="search"
       name="search"
       placeholder="Search {{ model_name }}"
@@ -83,7 +83,7 @@
     @htmx:before-request="isLoading = true"
     @htmx:after-request="isLoading = false"
   >
-    <h2>
+    <h2 class="text-gray-900 dark:text-gray-100">
       <i class="fa-solid {{ icon_class }} fa-lg mx-2"></i>
       {{ title }}
     </h2>
@@ -173,14 +173,14 @@
 {% partialdef hpo-network-visualization-section %}
   <div id="hpo-section-wrapper" x-data="hpoController()">
     <div class="flex justify-between items-center mb-2">
-      <h2 class="text-2xl font-bold">HPO Visualization</h2>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">HPO Visualization</h2>
     </div>
 
     <div class="relative min-h-[30rem]">
 
       <div
         id="hpo-visualization-container"
-        class="transition"
+        class="transition bg-white dark:bg-gray-800 shadow rounded-lg p-4"
         :class="{ 'opacity-50 blur-sm': isLoading }"
         @htmx:before-request="isLoading = true"
         @htmx:after-request="isLoading = false"
@@ -197,10 +197,10 @@
       <div
         x-show="isLoading"
         x-transition
-        class="absolute inset-0 bg-gray-400/20 flex items-center justify-center rounded-md z-10"
+        class="absolute inset-0 bg-gray-400/20 dark:bg-gray-700/40 flex items-center justify-center rounded-md z-10"
         style="display: none;"
       >
-        <div class="text-center text-gray-600">
+        <div class="text-center text-gray-600 dark:text-gray-300">
           <p class="mb-4">Updating visualization...</p>
           <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
         </div>
@@ -213,29 +213,29 @@
 
 {% partialdef hpo-network-visualization %}
   <div class="grid grid-cols-12">
-    <div class="col-span-2 h-96 overflow-y-auto">
+    <div class="col-span-2 h-96 overflow-y-auto bg-white dark:bg-gray-800 rounded-lg p-2">
       {% for individual in individuals %}
-        <h3 class="font-semibold text-lg">{{ individual.individual_id }}</h3>
+        <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">{{ individual.individual_id }}</h3>
         <ul>
           {% for hpo_term in individual.hpo_terms.all %}
-            <li>{{ hpo_term }} {{ hpo_term.label }}</li>
+            <li class="text-gray-700 dark:text-gray-300">{{ hpo_term }} {{ hpo_term.label }}</li>
           {% endfor %}
         </ul>
       {% endfor %}
     </div>
     <div class="col-span-10 space-y-4">
       {% if error %}
-        <div class="bg-red-100 p-4 rounded-lg text-red-800">
+        <div class="bg-red-100 dark:bg-red-900 p-4 rounded-lg text-red-800 dark:text-red-200">
           <b>Error:</b> {{ error }}
         </div>
       {% else %}
-        <div class="bg-white shadow rounded-lg p-4">
-          <label for="threshold" class="block text-sm font-medium text-gray-700">
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+          <label for="threshold" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Consolidation Threshold
             <span
               x-show="!isThresholdValid"
               x-transition
-              class="text-red-500 text-sm mt-1"
+              class="text-red-500 dark:text-red-300 text-sm mt-1"
             >
               Please enter a number between 1 and 24.
             </span>
@@ -249,11 +249,11 @@
             x-ref="hpoThresholdInput"
             min="1"
             max="24"
-            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+            class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
           />
         </div>
-        <div class="bg-white shadow rounded-lg p-4">
-          <p class="text-sm">
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+          <p class="text-sm text-gray-900 dark:text-gray-100">
             Plotting <span class="font-bold">{{ term_count }}</span> terms for
             <span class="font-bold">{{ individual_count }} individuals</span>.
           </p>
