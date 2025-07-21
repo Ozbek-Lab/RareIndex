@@ -1,22 +1,22 @@
 <div
-  class="bg-white p-4 rounded-lg shadow border m-2"
+  class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-2"
   data-item-id="{{ item.id }}"
 >
   {% with float="float-right" color=item.status.color text=item.status.name %}
     {% include 'lab/partials/badge.html' %}
   {% endwith %}
 
-  <h3 class="font-semibold text-lg">{{ item.individual_id }}</h3>
+  <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">{{ item.individual_id }}</h3>
   <div class="float-right">
     <i class="fa-solid fa-stethoscope"></i>
   </div>
-  <p class="text-gray-600">{{ item.full_name }}</p>
+  <p class="text-gray-600 dark:text-gray-400">{{ item.full_name }}</p>
   {% if item.icd11_code %}
-    <p class="text-sm text-gray-500">ICD11: {{ item.icd11_code }}</p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">ICD11: {{ item.icd11_code }}</p>
   {% endif %}
 
-  <span>
-    <i class="fa-solid fa-building-columns mr-1"></i>
+  <span class="text-gray-900 dark:text-gray-100">
+    <i class="fa-solid fa-building-columns mr-1 text-gray-900 dark:text-gray-100"></i>
     {{ item.institution }}
   </span>
 
@@ -24,7 +24,7 @@
     <button
       @click="open = ! open"
       type="button"
-      class="inline-flex items-center gap-x-1 text-sm/6 font-semibold text-gray-900"
+      class="inline-flex items-center gap-x-1 text-sm/6 font-semibold text-gray-900 dark:text-gray-100"
     >
       <span> <i class="fa-solid fa-comment"></i> Notes </span>
       <i class="fa-solid fa-chevron-down"></i>
@@ -34,7 +34,7 @@
       class="absolute left-1/2 z-10 mt-5 flex w-full max-w-max -translate-x-1/2 px-4"
     >
       <div
-        class="w-full max-w-md flex-auto overflow-hidden rounded-3xl bg-white text-sm/6 shadow-lg ring-1 ring-gray-900/5"
+        class="w-full max-w-md flex-auto overflow-hidden rounded-3xl bg-white dark:bg-gray-800 text-sm/6 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-100/10"
       >
         Test
       </div>
@@ -43,8 +43,8 @@
 </div>
 
 {% partialdef timeline %}
-  <div class="bg-white shadow rounded-lg p-4">
-    <p class="text-sm">
+  <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+    <p class="text-sm text-gray-900 dark:text-gray-100">
       Found <span class="font-bold">{{ term_count }}</span> terms for
       <span class="font-bold">{{ individual_count }} individuals</span> .
     </p>
