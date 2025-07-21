@@ -1,0 +1,33 @@
+<div
+  class="bg-white p-4 rounded-lg shadow border m-2"
+  data-item-id="{{ item.id }}"
+>
+  {% with float="float-right" color=item.status.color text=item.status.name %}
+    {% include 'lab/partials/badge.html' %}
+  {% endwith %}
+
+  <h3 class="font-semibold text-lg">{{ item.test_type.name }}</h3>
+  <p class="text-gray-600">Sample #{{ item.sample.id }}</p>
+  <p class="text-sm text-gray-500">
+    Individual: {{ item.sample.individual.individual_id }}
+  </p>
+
+  {% if item.performed_date %}
+    <p class="text-sm text-gray-500">Performed: {{ item.performed_date }}</p>
+  {% endif %}
+  {% if item.performed_by %}
+    <p class="text-sm text-gray-500">
+      Performed by: {{ item.performed_by.username }}
+    </p>
+  {% endif %}
+  {% if item.service_send_date %}
+    <p class="text-sm text-gray-500">
+      Service sent: {{ item.service_send_date }}
+    </p>
+  {% endif %}
+  {% if item.data_receipt_date %}
+    <p class="text-sm text-gray-500">
+      Data received: {{ item.data_receipt_date }}
+    </p>
+  {% endif %}
+</div>
