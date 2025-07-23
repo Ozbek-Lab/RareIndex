@@ -58,8 +58,22 @@ class IndividualAdmin(admin.ModelAdmin):
 class SampleAdmin(admin.ModelAdmin):
     list_display = ["individual", "sample_type", "status", "receipt_date", "created_by"]
     list_filter = ["status", "sample_type", "receipt_date", "created_at"]
-    search_fields = ["individual__lab_id", "individual__full_name"]
+    search_fields = [
+        "individual__full_name",  # Only direct or forward fields!
+    ]
     date_hierarchy = "receipt_date"
+
+    def get_search_results(self, request, queryset, search_term):
+        # Get the default search results
+        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
+
+        # Add custom search for individual's cross_id values
+        cross_id_matches = models.Sample.objects.filter(
+            individual__cross_ids__id_value__icontains=search_term
+        )
+        queryset |= cross_id_matches
+
+        return queryset, use_distinct
 
 
 @admin.register(models.Test)
