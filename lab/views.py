@@ -2931,3 +2931,6 @@ def sankey_visualization(request):
             "filters_active": filters_active,
         },
     )
+
+def plots(request):
+    return render(request, "lab/visualization/plots.html")
