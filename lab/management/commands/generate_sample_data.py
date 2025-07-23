@@ -80,30 +80,56 @@ class Command(BaseCommand):
             self._create_tasks(family, user, statuses['completed'], project, options['tasks_per_object'])
             
             # Create family members
-            mother = self._create_individual("Mother", family, user, institution, statuses['registered'], hpo_terms)
+            mother = self._create_individual("Mother", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
             self._create_identifiers(mother, identifier_types, f"{family_id}.2", f"RD3.F{i+1:02d}.2", user )
-            father = self._create_individual("Father", family, user, institution, statuses['registered'], hpo_terms)
+            father = self._create_individual("Father", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
             self._create_identifiers(father, identifier_types, f"{family_id}.3", f"RD3.F{i+1:02d}.3", user)
 
-            # Create proband (sick child)
-            proband = self._create_individual(
-                "Proband",
-                family,
-                user,
-                institution,
-                statuses['active'],
-                hpo_terms,
-                mother=mother,
-                father=father
-            )
-            self._create_identifiers(proband, identifier_types, f"{family_id}.1", f"RD3.F{i+1:02d}.1", user)
+            # Determine if this family will have multiple children (half of families)
+            multi_child = (i % 2 == 0)
+            children = []
+            if multi_child:
+                # Two children, both indexes
+                for child_num in range(1, 3):
+                    proband = self._create_individual(
+                        f"Proband{child_num}",
+                        family,
+                        user,
+                        institution,
+                        statuses['active'],
+                        hpo_terms,
+                        mother=mother,
+                        father=father,
+                        is_index=True
+                    )
+                    rb_code = f"{family_id}.1.{child_num}"
+                    biobank_code = f"RD3.F{i+1:02d}.1.{child_num}"
+                    self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
+                    children.append(proband)
+            else:
+                # Single child, index
+                proband = self._create_individual(
+                    "Proband",
+                    family,
+                    user,
+                    institution,
+                    statuses['active'],
+                    hpo_terms,
+                    mother=mother,
+                    father=father,
+                    is_index=True
+                )
+                rb_code = f"{family_id}.1"
+                biobank_code = f"RD3.F{i+1:02d}.1"
+                self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
+                children.append(proband)
 
             # Create tasks for individuals
-            for individual in [proband, mother, father]:
+            for individual in [mother, father] + children:
                 self._create_tasks(individual, user, statuses['completed'], project, options['tasks_per_object'])
 
             # Create samples for each individual
-            for individual in [proband, mother, father]:
+            for individual in [mother, father] + children:
                 self._create_samples(
                     individual,
                     sample_types,
@@ -232,9 +258,8 @@ class Command(BaseCommand):
         )
         return family
 
-    def _create_individual(self, role, family, user, institution, status, hpo_terms, mother=None, father=None):
+    def _create_individual(self, role, family, user, institution, status, hpo_terms, mother=None, father=None, is_index=False):
         birth_date = timezone.now() - timedelta(days=random.randint(365*20, 365*50))
-        
         individual = Individual.objects.create(
             full_name=f"{role} {family.family_id}",
             tc_identity=random.randint(1000000000, 9999999999),
@@ -244,16 +269,17 @@ class Command(BaseCommand):
             father=father,
             created_by=user,
             status=status,
-            sending_institution=institution
+            sending_institution=institution,
+            is_index=is_index
         )
-        
         # Add random HPO terms (5-20 terms per individual)
         num_terms = random.randint(5, 20)
         selected_terms = random.sample(hpo_terms, min(num_terms, len(hpo_terms)))
         individual.hpo_terms.add(*selected_terms)
-        
-        self.stdout.write(f"Added {len(selected_terms)} HPO terms to {individual.lab_id}")
-        
+        # Set is_affected based on HPO terms
+        individual.is_affected = len(selected_terms) > 0
+        individual.save()
+        self.stdout.write(f"Added {len(selected_terms)} HPO terms to {individual.full_name} (is_index={is_index})")
         return individual
 
     def _create_tasks(self, obj, user, target_status, project, num_tasks):

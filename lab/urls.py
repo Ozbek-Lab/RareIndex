@@ -90,7 +90,6 @@ urlpatterns = [
     path("task/<int:pk>/", views.task_detail, name="task_detail"),
     path("task/search/", views.task_search, name="task_search"),
     path("search-hpo-terms/", views.search_hpo_terms, name="search_hpo_terms"),
-    path(
-        "visualization/hpo-network/", views.hpo_visualization, name="hpo_visualization"
-    ),
+    path("visualization/hpo-network/", views.hpo_visualization, name="hpo_visualization"),
+    path("visualization/sankey_visualization/", views.sankey_visualization, name="sankey_visualization"),
 ]

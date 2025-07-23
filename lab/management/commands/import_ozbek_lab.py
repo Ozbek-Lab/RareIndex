@@ -19,6 +19,7 @@ from lab.models import (
 )
 from ontologies.models import Term, Ontology
 import os
+import re
 
 class Command(BaseCommand):
     help = 'Import data from TSV file'
@@ -364,6 +365,10 @@ class Command(BaseCommand):
                         continue
                     institution_name = row.get('Gönderen Kurum/Birim')
                     institution = institutions.get(institution_name, unknown_institution)
+                    # Determine is_index from RB id
+                    is_index = False
+                    if re.search(r'\.1(\.|$)', lab_id):
+                        is_index = True
                     # Always create Individual if not exists by full_name+family
                     full_name = row.get('Ad-Soyad')
                     individual = Individual.objects.filter(full_name=full_name, family=families[family_id]).first()
@@ -378,10 +383,15 @@ class Command(BaseCommand):
                             created_by=admin_user,
                             diagnosis='',
                             diagnosis_date=None,
-                            council_date=None
+                            council_date=None,
+                            is_index=is_index
                         )
                         self.stdout.write(self.style.SUCCESS(f'Created individual: {full_name}'))
                     else:
+                        # Update is_index if needed
+                        if individual.is_index != is_index:
+                            individual.is_index = is_index
+                            individual.save()
                         self.stdout.write(f'Individual already exists: {full_name}')
 
                     # --- CrossIdentifiers ---
@@ -456,6 +466,11 @@ class Command(BaseCommand):
                     admin_user
                 )
 
+                # Determine is_index from RB id
+                is_index = False
+                if re.search(r'\.1(\.|$)', lab_id):
+                    is_index = True
+
                 # Update individual information
                 individual.full_name = row.get('Ad-Soyad', individual.full_name)
                 individual.tc_identity = row.get('TC Kimlik No', individual.tc_identity)
@@ -463,6 +478,7 @@ class Command(BaseCommand):
                 individual.icd11_code = row.get('ICD11', individual.icd11_code)
                 individual.sending_institution = institution if institution else individual.sending_institution
                 individual.status = registered_status # Use the registered_status from import_ids.py
+                individual.is_index = is_index
                 individual.save()
                 
                 # Get and link HPO terms
