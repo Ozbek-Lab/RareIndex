@@ -14,9 +14,12 @@ from lab.models import (
     Institution,
     TestType,
     Note,
+    IdentifierType,
+    CrossIdentifier
 )
 from ontologies.models import Term, Ontology
 import os
+import re
 
 class Command(BaseCommand):
     help = 'Import data from TSV file'
@@ -209,16 +212,18 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f'Admin user {admin_username} not found'))
             return
 
-        # Get or create default status
-        default_individual_status = Status.objects.filter(name='Registered').first()
-        if not default_individual_status:
-            default_individual_status = Status.objects.create(
-                name='Registered',
-                description='Sample is registered in the system',
-                created_by=admin_user,
-                content_type=ContentType.objects.get(app_label='lab', model='individual'),
+        # --- CREATE IdentifierType objects for cross IDs ---
+        id_types = {}
+        for idtype_name in ["RareBoost", "Biobank", "ERDERA"]:
+            id_type, _ = IdentifierType.objects.get_or_create(
+                name=idtype_name,
+                defaults={
+                    "description": f"{idtype_name} identifier type",
+                    "created_by": admin_user
+                }
             )
-        
+            id_types[idtype_name] = id_type
+
         # Get or create sample statuses
         sample_statuses = {
             'registered': Status.objects.filter(name='Registered').first(),
@@ -260,6 +265,176 @@ class Command(BaseCommand):
                 content_type=ContentType.objects.get(app_label='lab', model='sample'),
             )
 
+        # Ensure required statuses exist (only for Individual, as Sample statuses are handled below)
+        self.stdout.write('Ensuring required statuses exist...')
+        required_statuses = {
+            'Registered': {'description': 'Initial status for new entries', 'color': 'blue'},
+            'Completed': {'description': 'Entry has been completed', 'color': 'green'},
+            'In Progress': {'description': 'Entry is currently being processed', 'color': 'yellow'}
+        }
+        for status_name, status_data in required_statuses.items():
+            status, created = Status.objects.get_or_create(
+                name=status_name,
+                content_type=ContentType.objects.get(app_label='lab', model='individual'),
+                defaults={
+                    'description': status_data['description'],
+                    'color': status_data['color'],
+                    'created_by': admin_user,
+                }
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'Created status: {status_name}'))
+            else:
+                self.stdout.write(f'Status already exists: {status_name}')
+        registered_status = Status.objects.get(name='Registered', content_type=ContentType.objects.get(app_label='lab', model='individual'))
+
+        # Create Unknown institution if it doesn't exist
+        self.stdout.write('Ensuring Unknown institution exists...')
+        unknown_institution, created = Institution.objects.get_or_create(
+            name='Unknown',
+            defaults={
+                'contact': 'Unknown institution - placeholder for missing institution data',
+                'created_by': admin_user
+            }
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS('Created Unknown institution'))
+        else:
+            self.stdout.write('Unknown institution already exists')
+
+        # First pass: Collect unique values
+        unique_family_ids = set()
+        institution_details = {}  # Store both name and contact info
+        self.stdout.write('First pass: Collecting unique values...')
+        with open(file_path, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file, delimiter='\t')
+            for row in reader:
+                # Collect family IDs
+                lab_id = row.get('Özbek Lab. ID')
+                if lab_id:
+                    family_id = self._get_family_id(lab_id)
+                    if family_id:
+                        unique_family_ids.add(family_id)
+                # Collect institution details
+                institution_name = row.get('Gönderen Kurum/Birim')
+                contact_info = row.get('Klinisyen & İletişim Bilgileri')
+                if institution_name:
+                    if institution_name not in institution_details:
+                        institution_details[institution_name] = set()
+                    if contact_info:
+                        institution_details[institution_name].add(contact_info)
+        # Create Families
+        self.stdout.write('Creating Families...')
+        families = {}
+        for family_id in unique_family_ids:
+            family, _ = Family.objects.get_or_create(
+                family_id=family_id,
+                defaults={'created_by': admin_user}
+            )
+            families[family_id] = family
+        # Create Institutions with contact information
+        self.stdout.write('Creating Institutions...')
+        institutions = {}
+        for name, contacts in institution_details.items():
+            institution, _ = Institution.objects.get_or_create(
+                name=name,
+                defaults={
+                    'contact': '\n'.join(contacts) if contacts else '',
+                    'created_by': admin_user
+                }
+            )
+            # Update contact information if institution exists and has new contacts
+            if not _ and contacts:
+                existing_contacts = set(institution.contact.split('\n')) if institution.contact else set()
+                all_contacts = existing_contacts.union(contacts)
+                institution.contact = '\n'.join(all_contacts)
+                institution.save()
+            institutions[name] = institution
+        # Second pass: Create Individuals and CrossIdentifiers
+        self.stdout.write('Second pass: Creating Individuals and CrossIdentifiers...')
+        with open(file_path, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file, delimiter='\t')
+            for row in reader:
+                try:
+                    # Get family
+                    lab_id = row.get('Özbek Lab. ID')
+                    if not lab_id:
+                        continue
+                    family_id = self._get_family_id(lab_id)
+                    if not family_id or family_id not in families:
+                        continue
+                    institution_name = row.get('Gönderen Kurum/Birim')
+                    institution = institutions.get(institution_name, unknown_institution)
+                    # Determine is_index from RB id
+                    is_index = False
+                    if re.search(r'\.1(\.|$)', lab_id):
+                        is_index = True
+                    # Always create Individual if not exists by full_name+family
+                    full_name = row.get('Ad-Soyad')
+                    individual = Individual.objects.filter(full_name=full_name, family=families[family_id]).first()
+                    if not individual:
+                        individual = Individual.objects.create(
+                            full_name=full_name,
+                            family=families[family_id],
+                            birth_date=self._parse_date(row.get('Doğum Tarihi')),
+                            icd11_code='',
+                            sending_institution=institution,
+                            status=registered_status,
+                            created_by=admin_user,
+                            diagnosis='',
+                            diagnosis_date=None,
+                            council_date=None,
+                            is_index=is_index
+                        )
+                        self.stdout.write(self.style.SUCCESS(f'Created individual: {full_name}'))
+                    else:
+                        # Update is_index if needed
+                        if individual.is_index != is_index:
+                            individual.is_index = is_index
+                            individual.save()
+                        self.stdout.write(f'Individual already exists: {full_name}')
+
+                    # --- CrossIdentifiers ---
+                    # RareBoost
+                    rareboost_id = row.get('Özbek Lab. ID')
+                    if rareboost_id:
+                        CrossIdentifier.objects.get_or_create(
+                            individual=individual,
+                            id_type=id_types["RareBoost"],
+                            defaults={
+                                'id_value': rareboost_id,
+                                'created_by': admin_user
+                            }
+                        )
+                    # Biobank
+                    biobank_id = row.get('Biyobanka ID')
+                    if biobank_id:
+                        CrossIdentifier.objects.get_or_create(
+                            individual=individual,
+                            id_type=id_types["Biobank"],
+                            defaults={
+                                'id_value': biobank_id,
+                                'created_by': admin_user
+                            }
+                        )
+                    # ERDERA
+                    erdera_id = row.get('ERDERA ID')
+                    if erdera_id:
+                        CrossIdentifier.objects.get_or_create(
+                            individual=individual,
+                            id_type=id_types["ERDERA"],
+                            defaults={
+                                'id_value': erdera_id,
+                                'created_by': admin_user
+                            }
+                        )
+                except Exception as e:
+                    self.stdout.write(
+                        self.style.ERROR(f"Error processing row for {row.get('Özbek Lab. ID')}: {str(e)}")
+                    )
+                    continue
+        # --- END: Individual and CrossIdentifier logic ---
+
         # Create leftovers file in the same directory as input file
         leftovers_path = os.path.join(os.path.dirname(file_path), 'import_ozbek_lab_leftovers.tsv')
         leftover_rows = []
@@ -277,7 +452,7 @@ class Command(BaseCommand):
 
                 # Try to find existing individual
                 try:
-                    individual = Individual.objects.get(lab_id=lab_id)
+                    individual = Individual.objects.get(cross_ids__id_value=lab_id)
                     self.stdout.write(f'Found existing individual: {lab_id}')
                 except Individual.DoesNotExist:
                     leftover_rows.append(row)
@@ -291,13 +466,19 @@ class Command(BaseCommand):
                     admin_user
                 )
 
+                # Determine is_index from RB id
+                is_index = False
+                if re.search(r'\.1(\.|$)', lab_id):
+                    is_index = True
+
                 # Update individual information
                 individual.full_name = row.get('Ad-Soyad', individual.full_name)
                 individual.tc_identity = row.get('TC Kimlik No', individual.tc_identity)
                 individual.birth_date = self._parse_date(row.get('Doğum Tarihi')) or individual.birth_date
                 individual.icd11_code = row.get('ICD11', individual.icd11_code)
                 individual.sending_institution = institution if institution else individual.sending_institution
-                individual.status = default_individual_status
+                individual.status = registered_status # Use the registered_status from import_ids.py
+                individual.is_index = is_index
                 individual.save()
                 
                 # Get and link HPO terms
