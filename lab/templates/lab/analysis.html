@@ -1,47 +1,44 @@
-{% partialdef card %}
-  <div class="card-base" data-item-id="{{ item.id }}">
-    <div class="card-header">
-      <div class="card-title-section">
-        <h3 class="card-title">{{ item.type.name }}</h3>
-        <p class="card-info-row">Test: {{ item.test.test_type.name }}</p>
-        <p class="card-info-row">Sample: #{{ item.test.sample.id }}</p>
-        <p class="card-info-row">
-          Individual: {{ item.test.sample.individual.individual_id }}
-        </p>
-        {% if item.performed_date %}
-          <p class="card-meta">Performed: {{ item.performed_date }}</p>
-        {% endif %}
-        {% if item.performed_by %}
-          <p class="card-meta">
-            Performed by: {{ item.performed_by.username }}
-          </p>
-        {% endif %}
-        {% if item.type.source_url %}
-          <p class="card-action-button">
-            <a href="{{ item.type.source_url }}" target="_blank">Source</a>
-          </p>
-        {% endif %}
-        {% if item.type.results_url %}
-          <p class="card-action-button">
-            <a href="{{ item.type.results_url }}" target="_blank">Results</a>
-          </p>
-        {% endif %}
-        {% if item.notes.all %}
-          <div class="card-footer mt-2">
-            <span class="font-semibold text-xs">Notes:</span>
-            <ul class="list-disc ml-4 text-xs">
-              {% for note in item.notes.all %}
-                <li>{{ note.content|truncatewords:15 }}</li>
-              {% endfor %}
-            </ul>
-          </div>
-        {% endif %}
-      </div>
-      <div class="card-badge-section">
-        {% with float="float-right" color=item.status.color text=item.status.name %}
-          {% include 'lab/partials/badge.html' %}
-        {% endwith %}
-      </div>
+<div
+  class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-2"
+  data-item-id="{{ item.id }}"
+>
+  {% with float="float-right" color=item.status.color text=item.status.name %}
+    {% include 'lab/partials/badge.html' %}
+  {% endwith %}
+
+  <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">{{ item.type.name }}</h3>
+  <p class="text-gray-600 dark:text-gray-400">Test: {{ item.test.test_type.name }}</p>
+  <p class="text-gray-600 dark:text-gray-400">Sample: #{{ item.test.sample.id }}</p>
+  <p class="text-sm text-gray-500 dark:text-gray-400">
+    Individual: {{ item.test.sample.individual.individual_id }}
+  </p>
+
+  {% if item.performed_date %}
+    <p class="text-sm text-gray-500 dark:text-gray-400">Performed: {{ item.performed_date }}</p>
+  {% endif %}
+  {% if item.performed_by %}
+    <p class="text-sm text-gray-500 dark:text-gray-400">
+      Performed by: {{ item.performed_by.username }}
+    </p>
+  {% endif %}
+  {% if item.type.source_url %}
+    <p class="text-sm text-blue-600 dark:text-blue-400">
+      <a href="{{ item.type.source_url }}" target="_blank">Source</a>
+    </p>
+  {% endif %}
+  {% if item.type.results_url %}
+    <p class="text-sm text-green-600 dark:text-green-400">
+      <a href="{{ item.type.results_url }}" target="_blank">Results</a>
+    </p>
+  {% endif %}
+  {% if item.notes.all %}
+    <div class="mt-2">
+      <span class="font-semibold text-xs">Notes:</span>
+      <ul class="list-disc ml-4 text-xs">
+        {% for note in item.notes.all %}
+          <li>{{ note.content|truncatewords:15 }}</li>
+        {% endfor %}
+      </ul>
     </div>
-  </div>
-{% endpartialdef card %}
+  {% endif %}
+</div>

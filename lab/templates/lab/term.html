@@ -1,5 +1,6 @@
-{% partialdef card %}
-  <div class="card-base" data-item-id="{{ item.id }}">
-    <span class="card-title">{{ item.term }} {{ item.label }}</span>
-  </div>
-{% endpartialdef card %}
+<div
+  class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-2"
+  data-item-id="{{ item.id }}"
+>
+  <span class="text-gray-900 dark:text-gray-100">{{ item.term }} {{ item.label }}</span>
+</div>
