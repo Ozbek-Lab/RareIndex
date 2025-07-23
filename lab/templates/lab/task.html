@@ -1,18 +1,20 @@
-<div
-  class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-2"
-  data-item-id="{{ item.id }}"
->
-  {% with float="float-right" color=item.status.color text=item.status.name %}
-    {% include 'lab/partials/badge.html' %}
-  {% endwith %}
-
-  <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">{{ item.title }}</h3>
-  <p class="text-gray-600 dark:text-gray-400">{{ item.description|truncatewords:20 }}</p>
-  <p class="text-sm text-gray-500 dark:text-gray-400">
-    Assigned to: {{ item.assigned_to.username }}
-  </p>
-  <p class="text-sm text-gray-500 dark:text-gray-400">Priority: {{ item.priority }}</p>
-  {% if item.project %}
-    <p class="text-sm text-gray-500 dark:text-gray-400">Project: {{ item.project.name }}</p>
-  {% endif %}
-</div>
+{% partialdef card %}
+  <div class="card-base" data-item-id="{{ item.id }}">
+    <div class="card-header">
+      <div class="card-title-section">
+        <h3 class="card-title">{{ item.title }}</h3>
+        <p class="card-subtitle">{{ item.description|truncatewords:20 }}</p>
+        <p class="card-meta">Assigned to: {{ item.assigned_to.username }}</p>
+        <p class="card-meta">Priority: {{ item.priority }}</p>
+        {% if item.project %}
+          <p class="card-meta">Project: {{ item.project.name }}</p>
+        {% endif %}
+      </div>
+      <div class="card-badge-section">
+        {% with float="float-right" color=item.status.color text=item.status.name %}
+          {% include 'lab/partials/badge.html' %}
+        {% endwith %}
+      </div>
+    </div>
+  </div>
+{% endpartialdef card %}
