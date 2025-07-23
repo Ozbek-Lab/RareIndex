@@ -9,8 +9,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
-        darkMode: 'class'
-      }
+        darkMode: "class",
+      };
     </script>
 
     <script defer src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
@@ -24,26 +24,18 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
     />
   </head>
-  <body x-data="{ darkMode: localStorage.getItem('darkMode') === 'true',
+  <body
+    x-data="{ darkMode: localStorage.getItem('darkMode') === 'true',
                   toggleDark() { this.darkMode = !this.darkMode; localStorage.setItem('darkMode', this.darkMode); },
                   init() { this.darkMode = localStorage.getItem('darkMode') === 'true'; }
                 }"
-        x-init="init()"
-        :class="{ 'dark': darkMode }"
-        class="bg-gray-100">
+    x-init="init()"
+    :class="{ 'dark': darkMode }"
+    class="bg-gray-100"
+  >
     {% if user.is_authenticated %}
-      <div class="flex h-screen bg-gray-50 dark:bg-gray-900">
-        <!-- Sidebar -->
-
-        {% include "lab/sidebar.html" %}
-        <!-- Main Content Area -->
-        <div class="flex-1 flex flex-col overflow-hidden">
-          <!-- Main Content -->
-          <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900 p-6">
-            {% block content %}{% endblock %}
-          </main>
-        </div>
-      </div>
+      {% block content %}
+      {% endblock %}
     {% endif %}
 
     <script>

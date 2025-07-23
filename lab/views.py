@@ -10,7 +10,6 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from .models import Note
 from django.contrib.contenttypes.models import ContentType
-from django.http import JsonResponse
 
 # Import models
 from .models import Individual
@@ -200,7 +199,9 @@ def _get_pks_to_filter_by(filter_model_name, filter_search_term):
         return [int(filter_search_term)]
     filter_model_config = FILTER_CONFIG.get(filter_model_name, {})
     filter_app_label = filter_model_config.get("app_label", "lab")
-    filter_model = apps.get_model(app_label=filter_app_label, model_name=filter_model_name)
+    filter_model = apps.get_model(
+        app_label=filter_app_label, model_name=filter_model_name
+    )
     search_fields = filter_model_config.get("search_fields", [])
     if search_fields:
         q_objects = Q()
@@ -220,14 +221,20 @@ def _apply_orm_path_filter(queryset, orm_path, pks_to_filter_by, filter_model_na
         combined_q = Q()
         for path_config in orm_path:
             link_model_name = path_config["link_model"]
-            link_model_app_label = FILTER_CONFIG.get(link_model_name, {}).get("app_label", "lab")
-            link_model = apps.get_model(app_label=link_model_app_label, model_name=link_model_name)
+            link_model_app_label = FILTER_CONFIG.get(link_model_name, {}).get(
+                "app_label", "lab"
+            )
+            link_model = apps.get_model(
+                app_label=link_model_app_label, model_name=link_model_name
+            )
             path_from_link = path_config["path_from_link_model"]
             link_model_pks = link_model.objects.filter(
                 **{f"{path_from_link}__in": pks_to_filter_by}
             ).values_list("pk", flat=True)
             content_type = ContentType.objects.get_for_model(link_model)
-            combined_q |= Q(content_type=content_type, object_id__in=list(link_model_pks))
+            combined_q |= Q(
+                content_type=content_type, object_id__in=list(link_model_pks)
+            )
         if combined_q:
             return queryset.filter(combined_q)
         else:
@@ -235,7 +242,9 @@ def _apply_orm_path_filter(queryset, orm_path, pks_to_filter_by, filter_model_na
     elif isinstance(orm_path, tuple):
         filter_model_config = FILTER_CONFIG.get(filter_model_name, {})
         filter_app_label = filter_model_config.get("app_label", "lab")
-        filter_model = apps.get_model(app_label=filter_app_label, model_name=filter_model_name)
+        filter_model = apps.get_model(
+            app_label=filter_app_label, model_name=filter_model_name
+        )
         content_type_field, object_id_field = orm_path
         content_type = ContentType.objects.get_for_model(filter_model)
         return queryset.filter(
@@ -285,7 +294,7 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
     Handles both generic text search and exact-match select filters.
     """
     target_config = FILTER_CONFIG.get(target_model_name, {})
-    
+
     # Handle the component's own text search (from generic-search partial)
     own_search_term = request.GET.get("search", "").strip()
     if own_search_term:
@@ -305,14 +314,18 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
 
     for filter_key, filter_value in active_filters.items():
         # Only look for select field config in the target model
-        source_model_name, select_config = _get_select_field_config(filter_key, target_model_name)
+        source_model_name, select_config = _get_select_field_config(
+            filter_key, target_model_name
+        )
 
         # A) If it's a select filter, apply an exact match
         path_to_model = target_config.get("filters", {}).get(source_model_name)
         if select_config:
             select_filter_path = select_config.get("select_filter_path")
             if select_filter_path:
-                queryset = queryset.filter(**{f"{select_filter_path}__exact": filter_value})
+                queryset = queryset.filter(
+                    **{f"{select_filter_path}__exact": filter_value}
+                )
             else:
                 continue
         # B) If it's a text-search filter from another model, use 'icontains'
@@ -324,14 +337,16 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
                 search_fields = filter_model_config.get("search_fields", [])
                 if not search_fields:
                     continue
-                
+
                 filter_app_label = filter_model_config.get("app_label", "lab")
-                filter_model = apps.get_model(app_label=filter_app_label, model_name=filter_model_name)
-                
+                filter_model = apps.get_model(
+                    app_label=filter_app_label, model_name=filter_model_name
+                )
+
                 q_objects = Q()
                 for field in search_fields:
                     q_objects |= Q(**{f"{field}__icontains": filter_value})
-                
+
                 pks_to_filter_by = list(
                     filter_model.objects.filter(q_objects)
                     .values_list("pk", flat=True)
@@ -343,7 +358,7 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
             else:
                 # skip/ignore if orm_path is not a string (e.g., list/tuple/None)
                 continue
-                
+
     return queryset.distinct()
 
 
@@ -420,7 +435,7 @@ def get_select_options(request):
     model_name = request.GET.get("model_name")
     field_name = request.GET.get("field_name")
     selected_value = request.GET.get("selected_value")
-    
+
     config = FILTER_CONFIG.get(model_name, {})
     if not config:
         return HttpResponseBadRequest("Model not configured.")
@@ -429,12 +444,16 @@ def get_select_options(request):
     field_path = select_config.get("field_path")
     select_filter_path = select_config.get("select_filter_path", field_path)
 
-    model_class = apps.get_model(app_label=config.get("app_label"), model_name=model_name)
+    model_class = apps.get_model(
+        app_label=config.get("app_label"), model_name=model_name
+    )
     if not all([field_name, model_class, select_filter_path]):
         return HttpResponseBadRequest("Invalid request for select options.")
 
     # Apply all filters *except* the one we are fetching options for
-    filtered_qs = apply_filters(request, model_name, model_class.objects.all(), exclude_filter=field_name)
+    filtered_qs = apply_filters(
+        request, model_name, model_class.objects.all(), exclude_filter=field_name
+    )
     options = (
         filtered_qs.order_by(select_filter_path)
         .values_list(select_filter_path, flat=True)
@@ -455,22 +474,27 @@ def get_select_options(request):
 
 @login_required
 def note_list(request):
-    object_id = request.GET.get('object_id')
-    content_type_id = request.GET.get('content_type')
+    object_id = request.GET.get("object_id")
+    content_type_id = request.GET.get("content_type")
     content_type = get_object_or_404(ContentType, id=content_type_id)
     obj = content_type.get_object_for_this_type(id=object_id)
-    return render(request, 'lab/note.html#note-list', {
-        'object': obj,
-        'content_type': content_type_id,
-        'user': request.user,
-    })
+    return render(
+        request,
+        "lab/note.html#note-list",
+        {
+            "object": obj,
+            "content_type": content_type_id,
+            "user": request.user,
+        },
+    )
+
 
 @login_required
 @require_POST
 def note_create(request):
-    content_type_id = request.POST.get('content_type')
-    object_id = request.POST.get('object_id')
-    content = request.POST.get('content')
+    content_type_id = request.POST.get("content_type")
+    object_id = request.POST.get("object_id")
+    content = request.POST.get("content")
     content_type = get_object_or_404(ContentType, id=content_type_id)
     obj = content_type.get_object_for_this_type(id=object_id)
     note = Note.objects.create(
@@ -479,23 +503,33 @@ def note_create(request):
         content_type=content_type,
         object_id=object_id,
     )
-    return render(request, 'lab/note.html#note-list', {
-        'object': obj,
-        'content_type': content_type_id,
-        'user': request.user,
-    })
+    return render(
+        request,
+        "lab/note.html#note-list",
+        {
+            "object": obj,
+            "content_type": content_type_id,
+            "user": request.user,
+        },
+    )
+
 
 @login_required
 def note_count(request):
-    object_id = request.GET.get('object_id')
-    content_type_id = request.GET.get('content_type')
+    object_id = request.GET.get("object_id")
+    content_type_id = request.GET.get("content_type")
     content_type = get_object_or_404(ContentType, id=content_type_id)
     obj = content_type.get_object_for_this_type(id=object_id)
-    return render(request, 'lab/note.html#note-summary', {
-        'object': obj,
-        'content_type': content_type_id,
-        'user': request.user,
-    })
+    return render(
+        request,
+        "lab/note.html#note-summary",
+        {
+            "object": obj,
+            "content_type": content_type_id,
+            "user": request.user,
+        },
+    )
+
 
 @login_required
 @require_POST
@@ -505,8 +539,12 @@ def note_delete(request, pk):
     object_id = note.object_id
     obj = note.content_object
     note.delete()
-    return render(request, 'lab/note.html#note-list', {
-        'object': obj,
-        'content_type': content_type_id,
-        'user': request.user,
-    })
+    return render(
+        request,
+        "lab/note.html#note-list",
+        {
+            "object": obj,
+            "content_type": content_type_id,
+            "user": request.user,
+        },
+    )
