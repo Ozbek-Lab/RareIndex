@@ -142,7 +142,7 @@ class Command(BaseCommand):
                     continue
 
                 try:
-                    individual = Individual.objects.get(lab_id=lab_id)
+                    individual = Individual.objects.get(cross_ids__id_value=lab_id)
                 except Individual.DoesNotExist:
                     leftover_rows.append(row)
                     self.stdout.write(self.style.WARNING(f'Individual not found with lab_id: {lab_id}'))

@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.contrib.contenttypes.models import ContentType
 from lab.models import (
     Family,
     Individual,
@@ -15,7 +16,9 @@ from lab.models import (
     AnalysisType,
     Analysis,
     Project,
-    Task
+    Task,
+    IdentifierType,
+    CrossIdentifier
 )
 from ontologies.models import Term
 
@@ -35,6 +38,10 @@ class Command(BaseCommand):
         if not user:
             self.stdout.write('Creating default superuser...')
             user = User.objects.create_superuser('admin', 'admin@example.com', 'admin')
+            self.stdout.write('Creating pleb user...')
+            pleb = User.objects.create_user('pleb', 'pleb@example.com', 'pleb')
+            self.stdout.write('Creating normal user...')
+            normal = User.objects.create_user('normal', 'normal@example.com', 'normal')
 
         # Create statuses if they don't exist
         statuses = self._create_statuses(user)
@@ -54,6 +61,9 @@ class Command(BaseCommand):
         # Create a project
         project = self._create_project(user)
 
+        # Create identifier types if they don't exist
+        identifier_types = self._create_identifier_types(user)
+
         # Get a random selection of HPO terms to use
         hpo_terms = list(Term.objects.filter(ontology__type=1).order_by('?')[:50])  # Get 50 random HPO terms
         self.stdout.write(f"Found {len(hpo_terms)} HPO terms to use")
@@ -63,35 +73,63 @@ class Command(BaseCommand):
 
         # Generate families and their members
         for i in range(options['families']):
-            family_id = f"RB_2025_{i+1:03d}"
+            family_id = f"RB_2025_{i+1:02d}"
             family = self._create_family(family_id, user)
             
             # Create tasks for family
             self._create_tasks(family, user, statuses['completed'], project, options['tasks_per_object'])
             
             # Create family members
-            mother = self._create_individual(f"{family_id}.2", "Mother", family, user, institution, statuses['registered'], hpo_terms)
-            father = self._create_individual(f"{family_id}.3", "Father", family, user, institution, statuses['registered'], hpo_terms)
-            
-            # Create proband (sick child)
-            proband = self._create_individual(
-                f"{family_id}.1",
-                "Proband",
-                family,
-                user,
-                institution,
-                statuses['active'],
-                hpo_terms,
-                mother=mother,
-                father=father
-            )
+            mother = self._create_individual("Mother", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
+            self._create_identifiers(mother, identifier_types, f"{family_id}.2", f"RD3.F{i+1:02d}.2", user )
+            father = self._create_individual("Father", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
+            self._create_identifiers(father, identifier_types, f"{family_id}.3", f"RD3.F{i+1:02d}.3", user)
+
+            # Determine if this family will have multiple children (half of families)
+            multi_child = (i % 2 == 0)
+            children = []
+            if multi_child:
+                # Two children, both indexes
+                for child_num in range(1, 3):
+                    proband = self._create_individual(
+                        f"Proband{child_num}",
+                        family,
+                        user,
+                        institution,
+                        statuses['active'],
+                        hpo_terms,
+                        mother=mother,
+                        father=father,
+                        is_index=True
+                    )
+                    rb_code = f"{family_id}.1.{child_num}"
+                    biobank_code = f"RD3.F{i+1:02d}.1.{child_num}"
+                    self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
+                    children.append(proband)
+            else:
+                # Single child, index
+                proband = self._create_individual(
+                    "Proband",
+                    family,
+                    user,
+                    institution,
+                    statuses['active'],
+                    hpo_terms,
+                    mother=mother,
+                    father=father,
+                    is_index=True
+                )
+                rb_code = f"{family_id}.1"
+                biobank_code = f"RD3.F{i+1:02d}.1"
+                self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
+                children.append(proband)
 
             # Create tasks for individuals
-            for individual in [proband, mother, father]:
+            for individual in [mother, father] + children:
                 self._create_tasks(individual, user, statuses['completed'], project, options['tasks_per_object'])
 
             # Create samples for each individual
-            for individual in [proband, mother, father]:
+            for individual in [mother, father] + children:
                 self._create_samples(
                     individual,
                     sample_types,
@@ -109,26 +147,28 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('Successfully generated sample data'))
 
     def _create_statuses(self, user):
-        status_data = {
-            'registered': ('Registered', 'gray'),
-            'active': ('Active', 'green'),
-            'completed': ('Completed', 'blue'),
-            'cancelled': ('Cancelled', 'red'),
-            'pending': ('Pending', 'yellow'),
-        }
-        
-        statuses = {}
-        for key, (name, color) in status_data.items():
-            status, _ = Status.objects.get_or_create(
-                name=name,
-                defaults={
-                    'color': color,
-                    'created_by': user
-                }
-            )
-            statuses[key] = status
-        
-        return statuses
+        for type in [Individual, Sample, Test, Analysis]:
+            status_data = {
+                'registered': ('Registered', 'gray'),
+                'active': ('Active', 'green'),
+                'completed': ('Completed', 'blue'),
+                'cancelled': ('Cancelled', 'red'),
+                'pending': ('Pending', 'yellow'),
+            }
+            
+            statuses = {}
+            for key, (name, color) in status_data.items():
+                status, _ = Status.objects.get_or_create(
+                    name=name,
+                    content_type=ContentType.objects.get_for_model(type),
+                    defaults={
+                        'color': color,
+                        'created_by': user
+                    }
+                )
+                statuses[key] = status
+            
+            return statuses
 
     def _create_sample_types(self, user):
         sample_type_names = ['Blood', 'Tissue', 'Saliva', 'Urine']
@@ -218,29 +258,28 @@ class Command(BaseCommand):
         )
         return family
 
-    def _create_individual(self, lab_id, role, family, user, institution, status, hpo_terms, mother=None, father=None):
+    def _create_individual(self, role, family, user, institution, status, hpo_terms, mother=None, father=None, is_index=False):
         birth_date = timezone.now() - timedelta(days=random.randint(365*20, 365*50))
-        
         individual = Individual.objects.create(
-            lab_id=lab_id,
-            biobank_id=f"RD3.{lab_id}",
             full_name=f"{role} {family.family_id}",
+            tc_identity=random.randint(1000000000, 9999999999),
             birth_date=birth_date,
             family=family,
             mother=mother,
             father=father,
             created_by=user,
             status=status,
-            sending_institution=institution
+            sending_institution=institution,
+            is_index=is_index
         )
-        
         # Add random HPO terms (5-20 terms per individual)
         num_terms = random.randint(5, 20)
         selected_terms = random.sample(hpo_terms, min(num_terms, len(hpo_terms)))
         individual.hpo_terms.add(*selected_terms)
-        
-        self.stdout.write(f"Added {len(selected_terms)} HPO terms to {individual.lab_id}")
-        
+        # Set is_affected based on HPO terms
+        individual.is_affected = len(selected_terms) > 0
+        individual.save()
+        self.stdout.write(f"Added {len(selected_terms)} HPO terms to {individual.full_name} (is_index={is_index})")
         return individual
 
     def _create_tasks(self, obj, user, target_status, project, num_tasks):
@@ -299,4 +338,37 @@ class Command(BaseCommand):
                     )
 
                     # Create tasks for analysis
-                    self._create_tasks(analysis, user, statuses['completed'], project, tasks_per_object) 
+                    self._create_tasks(analysis, user, statuses['completed'], project, tasks_per_object)
+
+    def _create_identifier_types(self, user):
+        identifier_type_data = {
+            'RareBoost': 'RareBoost',
+            'Biobank': 'Biobank',
+            'ERDERA': 'ERDERA'
+        }
+        for name, description in identifier_type_data.items():
+            IdentifierType.objects.get_or_create(name=name, defaults={'description': description, 'created_by': user})
+        return IdentifierType.objects.all()
+
+    def _create_identifiers(self, individual, identifier_types, lab_id, biobank_id, user):
+            CrossIdentifier.objects.create(
+                individual=individual,
+                id_type=identifier_types[0],
+                id_value=lab_id,
+                link=f"https://www.rareboost.com/individual/{lab_id}",
+                created_by=user
+            )
+            CrossIdentifier.objects.create(
+                individual=individual,
+                id_type=identifier_types[1],
+                id_value=biobank_id,
+                link=f"https://www.biobank.com/individual/{biobank_id}",
+                created_by=user
+            )
+            CrossIdentifier.objects.create(
+                individual=individual,
+                id_type=identifier_types[2],
+                id_value=random.randint(1000000000, 9999999999),
+                link=f"https://www.erdera.com/individual/{random.randint(1000000000, 9999999999)}",
+                created_by=user
+            )
