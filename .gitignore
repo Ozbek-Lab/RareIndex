@@ -1,5 +1,6 @@
 # Ignore all .sql files
 *.sql
+*.db
 
 # Python bytecode files
 *.pyc
