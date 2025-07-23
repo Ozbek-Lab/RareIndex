@@ -1,6 +1,120 @@
 {% extends "lab/base.html" %}
 {% load partials %}
 
+
+{% partialdef drawer %}
+<!-- Alpine.js Right-side Drawer -->
+<div x-show="open" x-cloak>
+  <!-- Overlay -->
+  <div x-show="open" @click="open = false" class="fixed inset-0 bg-black bg-opacity-30 z-40 transition-opacity duration-200" x-transition.opacity></div>
+
+  <!-- Drawer -->
+  <aside
+    x-show="open"
+    x-transition:enter="transition transform duration-300"
+    x-transition:enter-start="translate-x-full"
+    x-transition:enter-end="translate-x-0"
+    x-transition:leave="transition transform duration-200"
+    x-transition:leave-start="translate-x-0"
+    x-transition:leave-end="translate-x-full"
+    class="fixed top-0 right-0 h-full w-80 bg-white dark:bg-gray-800 shadow-lg z-50 flex flex-col"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="filter-drawer-label"
+  >
+    <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+      <h5 id="filter-drawer-label" class="text-base font-semibold text-gray-700 dark:text-gray-200">Filters</h5>
+      <button @click="open = false" type="button" class="text-gray-400 hover:text-gray-700 dark:hover:text-white focus:outline-none">
+        <i class="fa-solid fa-circle-xmark"></i>
+      </button>
+    </div>
+    <div class="p-4 flex-1 overflow-y-auto space-y-6">
+      <!-- Individuals -->
+      <div>
+        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          <i class="fa-solid fa-person mr-2"></i> Individuals
+        </h6>
+        {% with app_label='lab' model_name='Individual' %}
+          {% partial generic-search %}
+        {% endwith %}
+      </div>
+      <!-- Samples -->
+      <div>
+        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          <i class="fa-solid fa-vial mr-2"></i> Samples
+        </h6>
+        {% with app_label='lab' model_name='Sample' %}
+          {% partial generic-search %}
+        {% endwith %}
+        {% with app_label='lab' model_name='Sample' field_name='sample_type' label='Sample Type' %}
+          {% partial generic-select %}
+        {% endwith %}
+      </div>
+      <!-- Tests -->
+      <div>
+        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          <i class="fa-solid fa-flask-vial mr-2"></i> Tests
+        </h6>
+        {% with app_label='lab' model_name='Test' %}
+          {% partial generic-search %}
+        {% endwith %}
+        {% with app_label='lab' model_name='Test' field_name='test_type' label='Test Type' %}
+          {% partial generic-select %}
+        {% endwith %}
+      </div>
+      <!-- Analyses -->
+      <div>
+        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          <i class="fa-solid fa-laptop mr-2"></i> Analyses
+        </h6>
+        {% with app_label='lab' model_name='Analysis' %}
+          {% partial generic-search %}
+        {% endwith %}
+        {% with app_label='lab' model_name='Analysis' field_name='analysis_type' label='Analysis Type' %}
+          {% partial generic-select %}
+        {% endwith %}
+      </div>
+      <!-- Institutions -->
+      <div>
+        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          <i class="fa-solid fa-building-columns mr-2"></i> Institutions
+        </h6>
+        {% with app_label='lab' model_name='Institution' %}
+          {% partial generic-search %}
+        {% endwith %}
+      </div>
+      <!-- Projects -->
+      <div>
+        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          <i class="fa-solid fa-diagram-project mr-2"></i> Projects
+        </h6>
+        {% with app_label='lab' model_name='Project' %}
+          {% partial generic-search %}
+        {% endwith %}
+      </div>
+      <!-- Tasks -->
+      <div>
+        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          <i class="fa-solid fa-list-check mr-2"></i> Tasks
+        </h6>
+        {% with app_label='lab' model_name='Task' %}
+          {% partial generic-search %}
+        {% endwith %}
+      </div>
+      <!-- HPO Terms -->
+      <div>
+        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          <i class="fa-solid fa-stethoscope mr-2"></i> HPO Terms
+        </h6>
+        {% with app_label='ontologies' model_name='Term' %}
+          {% partial generic-search %}
+        {% endwith %}
+      </div>
+    </div>
+  </aside>
+</div>
+{% endpartialdef drawer %}
+
 {% partialdef indicator %}
   <div x-show="isLoading" x-transition>
     {% if text %}
@@ -30,7 +144,8 @@
       x-model.debounce.300ms="filters.{{ model_name|lower }}"
       hx-get="{% url 'lab:generic_search' %}"
       hx-trigger="input changed delay:200ms, filters-updated from:window, load"
-      hx-target="#{{ model_name|lower }}"
+      hx-target="#index-{{ model_name|lower }}-results"
+      hx-oob
       :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
     />
   </div>
@@ -113,80 +228,75 @@
       {{ title }}
     </h2>
 
-    {% with app_label=app_label model_name=model_name %}
-      {% partial generic-search %}
-      {% if select == "true" %}
-        {% partial generic-select %}
-      {% endif %}
+    {# Search and select fields moved to drawer #}
 
-      {# The container for results and the loading overlay #}
-      <div class="relative min-h-[24rem]">
+    {# The container for results and the loading overlay #}
+    <div class="relative min-h-[24rem]">
 
-        {# Results will be loaded into this div #}
-        <div id="{{ model_name|lower }}" class="transition" :class="{ 'opacity-50 blur-sm': isLoading }">
-          {% partial generic-search-results %}
-        </div>
-
-        {# The loading overlay with spinner #}
-        <div
-          x-show="isLoading"
-          x-transition
-          class="absolute inset-0 bg-gray-400/20 flex items-center justify-center rounded-md z-10"
-          style="display: none;"
-        >
-          {% partial indicator %}
-        </div>
-
+      {# Results will be loaded into this div #}
+      <div id="{{ view }}-{{ model_name|lower }}-results" class="transition" :class="{ 'opacity-50 blur-sm': isLoading }">
+        {% partial generic-search-results %}
       </div>
-    {% endwith %}
+
+      {# The loading overlay with spinner #}
+      <div
+        x-show="isLoading"
+        x-transition
+        class="absolute inset-0 bg-gray-400/20 flex items-center justify-center rounded-md z-10"
+        style="display: none;"
+      >
+        {% partial indicator %}
+      </div>
+
+    </div>
   </div>
 {% endpartialdef %}
 
 {% partialdef individual-section %}
-  {% with title='Individuals' icon_class='fa-person' model_name='Individual' app_label='lab' %}
+  {% with title='Individuals' icon_class='fa-person' model_name='Individual' app_label='lab' view=view %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
 {% partialdef sample-section %}
-  {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' select='true' field_name='sample_type' %}
+  {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' select='true' field_name='sample_type' view=view %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
 
 {% partialdef test-section %}
-  {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' select='true' field_name='test_type' %}
+  {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' select='true' field_name='test_type' view=view %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
 {% partialdef analysis-section %}
-  {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type'  %}
+  {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type' view=view %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
 {% partialdef institution-section %}
-  {% with title='Institutions' icon_class='fa-building-columns' model_name='Institution' app_label='lab' %}
+  {% with title='Institutions' icon_class='fa-building-columns' model_name='Institution' app_label='lab' view=view %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
 {% partialdef project-section %}
-  {% with title='Projects' icon_class='fa-diagram-project' model_name='Project' app_label='lab' %}
+  {% with title='Projects' icon_class='fa-diagram-project' model_name='Project' app_label='lab' view=view %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
 {% partialdef task-section %}
-  {% with title='Tasks' icon_class='fa-list-check' model_name='Task' app_label='lab' %}
+  {% with title='Tasks' icon_class='fa-list-check' model_name='Task' app_label='lab' view=view %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
 {% partialdef hpo-term-section %}
-  {% with title='HPO Terms' icon_class='fa-stethoscope' model_name='Term' app_label='ontologies' %}
+  {% with title='HPO Terms' icon_class='fa-stethoscope' model_name='Term' app_label='ontologies' view=view %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
@@ -302,32 +412,94 @@
 {% endpartialdef %}
 
 {% block content %}
-  {% partial index %}
-
-  <div x-data="searchController()" class="grid grid-cols-4 gap-4 relative">
-    <!-- Clear Filters Button -->
-    <button
-      x-show="Object.values(filters).some(v => v)"
-      @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
-      class="absolute right-0 -top-12 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-full shadow hover:bg-gray-300 dark:hover:bg-gray-600 transition"
-      type="button"
-    >
-      <i class="fa-solid fa-xmark mr-2"></i>Clear Filters
-    </button>
-    {% partial individual-section %}
-    {% partial sample-section %}
-    {% partial test-section %}
-    {% partial analysis-section %}
-    {% partial institution-section %}
-    {% partial project-section %}
-    {% partial task-section %}
-    {% partial hpo-term-section %}
-  </div>
-  {% partial hpo-network-visualization-section %}
+<div
+  x-data="{ activeItem: 'index' }"
+  class="flex h-screen bg-gray-50 dark:bg-gray-900">
+  {% include "lab/sidebar.html" %}
+  <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900 p-6">
+    <div x-data="searchController()">
+      <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
+        <button @click="open = true" type="button"
+          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
+          aria-label="Open filters">
+          <i class="fa-solid fa-filter"></i>
+        </button>
+        <!-- Clear Filters Button -->
+        <button
+          x-show="Object.values(filters).some(v => v)"
+          @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
+          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
+          type="button"
+        >
+          <i class="fa-solid fa-filter-circle-xmark"></i>
+        </button>
+      </div>
+      {% partial drawer %}
+      <div x-show="activeItem === 'index'">
+        <div class="grid grid-cols-4 gap-4 relative">
+          {% with view="index" %}
+          {% partial individual-section %}
+          {% partial sample-section %}
+          {% partial test-section %}
+          {% partial analysis-section %}
+          {% partial institution-section %}
+          {% partial project-section %}
+          {% partial task-section %}
+          {% partial hpo-term-section %}
+          {% endwith %}
+        </div>
+      </div>
+      <div x-show="activeItem === 'individual'">
+        {% with view="page" %}
+          {% partial individual-section %}
+        {% endwith %}
+      </div>
+      <div x-show="activeItem === 'sample'">
+        {% with view="page" %}
+          {% partial sample-section %}
+        {% endwith %}
+      </div>
+      <div x-show="activeItem === 'test'">
+        {% with view="page" %}
+          {% partial test-section %}
+        {% endwith %}
+      </div>
+      <div x-show="activeItem === 'analysis'">
+        {% with view="page" %}
+          {% partial analysis-section %}
+        {% endwith %}
+      </div>
+      <div x-show="activeItem === 'institution'">
+        {% with view="page" %}
+          {% partial institution-section %}
+        {% endwith %}
+      </div>
+      <div x-show="activeItem === 'project'">
+        {% with view="page" %}
+          {% partial project-section %}
+        {% endwith %}
+      </div>
+      <div x-show="activeItem === 'task'">
+        {% with view="page" %}
+          {% partial task-section %}
+        {% endwith %}
+      </div>
+      <div x-show="activeItem === 'hpo-term'">
+        {% with view="page" %}
+          {% partial hpo-term-section %}
+        {% endwith %}
+      </div>
+      <div x-show="activeItem === 'hpo-network-visualization'">
+        {% partial hpo-network-visualization-section %}
+      </div>
+    </div>
+  </main>
+</div>
 
   <script>
     function searchController() {
       return {
+        open: false,
         filters: {},
         init() {
           const params = new URLSearchParams(window.location.search);
@@ -375,7 +547,7 @@
             }
           }
           return JSON.stringify(vals);
-        },
+        }
       };
     }
 
