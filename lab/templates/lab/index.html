@@ -36,6 +36,31 @@
   </div>
 {% endpartialdef %}
 
+{% partialdef generic-select %}
+<div class="relative w-full mb-2" >
+  <label for="select-{{ model_name|lower }}-{{ field_name }}" class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">{{ label }}</label>
+  <select
+    class="form-control w-full rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400"
+    name="{{ field_name }}"
+    x-model.debounce.150ms="filters.{{ field_name }}"
+    hx-get="{% url 'lab:get_select_options' %}"
+    hx-trigger="load, filters-updated from:window"
+    hx-target="this"
+    hx-swap="innerHTML"
+    :hx-vals="getSelectHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', '{{ field_name }}')"
+  >
+    <option>Loading...</option>
+  </select>
+</div>
+{% endpartialdef %}
+
+{% partialdef select-options %}
+  <option value="">Any {{ label }}</option>
+  {% for option in options %}
+    <option value="{{ option }}" {% if option == selected_value %}selected{% endif %}>{{ option }}</option>
+  {% endfor %}
+{% endpartialdef %}
+
 
 {% partialdef generic-search-results %}
   {% if items.number == 1 %}
@@ -89,8 +114,10 @@
     </h2>
 
     {% with app_label=app_label model_name=model_name %}
-      {# The search input field partial #}
       {% partial generic-search %}
+      {% if select == "true" %}
+        {% partial generic-select %}
+      {% endif %}
 
       {# The container for results and the loading overlay #}
       <div class="relative min-h-[24rem]">
@@ -122,25 +149,20 @@
 {% endpartialdef %}
 
 {% partialdef sample-section %}
-  {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' %}
+  {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' select='true' field_name='sample_type' %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
-{% partialdef sample-section %}
-  {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
 
 {% partialdef test-section %}
-  {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' %}
+  {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' select='true' field_name='test_type' %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
 
 {% partialdef analysis-section %}
-  {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' %}
+  {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type'  %}
     {% partial search-section %}
   {% endwith %}
 {% endpartialdef %}
@@ -282,7 +304,16 @@
 {% block content %}
   {% partial index %}
 
-  <div x-data="searchController()" class="grid grid-cols-4 gap-4">
+  <div x-data="searchController()" class="grid grid-cols-4 gap-4 relative">
+    <!-- Clear Filters Button -->
+    <button
+      x-show="Object.values(filters).some(v => v)"
+      @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
+      class="absolute right-0 -top-12 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-full shadow hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+      type="button"
+    >
+      <i class="fa-solid fa-xmark mr-2"></i>Clear Filters
+    </button>
     {% partial individual-section %}
     {% partial sample-section %}
     {% partial test-section %}
@@ -318,12 +349,28 @@
             );
           });
         },
-
         getHxVals(appLabel, modelName) {
           let vals = { app_label: appLabel, model_name: modelName };
-          vals.search = this.filters[modelName.toLowerCase()] || "";
           for (const key in this.filters) {
-            if (key !== modelName.toLowerCase() && this.filters[key]) {
+            if (this.filters[key]) {
+              if (key === modelName.toLowerCase()){
+                  vals['search'] = this.filters[key];
+              } else {
+                  vals[`filter_${key}`] = this.filters[key];
+              }
+            }
+          }
+          return JSON.stringify(vals);
+        },
+        getSelectHxVals(appLabel, modelName, fieldName) {
+          let vals = {
+            app_label: appLabel,
+            model_name: modelName,
+            field_name: fieldName,
+            selected_value: this.filters[fieldName] || ''
+          };
+          for (const key in this.filters) {
+            if (key !== fieldName && this.filters[key]) {
               vals[`filter_${key}`] = this.filters[key];
             }
           }

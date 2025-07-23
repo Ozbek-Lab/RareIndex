@@ -15,6 +15,7 @@ urlpatterns = [
         views.hpo_network_visualization,
         name="hpo_network_visualization",
     ),
+    path("get-select-options/", views.get_select_options, name="get_select_options"),
     # path("", views.dashboard, name="dashboard"),
     # path("select/search/", views.select_search, name="select_search"),
     # # Individual routes
@@ -76,10 +77,10 @@ urlpatterns = [
     #     name="analysis_type_delete",
     # ),
     # # Notes
-    # path("notes/", views.note_list, name="notes"),
-    # path("note/count/", views.note_count, name="note_count"),
-    # path("note/create/", views.note_create, name="note_create"),
-    # path("note/<int:pk>/delete/", views.note_delete, name="note_delete"),
+    path("notes/", views.note_list, name="notes"),
+    path("note/count/", views.note_count, name="note_count"),
+    path("note/create/", views.note_create, name="note_create"),
+    path("note/<int:pk>/delete/", views.note_delete, name="note_delete"),
     # # Project routes
     # path("projects/", views.project_index, name="projects"),
     # path("project/create/", views.project_create, name="project_create"),
