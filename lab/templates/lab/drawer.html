@@ -2,8 +2,14 @@
 <div x-data="{ open: false }" x-cloak>
   <!-- Trigger Button (example: you may want to move this to the sidebar or main content) -->
   <button @click="open = true" type="button"
-    class="fixed top-4 right-4 z-50 bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-    <i class="fas fa-filter mr-2"></i> Filters
+    class="fixed top-1/2 right-4 z-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 transform -translate-y-1/2"
+    aria-label="Open filters">
+    <svg class="w-7 h-7 text-indigo-600 hover:text-indigo-800 transition-colors" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Left (shorter) line -->
+      <rect x="7" y="10" width="2.5" height="8" rx="1.25" fill="currentColor" />
+      <!-- Right (taller) line -->
+      <rect x="15" y="6" width="2.5" height="16" rx="1.25" fill="currentColor" />
+    </svg>
   </button>
 
   <!-- Overlay -->
