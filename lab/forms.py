@@ -2,7 +2,6 @@
 from django import forms
 from .models import (
     Task,
-    StatusLog,
     Individual,
     Sample,
     Note,
@@ -36,7 +35,7 @@ class TaskForm(forms.ModelForm):
             "due_date",
             "priority",
             "target_status",
-            "project",  # Add this field
+            "project",
         ]
         widgets = {
             "due_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
@@ -45,25 +44,7 @@ class TaskForm(forms.ModelForm):
 
     def __init__(self, *args, content_object=None, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # If we have a content object, filter statuses accordingly
-        if content_object:
-            content_type = ContentType.objects.get_for_model(content_object.__class__)
-
-            # Get all statuses that have been used with this content type
-            used_status_ids = (
-                StatusLog.objects.filter(
-                    content_type=content_type,
-                )
-                .values_list("new_status_id", flat=True)
-                .distinct()
-            )
-
-            self.fields["target_status"].queryset = Status.objects.filter(
-                id__in=used_status_ids
-            )
-
-        # Always sort projects by name
+        # Remove StatusLog filtering logic; just show all Status objects
         self.fields["project"].queryset = Project.objects.all().order_by("name")
 
 

@@ -7,6 +7,7 @@ from encrypted_model_fields.fields import (
     EncryptedBigIntegerField,
     EncryptedDateField,
 )
+from simple_history.models import HistoricalRecords
 
 
 class Task(models.Model):
@@ -49,6 +50,7 @@ class Task(models.Model):
     )
     status = models.ForeignKey("Status", on_delete=models.PROTECT)
     notes = GenericRelation("Note")
+    history = HistoricalRecords()
 
     class Meta:
         ordering = ["-created_at"]
@@ -93,6 +95,7 @@ class Project(models.Model):
     )
     # Notes for the project
     notes = GenericRelation("Note")
+    history = HistoricalRecords()
 
     class Meta:
         ordering = ["-created_at"]
@@ -235,7 +238,7 @@ class StatusMixin:
             self.save()
 
 
-class Individual(StatusMixin, models.Model):
+class Individual(models.Model):
     id = models.AutoField(primary_key=True)
     full_name = EncryptedCharField(max_length=255)
     tc_identity = EncryptedBigIntegerField(null=True, blank=True)
@@ -277,7 +280,7 @@ class Individual(StatusMixin, models.Model):
         User, on_delete=models.PROTECT, related_name="created_individuals"
     )
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
-    status_logs = GenericRelation(StatusLog)
+    history = HistoricalRecords()
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
     institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
@@ -340,13 +343,13 @@ class Individual(StatusMixin, models.Model):
         return f"{self.individual_id}"
 
 
-class Sample(StatusMixin, models.Model):
+class Sample(models.Model):
     individual = models.ForeignKey(
         Individual, on_delete=models.PROTECT, related_name="samples"
     )
     sample_type = models.ForeignKey(SampleType, on_delete=models.PROTECT)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
-    status_logs = GenericRelation(StatusLog)
+    history = HistoricalRecords()
 
     # Dates
     receipt_date = models.DateField(null=True, blank=True)
@@ -375,7 +378,7 @@ class Sample(StatusMixin, models.Model):
         return f"{self.individual.lab_id} - {self.sample_type} - {self.receipt_date}"
 
 
-class Test(StatusMixin, models.Model):
+class Test(models.Model):
     """Through model for tracking tests performed on samples"""
 
     sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name="tests")
@@ -400,9 +403,9 @@ class Test(StatusMixin, models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
-    status_logs = GenericRelation(StatusLog)
     notes = GenericRelation("Note")
     tasks = GenericRelation("Task")
+    history = HistoricalRecords()
 
     def __str__(self):
         return f"{self.test_type} - {self.sample}"
@@ -444,7 +447,7 @@ class AnalysisType(models.Model):
         return f"{self.name} v{self.version}"
 
 
-class Analysis(StatusMixin, models.Model):
+class Analysis(models.Model):
     """Model for tracking analyses performed on sample tests"""
 
     test = models.ForeignKey(Test, on_delete=models.PROTECT, related_name="analyses")
@@ -452,12 +455,12 @@ class Analysis(StatusMixin, models.Model):
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
     type = models.ForeignKey(AnalysisType, on_delete=models.PROTECT)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
-    status_logs = GenericRelation(StatusLog)
     notes = GenericRelation("Note")
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_analyses"
     )
+    history = HistoricalRecords()
 
     class Meta:
         verbose_name_plural = "analyses"

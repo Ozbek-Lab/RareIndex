@@ -46,7 +46,7 @@ class IndividualAdmin(admin.ModelAdmin):
     list_filter = ["status", "created_at", "family", "mother", "father"]
     search_fields = ["full_name", "tc_identity"]
     date_hierarchy = "created_at"
-    filter_horizontal = ["hpo_terms"]
+    autocomplete_fields = ["hpo_terms"]
 
     def get_hpo_terms(self, obj):
         return ", ".join([term.label for term in obj.hpo_terms.all()])
@@ -89,20 +89,6 @@ class StatusAdmin(admin.ModelAdmin):
     list_display = ["name", "content_type", "color", "created_by", "created_at"]
     search_fields = ["name", "description"]
     list_filter = ["created_at", "content_type"]
-
-
-@admin.register(models.StatusLog)
-class StatusLogAdmin(admin.ModelAdmin):
-    list_display = [
-        "content_object",
-        "previous_status",
-        "new_status",
-        "changed_by",
-        "changed_at",
-    ]
-    list_filter = ["changed_at", "content_type", "changed_by"]
-    search_fields = ["notes"]
-    date_hierarchy = "changed_at"
 
 
 @admin.register(models.Family)

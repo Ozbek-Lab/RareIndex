@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "template_partials",
     "lab",
     "ontologies",
+    "simple_history",
+    "notifications",
 ]
 
 MIDDLEWARE = [
@@ -59,6 +61,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",  # For django-allauth 0.54.0+
+    "simple_history.middleware.HistoryRequestMiddleware",
 ]
 
 # Authentication settings
