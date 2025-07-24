@@ -14,7 +14,7 @@
       Test: {{ item.test.test_type.name }}
     </p>
     <p class="text-gray-600 dark:text-gray-400">
-      Sample: #{{ item.test.sample.id }}
+      Sample: #{{ item.test.sample.sample_type.name }}
     </p>
     <p class="text-sm text-gray-500 dark:text-gray-400">
       Individual: {{ item.test.sample.individual.individual_id }}
@@ -55,7 +55,7 @@
 
 {% partialdef card %}
   <div
-    class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 m-4"
+    class="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 m-4"
     data-item-id="{{ item.id }}"
   >
     <div class="flex justify-between items-start mb-4">
@@ -86,27 +86,27 @@
     </div>
 
     <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-      <h4 class="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-1">Associated Individual</h4>
       <div class="flex items-center">
         <i class="fa-solid fa-user mr-2 text-blue-600 dark:text-blue-400"></i>
-        <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
+        <span class="text-lg text-blue-900 dark:text-blue-100 font-small">
           {{ item.test.sample.individual.individual_id }}
         </span>
       </div>
-      {% if item.test.sample.individual.full_name %}
-        <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
-          {{ item.test.sample.individual.full_name }}
-        </p>
+      {% if perms.lab.view_individual_sensitive_data %}
+        {% if item.test.sample.individual.full_name %}
+          <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
+            {{ item.test.sample.individual.full_name }}
+          </p>
+        {% endif %}
       {% endif %}
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
       {% if item.performed_date %}
         <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-          <h4 class="text-sm font-semibold text-green-700 dark:text-green-300 mb-1">Performed Date</h4>
           <div class="flex items-center">
             <i class="fa-solid fa-calendar-check mr-2 text-green-600 dark:text-green-400"></i>
-            <span class="text-green-900 dark:text-green-100 font-medium">
+            <span class="text-green-900 dark:text-green-100 font-small">
               {{ item.performed_date }}
             </span>
           </div>
@@ -115,10 +115,9 @@
 
       {% if item.performed_by %}
         <div class="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-          <h4 class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-1">Performed By</h4>
           <div class="flex items-center">
             <i class="fa-solid fa-user-md mr-2 text-purple-600 dark:text-purple-400"></i>
-            <span class="text-purple-900 dark:text-purple-100 font-medium">
+            <span class="text-purple-900 dark:text-purple-100 font-small">
               {{ item.performed_by.username }}
             </span>
           </div>
@@ -156,12 +155,14 @@
         </div>
       </div>
     {% endif %}
+    
+    <div class="text-sm text-gray-500 dark:text-gray-400">
+      <i class="fa-solid fa-calendar mr-1"></i>
+      Created: {{ item.created_at|date:"M d, Y H:i"|default:"Unknown" }}
+    </div>
 
     <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
-      <div class="text-sm text-gray-500 dark:text-gray-400">
-        <i class="fa-solid fa-calendar mr-1"></i>
-        Created: {{ item.created_at|date:"M d, Y H:i"|default:"Unknown" }}
-      </div>
+
       <div class="flex space-x-2">
         <button class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
           <i class="fa-solid fa-eye mr-1"></i>View Details
