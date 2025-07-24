@@ -429,6 +429,7 @@ def generic_search_page(request):
     paginator = Paginator(filtered_items, 12)
     paged_items = paginator.get_page(page)
 
+    card_partial = request.GET.get("card", "card")
     context = {
         "items": paged_items,
         "model_name": target_model_name,
@@ -436,6 +437,7 @@ def generic_search_page(request):
         "all_filters": {
             k: v for k, v in request.GET.items() if k.startswith("filter_")
         },
+        "card": card_partial,
     }
     return render(request, "lab/partials/_infinite_scroll_items.html", context)
 
