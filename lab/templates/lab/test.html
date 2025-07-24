@@ -72,10 +72,12 @@
           {{ item.sample.individual.individual_id }}
         </span>
       </div>
-      {% if item.sample.individual.full_name %}
-        <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
-          {{ item.sample.individual.full_name }}
-        </p>
+      {% if perms.lab.view_individual_sensitive_data %}
+        {% if item.sample.individual.full_name %}
+          <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
+            {{ item.sample.individual.full_name }}
+          </p>
+        {% endif %}
       {% endif %}
     </div>
 
