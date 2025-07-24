@@ -52,29 +52,30 @@
 
 {% partialdef card %}
   <div
-    class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 m-4"
+    class="bg-white dark:bg-gray-800 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
     data-item-id="{{ item.id }}"
   >
-    <div class="flex justify-between items-start mb-4">
-      {% with float="float-right" color=item.status.color text=item.status.name %}
-        {% include 'lab/partials/badge.html' %}
-      {% endwith %}
+    <div class="flex justify-between items-start">
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {{ item.individual_id }}
+      </h2>
       <div class="text-right">
-        <i class="fa-solid fa-stethoscope text-2xl text-blue-600 dark:text-blue-400"></i>
+        {% with float="float-right" color=item.status.color text=item.status.name %}
+          {% include 'lab/partials/badge.html' %}
+        {% endwith %}
       </div>
     </div>
 
-    <div class="mb-4">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-        {{ item.individual_id }}
-      </h2>
-      <h3 class="text-xl text-gray-700 dark:text-gray-300 font-medium">
-        {{ item.full_name }}
-      </h3>
+    <div class="mb-2">
+      {% if perms.lab.view_individual_sensitive_data %}
+        <h3 class="text-xl text-gray-700 dark:text-gray-300 font-medium">
+          {{ item.full_name }}
+        </h3>
+      {% endif %}
     </div>
 
     {% if item.icd11_code %}
-      <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      <div class="mb-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
         <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">ICD-11 Code</h4>
         <p class="text-lg font-mono text-gray-900 dark:text-gray-100">
           {{ item.icd11_code }}
@@ -82,18 +83,16 @@
       </div>
     {% endif %}
 
-    <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-      <h4 class="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-1">Institution</h4>
-      <div class="flex items-center">
-        <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
-        <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
-          {{ item.institution }}
-        </span>
+    <div class="flex justify-between">
+      <div class="mb-2 p-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        <div class="flex items-center">
+          <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
+          <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
+            {{ item.institution }}
+          </span>
+        </div>
       </div>
-    </div>
 
-    <div class="mb-4">
-      <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Notes</h4>
       <div x-data="{ open: false }" class="relative">
         <button
           @click="open = ! open"
@@ -101,7 +100,7 @@
           class="inline-flex items-center gap-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
         >
           <i class="fa-solid fa-comment"></i>
-          <span>View Notes</span>
+          <span>Notes</span>
           <i class="fa-solid fa-chevron-down transition-transform" :class="{ 'rotate-180': open }"></i>
         </button>
         <div
@@ -121,12 +120,12 @@
         </div>
       </div>
     </div>
+    <div class="text-sm text-gray-500 dark:text-gray-400">
+      <i class="fa-solid fa-calendar mr-1"></i>
+      Last updated: {{ item.updated_at|date:"M d, Y H:i"|default:"Unknown" }}
+    </div>
 
     <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
-      <div class="text-sm text-gray-500 dark:text-gray-400">
-        <i class="fa-solid fa-calendar mr-1"></i>
-        Last updated: {{ item.updated_at|date:"M d, Y H:i"|default:"Unknown" }}
-      </div>
       <div class="flex space-x-2">
         <button class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
           <i class="fa-solid fa-eye mr-1"></i>View Details
