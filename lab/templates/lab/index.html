@@ -550,7 +550,7 @@
           history.pushState({}, "", `?${newParams.toString()}`);
         },
 
-        getHxVals(appLabel, modelName, page=1) {
+        getHxVals(appLabel, modelName, page=1, card=null) {
           let vals = { app_label: appLabel, model_name: modelName, page: page };
           for (const key in this.filters) {
             if (this.filters[key]) {
@@ -560,6 +560,9 @@
                   vals[`filter_${key}`] = this.filters[key];
               }
             }
+          }
+          if (card) {
+            vals['card'] = card;
           }
           return JSON.stringify(vals);
         },
@@ -577,42 +580,41 @@
           }
           return JSON.stringify(vals);
         },
+      };
+    }
 
-     hpoController() {
-        return {
-          hpoThreshold: 3,
-          isLoading: false,
-          isThresholdValid: true,
+    function hpoController() {
+      return {
+        hpoThreshold: 3,
+        isLoading: false,
+        isThresholdValid: true,
 
-          init() {
-            // This watches for changes to the threshold input
-            this.$watch("hpoThreshold", () => {
-              // Check if the input value is valid (e.g., between 1 and 24)
-              this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
-              
-              // If it's valid, trigger a global event to refresh the plot
-              if (this.isThresholdValid) {
-                window.dispatchEvent(new CustomEvent("filters-updated"));
-              }
-            });
-          },
-
-          getHpoVals() {
-            let vals = {
-              model_name: "Individual",
-              threshold: this.hpoThreshold,
-            };
-            for (const key in this.filters) {
-              if (this.filters[key]) {
-                vals[`filter_${key}`] = this.filters[key];
-              }
+        init() {
+          // This watches for changes to the threshold input
+          this.$watch("hpoThreshold", () => {
+            // Check if the input value is valid (e.g., between 1 and 24)
+            this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
+            
+            // If it's valid, trigger a global event to refresh the plot
+            if (this.isThresholdValid) {
+              window.dispatchEvent(new CustomEvent("filters-updated"));
             }
-            return JSON.stringify(vals);
-          }
-        };
-      }
-    };
-  }
+          });
+        },
 
+        getHpoVals() {
+          let vals = {
+            model_name: "Individual",
+            threshold: this.hpoThreshold,
+          };
+          for (const key in this.filters) {
+            if (this.filters[key]) {
+              vals[`filter_${key}`] = this.filters[key];
+            }
+          }
+          return JSON.stringify(vals);
+        }
+      };
+    }
   </script>
 {% endblock content %}
