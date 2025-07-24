@@ -1,0 +1,17 @@
+{% load partials %}
+
+{% for item in items %}
+  <div
+    {% if forloop.last and items.has_next %}
+      hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once"
+      hx-swap="afterend" hx-target="this" :hx-vals="getHxVals('{{ app_label }}',
+      '{{ model_name }}', '{{ items.next_page_number }}')"
+    {% endif %}
+  >
+    {% include "lab/"|add:model_name|lower|add:'.html#'|add:card with item=item %}
+  </div>
+{% endfor %}
+
+{% if not items.has_next %}
+  <div class="text-orange-300">No more {{ model_name|lower }}s.</div>
+{% endif %}
