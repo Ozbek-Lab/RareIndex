@@ -241,12 +241,14 @@ class Individual(StatusMixin, models.Model):
     tc_identity = EncryptedBigIntegerField(null=True, blank=True)
     birth_date = EncryptedDateField(null=True, blank=True)
     icd11_code = models.TextField(blank=True)
+    is_index = models.BooleanField(default=False)
     hpo_terms = models.ManyToManyField(
         "ontologies.Term",
         related_name="individuals",
         blank=True,
         limit_choices_to={"ontology__type": 1},  # 1 is HP in ONTOLOGY_CHOICES
     )
+    is_affected = models.BooleanField(default=False)
     council_date = models.DateField(null=True, blank=True)
     family = models.ForeignKey(
         Family,
