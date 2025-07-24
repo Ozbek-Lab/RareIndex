@@ -9,7 +9,6 @@ from lab.models import (
     Institution,
     Family,
     Status,
-    StatusLog,
     Individual,
     Sample,
     Test,
@@ -51,9 +50,6 @@ class Command(BaseCommand):
         
         self.stdout.write('Deleting Family entries...')
         Family.objects.all().delete()
-        
-        self.stdout.write('Deleting StatusLog entries...')
-        StatusLog.objects.all().delete()
         
         # Preserve default statuses
         default_statuses = ['Registered', 'Completed', 'In Progress']
