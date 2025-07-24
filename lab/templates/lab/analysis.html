@@ -55,22 +55,21 @@
 
 {% partialdef card %}
   <div
-    class="bg-white dark:bg-gray-800 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 m-2"
+    class="bg-white dark:bg-gray-800 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
     data-item-id="{{ item.id }}"
   >
     <div class="flex justify-between items-start">
-      {% with float="float-right" color=item.status.color text=item.status.name %}
-        {% include 'lab/partials/badge.html' %}
-      {% endwith %}
-      <div class="text-right">
-        <i class="fa-solid fa-chart-line text-2xl text-indigo-600 dark:text-indigo-400"></i>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {{ item.type.name }}
+      </h2>
+      <div class="justify-right text-right">
+        {% with float="float-right" color=item.status.color text=item.status.name %}
+          {% include 'lab/partials/badge.html' %}
+        {% endwith %}
       </div>
     </div>
 
     <div class="mb-2">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-        {{ item.type.name }}
-      </h2>
       <div class="grid grid-cols-2 gap-2 mb-2">
         <div class="flex items-center">
           <i class="fa-solid fa-microscope mr-2 text-gray-500 dark:text-gray-400"></i>
