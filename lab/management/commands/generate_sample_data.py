@@ -32,6 +32,7 @@ class Command(BaseCommand):
         parser.add_argument('--analyses-per-test', type=int, default=2, help='Number of analyses per test')
         parser.add_argument('--tasks-per-object', type=int, default=2, help='Number of tasks per object')
 
+
     def handle(self, *args, **options):
         # Get or create default user
         user = User.objects.first()
@@ -45,7 +46,7 @@ class Command(BaseCommand):
 
         # Create statuses if they don't exist
         statuses = self._create_statuses(user)
-        
+
         # Create sample types if they don't exist
         sample_types = self._create_sample_types(user)
 
@@ -58,8 +59,19 @@ class Command(BaseCommand):
         # Create institution if it doesn't exist
         institution = self._get_or_create_institution(user)
 
-        # Create a project
-        project = self._create_project(user)
+        # Create 'Ongoing' status for Project if it doesn't exist
+        project_content_type = ContentType.objects.get_for_model(Project)
+        project_status, _ = Status.objects.get_or_create(
+            name='Ongoing',
+            content_type=project_content_type,
+            defaults={
+                'color': 'purple',
+                'created_by': user
+            }
+        )
+
+        # Create a project with 'Ongoing' status
+        project = self._create_project(user, project_status)
 
         # Create identifier types if they don't exist
         identifier_types = self._create_identifier_types(user)
@@ -237,13 +249,14 @@ class Command(BaseCommand):
         )
         return institution
 
-    def _create_project(self, user):
+    def _create_project(self, user, status):
         project, _ = Project.objects.get_or_create(
             name='Sample Data Project',
             defaults={
                 'description': 'Project created by sample data generator',
                 'created_by': user,
-                'due_date': timezone.now() + timedelta(days=90)
+                'due_date': timezone.now() + timedelta(days=90),
+                'status': status
             }
         )
         return project
@@ -269,7 +282,7 @@ class Command(BaseCommand):
             father=father,
             created_by=user,
             status=status,
-            sending_institution=institution,
+            institution=institution,
             is_index=is_index
         )
         # Add random HPO terms (5-20 terms per individual)
@@ -293,7 +306,7 @@ class Command(BaseCommand):
                 created_by=user,
                 due_date=timezone.now() + timedelta(days=random.randint(1, 30)),
                 priority=random.choice(priorities),
-                target_status=target_status,
+                status=target_status,
                 project=project
             )
 
