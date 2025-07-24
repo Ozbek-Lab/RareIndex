@@ -28,7 +28,7 @@
   <div class="flex-1 overflow-y-auto py-4" >
     <div class="px-3 space-y-1">
       <a
-        @click="activeItem = 'index'"
+        @click.prevent="navigateTo('index')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'index' }"
       >
@@ -39,7 +39,7 @@
       </a>
       <!-- New navigation links for each model (no href) -->
       <a
-        @click="activeItem = 'individual'"
+        @click.prevent="navigateTo('individual')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'individual' }"
       >
@@ -47,7 +47,7 @@
         <span>Individuals</span>
       </a>
       <a
-        @click="activeItem = 'sample'"
+        @click.prevent="navigateTo('sample')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'sample' }"
       >
@@ -55,7 +55,7 @@
         <span>Samples</span>
       </a>
       <a
-        @click="activeItem = 'test'"
+        @click.prevent="navigateTo('test')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'test' }"
       >
@@ -63,7 +63,7 @@
         <span>Tests</span>
       </a>
       <a
-        @click="activeItem = 'analysis'"
+        @click.prevent="navigateTo('analysis')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'analysis' }"
       >
@@ -71,7 +71,7 @@
         <span>Analyses</span>
       </a>
       <a
-        @click="activeItem = 'institution'"
+        @click.prevent="navigateTo('institution')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'institution' }"
       >
@@ -79,7 +79,7 @@
         <span>Institutions</span>
       </a>
       <a
-        @click="activeItem = 'project'"
+        @click.prevent="navigateTo('project')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'project' }"
       >
@@ -87,7 +87,7 @@
         <span>Projects</span>
       </a>
       <a
-        @click="activeItem = 'task'"
+        @click.prevent="navigateTo('task')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'task' }"
       >
@@ -95,7 +95,7 @@
         <span>Tasks</span>
       </a>
       <a
-        @click="activeItem = 'term'"
+        @click.prevent="navigateTo('term')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'term' }"
       >
@@ -103,7 +103,7 @@
         <span>Terms</span>
       </a>
       <a
-        @click="activeItem = 'hpo-network-visualization'"
+        @click.prevent="navigateTo('hpo-network-visualization')"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
         :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'hpo-network-visualization' }"
       >

@@ -145,7 +145,6 @@
       hx-get="{% url 'lab:generic_search' %}"
       hx-trigger="input changed delay:200ms, filters-updated from:window, load"
       hx-target="#index-{{ model_name|lower }}-results"
-      hx-oob
       :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
     />
   </div>
@@ -178,6 +177,7 @@
 
 
 {% partialdef generic-search-results %}
+<div>
   {% if items.number == 1 %}
     <div
       class=""
@@ -189,32 +189,35 @@
 
     <div class="h-96 overflow-y-auto">
   {% endif %}
-  {% for item in items %}
-    <div
-      {% if forloop.last and items.has_next %}
-        hx-get="{% url 'lab:generic_search' %}" hx-trigger="intersect once"
-        hx-swap="afterend" hx-target="this" hx-vals='{ "page":
-        "{{ items.next_page_number }}", "app_label": "{{ app_label }}",
-        "model_name": "{{ model_name }}", "search": "{{ search }}"
-        {% if all_filters %}
-          {% for key, value in all_filters.items %}
-            {% if forloop.first %},{% else %},{% endif %}
-            "{{ key }}": "{{ value }}"
-          {% endfor %}
-        {% endif %}
-        }'
-      {% endif %}
-    >
-      {% include "lab/"|add:model_name|lower|add:".html#card" with item=item %}
-    </div>
-  {% endfor %}
 
+  {% with card='compact-card' %}
+  {% include "lab/partials/_infinite_scroll_items.html" %}
+  {% endwith %}
   {% if items.number == 1 %}
     </div>
   {% endif %}
-  {% if not items.has_next %}
-    <div class="text-orange-300">No more {{ model_name|lower }}s.</div>
+  </div>
+
+  <div id="page-{{ model_name|lower }}-results" hx-swap-oob="innerHTML">
+  {% if items.number == 1 %}
+    <div
+      class=""
+      :class="{'text-green-500': {{ num_items }} > 0,
+                'text-red-500': {{ num_items }} == 0}"
+    >
+      Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
+    </div>
+
   {% endif %}
+
+  <div class="grid grid-cols-4 gap-4 relative h-full overflow-y-auto">
+  {% with card='card' %}
+  {% include "lab/partials/_infinite_scroll_items.html" %}
+  {% endwith %}
+  </div>
+  </div>
+
+
 {% endpartialdef %}
 
 {% partialdef search-section %}
@@ -303,7 +306,7 @@
 
 
 {% partialdef hpo-network-visualization-section %}
-  <div id="hpo-section-wrapper" x-data="hpoController()">
+  <div id="hpo-section-wrapper">
     <div class="flex justify-between items-center mb-2">
       <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">HPO Visualization</h2>
     </div>
@@ -413,11 +416,11 @@
 
 {% block content %}
 <div
-  x-data="{ activeItem: 'index' }"
+  x-data="mainController()"
   class="flex h-screen bg-gray-50 dark:bg-gray-900">
   {% include "lab/sidebar.html" %}
   <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900 p-6">
-    <div x-data="searchController()">
+    <div>
       <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
         <button @click="open = true" type="button"
           class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
@@ -490,30 +493,33 @@
         {% endwith %}
       </div>
       <div x-show="activeItem === 'hpo-network-visualization'">
-        {% partial hpo-network-visualization-section %}
+        {% with view="page" %}
+          <div x-data="hpoController()">
+            {% partial hpo-network-visualization-section %}
+          </div>
+        {% endwith %}
       </div>
     </div>
   </main>
 </div>
 
   <script>
-    function searchController() {
+    function mainController() {
       return {
+        activeItem: 'index',
         open: false,
         filters: {},
+
         init() {
           const params = new URLSearchParams(window.location.search);
+          // Read the active page from the URL, defaulting to 'index'
+          this.activeItem = params.get('page') || 'index';
           params.forEach((value, key) => {
             if (key.startsWith("filter_"))
               this.filters[key.replace("filter_", "")] = value;
           });
           this.$watch("filters", (newFilters) => {
-            const newParams = new URLSearchParams();
-            for (const modelName in newFilters) {
-              if (newFilters[modelName])
-                newParams.set(`filter_${modelName}`, newFilters[modelName]);
-            }
-            history.pushState({}, "", `?${newParams.toString()}`);
+            this.updateURL();
             window.dispatchEvent(
               new CustomEvent("filters-updated", {
                 detail: { filters: newFilters },
@@ -521,8 +527,31 @@
             );
           });
         },
-        getHxVals(appLabel, modelName) {
-          let vals = { app_label: appLabel, model_name: modelName };
+
+        // NEW: Method to handle navigation
+        navigateTo(pageName) {
+          this.activeItem = pageName;
+          this.updateURL();
+        },
+
+        // NEW: Extracted URL logic into its own method
+        updateURL() {
+          const newParams = new URLSearchParams();
+          // Add the current page to the URL
+          if (this.activeItem && this.activeItem !== 'index') {
+            newParams.set('page', this.activeItem);
+          }
+          // Add all active filters to the URL
+          for (const modelName in this.filters) {
+            if (this.filters[modelName])
+              newParams.set(`filter_${modelName}`, this.filters[modelName]);
+          }
+          // Push the new state to the browser's history
+          history.pushState({}, "", `?${newParams.toString()}`);
+        },
+
+        getHxVals(appLabel, modelName, page=1) {
+          let vals = { app_label: appLabel, model_name: modelName, page: page };
           for (const key in this.filters) {
             if (this.filters[key]) {
               if (key === modelName.toLowerCase()){
@@ -547,55 +576,43 @@
             }
           }
           return JSON.stringify(vals);
-        }
-      };
-    }
-
-    function hpoController() {
-      return {
-        hpoThreshold: 3,
-        isLoading: false,
-        isThresholdValid: true,
-        mainFilters: {}, // This will hold the filters.
-        init() {
-          // **FIX 1**: Load its state AND the shared filters directly from the URL.
-          const params = new URLSearchParams(window.location.search);
-          params.forEach((value, key) => {
-            if (key.startsWith("filter_")) {
-              this.mainFilters[key.replace("filter_", "")] = value;
-            } else if (key === "threshold") {
-              this.hpoThreshold = parseInt(params.get("threshold"), 10);
-            }
-          });
-
-          // For SUBSEQUENT updates, it listens for events from the searchController.
-          window.addEventListener("filters-updated", (event) => {
-            if (event.detail && event.detail.filters) {
-              this.mainFilters = event.detail.filters;
-            }
-          });
-
-          // When its own threshold changes, it triggers an update.
-          this.$watch("hpoThreshold", () => {
-            this.isThresholdValid =
-              this.$refs.hpoThresholdInput.checkValidity();
-            if (this.isThresholdValid) {
-              // We still need to dispatch an event to trigger the htmx request.
-              window.dispatchEvent(new CustomEvent("filters-updated"));
-            }
-          });
         },
-        getHpoVals() {
-          let vals = { model_name: "Individual", threshold: this.hpoThreshold };
-          for (const key in this.mainFilters) {
-            if (this.mainFilters[key]) {
-              vals[key === "individual" ? "search" : `filter_${key}`] =
-                this.mainFilters[key];
+
+     hpoController() {
+        return {
+          hpoThreshold: 3,
+          isLoading: false,
+          isThresholdValid: true,
+
+          init() {
+            // This watches for changes to the threshold input
+            this.$watch("hpoThreshold", () => {
+              // Check if the input value is valid (e.g., between 1 and 24)
+              this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
+              
+              // If it's valid, trigger a global event to refresh the plot
+              if (this.isThresholdValid) {
+                window.dispatchEvent(new CustomEvent("filters-updated"));
+              }
+            });
+          },
+
+          getHpoVals() {
+            let vals = {
+              model_name: "Individual",
+              threshold: this.hpoThreshold,
+            };
+            for (const key in this.filters) {
+              if (this.filters[key]) {
+                vals[`filter_${key}`] = this.filters[key];
+              }
             }
+            return JSON.stringify(vals);
           }
-          return JSON.stringify(vals);
-        },
-      };
-    }
+        };
+      }
+    };
+  }
+
   </script>
 {% endblock content %}
