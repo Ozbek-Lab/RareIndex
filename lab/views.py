@@ -296,7 +296,9 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
     target_config = FILTER_CONFIG.get(target_model_name, {})
 
     # Handle the component's own text search (from generic-search partial)
-    own_search_term = request.GET.get("search", "").strip()
+    own_search_term = request.GET.get("search") or request.GET.get(
+        f"filter_{target_model_name.lower()}"
+    )
     if own_search_term:
         own_search_fields = target_config.get("search_fields", [])
         if own_search_fields:
@@ -319,7 +321,7 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
         )
 
         # A) If it's a select filter, apply an exact match
-        path_to_model = target_config.get("filters", {}).get(source_model_name)
+        print(select_config)
         if select_config:
             select_filter_path = select_config.get("select_filter_path")
             if select_filter_path:
@@ -401,6 +403,41 @@ def generic_search(request):
         },
     )
     return response
+
+
+@login_required
+def generic_search_page(request):
+    """
+    This view ONLY handles infinite scroll pagination.
+    It returns a simple list of items, not an OOB response.
+    """
+    target_app_label = request.GET.get("app_label", "lab").strip()
+    target_model_name = request.GET.get("model_name", "").strip()
+    if not target_model_name:
+        return HttpResponseBadRequest("Model not specified.")
+
+    target_model = apps.get_model(
+        app_label=target_app_label, model_name=target_model_name
+    )
+
+    filtered_items = apply_filters(
+        request, target_model_name, target_model.objects.all()
+    )
+
+    # Pagination
+    page = request.GET.get("page")
+    paginator = Paginator(filtered_items, 12)
+    paged_items = paginator.get_page(page)
+
+    context = {
+        "items": paged_items,
+        "model_name": target_model_name,
+        "app_label": target_app_label,
+        "all_filters": {
+            k: v for k, v in request.GET.items() if k.startswith("filter_")
+        },
+    }
+    return render(request, "lab/partials/_infinite_scroll_items.html", context)
 
 
 @login_required

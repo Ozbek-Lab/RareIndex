@@ -10,6 +10,7 @@ urlpatterns = [
         views.generic_search,
         name="generic_search",
     ),
+    path('search/page/', views.generic_search_page, name='generic_search_page'),
     path(
         "hpo_network_visualization/",
         views.hpo_network_visualization,
