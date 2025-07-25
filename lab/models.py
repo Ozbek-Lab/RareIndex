@@ -93,6 +93,7 @@ class Project(models.Model):
     priority = models.CharField(
         max_length=10, choices=Task.PRIORITY_CHOICES, default="medium"
     )
+    individuals = models.ManyToManyField("Individual", related_name="projects")
     # Notes for the project
     notes = GenericRelation("Note")
     history = HistoricalRecords()
