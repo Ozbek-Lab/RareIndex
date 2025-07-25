@@ -1,6 +1,18 @@
 from django.contrib import admin
 from . import models
 
+class ProjectIndividualsInline(admin.TabularInline):
+    model = models.Project.individuals.through
+    extra = 1
+    verbose_name = "Project Individual"
+    verbose_name_plural = "Project Individuals"
+
+class IndividualProjectsInline(admin.TabularInline):
+    model = models.Project.individuals.through
+    extra = 1
+    verbose_name = "Individual Project"
+    verbose_name_plural = "Individual Projects"
+
 
 @admin.register(models.Note)
 class NoteAdmin(admin.ModelAdmin):
@@ -47,6 +59,7 @@ class IndividualAdmin(admin.ModelAdmin):
     search_fields = ["full_name", "tc_identity"]
     date_hierarchy = "created_at"
     autocomplete_fields = ["hpo_terms"]
+    inlines = [IndividualProjectsInline]
 
     def get_hpo_terms(self, obj):
         return ", ".join([term.label for term in obj.hpo_terms.all()])
@@ -123,6 +136,7 @@ class AnalysisAdmin(admin.ModelAdmin):
 @admin.register(models.Task)
 class TaskAdmin(admin.ModelAdmin):
     list_display = [
+        "id",
         "title",
         "project",
         "assigned_to",
@@ -160,6 +174,7 @@ class ProjectAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     date_hierarchy = "created_at"
     raw_id_fields = ["created_by"]
+    inlines = [ProjectIndividualsInline]
 
     def get_completion_percentage(self, obj):
         return f"{obj.get_completion_percentage()}%"

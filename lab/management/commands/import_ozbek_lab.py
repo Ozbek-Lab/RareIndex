@@ -15,7 +15,8 @@ from lab.models import (
     TestType,
     Note,
     IdentifierType,
-    CrossIdentifier
+    CrossIdentifier,
+    Project
 )
 from ontologies.models import Term, Ontology
 import os
@@ -302,6 +303,22 @@ class Command(BaseCommand):
         else:
             self.stdout.write('Unknown institution already exists')
 
+        # Create or get the project for imported individuals
+        imported_project_status, _ = Status.objects.get_or_create(
+            name='Imported',
+            defaults={'description': 'Imported data project', 'color': 'gray', 'created_by': admin_user}
+        )
+        imported_project, _ = Project.objects.get_or_create(
+            name='Imported Data Project',
+            defaults={
+                'description': 'Project for imported individuals',
+                'created_by': admin_user,
+                'status': imported_project_status,
+                'due_date': timezone.now() + timezone.timedelta(days=90),
+                'priority': 'medium'
+            }
+        )
+
         # First pass: Collect unique values
         unique_family_ids = set()
         institution_details = {}  # Store both name and contact info
@@ -373,20 +390,29 @@ class Command(BaseCommand):
                     full_name = row.get('Ad-Soyad')
                     individual = Individual.objects.filter(full_name=full_name, family=families[family_id]).first()
                     if not individual:
+                        tc_identity_val = row.get('TC Kimlik No')
+                        if tc_identity_val is not None and str(tc_identity_val).strip() == '':
+                            tc_identity_val = None
+                        try:
+                            tc_identity_val = int(tc_identity_val)
+                        except (TypeError, ValueError):
+                            tc_identity_val = None
                         individual = Individual.objects.create(
                             full_name=full_name,
                             family=families[family_id],
                             birth_date=self._parse_date(row.get('Doğum Tarihi')),
                             icd11_code='',
-                            sending_institution=institution,
+                            institution=institution,
                             status=registered_status,
                             created_by=admin_user,
                             diagnosis='',
                             diagnosis_date=None,
                             council_date=None,
-                            is_index=is_index
+                            is_index=is_index,
+                            tc_identity=tc_identity_val
                         )
                         self.stdout.write(self.style.SUCCESS(f'Created individual: {full_name}'))
+                        imported_project.individuals.add(individual)
                     else:
                         # Update is_index if needed
                         if individual.is_index != is_index:
@@ -473,13 +499,21 @@ class Command(BaseCommand):
 
                 # Update individual information
                 individual.full_name = row.get('Ad-Soyad', individual.full_name)
-                individual.tc_identity = row.get('TC Kimlik No', individual.tc_identity)
+                tc_identity_val = row.get('TC Kimlik No', individual.tc_identity)
+                if tc_identity_val is not None and str(tc_identity_val).strip() == '':
+                    tc_identity_val = None
+                try:
+                    tc_identity_val = int(tc_identity_val)
+                except (TypeError, ValueError):
+                    tc_identity_val = None
+                individual.tc_identity = tc_identity_val
                 individual.birth_date = self._parse_date(row.get('Doğum Tarihi')) or individual.birth_date
                 individual.icd11_code = row.get('ICD11', individual.icd11_code)
-                individual.sending_institution = institution if institution else individual.sending_institution
+                individual.institution = institution if institution else individual.institution
                 individual.status = registered_status # Use the registered_status from import_ids.py
                 individual.is_index = is_index
                 individual.save()
+                imported_project.individuals.add(individual)
                 
                 # Get and link HPO terms
                 hpo_terms = self._get_hpo_terms(row.get('HPO kodları'))
