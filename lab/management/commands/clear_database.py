@@ -16,7 +16,10 @@ from lab.models import (
     Analysis,
     IdentifierType,
     CrossIdentifier,
+    StatusLog,
 )
+from lab import history_notifications
+from simple_history.signals import post_create_historical_record
 
 class Command(BaseCommand):
     help = 'Clear all entries from the database except the superuser and default statuses'
@@ -37,20 +40,45 @@ class Command(BaseCommand):
         self.stdout.write('Deleting Sample entries...')
         Sample.objects.all().delete()
         
-        # First nullify the self-referential fields
+        # First nullify the self-referential fields and related FKs
         self.stdout.write('Nullifying Individual self-references...')
         Individual.objects.all().update(mother=None, father=None)
-        
-        # Delete CrossIdentifiers before Individuals
+        self.stdout.write('Nullifying Sample.individual...')
+        Sample.objects.all().update(individual=None)
+        self.stdout.write('Nullifying Test.sample...')
+        Test.objects.all().update(sample=None)
+        self.stdout.write('Nullifying Analysis.test...')
+        Analysis.objects.all().update(test=None)
+        # Nullifying CrossIdentifier.individual is not possible due to NOT NULL constraint; delete instead
         self.stdout.write('Deleting CrossIdentifier entries...')
         CrossIdentifier.objects.all().delete()
         
-        self.stdout.write('Deleting Individual entries...')
-        Individual.objects.all().delete()
-        
-        self.stdout.write('Deleting Family entries...')
-        Family.objects.all().delete()
-        
+        # Temporarily disconnect history notification signal to avoid errors during destructive delete
+        post_create_historical_record.disconnect(receiver=history_notifications.notify_on_history)
+        try:
+            # Delete all Task objects before deleting Project objects
+            self.stdout.write('Deleting Task entries...')
+            Task.objects.all().delete()
+            self.stdout.write('Deleting Project entries...')
+            Project.objects.all().delete()
+
+            # Nullify or delete all objects referencing Status before deleting Status
+            self.stdout.write('Nullifying StatusLog.previous_status and new_status...')
+            StatusLog.objects.all().update(previous_status=None, new_status=None)
+
+            # Delete all objects that reference Status before deleting Status itself
+            self.stdout.write('Deleting Analysis entries...')
+            Analysis.objects.all().delete()
+            self.stdout.write('Deleting Test entries...')
+            Test.objects.all().delete()
+            self.stdout.write('Deleting Sample entries...')
+            Sample.objects.all().delete()
+            self.stdout.write('Deleting Individual entries...')
+            Individual.objects.all().delete()
+        finally:
+            # Reconnect the signal after deletion
+            post_create_historical_record.connect(receiver=history_notifications.notify_on_history)
+
         # Preserve default statuses
         default_statuses = ['Registered', 'Completed', 'In Progress']
         self.stdout.write('Preserving default statuses...')
@@ -71,9 +99,6 @@ class Command(BaseCommand):
         
         self.stdout.write('Deleting Note entries...')
         Note.objects.all().delete()
-        
-        self.stdout.write('Deleting Task entries...')
-        Task.objects.all().delete()
         
         self.stdout.write('Deleting Project entries...')
         Project.objects.all().delete()
