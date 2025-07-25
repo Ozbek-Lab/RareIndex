@@ -40,7 +40,7 @@
 
 {% partialdef card %}
   <div
-    class="bg-white dark:bg-gray-800 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+    class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
     data-item-id="{{ item.id }}"
   >
     <div class="flex justify-between items-start">
@@ -57,7 +57,7 @@
     <div class="flex items-center mb-2">
       <i class="fa-solid fa-flask mr-2 text-gray-500 dark:text-gray-400"></i>
       <span class="text-lg text-gray-700 dark:text-gray-300 font-medium">
-        Sample #{{ item.sample.id }}
+        {{ item.sample.sample_type.name }} #{{ item.sample.id }}
       </span>
     </div>
 
@@ -79,7 +79,7 @@
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
       {% if item.performed_date %}
-        <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+        <div class="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
           <div class="flex items-center">
             <i class="fa-solid fa-calendar-check mr-2 text-green-600 dark:text-green-400"></i>
             <span class="text-green-900 dark:text-green-100 font-medium">

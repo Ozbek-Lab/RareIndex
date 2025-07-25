@@ -18,7 +18,8 @@ from lab.models import (
     Project,
     Task,
     IdentifierType,
-    CrossIdentifier
+    CrossIdentifier,
+    Note  # Added Note import
 )
 from ontologies.models import Term
 
@@ -84,63 +85,44 @@ class Command(BaseCommand):
             return
 
         # Generate families and their members
+
+        all_individuals = []
         for i in range(options['families']):
             family_id = f"RB_2025_{i+1:02d}"
             family = self._create_family(family_id, user)
-            
-            # Create tasks for family
+            self._create_note(family, user)
             self._create_tasks(family, user, statuses['completed'], project, options['tasks_per_object'])
-            
-            # Create family members
             mother = self._create_individual("Mother", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
+            self._create_note(mother, user)
             self._create_identifiers(mother, identifier_types, f"{family_id}.2", f"RD3.F{i+1:02d}.2", user )
             father = self._create_individual("Father", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
+            self._create_note(father, user)
             self._create_identifiers(father, identifier_types, f"{family_id}.3", f"RD3.F{i+1:02d}.3", user)
-
-            # Determine if this family will have multiple children (half of families)
+            all_individuals.extend([mother, father])
             multi_child = (i % 2 == 0)
             children = []
             if multi_child:
-                # Two children, both indexes
                 for child_num in range(1, 3):
                     proband = self._create_individual(
-                        f"Proband{child_num}",
-                        family,
-                        user,
-                        institution,
-                        statuses['active'],
-                        hpo_terms,
-                        mother=mother,
-                        father=father,
-                        is_index=True
+                        f"Proband{child_num}", family, user, institution, statuses['active'], hpo_terms, mother=mother, father=father, is_index=True
                     )
+                    self._create_note(proband, user)
                     rb_code = f"{family_id}.1.{child_num}"
                     biobank_code = f"RD3.F{i+1:02d}.1.{child_num}"
                     self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
                     children.append(proband)
             else:
-                # Single child, index
                 proband = self._create_individual(
-                    "Proband",
-                    family,
-                    user,
-                    institution,
-                    statuses['active'],
-                    hpo_terms,
-                    mother=mother,
-                    father=father,
-                    is_index=True
+                    "Proband", family, user, institution, statuses['active'], hpo_terms, mother=mother, father=father, is_index=True
                 )
+                self._create_note(proband, user)
                 rb_code = f"{family_id}.1"
                 biobank_code = f"RD3.F{i+1:02d}.1"
                 self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
                 children.append(proband)
-
-            # Create tasks for individuals
+            all_individuals.extend(children)
             for individual in [mother, father] + children:
                 self._create_tasks(individual, user, statuses['completed'], project, options['tasks_per_object'])
-
-            # Create samples for each individual
             for individual in [mother, father] + children:
                 self._create_samples(
                     individual,
@@ -155,6 +137,23 @@ class Command(BaseCommand):
                     statuses,
                     project
                 )
+
+        # Create additional projects and assign random individuals to them
+        project_names = ["Cancer Study", "Rare Disease Cohort", "Control Group"]
+        for pname in project_names:
+            proj = Project.objects.create(
+                name=pname,
+                description=f"Auto-generated project: {pname}",
+                created_by=user,
+                due_date=timezone.now() + timedelta(days=random.randint(30, 180)),
+                status=project_status,
+                priority=random.choice(["low", "medium", "high"])
+            )
+            # Assign a random subset of individuals to this project
+            num_to_add = random.randint(2, min(8, len(all_individuals)))
+            selected_inds = random.sample(all_individuals, num_to_add)
+            proj.individuals.add(*selected_inds)
+            self.stdout.write(f"Added {num_to_add} individuals to project '{pname}'")
 
         self.stdout.write(self.style.SUCCESS('Successfully generated sample data'))
 
@@ -298,9 +297,9 @@ class Command(BaseCommand):
     def _create_tasks(self, obj, user, target_status, project, num_tasks):
         priorities = ['low', 'medium', 'high', 'urgent']
         for i in range(num_tasks):
-            Task.objects.create(
-                title=f'Task {i+1} for {obj}',
-                description=f'Sample task {i+1} created for {obj}',
+            task = Task.objects.create(
+                title=f'Task {i+1}',
+                description=f'Auto task {i+1}',
                 content_object=obj,
                 assigned_to=user,
                 created_by=user,
@@ -309,6 +308,7 @@ class Command(BaseCommand):
                 status=target_status,
                 project=project
             )
+            self._create_note(task, user, text=f"Auto note for Task {i+1}")
 
     def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, statuses, project):
         for i in range(num_samples):
@@ -321,6 +321,7 @@ class Command(BaseCommand):
                 isolation_by=user,
                 created_by=user
             )
+            self._create_note(sample, user)
 
             # Create tasks for sample
             self._create_tasks(sample, user, statuses['completed'], project, tasks_per_object)
@@ -335,6 +336,7 @@ class Command(BaseCommand):
                     created_by=user,
                     status=statuses['active']
                 )
+                self._create_note(test, user)
 
                 # Create tasks for test
                 self._create_tasks(test, user, statuses['completed'], project, tasks_per_object)
@@ -349,6 +351,7 @@ class Command(BaseCommand):
                         status=statuses['active'],
                         created_by=user
                     )
+                    self._create_note(analysis, user)
 
                     # Create tasks for analysis
                     self._create_tasks(analysis, user, statuses['completed'], project, tasks_per_object)
@@ -384,4 +387,13 @@ class Command(BaseCommand):
                 id_value=random.randint(1000000000, 9999999999),
                 link=f"https://www.erdera.com/individual/{random.randint(1000000000, 9999999999)}",
                 created_by=user
+            )
+
+    def _create_note(self, obj, user, text=None):
+        """Create a note for the given object if it supports notes."""
+        if hasattr(obj, 'notes'):
+            Note.objects.create(
+                content_object=obj,
+                content=text or f"Auto-generated note for {obj}",
+                user=user
             )

@@ -55,7 +55,7 @@
 
 {% partialdef card %}
   <div
-    class="bg-white dark:bg-gray-800 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+    class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
     data-item-id="{{ item.id }}"
   >
     <div class="flex justify-between items-start">
@@ -86,7 +86,7 @@
       </div>
     </div>
 
-    <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+    <div class="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
       <div class="flex items-center">
         <i class="fa-solid fa-user mr-2 text-blue-600 dark:text-blue-400"></i>
         <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
@@ -102,12 +102,12 @@
       {% endif %}
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
       {% if item.performed_date %}
-        <div class="p-1 bg-green-50 dark:bg-green-900/20 rounded-lg">
+        <div class="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
           <div class="flex items-center">
             <i class="fa-solid fa-calendar-check mr-2 text-green-600 dark:text-green-400"></i>
-            <span class="text-green-900 dark:text-green-100 font-small">
+            <span class="text-green-900 dark:text-green-100 font-medium">
               {{ item.performed_date }}
             </span>
           </div>
@@ -115,10 +115,10 @@
       {% endif %}
 
       {% if item.performed_by %}
-        <div class="p-1 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+        <div class="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
           <div class="flex items-center">
             <i class="fa-solid fa-user-md mr-2 text-purple-600 dark:text-purple-400"></i>
-            <span class="text-purple-900 dark:text-purple-100 font-small">
+            <span class="text-purple-900 dark:text-purple-100 font-medium">
               {{ item.performed_by.username }}
             </span>
           </div>
