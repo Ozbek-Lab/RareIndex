@@ -18,7 +18,9 @@
     <div class="float-right">
       <i class="fa-solid fa-stethoscope"></i>
     </div>
-    <p class="text-gray-600 dark:text-gray-400">{{ item.full_name }}</p>
+    {% if perms.lab.view_individual_sensitive_data %}
+      <p class="text-gray-600 dark:text-gray-400">{{ item.full_name }}</p>
+    {% endif %}
     {% if item.icd11_code %}
       <p class="text-sm text-gray-500 dark:text-gray-400">
         ICD11: {{ item.icd11_code }}
