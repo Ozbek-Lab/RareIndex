@@ -3,11 +3,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from lab.models import (
     Individual, Test, TestType, Analysis, AnalysisType,
-    Status, Sample, SampleType, Institution
+    Status, Sample, SampleType, Institution, Project
 )
 import csv
 from datetime import datetime
 import os
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -126,6 +127,22 @@ class Command(BaseCommand):
             admin_user
         )
 
+        # Get or create the project for imported individuals
+        imported_project_status, _ = Status.objects.get_or_create(
+            name='Imported',
+            defaults={'description': 'Imported data project', 'color': 'gray', 'created_by': admin_user}
+        )
+        imported_project, _ = Project.objects.get_or_create(
+            name='Imported Data Project',
+            defaults={
+                'description': 'Project for imported individuals',
+                'created_by': admin_user,
+                'status': imported_project_status,
+                'due_date': timezone.now() + timezone.timedelta(days=90),
+                'priority': 'medium'
+            }
+        )
+
         # Track unique test types
         test_types = {}
 
@@ -143,6 +160,7 @@ class Command(BaseCommand):
 
                 try:
                     individual = Individual.objects.get(cross_ids__id_value=lab_id)
+                    imported_project.individuals.add(individual)
                 except Individual.DoesNotExist:
                     leftover_rows.append(row)
                     self.stdout.write(self.style.WARNING(f'Individual not found with lab_id: {lab_id}'))
