@@ -420,24 +420,32 @@
   class="flex h-screen bg-gray-50 dark:bg-gray-900">
   {% include "lab/sidebar.html" %}
   <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900 p-6">
-    <div>
-      <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
-        <button @click="open = true" type="button"
-          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
-          aria-label="Open filters">
-          <i class="fa-solid fa-filter"></i>
-        </button>
-        <!-- Clear Filters Button -->
-        <button
-          x-show="Object.values(filters).some(v => v)"
-          @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
-          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
-          type="button"
-        >
-          <i class="fa-solid fa-filter-circle-xmark"></i>
-        </button>
-      </div>
-      {% partial drawer %}
+    <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
+      <button @click="open = true" type="button"
+        class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
+        aria-label="Open filters">
+        <i class="fa-solid fa-filter"></i>
+      </button>
+      <!-- Clear Filters Button -->
+      <button
+        x-show="Object.values(filters).some(v => v)"
+        @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
+        class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
+        type="button"
+      >
+        <i class="fa-solid fa-filter-circle-xmark"></i>
+      </button>
+    </div>
+    {% partial drawer %}
+    <!-- Detail View Container -->
+    <div x-show="activeItem && activeItem.startsWith('detail-')" id="detail-view" class="relative">
+      <template x-if="detailHtml">
+        <div x-html="detailHtml"></div>
+      </template>
+      <button @click="closeDetail()" class="absolute top-2 right-2 z-10 bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Close</button>
+    </div>
+    <!-- Hide main content when detail is open -->
+    <div x-show="!activeItem || !activeItem.startsWith('detail-')">
       <div x-show="activeItem === 'index'">
         <div class="grid grid-cols-4 gap-4 relative">
           {% with view="index" %}
@@ -509,6 +517,7 @@
         activeItem: 'index',
         open: false,
         filters: {},
+        detailHtml: null, // New: to hold HTML for detail view
 
         init() {
           const params = new URLSearchParams(window.location.search);
@@ -548,6 +557,18 @@
           }
           // Push the new state to the browser's history
           history.pushState({}, "", `?${newParams.toString()}`);
+        },
+
+        // NEW: Method to open detail view
+        openDetail(html) {
+          this.detailHtml = html;
+          this.activeItem = 'detail-view'; // Set activeItem to 'detail-view'
+        },
+
+        // NEW: Method to close detail view
+        closeDetail() {
+          this.detailHtml = null;
+          this.activeItem = 'index'; // Return to index page
         },
 
         getHxVals(appLabel, modelName, page=1, card=null) {
