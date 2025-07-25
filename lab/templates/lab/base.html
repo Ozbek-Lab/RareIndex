@@ -26,24 +26,43 @@
     <style>
       /* Webkit browsers (Chrome, Safari, Edge) */
       ::-webkit-scrollbar {
-        width: 12px;
-        background: #f1f1f1;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #bdbdbd;
-        border-radius: 6px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #888;
-      }
-      ::-webkit-scrollbar-corner {
-        background: #f1f1f1;
+        width: 5px; /* Sets the total width of the scrollbar */
+        height: 5px; /* Sets the total height for horizontal scrollbars */
+        background: transparent; /* Makes the scrollbar track transparent */
       }
 
-      /* Firefox */
+      ::-webkit-scrollbar-track {
+        background: transparent; /* Ensures the track itself is transparent */
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #bdbdbd; /* Color of the scrollbar handle */
+        border-radius: 10px; /* Fully rounded corners for the handle */
+        border: 1.5px solid transparent; /* Creates a "padding" effect around the handle */
+        background-clip: padding-box; /* Prevents background from extending into the border area */
+        min-height: 40px; /* Minimum height for the handle */
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #888; /* Darker handle color on hover */
+      }
+
+      /* This rule hides the up and down arrow buttons */
+      ::-webkit-scrollbar-button {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+
+      /* Hides the corner piece where vertical and horizontal scrollbars meet */
+      ::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+
+      /* For Firefox */
       html {
-        scrollbar-width: thin;
-        scrollbar-color: #bdbdbd #f1f1f1;
+        scrollbar-width: thin; /* Use Firefox's built-in thin scrollbar */
+        scrollbar-color: #bdbdbd transparent; /* Sets handle and track colors */
       }
     </style>
   </head>
