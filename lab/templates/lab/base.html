@@ -23,6 +23,29 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
     />
+    <style>
+      /* Webkit browsers (Chrome, Safari, Edge) */
+      ::-webkit-scrollbar {
+        width: 12px;
+        background: #f1f1f1;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #bdbdbd;
+        border-radius: 6px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #888;
+      }
+      ::-webkit-scrollbar-corner {
+        background: #f1f1f1;
+      }
+
+      /* Firefox */
+      html {
+        scrollbar-width: thin;
+        scrollbar-color: #bdbdbd #f1f1f1;
+      }
+    </style>
   </head>
   <body
     x-data="{ darkMode: localStorage.getItem('darkMode') === 'true',
