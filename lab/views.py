@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404
 from .models import Note
 from django.contrib.contenttypes.models import ContentType
 
+from django.views.decorators.vary import vary_on_headers
 # Import models
 from .models import Individual
 
@@ -440,6 +441,28 @@ def generic_search_page(request):
         "card": card_partial,
     }
     return render(request, "lab/partials/_infinite_scroll_items.html", context)
+
+
+@login_required
+@vary_on_headers("HX-Request")
+def generic_detail(request):
+    target_app_label = request.GET.get("app_label", "lab").strip()
+    target_model_name = request.GET.get("model_name", "").strip()
+    pk = request.GET.get("pk")
+    if not target_model_name or not pk:
+        return HttpResponseBadRequest("Model or pk not specified.")
+
+    target_model = apps.get_model(app_label=target_app_label, model_name=target_model_name)
+    obj = get_object_or_404(target_model, pk=pk)
+
+    template_base = f"lab/{target_model_name.lower()}.html"
+    if request.htmx:
+        # Render only the detail partial for htmx requests
+        template_name = f"{template_base}#detail"
+    else:
+        # Render the full template for non-htmx requests
+        template_name = template_base
+    return render(request, template_name, {"item": obj, "model_name": target_model_name, "app_label": target_app_label})
 
 
 @login_required

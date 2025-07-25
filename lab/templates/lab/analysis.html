@@ -1,3 +1,8 @@
+{% extends "lab/base.html" %}
+{% block content %}
+  {% partial detail %}
+{% endblock content %}
+
 {% partialdef compact-card %}
   <div
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-2"
@@ -167,7 +172,14 @@
     <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
 
       <div class="flex space-x-2">
-        <button class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+        <button 
+          class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          hx-get="{% url 'lab:generic_detail' %}"
+          hx-target="#detail-view"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+          hx-vals='{"model_name": "Analysis", "app_label": "lab", "pk": {{ item.pk }} }'
+        >
           <i class="fa-solid fa-eye mr-1"></i>View Details
         </button>
         <button class="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">
@@ -177,3 +189,27 @@
     </div>
   </div>
 {% endpartialdef card %}
+
+{% partialdef detail %}
+  <div x-init="activeItem = 'detail-analysis-{{ item.pk }}'" class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+      Analysis: {{ item.id }}
+    </h2>
+    <div class="mb-2">
+      <span class="font-semibold">Type:</span> {{ item.analysis_type.name }}<br>
+      <span class="font-semibold">Sample:</span> {{ item.sample.id }}<br>
+      <span class="font-semibold">Created:</span> {{ item.created_at|date:"M d, Y H:i" }}<br>
+      <span class="font-semibold">Last Updated:</span> {{ item.updated_at|date:"M d, Y H:i" }}
+    </div>
+    <div class="mt-4">
+      <h3 class="font-semibold">Notes</h3>
+      <ul>
+        {% for note in item.notes.all %}
+          <li class="text-sm text-gray-600 dark:text-gray-400">{{ note.content|truncatewords:20 }}</li>
+        {% empty %}
+          <li class="text-sm text-gray-400">No notes available.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+{% endpartialdef %}
