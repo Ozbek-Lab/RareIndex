@@ -17,6 +17,9 @@ from django.template.loader import render_to_string
 # Import models
 from .models import Individual
 
+# Import forms
+from .forms import NoteForm
+
 # Import HPO visualization functions
 from .visualization.hpo_network_visualization import (
     process_hpo_data,
@@ -215,6 +218,7 @@ def note_list(request):
     content_type_id = request.GET.get("content_type")
     content_type = get_object_or_404(ContentType, id=content_type_id)
     obj = content_type.get_object_for_this_type(id=object_id)
+    form = NoteForm()
     return render(
         request,
         "lab/note.html#note-list",
@@ -222,6 +226,7 @@ def note_list(request):
             "object": obj,
             "content_type": content_type_id,
             "user": request.user,
+            "form": form,
         },
     )
 
@@ -240,6 +245,7 @@ def note_create(request):
         content_type=content_type,
         object_id=object_id,
     )
+    form = NoteForm()
     return render(
         request,
         "lab/note.html#note-list",
@@ -247,6 +253,7 @@ def note_create(request):
             "object": obj,
             "content_type": content_type_id,
             "user": request.user,
+            "form": form,
         },
     )
 
@@ -276,6 +283,7 @@ def note_delete(request, pk):
     object_id = note.object_id
     obj = note.content_object
     note.delete()
+    form = NoteForm()
     return render(
         request,
         "lab/note.html#note-list",
@@ -283,5 +291,6 @@ def note_delete(request, pk):
             "object": obj,
             "content_type": content_type_id,
             "user": request.user,
+            "form": form,
         },
     )
