@@ -1,5 +1,5 @@
 from django.apps import apps
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import HttpResponseBadRequest
@@ -12,6 +12,7 @@ from .models import Note
 from django.contrib.contenttypes.models import ContentType
 
 from django.views.decorators.vary import vary_on_headers
+from django.template.loader import render_to_string
 
 # Import models
 from .models import Individual
@@ -128,13 +129,15 @@ def generic_detail(request):
     obj = get_object_or_404(target_model, pk=pk)
 
     template_base = f"lab/{target_model_name.lower()}.html"
+    context = {"item": obj, "model_name": target_model_name, "app_label": target_app_label}
+
     if request.htmx:
-        # Render only the detail partial for htmx requests
-        template_name = f"{template_base}#detail"
+        # For HTMX requests, return only the detail partial
+        return render(request, f"{template_base}#detail", context)
     else:
-        # Render the full template for non-htmx requests
-        template_name = template_base
-    return render(request, template_name, {"item": obj, "model_name": target_model_name, "app_label": target_app_label})
+        # For direct loads, render the main index page and inject the detail content
+        detail_html = render_to_string(f"{template_base}#detail", context=context, request=request)
+        return render(request, "lab/index.html", {"initial_detail_html": detail_html})
 
 
 @login_required

@@ -517,16 +517,12 @@
         activeItem: 'index',
         open: false,
         filters: {},
-        detailHtml: null, // New: to hold HTML for detail view
+        detailHtml: null,
 
         init() {
-          const params = new URLSearchParams(window.location.search);
-          // Read the active page from the URL, defaulting to 'index'
-          this.activeItem = params.get('page') || 'index';
-          params.forEach((value, key) => {
-            if (key.startsWith("filter_"))
-              this.filters[key.replace("filter_", "")] = value;
-          });
+          this.syncStateFromURL();
+          window.addEventListener('popstate', () => this.syncStateFromURL());
+
           this.$watch("filters", (newFilters) => {
             this.updateURL();
             window.dispatchEvent(
@@ -537,38 +533,70 @@
           });
         },
 
-        // NEW: Method to handle navigation
-        navigateTo(pageName) {
-          this.activeItem = pageName;
-          this.updateURL();
+        syncStateFromURL() {
+          const params = new URLSearchParams(window.location.search);
+          this.activeItem = params.get('page') || 'index';
+          
+          const newFilters = {};
+          params.forEach((value, key) => {
+            if (key.startsWith("filter_")) {
+              newFilters[key.replace("filter_", "")] = value;
+            }
+          });
+          this.filters = newFilters;
+
+          if (params.has('pk')) {
+            this.loadDetailView(params);
+          }
         },
 
-        // NEW: Extracted URL logic into its own method
         updateURL() {
           const newParams = new URLSearchParams();
-          // Add the current page to the URL
           if (this.activeItem && this.activeItem !== 'index') {
             newParams.set('page', this.activeItem);
           }
-          // Add all active filters to the URL
           for (const modelName in this.filters) {
-            if (this.filters[modelName])
+            if (this.filters[modelName]) {
               newParams.set(`filter_${modelName}`, this.filters[modelName]);
+            }
           }
-          // Push the new state to the browser's history
-          history.pushState({}, "", `?${newParams.toString()}`);
+          const url = `?${newParams.toString()}`;
+          if (window.location.search !== url) {
+            history.pushState({}, "", url);
+          }
         },
 
-        // NEW: Method to open detail view
-        openDetail(html) {
-          this.detailHtml = html;
-          this.activeItem = 'detail-view'; // Set activeItem to 'detail-view'
+        navigateTo(pageName) {
+          this.activeItem = pageName;
+          this.detailHtml = null;
+          this.updateURL();
         },
 
-        // NEW: Method to close detail view
+        openDetail(pk, modelName, appLabel) {
+          const newParams = new URLSearchParams();
+          newParams.set('pk', pk);
+          newParams.set('model_name', modelName);
+          newParams.set('app_label', appLabel);
+          history.pushState({}, "", `/detail/?${newParams.toString()}`);
+          this.loadDetailView(newParams);
+        },
+
+        loadDetailView(params) {
+            const pk = params.get('pk');
+            const modelName = params.get('model_name');
+            const appLabel = params.get('app_label');
+            if (pk && modelName && appLabel) {
+                const detailUrl = `{% url 'lab:generic_detail' %}?${params.toString()}`;
+                htmx.ajax('GET', detailUrl, '#detail-view').then(response => {
+                    this.detailHtml = response;
+                    this.activeItem = `detail-${modelName}-${pk}`;
+                });
+            }
+        },
+
         closeDetail() {
           this.detailHtml = null;
-          this.activeItem = 'index'; // Return to index page
+          this.navigateTo('index');
         },
 
         getHxVals(appLabel, modelName, page=1, card=null) {
@@ -611,12 +639,8 @@
         isThresholdValid: true,
 
         init() {
-          // This watches for changes to the threshold input
           this.$watch("hpoThreshold", () => {
-            // Check if the input value is valid (e.g., between 1 and 24)
             this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
-            
-            // If it's valid, trigger a global event to refresh the plot
             if (this.isThresholdValid) {
               window.dispatchEvent(new CustomEvent("filters-updated"));
             }
@@ -639,3 +663,14 @@
     }
   </script>
 {% endblock content %}
+
+{% if initial_detail_html %}
+<script>
+  document.addEventListener('alpine:init', () => {
+    const mainController = document.querySelector('[x-data="mainController()"]').__x;
+    if (mainController) {
+      mainController.openDetail({{ initial_detail_html|safe }});
+    }
+  });
+</script>
+{% endif %}
