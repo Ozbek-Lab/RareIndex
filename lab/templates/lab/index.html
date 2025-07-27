@@ -560,10 +560,8 @@
               newParams.set(`filter_${modelName}`, this.filters[modelName]);
             }
           }
-          const url = `?${newParams.toString()}`;
-          if (window.location.search !== url) {
-            history.pushState({}, "", url);
-          }
+          const newPath = newParams.toString() ? `/?${newParams.toString()}` : '/';
+          history.pushState({}, "", newPath);
         },
 
         navigateTo(pageName) {
