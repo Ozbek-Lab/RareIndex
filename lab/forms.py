@@ -34,7 +34,7 @@ class TaskForm(forms.ModelForm):
             "assigned_to",
             "due_date",
             "priority",
-            "target_status",
+            "status",
             "project",
         ]
         widgets = {
@@ -64,7 +64,7 @@ class IndividualForm(forms.ModelForm):
             "father",
             "diagnosis",
             "diagnosis_date",
-            "sending_institution",
+            "institution",
             "status",
         ]
         widgets = {
