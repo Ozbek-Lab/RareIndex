@@ -83,7 +83,9 @@
 
     {% if item.icd11_code %}
       <div class="mb-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-        <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">ICD-11 Code</h4>
+        <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+          ICD-11 Code
+        </h4>
         <p class="text-lg font-mono text-gray-900 dark:text-gray-100">
           {{ item.icd11_code }}
         </p>
@@ -93,7 +95,9 @@
     <div class="flex justify-between">
       <div class="mb-2 p-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
         <div class="flex items-center">
-          <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
+          <i
+            class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"
+          ></i>
           <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
             {{ item.institution }}
           </span>
@@ -108,7 +112,10 @@
         >
           <i class="fa-solid fa-comment"></i>
           <span>Notes</span>
-          <i class="fa-solid fa-chevron-down transition-transform" :class="{ 'rotate-180': open }"></i>
+          <i
+            class="fa-solid fa-chevron-down transition-transform"
+            :class="{ 'rotate-180': open }"
+          ></i>
         </button>
         <div
           x-show="open"
@@ -120,9 +127,15 @@
           x-transition:leave-end="opacity-0 transform scale-95"
           class="absolute left-0 z-10 mt-2 w-full max-w-md"
         >
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4">
-            <h5 class="font-semibold text-gray-900 dark:text-gray-100 mb-2">Notes Section</h5>
-            <p class="text-gray-600 dark:text-gray-400">Detailed notes and comments will appear here.</p>
+          <div
+            class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+          >
+            <h5 class="font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              Notes Section
+            </h5>
+            <p class="text-gray-600 dark:text-gray-400">
+              Detailed notes and comments will appear here.
+            </p>
           </div>
         </div>
       </div>
@@ -132,19 +145,19 @@
       Last updated: {{ item.updated_at|date:"M d, Y H:i"|default:"Unknown" }}
     </div>
 
-    <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+    <div
+      class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700"
+    >
       <div class="flex space-x-2">
-        <button 
+        <button
           class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-          hx-get="{% url 'lab:generic_detail' %}"
-          hx-target="#detail-view"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          hx-vals='{"model_name": "Individual", "app_label": "lab", "pk": {{ item.pk }} }'
+          @click="openDetail({{ item.pk }}, 'Individual', 'lab')"
         >
           <i class="fa-solid fa-eye mr-1"></i>View Details
         </button>
-        <button class="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
+        <button
+          class="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+        >
           <i class="fa-solid fa-edit mr-1"></i>Edit
         </button>
       </div>
@@ -153,23 +166,31 @@
 {% endpartialdef card %}
 
 {% partialdef detail %}
-  <div x-init="activeItem = 'detail-individual-{{ item.pk }}'" class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+  <div
+    x-init="activeItem = 'detail-individual-{{ item.pk }}'"
+    class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+  >
     <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
       Individual: {{ item.individual_id }}
     </h2>
     <div class="mb-2">
-      <span class="font-semibold">Full Name:</span> {{ item.full_name }}<br>
-      <span class="font-semibold">Status:</span> {{ item.status.name }}<br>
-      <span class="font-semibold">ICD-11 Code:</span> {{ item.icd11_code|default:'—' }}<br>
-      <span class="font-semibold">Created:</span> {{ item.created_at|date:"M d, Y H:i" }}<br>
-      <span class="font-semibold">Last Updated:</span> {{ item.updated_at|date:"M d, Y H:i" }}
+      <span class="font-semibold">Full Name:</span> {{ item.full_name }}<br />
+      <span class="font-semibold">Status:</span> {{ item.status.name }}<br />
+      <span class="font-semibold">ICD-11 Code:</span>
+      {{ item.icd11_code|default:'—' }}<br />
+      <span class="font-semibold">Created:</span>
+      {{ item.created_at|date:"M d, Y H:i" }}<br />
+      <span class="font-semibold">Last Updated:</span>
+      {{ item.updated_at|date:"M d, Y H:i" }}
     </div>
     <div class="mt-4">
       <h3 class="font-semibold">Notes</h3>
       <ul>
         {% for note in item.notes.all %}
-          <li class="text-sm text-gray-600 dark:text-gray-400">{{ note.content|truncatewords:20 }}</li>
-        {% empty %}
+          <li class="text-sm text-gray-600 dark:text-gray-400">
+            {{ note.content|truncatewords:20 }}
+          </li>
+          {% empty %}
           <li class="text-sm text-gray-400">No notes available.</li>
         {% endfor %}
       </ul>
