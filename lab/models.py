@@ -244,7 +244,7 @@ class Individual(models.Model):
     full_name = EncryptedCharField(max_length=255)
     tc_identity = EncryptedBigIntegerField(null=True, blank=True)
     birth_date = EncryptedDateField(null=True, blank=True)
-    icd11_code = models.TextField(blank=True)
+    icd11_code = models.TextField(null=True, blank=True)
     is_index = models.BooleanField(default=False)
     hpo_terms = models.ManyToManyField(
         "ontologies.Term",
@@ -382,7 +382,7 @@ class Sample(models.Model):
 class Test(models.Model):
     """Through model for tracking tests performed on samples"""
 
-    sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name="tests")
+    sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name="tests",null=True, blank=True)
     test_type = models.ForeignKey(TestType, on_delete=models.PROTECT)
     performed_date = models.DateField(null=True, blank=True)
     performed_by = models.ForeignKey(
