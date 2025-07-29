@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "ontologies",
     "simple_history",
     "notifications",
+    "openpyxl",
 ]
 
 MIDDLEWARE = [

@@ -103,6 +103,23 @@ class Command(BaseCommand):
         self.stdout.write('Deleting Project entries...')
         Project.objects.all().delete()
         
+        # Delete objects with required User references before nullifying others
+        self.stdout.write('Deleting objects with required User references...')
+        Family.objects.all().delete()  # Family has NOT NULL created_by
+        Status.objects.all().delete()  # Status has NOT NULL created_by
+        Sample.objects.all().delete()  # Sample has NOT NULL created_by
+        Test.objects.all().delete()    # Test has NOT NULL created_by
+        Analysis.objects.all().delete() # Analysis has NOT NULL created_by
+        Project.objects.all().delete()  # Project has NOT NULL created_by
+        Note.objects.all().delete()     # Note has NOT NULL created_by
+        Institution.objects.all().delete() # Institution has NOT NULL created_by
+        SampleType.objects.all().delete()  # SampleType has NOT NULL created_by
+        TestType.objects.all().delete()    # TestType has NOT NULL created_by
+        AnalysisType.objects.all().delete() # AnalysisType has NOT NULL created_by
+        IdentifierType.objects.all().delete() # IdentifierType has NOT NULL created_by
+        CrossIdentifier.objects.all().delete() # CrossIdentifier has NOT NULL created_by
+        Individual.objects.all().delete()      # Individual has NOT NULL created_by
+        
         # Keep superuser, delete other users
         self.stdout.write('Deleting non-superuser User entries...')
         User.objects.filter(is_superuser=False).delete()
