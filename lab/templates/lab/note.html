@@ -1,6 +1,6 @@
 {% load partials %}
 
-{% partialdef note-list %}
+{% partialdef list %}
 <div class="notes-list space-y-1.5">
   {% if object.notes.all %}
     {% for note in object.notes.all %}
@@ -65,7 +65,7 @@
 </div>
 {% endpartialdef %}
 
-{% partialdef note-summary %}
+{% partialdef summary %}
 <div
   class="flex items-center space-x-2 text-sm"
   hx-get="{% url 'lab:note_count' %}"
@@ -92,7 +92,7 @@
 </div>
 {% endpartialdef %}
 
-{% partialdef note-form inline %}
+{% partialdef inline-form %}
 <form
     class="mt-2"
     hx-post="{% url 'lab:note_create' %}"
@@ -115,11 +115,11 @@
 </form>
 {% endpartialdef %}
 
-{% partialdef note-dropdown %}
+{% partialdef dropdown %}
 <div x-data="{ open: false }">
-  <button @click="open = !open">{% include 'lab/notes/summary.html' %}</button>
+  <button @click="open = !open">{% include 'lab/note.html#summary' %}</button>
   <div x-show="open" @click.outside="open = false">
-    {% include 'lab/notes/list.html' %}
+    {% include 'lab/note.html#list' %}
   </div>
 </div>
 {% endpartialdef %} 
