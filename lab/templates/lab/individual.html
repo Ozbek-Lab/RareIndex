@@ -185,6 +185,7 @@
       Individual: {{ item.individual_id }}
     </h2>
     <div class="mb-2">
+      <span class="font-semibold">ID:</span> {{ item.individual_id }}<br />
       {% if perms.lab.view_individual_sensitive_data %}
         <span class="font-semibold">Full Name:</span> {{ item.full_name }}<br />
       {% endif %}
