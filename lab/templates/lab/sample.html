@@ -133,7 +133,10 @@
     </h2>
     <div class="mb-2">
       <span class="font-semibold">Sample Type:</span> {{ item.sample_type.name }}<br>
-      <span class="font-semibold">Individual:</span> {{ item.individual.full_name }}<br>
+      <span class="font-semibold">Individual:</span> {{ item.individual.individual_id }}<br>
+      {% if perms.lab.view_individual_sensitive_data %}
+        <span class="font-semibold">Individual Name:</span> {{ item.individual.full_name }}<br>
+      {% endif %}
       <span class="font-semibold">Created:</span> {{ item.created_at|date:"M d, Y H:i" }}<br>
       <span class="font-semibold">Last Updated:</span> {{ item.updated_at|date:"M d, Y H:i" }}
     </div>
