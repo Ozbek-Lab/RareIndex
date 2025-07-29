@@ -2,7 +2,7 @@ from django.apps import apps
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponseBadRequest, HttpResponseForbidden
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 import json
@@ -13,6 +13,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
+from django.template.response import TemplateResponse
 
 # Import models
 from .models import Individual
@@ -128,18 +129,26 @@ def generic_detail(request):
     if not target_model_name or not pk:
         return HttpResponseBadRequest("Model or pk not specified.")
 
-    target_model = apps.get_model(app_label=target_app_label, model_name=target_model_name)
+    target_model = apps.get_model(
+        app_label=target_app_label, model_name=target_model_name
+    )
     obj = get_object_or_404(target_model, pk=pk)
 
     template_base = f"lab/{target_model_name.lower()}.html"
-    context = {"item": obj, "model_name": target_model_name, "app_label": target_app_label}
+    context = {
+        "item": obj,
+        "model_name": target_model_name,
+        "app_label": target_app_label,
+    }
 
     if request.htmx:
         # For HTMX requests, return only the detail partial
         return render(request, f"{template_base}#detail", context)
     else:
         # For direct loads, render the main index page and inject the detail content
-        detail_html = render_to_string(f"{template_base}#detail", context=context, request=request)
+        detail_html = render_to_string(
+            f"{template_base}#detail", context=context, request=request
+        )
         return render(request, "lab/index.html", {"initial_detail_html": detail_html})
 
 
@@ -213,84 +222,121 @@ def get_select_options(request):
 
 
 @login_required
-def note_list(request):
+def note_create(request):
+    """Create a new note for a specific object"""
+    if request.method == "POST":
+        content_type_str = request.POST.get("content_type")
+        object_id = request.POST.get("object_id")
+
+        # Get the content type and object
+        model = apps.get_model("lab", content_type_str.capitalize())
+        content_type = ContentType.objects.get_for_model(model)
+        obj = model.objects.get(id=object_id)
+
+        # Create the note
+        Note.objects.create(
+            content=request.POST.get("content"),
+            user=request.user,
+            content_type=content_type,
+            object_id=object_id,
+        )
+
+        # Return the updated list
+        return TemplateResponse(
+            request,
+            "lab/note.html#list",
+            {
+                "object": obj,
+                "content_type": content_type_str,
+                "user": request.user,
+            },
+        )
+
+    # For GET requests, return the form
+    content_type_str = request.GET.get("content_type")
     object_id = request.GET.get("object_id")
-    content_type_id = request.GET.get("content_type")
-    content_type = get_object_or_404(ContentType, id=content_type_id)
-    obj = content_type.get_object_for_this_type(id=object_id)
-    form = NoteForm()
-    return render(
+
+    # Get the content type and object
+    model = apps.get_model("lab", content_type_str.capitalize())
+    content_type = ContentType.objects.get_for_model(model)
+    obj = model.objects.get(id=object_id)
+
+    return TemplateResponse(
         request,
-        "lab/note.html#note-list",
+        "lab/note.html#form",
         {
             "object": obj,
-            "content_type": content_type_id,
-            "user": request.user,
-            "form": form,
+            "content_type": content_type_str,
+            "form": NoteForm(),
         },
     )
 
 
 @login_required
-@require_POST
-def note_create(request):
-    content_type_id = request.POST.get("content_type")
-    object_id = request.POST.get("object_id")
-    content = request.POST.get("content")
-    content_type = get_object_or_404(ContentType, id=content_type_id)
-    obj = content_type.get_object_for_this_type(id=object_id)
-    note = Note.objects.create(
-        content=content,
-        user=request.user,
-        content_type=content_type,
-        object_id=object_id,
-    )
-    form = NoteForm()
-    return render(
-        request,
-        "lab/note.html#note-list",
-        {
-            "object": obj,
-            "content_type": content_type_id,
-            "user": request.user,
-            "form": form,
-        },
-    )
+def note_delete(request, pk):
+    if request.method == "DELETE":
+        note = get_object_or_404(Note, id=pk)
+
+        # Get the object and content type before deleting the note
+        obj = note.content_object
+        content_type_str = note.content_type.model
+        object_id = note.object_id
+
+        # Only allow the note creator or staff to delete
+        if request.user == note.user or request.user.is_staff:
+            note.delete()
+
+            response = render(
+                request,
+                "lab/note.html#list",
+                {
+                    "object": obj,
+                    "content_type": content_type_str,
+                    "user": request.user,
+                },
+            )
+            response["HX-Trigger"] = f"noteCountUpdate-{content_type_str}-{object_id}"
+            return response
+
+        return HttpResponseForbidden()
 
 
 @login_required
 def note_count(request):
-    object_id = request.GET.get("object_id")
-    content_type_id = request.GET.get("content_type")
-    content_type = get_object_or_404(ContentType, id=content_type_id)
-    obj = content_type.get_object_for_this_type(id=object_id)
-    return render(
-        request,
-        "lab/note.html#note-summary",
-        {
-            "object": obj,
-            "content_type": content_type_id,
-            "user": request.user,
-        },
-    )
+    if request.method == "GET":
+        object_id = request.GET.get("object_id")
+        content_type_str = request.GET.get("content_type")
+
+        # Get the content type and object
+        model = apps.get_model("lab", content_type_str.capitalize())
+        obj = model.objects.get(id=object_id)
+
+        return render(
+            request,
+            "lab/note.html#summary",
+            context={
+                "object": obj,
+                "content_type": content_type_str,
+            },
+        )
 
 
 @login_required
-@require_POST
-def note_delete(request, pk):
-    note = get_object_or_404(Note, pk=pk, user=request.user)
-    content_type_id = note.content_type.id
-    object_id = note.object_id
-    obj = note.content_object
-    note.delete()
-    form = NoteForm()
-    return render(
-        request,
-        "lab/note.html#note-list",
-        {
-            "object": obj,
-            "content_type": content_type_id,
-            "user": request.user,
-            "form": form,
-        },
-    )
+def note_list(request):
+    if request.method == "POST":
+        object_id = request.POST.get("object_id")
+        content_type_str = request.POST.get("content_type")
+
+        # Get the content type and object
+        model = apps.get_model("lab", content_type_str.capitalize())
+        obj = model.objects.get(id=object_id)
+
+        return render(
+            request,
+            "lab/note.html#list",
+            context={
+                "object": obj,
+                "content_type": content_type_str,
+                "user": request.user,
+            },
+        )
