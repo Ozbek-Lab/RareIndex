@@ -1,6 +1,7 @@
 import openpyxl
 import json
 import os
+import csv
 from datetime import datetime
 from django.core.management.base import BaseCommand
 from django.core.management import call_command
@@ -115,7 +116,7 @@ class Command(BaseCommand):
         return sample_type
 
     def _get_hpo_terms(self, hpo_codes_str):
-        """Get HPO terms from space-separated descriptions and codes"""
+        """Get HPO terms from newline-separated descriptions and codes"""
         if not hpo_codes_str:
             return []
             
@@ -127,87 +128,49 @@ class Command(BaseCommand):
             
         # Split into individual terms (each term is "Description HP:code")
         terms = []
-        current_term = []
         
-        for word in hpo_codes_str.split():
-            if word.startswith('HP:'):
-                # This is a code, process the complete term
-                code = word.replace('HP:', '')
-                description = ' '.join(current_term)
+        # Split by newlines and filter out empty lines and '+' lines
+        term_strings = []
+        for line in hpo_codes_str.split('\n'):
+            line = line.strip()
+            if line and line != '+':
+                term_strings.append(line)
+        
+        for term_str in term_strings:
+            # Find the HP: code in the term string
+            hp_match = re.search(r'HP:(\d+)', term_str)
+            if not hp_match:
+                self.stdout.write(self.style.WARNING(f'No HP code found in term: {term_str}'))
+                continue
                 
-                # Find the term by identifier
+            code = hp_match.group(1)
+            # Get the description (everything before the HP: code)
+            description = term_str[:hp_match.start()].strip()
+            
+            # Find the term by identifier
+            term = Term.objects.filter(
+                ontology=hp_ontology,
+                identifier=code
+            ).first()
+            
+            if term:
+                # self.stdout.write(self.style.SUCCESS(f'Found HPO term: {term.label} (HP:{code})'))
+                terms.append(term)
+            else:
+                self.stdout.write(self.style.WARNING(f'HPO term not found: {description} (HP:{code})'))
+                # Try to find by label as fallback
                 term = Term.objects.filter(
                     ontology=hp_ontology,
-                    identifier=code
+                    label__icontains=description
                 ).first()
-                
                 if term:
-                    # self.stdout.write(self.style.SUCCESS(f'Found HPO term: {term.label} (HP:{code})'))
+                    self.stdout.write(self.style.SUCCESS(f'Found HPO term by label: {term.label} (HP:{term.identifier})'))
                     terms.append(term)
-                else:
-                    self.stdout.write(self.style.WARNING(f'HPO term not found: {description} (HP:{code})'))
-                    # Try to find by label as fallback
-                    term = Term.objects.filter(
-                        ontology=hp_ontology,
-                        label__icontains=description
-                    ).first()
-                    if term:
-                        self.stdout.write(self.style.SUCCESS(f'Found HPO term by label: {term.label} (HP:{term.identifier})'))
-                        terms.append(term)
-                
-                # Reset for next term
-                current_term = []
-            else:
-                # This is part of the description
-                current_term.append(word)
         
         self.stdout.write(self.style.SUCCESS(f'Total HPO terms found: {len(terms)}'))
         return terms
 
-    def _create_tests_from_text(self, text, individual, test_types, status, user):
-        """Create Test objects from comma or newline separated text"""
-        if not text:
-            return
 
-        # Split by either comma or newline
-        test_names = [t.strip() for t in text.replace('\n', ',').split(',')]
-        
-        # Create a default sample if none exists
-        default_sample = None
-
-        for test_name in test_names:
-            if not test_name:
-                continue
-
-            # Try to find matching test type
-            test_type = None
-            test_name_lower = test_name.lower()
-            for existing_name, existing_type in test_types.items():
-                if test_name_lower in existing_name.lower() or existing_name.lower() in test_name_lower:
-                    test_type = existing_type
-                    break
-
-            if test_type:
-                # Create default sample if needed
-                if not default_sample:
-                    # Get the received status
-                    
-                    default_sample = Sample.objects.create(
-                        individual=individual,
-                        sample_type=SampleType.objects.first(),  # Get the first sample type as default
-                        status=Status.objects.filter(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample')).first(),
-                        created_by=user,
-                        isolation_by=user  # Use the same user as isolation_by for default sample
-                    )
-
-                # Create the test
-                Test.objects.create(
-                    sample=default_sample,
-                    test_type=test_type,
-                    status=status,
-                    performed_by=user,
-                    created_by=user
-                )
 
     def analysis_add_arguments(self, parser):
         parser.add_argument('file_path', type=str, help='Path to the TSV file')
@@ -264,12 +227,13 @@ class Command(BaseCommand):
     def _get_or_create_placeholder_sample(self, individual, admin_user):
         # Create a placeholder sample type if it doesn't exist
         placeholder_type = self._get_or_create_sample_type('Placeholder', admin_user)
+        placeholder_sample = self._get_or_create_sample(individual, placeholder_type, admin_user)
         
         # Create a placeholder sample
         sample = Sample.objects.create(
             individual=individual,
             sample_type=placeholder_type,
-            status=Status.objects.get(name='Pending Isolation', content_type=ContentType.objects.get(app_label='lab', model='sample')),
+            status=Status.objects.get(name='Not Available', content_type=ContentType.objects.get(app_label='lab', model='sample')),
             isolation_by=admin_user,
             created_by=admin_user
         )
@@ -319,6 +283,13 @@ class Command(BaseCommand):
 
         # Sample statuses
         sample_statuses = {
+            'placeholder': self._get_or_create_status(
+                'Not Available', 
+                'A placeholder sample for tests performed off-center', 
+                'gray', 
+                admin_user, 
+                ContentType.objects.get(app_label='lab', model='sample')
+            ),
             'pending_blood_recovery': self._get_or_create_status(
                 'Pending Blood Recovery', 
                 'Awaiting blood draw', 
@@ -695,7 +666,7 @@ class Command(BaseCommand):
                     if not existing_sample.isolation_by:
                         existing_sample.isolation_by = isolation_by
                     if not existing_sample.status:
-                        existing_sample.status = Status.objects.get(name='Pending Isolation', content_type=ContentType.objects.get(app_label='lab', model='sample'))
+                        existing_sample.status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample'))
                     existing_sample.save()
                     self.stdout.write(self.style.SUCCESS(f'Updated existing sample: {existing_sample}'))
                 else:
@@ -709,8 +680,8 @@ class Command(BaseCommand):
                         created_by=admin_user,
                     )
                     self.stdout.write(self.style.SUCCESS(f'Created new sample: {sample}'))
+        self.stdout.write(self.style.WARNING(f'Leftover Rows: {len(leftover_rows)}'))
         if leftover_rows:
-            import csv
             with open(leftovers_path, 'w', encoding='utf-8', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=headers_lab, delimiter='\t')
                 writer.writeheader()
@@ -732,6 +703,8 @@ class Command(BaseCommand):
 
         test_types = {}
         leftover_rows = []
+        leftovers_path = os.path.join(os.path.dirname(file_path), 'import_analiz_takip_leftovers.tsv')
+
         for row in ws_analiz.iter_rows(min_row=2, values_only=True):
             # Skip rows where all values are None (empty rows at the end)
             if all(cell is None for cell in row):
@@ -768,6 +741,7 @@ class Command(BaseCommand):
             test_types[veri_kaynagi] = test_type
             sample = individual.samples.first()
             if not sample:
+                self.stdout.write(self.style.WARNING(f'AAAAAANo sample found for individual: {individual.full_name}'))
                 sample = self._get_or_create_placeholder_sample(individual, admin_user)
             test = Test.objects.create(
                 test_type=test_type,
@@ -787,8 +761,6 @@ class Command(BaseCommand):
                     created_by=admin_user
                 )
         if leftover_rows:
-            import csv
-            leftovers_path = os.path.join(os.path.dirname(file_path), 'import_analiz_takip_leftovers.tsv')
             with open(leftovers_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=headers_analiz, delimiter='\t')
                 writer.writeheader()
