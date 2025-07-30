@@ -183,28 +183,212 @@
 {% endpartialdef table %}
 
 {% partialdef detail %}
-  <div x-init="activeItem = 'detail-sample-{{ item.pk }}'" class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-      Sample: {{ item.id }}
-    </h2>
-    <div class="mb-2">
-      <span class="font-semibold">Sample Type:</span> {{ item.sample_type.name }}<br>
-      <span class="font-semibold">Individual:</span> {{ item.individual.individual_id }}<br>
-      {% if perms.lab.view_individual_sensitive_data %}
-        <span class="font-semibold">Individual Name:</span> {{ item.individual.full_name }}<br>
-      {% endif %}
-      <span class="font-semibold">Created:</span> {{ item.created_at|date:"M d, Y H:i" }}<br>
-      <span class="font-semibold">Last Updated:</span> {{ item.updated_at|date:"M d, Y H:i" }}
+  <div class="space-y-6">
+
+    <!-- Sample Details -->
+    <div class="bg-white shadow rounded-lg p-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Basic Information -->
+        <div>
+          <h2 class="text-lg font-medium text-gray-900 mb-4">
+            Basic Information
+          </h2>
+          <dl class="space-y-4">
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Status</dt>
+              <dd class="mt-1">
+                <span
+                  class="px-2 py-1 text-xs rounded-full font-medium {% if item.status.name == 'Complete' %}
+                    bg-green-100 text-green-800
+                  {% elif item.status.name == 'In Progress' %}
+                    bg-yellow-100 text-yellow-800
+                  {% else %}
+                    bg-gray-100 text-gray-800
+                  {% endif %}"
+                >
+                  {{ item.status.name }}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Sample Type</dt>
+              <dd class="mt-1 text-sm text-gray-900">
+                {{ item.sample_type.name }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Individual</dt>
+              <dd class="mt-1">
+                <span class = "cursor-pointer hover:text-blue-600" 
+                  @click="openDetail({{ item.individual.id }}, 'Individual', 'lab')"
+                >
+                  {{ item.individual.individual_id }}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Receipt Date</dt>
+              <dd class="mt-1 text-sm text-gray-900">
+                {{ item.receipt_date|date:"d M Y" }}
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- Additional Information -->
+        <div>
+          <h2 class="text-lg font-medium text-gray-900 mb-4">
+            Additional Information
+          </h2>
+          <dl class="space-y-4">
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Notes</dt>
+              <dd class="mt-1 text-sm text-gray-900">
+                {% include "lab/note.html#list" %}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Created At</dt>
+              <dd class="mt-1 text-sm text-gray-900">
+                {{ item.created_at|date:"d M Y H:i" }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Updated At</dt>
+              <dd class="mt-1 text-sm text-gray-900">
+                {{ item.updated_at|date:"d M Y H:i" }}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="mt-6 flex justify-end space-x-3">
+        <button
+          class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
+          Edit Sample
+        </button>
+      </div>
     </div>
-    <div class="mt-4">
-      <h3 class="font-semibold">Notes</h3>
-      <ul>
-        {% for note in item.notes.all %}
-          <li class="text-sm text-gray-600 dark:text-gray-400">{{ note.content|truncatewords:20 }}</li>
-        {% empty %}
-          <li class="text-sm text-gray-400">No notes available.</li>
-        {% endfor %}
-      </ul>
+
+    <!-- Tests Section -->
+    <div class="bg-white shadow rounded-lg p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-medium text-gray-900">Tests</h2>
+        <button
+          class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
+          Add Test
+        </button>
+      </div>
+
+      {% if item.tests.all %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {% for test in item.tests.all %}
+            <div
+              class="bg-gray-50 rounded-lg p-4 border-l-4 {% if test.status.name == 'Complete' %}border-green-500{% elif test.status.name == 'In Progress' %}border-yellow-500{% else %}border-gray-500{% endif %}"
+            >
+              <div class="flex justify-between items-start">
+                <h3 class="text-lg font-medium text-gray-900">
+                  {{ test.test_type.name }}
+                </h3>
+                <span
+                  class="px-2 py-1 text-xs rounded-full font-medium {% if test.status.name == 'Complete' %}
+                    bg-green-100 text-green-800
+                  {% elif test.status.name == 'In Progress' %}
+                    bg-yellow-100 text-yellow-800
+                  {% else %}
+                    bg-gray-100 text-gray-800
+                  {% endif %}"
+                >
+                  {{ test.status.name }}
+                </span>
+              </div>
+              <div class="mt-2 text-xs text-gray-500">
+                <div>Performed: {{ test.performed_date|date:"d M Y" }}</div>
+                {% if test.performed_by %}
+                  <div>Performed By: {{ test.performed_by.get_username }}</div>
+                {% endif %}
+              </div>
+              <div class="mt-3 flex justify-end space-x-2">
+                <button
+                  class="text-indigo-600 hover:text-indigo-900"
+                  @click="openDetail({{ test.id }}, 'Test', 'lab')"
+                >
+                  View Details
+                </button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-center py-8 bg-gray-50 rounded-lg">
+          <i class="fas fa-flask text-gray-300 text-5xl mb-3"></i>
+          <h3 class="text-lg font-medium text-gray-700">No tests found</h3>
+          <p class="text-gray-500 mt-1">Add a test to get started.</p>
+        </div>
+      {% endif %}
+    </div>
+    
+    <!-- Analyses Section -->
+    <div class="bg-white shadow rounded-lg p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-medium text-gray-900">Analyses</h2>
+        <button
+          class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
+          Add Analysis
+        </button>
+      </div>
+
+      {% if analyses %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {% for analysis in analyses %}
+            <div
+              class="bg-gray-50 rounded-lg p-4 border-l-4 {% if analysis.status.name == 'Complete' %}border-green-500{% elif analysis.status.name == 'In Progress' %}border-yellow-500{% else %}border-gray-500{% endif %}"
+            >
+              <div class="flex justify-between items-start">
+                <h3 class="text-lg font-medium text-gray-900">
+                  {{ analysis.type.name }}
+                </h3>
+                <span
+                  class="px-2 py-1 text-xs rounded-full font-medium {% if analysis.status.name == 'Complete' %}
+                    bg-green-100 text-green-800
+                  {% elif analysis.status.name == 'In Progress' %}
+                    bg-yellow-100 text-yellow-800
+                  {% else %}
+                    bg-gray-100 text-gray-800
+                  {% endif %}"
+                >
+                  {{ analysis.status.name }}
+                </span>
+              </div>
+              <div class="mt-2 text-xs text-gray-500">
+                <div>Performed: {{ analysis.performed_date|date:"d M Y" }}</div>
+                {% if analysis.performed_by %}
+                  <div>Performed By: {{ analysis.performed_by.get_username }}</div>
+                {% endif %}
+              </div>
+              <div class="mt-3 flex justify-end space-x-2">
+                <button
+                  class="text-indigo-600 hover:text-indigo-900"
+                  @click="openDetail({{ analysis.id }}, 'Analysis', 'lab')"
+                >
+                  View Details
+                </button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-center py-8 bg-gray-50 rounded-lg">
+          <i class="fas fa-flask text-gray-300 text-5xl mb-3"></i>
+          <h3 class="text-lg font-medium text-gray-700">No analyses found</h3>
+          <p class="text-gray-500 mt-1">Add an analysis to get started.</p>
+        </div>
+      {% endif %}
     </div>
   </div>
 {% endpartialdef %}
