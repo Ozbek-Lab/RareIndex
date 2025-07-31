@@ -29,12 +29,12 @@
 
 {% if view_mode == 'table' %}
   {% if not items.has_next %}
-    <tr class="text-orange-300">
+    <tr class="text-orange-300 dark:text-orange-400">
       <td colspan="5">No more {{ model_name|lower }}s.</td>
     </tr>
   {% endif %}
 {% else %}
   {% if not items.has_next %}
-    <div class="text-orange-300">No more {{ model_name|lower }}s.</div>
+    <div class="text-orange-300 dark:text-orange-400">No more {{ model_name|lower }}s.</div>
   {% endif %}
 {% endif %}

@@ -138,6 +138,7 @@ def generic_detail(request):
     target_model = apps.get_model(
         app_label=target_app_label, model_name=target_model_name
     )
+
     obj = get_object_or_404(target_model, pk=pk)
 
     template_base = f"lab/{target_model_name.lower()}.html"
@@ -146,6 +147,12 @@ def generic_detail(request):
         "model_name": target_model_name,
         "app_label": target_app_label,
     }
+
+    if target_model_name == "Individual":
+        context["tests"] = [test for sample in obj.samples.all() for test in sample.tests.all()]
+        context["analyses"] = [analysis for test in context["tests"] for analysis in test.analyses.all()]
+    elif target_model_name == "Sample":
+        context["analyses"] = [analysis for test in obj.tests.all() for analysis in test.analyses.all()]
 
     if request.htmx:
         # For HTMX requests, return only the detail partial

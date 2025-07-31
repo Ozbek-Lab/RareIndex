@@ -33,10 +33,10 @@
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
           <i class="fa-solid fa-person mr-2"></i> Individuals
-        </h6>
         {% with app_label='lab' model_name='Individual' %}
           {% partial generic-search %}
         {% endwith %}
+      </h6>
       </div>
       <!-- Samples -->
       <div>
@@ -235,30 +235,22 @@
     {% if view == "page" %}
       <div class="flex justify-between items-center mb-4">
         <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h1>
-        <div class="inline-flex rounded-md shadow bg-gray-100 dark:bg-gray-800 p-0.5">
-  <button
-    @click="viewMode = 'cards'"
-    :aria-pressed="viewMode === 'cards'"
-    :class="viewMode === 'cards'
-      ? 'bg-blue-600 text-white shadow font-semibold scale-105'
-      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'"
-    class="px-2 py-1 rounded-l-md text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
-  >
-    <i class="fa-solid fa-th-large mr-1"></i>
-    Cards
-  </button>
-  <button
-    @click="viewMode = 'table'"
-    :aria-pressed="viewMode === 'table'"
-    :class="viewMode === 'table'
-      ? 'bg-blue-600 text-white shadow font-semibold scale-105'
-      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'"
-    class="px-2 py-1 rounded-r-md text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
-  >
-    <i class="fa-solid fa-table mr-1"></i>
-    Table
-  </button>
-</div>
+        <div class="flex items-center space-x-2">
+          <button
+            @click="viewMode = 'cards'"
+            :class="viewMode === 'cards' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
+            class="px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+          >
+            <i class="fa-solid fa-th-large mr-1"></i>Card
+          </button>
+          <button
+            @click="viewMode = 'table'"
+            :class="viewMode === 'table' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
+            class="px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+          >
+            <i class="fa-solid fa-table mr-1"></i>Table
+          </button>
+        </div>
       </div>
     {% else %}
       <h2 class="text-gray-900 dark:text-gray-100">
@@ -274,7 +266,9 @@
 
       {# Results will be loaded into this div #}
       <div id="{{ view }}-{{ model_name|lower }}-results" class="transition" :class="{ 'opacity-50 blur-sm': isLoading }">
-        {% partial generic-search-results %}
+        {% with icon_class=icon_class %}
+          {% partial generic-search-results %}
+        {% endwith %}
       </div>
 
       {# The loading overlay with spinner #}
