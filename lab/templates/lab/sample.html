@@ -40,7 +40,7 @@
 {% partialdef card %}
   <div
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
-    data-item-id="{{ item.id }}"
+    data-item-id="{{ item.id }}" x-data="{ showFullName: false }"
   >
     <div class="flex justify-between items-start">
       <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -65,13 +65,21 @@
     <div class="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
       <div class="flex items-center">
         <i class="fa-solid fa-user mr-2 text-blue-600 dark:text-blue-400"></i>
-        <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
+        <span class="text-lg text-blue-900 dark:text-blue-100 font-medium mr-2">
           {{ item.individual.individual_id }}
         </span>
+        <button
+          type="button"
+          class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+          @click="showFullName = !showFullName"
+          title="Toggle full name visibility"
+        >
+          <i class="fas fa-id-card"></i>
+        </button>
       </div>
       {% if perms.lab.view_individual_sensitive_data %}
         {% if item.individual.full_name %}
-          <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
+          <p class="text-sm text-blue-700 dark:text-blue-300 mt-1" x-show="showFullName" x-transition>
             {{ item.individual.full_name }}
           </p>
         {% endif %}
@@ -183,212 +191,343 @@
 {% endpartialdef table %}
 
 {% partialdef detail %}
-  <div class="space-y-6">
-
-    <!-- Sample Details -->
-    <div class="bg-white shadow rounded-lg p-6">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Basic Information -->
-        <div>
-          <h2 class="text-lg font-medium text-gray-900 mb-4">
-            Basic Information
-          </h2>
-          <dl class="space-y-4">
-            <div>
-              <dt class="text-sm font-medium text-gray-500">Status</dt>
-              <dd class="mt-1">
-                <span
-                  class="px-2 py-1 text-xs rounded-full font-medium {% if item.status.name == 'Complete' %}
-                    bg-green-100 text-green-800
-                  {% elif item.status.name == 'In Progress' %}
-                    bg-yellow-100 text-yellow-800
-                  {% else %}
-                    bg-gray-100 text-gray-800
-                  {% endif %}"
-                >
-                  {{ item.status.name }}
-                </span>
-              </dd>
-            </div>
-            <div>
-              <dt class="text-sm font-medium text-gray-500">Sample Type</dt>
-              <dd class="mt-1 text-sm text-gray-900">
-                {{ item.sample_type.name }}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-sm font-medium text-gray-500">Individual</dt>
-              <dd class="mt-1">
-                <span class = "cursor-pointer hover:text-blue-600" 
-                  @click="openDetail({{ item.individual.id }}, 'Individual', 'lab')"
-                >
-                  {{ item.individual.individual_id }}
-                </span>
-              </dd>
-            </div>
-            <div>
-              <dt class="text-sm font-medium text-gray-500">Receipt Date</dt>
-              <dd class="mt-1 text-sm text-gray-900">
-                {{ item.receipt_date|date:"d M Y" }}
-              </dd>
-            </div>
-          </dl>
-        </div>
-
-        <!-- Additional Information -->
-        <div>
-          <h2 class="text-lg font-medium text-gray-900 mb-4">
-            Additional Information
-          </h2>
-          <dl class="space-y-4">
-            <div>
-              <dt class="text-sm font-medium text-gray-500">Notes</dt>
-              <dd class="mt-1 text-sm text-gray-900">
-                {% include "lab/note.html#list" %}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-sm font-medium text-gray-500">Created At</dt>
-              <dd class="mt-1 text-sm text-gray-900">
-                {{ item.created_at|date:"d M Y H:i" }}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-sm font-medium text-gray-500">Updated At</dt>
-              <dd class="mt-1 text-sm text-gray-900">
-                {{ item.updated_at|date:"d M Y H:i" }}
-              </dd>
-            </div>
-          </dl>
+  <div id="sample-detail" class="space-y-6" x-data="{ activeTab: '{{ activeTab|default:"notes" }}' }">
+    <!-- Header -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+      <div class="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
+        <div class="flex justify-between items-center">
+          <div>
+            <h1 class="text-2xl font-bold text-white">Sample #{{ item.id }}</h1>
+            <p class="text-blue-100">{{ item.sample_type.name }}</p>
+          </div>
+          <div class="text-right">
+            <span
+              class="px-3 py-1 text-sm rounded-full font-medium {% if item.status.name == 'Complete' %}
+                bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200
+              {% elif item.status.name == 'In Progress' %}
+                bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200
+              {% else %}
+                bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200
+              {% endif %}"
+            >
+              {{ item.status.name }}
+            </span>
+          </div>
         </div>
       </div>
 
-      <!-- Actions -->
-      <div class="mt-6 flex justify-end space-x-3">
+      <!-- Sample Information -->
+      <div class="px-6 py-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Individual</h3>
+            <p class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              @click="openDetail({{ item.individual.id }}, 'Individual', 'lab')"
+            >
+              {{ item.individual.individual_id }}
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Receipt Date</h3>
+            <p class="text-gray-900 dark:text-gray-100">{{ item.receipt_date|date:"d M Y" }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="border-t border-gray-200 dark:border-gray-700">
+        <div class="px-6 flex space-x-8">
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'notes'"
+          >
+            Notes ({{ item.notes.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'tests' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'tests'"
+          >
+            Tests ({{ item.tests.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'analyses' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'analyses'"
+          >
+            Analyses ({{ analyses|length }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'tasks'"
+          >
+            Tasks ({{ item.tasks.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'history' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'history'"
+          >
+            History
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="px-6 py-4">
+        <!-- Notes tab -->
+        <div x-show="activeTab === 'notes'" x-cloak>
+          {% with object=item content_type="sample" %}
+            {% include "lab/note.html#list" %}
+          {% endwith %}
+        </div>
+
+        <!-- Tests tab -->
+        <div x-show="activeTab === 'tests'" x-cloak>
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Tests</h3>
+            <button
+              class="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors"
+            >
+              Add Test
+            </button>
+          </div>
+
+          {% if item.tests.all %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {% for test in item.tests.all %}
+                <div
+                  class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
+                >
+                  <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                      <h4 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                        {{ test.test_type.name }}
+                      </h4>
+                      <span
+                        class="px-2 py-1 text-xs rounded-full font-medium {% if test.status.name == 'Complete' %}
+                          bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200
+                        {% elif test.status.name == 'In Progress' %}
+                          bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200
+                        {% else %}
+                          bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200
+                        {% endif %}"
+                      >
+                        {{ test.status.name }}
+                      </span>
+                    </div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                      <div>Performed: {{ test.performed_date|date:"d M Y" }}</div>
+                      {% if test.performed_by %}
+                        <div>By: {{ test.performed_by.get_username }}</div>
+                      {% endif %}
+                    </div>
+                    <div class="flex justify-end">
+                      <button
+                        class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 transition-colors"
+                        @click="openDetail({{ test.id }}, 'Test', 'lab')"
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+              <i class="fas fa-flask text-gray-300 dark:text-gray-500 text-5xl mb-3"></i>
+              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">No tests found</h3>
+              <p class="text-gray-500 dark:text-gray-400 mt-1">Add a test to get started.</p>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Analyses tab -->
+        <div x-show="activeTab === 'analyses'" x-cloak>
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Analyses</h3>
+            <button
+              class="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors"
+            >
+              Add Analysis
+            </button>
+          </div>
+
+          {% if analyses %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {% for analysis in analyses %}
+                <div
+                  class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
+                >
+                  <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                      <h4 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                        {{ analysis.type.name }}
+                      </h4>
+                      <span
+                        class="px-2 py-1 text-xs rounded-full font-medium {% if analysis.status.name == 'Complete' %}
+                          bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200
+                        {% elif analysis.status.name == 'In Progress' %}
+                          bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200
+                        {% else %}
+                          bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200
+                        {% endif %}"
+                      >
+                        {{ analysis.status.name }}
+                      </span>
+                    </div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                      <div>Performed: {{ analysis.performed_date|date:"d M Y" }}</div>
+                      {% if analysis.performed_by %}
+                        <div>By: {{ analysis.performed_by.get_username }}</div>
+                      {% endif %}
+                    </div>
+                    <div class="flex justify-end">
+                      <button
+                        class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 transition-colors"
+                        @click="openDetail({{ analysis.id }}, 'Analysis', 'lab')"
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+              <i class="fas fa-microscope text-gray-300 dark:text-gray-500 text-5xl mb-3"></i>
+              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">No analyses found</h3>
+              <p class="text-gray-500 dark:text-gray-400 mt-1">Add an analysis to get started.</p>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Tasks tab -->
+        <div x-show="activeTab === 'tasks'" x-cloak>
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Tasks</h3>
+            <button
+              class="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors"
+            >
+              Add Task
+            </button>
+          </div>
+
+          {% if item.tasks.all %}
+            <div class="space-y-4">
+              {% for task in item.tasks.all %}
+                <div
+                  class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 {% if task.is_completed %}border-green-500{% elif task.priority == 'urgent' %}border-red-500{% elif task.priority == 'high' %}border-orange-500{% elif task.priority == 'medium' %}border-yellow-500{% else %}border-blue-500{% endif %}"
+                >
+                  <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                      <h4 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ task.title }}</h4>
+                      <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ task.description }}</p>
+                      <div class="flex items-center space-x-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span>Priority: {{ task.priority|title }}</span>
+                        <span>Due: {{ task.due_date|date:"d M Y" }}</span>
+                        {% if task.assigned_to %}
+                          <span>Assigned to: {{ task.assigned_to.get_username }}</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                      {% if task.is_completed %}
+                        <span class="px-2 py-1 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">Completed</span>
+                      {% else %}
+                        <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200">Pending</span>
+                      {% endif %}
+                      <button
+                        class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 transition-colors"
+                        @click="openDetail({{ task.id }}, 'Task', 'lab')"
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+              <i class="fas fa-tasks text-gray-300 dark:text-gray-500 text-5xl mb-3"></i>
+              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">No tasks found</h3>
+              <p class="text-gray-500 dark:text-gray-400 mt-1">Add a task to get started.</p>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- History tab -->
+        <div x-show="activeTab === 'history'" x-cloak>
+          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Status History</h3>
+
+          {% if item.status_logs.exists %}
+            <div class="relative">
+              <div class="absolute h-full w-0.5 bg-gray-200 dark:bg-gray-600 left-5 top-0"></div>
+              {% for log in item.status_logs.all %}
+                <div class="mb-4 ml-10 relative">
+                  <!-- Status circle -->
+                  <div
+                    class="absolute w-10 h-10 rounded-full bg-{{ log.new_status.color|default:'gray' }}-100 dark:bg-{{ log.new_status.color|default:'gray' }}-900/30 text-{{ log.new_status.color|default:'gray' }}-800 dark:text-{{ log.new_status.color|default:'gray' }}-200 flex items-center justify-center -left-10 border-2 border-white dark:border-gray-800 shadow"
+                  >
+                    <i class="fas fa-circle text-sm"></i>
+                  </div>
+                  
+                  <!-- Status card -->
+                  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700">
+                    <div class="flex justify-between items-start">
+                      <div>
+                        <p class="text-sm text-gray-900 dark:text-gray-100">
+                          Status changed to <span class="font-medium">{{ log.new_status.name }}</span>
+                        </p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                          {{ log.created_at|date:"d M Y H:i" }}
+                        </p>
+                        {% if log.notes %}
+                          <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            {{ log.notes }}
+                          </p>
+                        {% endif %}
+                      </div>
+                      <span
+                        class="px-2 py-1 text-xs rounded-full font-medium bg-{{ log.new_status.color|default:'gray' }}-100 dark:bg-{{ log.new_status.color|default:'gray' }}-900/30 text-{{ log.new_status.color|default:'gray' }}-800 dark:text-{{ log.new_status.color|default:'gray' }}-200"
+                      >
+                        {{ log.new_status.name }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+              <i class="fas fa-history text-gray-300 dark:text-gray-500 text-5xl mb-3"></i>
+              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">No status history</h3>
+              <p class="text-gray-500 dark:text-gray-400 mt-1">Status changes will appear here.</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-end space-x-3">
         <button
-          class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 flex items-center transition-colors"
         >
+          <i class="fas fa-edit mr-2"></i>
           Edit Sample
         </button>
-      </div>
-    </div>
-
-    <!-- Tests Section -->
-    <div class="bg-white shadow rounded-lg p-6">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-medium text-gray-900">Tests</h2>
         <button
-          class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 flex items-center transition-colors"
         >
-          Add Test
+          <i class="fas fa-trash mr-2"></i>
+          Delete Sample
         </button>
       </div>
-
-      {% if item.tests.all %}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {% for test in item.tests.all %}
-            <div
-              class="bg-gray-50 rounded-lg p-4 border-l-4 {% if test.status.name == 'Complete' %}border-green-500{% elif test.status.name == 'In Progress' %}border-yellow-500{% else %}border-gray-500{% endif %}"
-            >
-              <div class="flex justify-between items-start">
-                <h3 class="text-lg font-medium text-gray-900">
-                  {{ test.test_type.name }}
-                </h3>
-                <span
-                  class="px-2 py-1 text-xs rounded-full font-medium {% if test.status.name == 'Complete' %}
-                    bg-green-100 text-green-800
-                  {% elif test.status.name == 'In Progress' %}
-                    bg-yellow-100 text-yellow-800
-                  {% else %}
-                    bg-gray-100 text-gray-800
-                  {% endif %}"
-                >
-                  {{ test.status.name }}
-                </span>
-              </div>
-              <div class="mt-2 text-xs text-gray-500">
-                <div>Performed: {{ test.performed_date|date:"d M Y" }}</div>
-                {% if test.performed_by %}
-                  <div>Performed By: {{ test.performed_by.get_username }}</div>
-                {% endif %}
-              </div>
-              <div class="mt-3 flex justify-end space-x-2">
-                <button
-                  class="text-indigo-600 hover:text-indigo-900"
-                  @click="openDetail({{ test.id }}, 'Test', 'lab')"
-                >
-                  View Details
-                </button>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="text-center py-8 bg-gray-50 rounded-lg">
-          <i class="fas fa-flask text-gray-300 text-5xl mb-3"></i>
-          <h3 class="text-lg font-medium text-gray-700">No tests found</h3>
-          <p class="text-gray-500 mt-1">Add a test to get started.</p>
-        </div>
-      {% endif %}
-    </div>
-    
-    <!-- Analyses Section -->
-    <div class="bg-white shadow rounded-lg p-6">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-medium text-gray-900">Analyses</h2>
-        <button
-          class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        >
-          Add Analysis
-        </button>
-      </div>
-
-      {% if analyses %}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {% for analysis in analyses %}
-            <div
-              class="bg-gray-50 rounded-lg p-4 border-l-4 {% if analysis.status.name == 'Complete' %}border-green-500{% elif analysis.status.name == 'In Progress' %}border-yellow-500{% else %}border-gray-500{% endif %}"
-            >
-              <div class="flex justify-between items-start">
-                <h3 class="text-lg font-medium text-gray-900">
-                  {{ analysis.type.name }}
-                </h3>
-                <span
-                  class="px-2 py-1 text-xs rounded-full font-medium {% if analysis.status.name == 'Complete' %}
-                    bg-green-100 text-green-800
-                  {% elif analysis.status.name == 'In Progress' %}
-                    bg-yellow-100 text-yellow-800
-                  {% else %}
-                    bg-gray-100 text-gray-800
-                  {% endif %}"
-                >
-                  {{ analysis.status.name }}
-                </span>
-              </div>
-              <div class="mt-2 text-xs text-gray-500">
-                <div>Performed: {{ analysis.performed_date|date:"d M Y" }}</div>
-                {% if analysis.performed_by %}
-                  <div>Performed By: {{ analysis.performed_by.get_username }}</div>
-                {% endif %}
-              </div>
-              <div class="mt-3 flex justify-end space-x-2">
-                <button
-                  class="text-indigo-600 hover:text-indigo-900"
-                  @click="openDetail({{ analysis.id }}, 'Analysis', 'lab')"
-                >
-                  View Details
-                </button>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="text-center py-8 bg-gray-50 rounded-lg">
-          <i class="fas fa-flask text-gray-300 text-5xl mb-3"></i>
-          <h3 class="text-lg font-medium text-gray-700">No analyses found</h3>
-          <p class="text-gray-500 mt-1">Add an analysis to get started.</p>
-        </div>
-      {% endif %}
     </div>
   </div>
 {% endpartialdef %}
