@@ -70,7 +70,7 @@
 {% partialdef card %}
   <div
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
-    data-item-id="{{ item.id }}"
+    data-item-id="{{ item.id }}" x-data="{ showFullName: false }"
   >
     <div class="flex justify-between items-start">
       <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -103,13 +103,21 @@
     <div class="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
       <div class="flex items-center">
         <i class="fa-solid fa-user mr-2 text-blue-600 dark:text-blue-400"></i>
-        <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
+        <span class="text-lg text-blue-900 dark:text-blue-100 font-medium mr-2">
           {{ item.test.sample.individual.individual_id }}
         </span>
+        <button
+          type="button"
+          class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+          @click="showFullName = !showFullName"
+          title="Toggle full name visibility"
+        >
+          <i class="fas fa-id-card"></i>
+        </button>
       </div>
       {% if perms.lab.view_individual_sensitive_data %}
         {% if item.test.sample.individual.full_name %}
-          <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
+          <p class="text-sm text-blue-700 dark:text-blue-300 mt-1" x-show="showFullName" x-transition>
             {{ item.test.sample.individual.full_name }}
           </p>
         {% endif %}
@@ -250,7 +258,7 @@
 {% partialdef detail %}
   <div id="analysis-detail" class="space-y-6" x-data="{ activeTab: '{{ activeTab|default:"notes" }}', showFullName: false }">
     <!-- Analysis card -->
-    <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
       <!-- Header with analysis info -->
       <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
         <div class="flex items-center justify-between">
@@ -269,39 +277,41 @@
         <!-- First column -->
         <div class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Test</h3>
-            <p class="text-gray-900 cursor-pointer hover:text-blue-600"
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Test</h3>
+            <p class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
               @click="openDetail({{ item.test.id }}, 'Test', 'lab')"
             >
               {{ item.test.test_type.name }}
             </p>
           </div>
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Sample</h3>
-            <p class="text-gray-900 cursor-pointer hover:text-blue-600"
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Sample</h3>
+            <p class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
               @click="openDetail({{ item.test.sample.id }}, 'Sample', 'lab')"
             >
               {{ item.test.sample.sample_type.name }}
             </p>
           </div>
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Individual</h3>
-            <p class="text-gray-900 cursor-pointer hover:text-blue-600"
-              @click="openDetail({{ item.test.sample.individual.id }}, 'Individual', 'lab')"
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Individual</h3>
+            <p class="text-gray-900 dark:text-gray-100"
             >
-              {{ item.test.sample.individual.individual_id }}
+              <span class="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+              @click="openDetail({{ item.test.sample.individual.id }}, 'Individual', 'lab')">
+                {{ item.test.sample.individual.individual_id }}
+              </span>
+              <button
+                type="button"
+                class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                @click="showFullName = !showFullName"
+                title="Toggle full name visibility"
+              >
+                <i class="fas fa-id-card"></i>
+              </button>
             </p>
             {% if perms.lab.view_individual_sensitive_data %}
               <div class="flex items-center space-x-2">
-                <button
-                  type="button"
-                  class="text-gray-500 hover:text-gray-700 transition-colors"
-                  @click="showFullName = !showFullName"
-                  title="Toggle full name visibility"
-                >
-                  <i class="fas" :class="showFullName ? 'fa-eye-slash' : 'fa-eye'"></i>
-                </button>
-                <p class="text-gray-600 text-sm" x-show="showFullName" x-transition>
+                <p class="text-gray-600 dark:text-gray-400 text-sm" x-show="showFullName" x-transition>
                   {{ item.test.sample.individual.full_name }}
                 </p>
               </div>
@@ -312,53 +322,53 @@
         <!-- Second column -->
         <div class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Performed Date</h3>
-            <p class="text-gray-900">{{ item.performed_date|date:"d M Y" }}</p>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Performed Date</h3>
+            <p class="text-gray-900 dark:text-gray-100">{{ item.performed_date|date:"d M Y" }}</p>
           </div>
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Performed By</h3>
-            <p class="text-gray-900">{{ item.performed_by.get_full_name|default:item.performed_by.username }}</p>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Performed By</h3>
+            <p class="text-gray-900 dark:text-gray-100">{{ item.performed_by.get_full_name|default:item.performed_by.username }}</p>
           </div>
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Created</h3>
-            <p class="text-gray-900">{{ item.created_at|date:"d M Y" }}</p>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Created</h3>
+            <p class="text-gray-900 dark:text-gray-100">{{ item.created_at|date:"d M Y" }}</p>
           </div>
         </div>
 
         <!-- Third column -->
         <div class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Version</h3>
-            <p class="text-gray-900">{{ item.type.version|default:"—" }}</p>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Version</h3>
+            <p class="text-gray-900 dark:text-gray-100">{{ item.type.version|default:"—" }}</p>
           </div>
           {% if item.type.source_url %}
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Source URL</h3>
-            <a href="{{ item.type.source_url }}" target="_blank" class="text-blue-600 hover:text-blue-800">View Source</a>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Source URL</h3>
+            <a href="{{ item.type.source_url }}" target="_blank" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">View Source</a>
           </div>
           {% endif %}
           {% if item.type.results_url %}
           <div>
-            <h3 class="text-sm font-medium text-gray-500">Results URL</h3>
-            <a href="{{ item.type.results_url }}" target="_blank" class="text-blue-600 hover:text-blue-800">View Results</a>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Results URL</h3>
+            <a href="{{ item.type.results_url }}" target="_blank" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">View Results</a>
           </div>
           {% endif %}
         </div>
       </div>
 
       <!-- Tabs -->
-      <div class="border-t border-gray-200">
+      <div class="border-t border-gray-200 dark:border-gray-700">
         <div class="flex">
           <button
             class="py-2 px-4 border-b-2 transition-colors"
-            :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'"
+            :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click="activeTab = 'notes'"
           >
-            Notes ({{ analysis.notes.count }})
+            Notes ({{ item.notes.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
-            :class="activeTab === 'status' ? 'border-blue-500 text-blue-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'"
+            :class="activeTab === 'status' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click="activeTab = 'status'"
           >
             Status History
@@ -370,7 +380,9 @@
       <div class="p-6">
         <!-- Notes tab -->
         <div x-show="activeTab === 'notes'" x-cloak>
-          {% include "lab/note.html#list" %}
+          {% with object=item content_type="analysis" %}
+            {% include "lab/note.html#list" %}
+          {% endwith %}
         </div>
 
         <!-- Status History tab -->
@@ -380,19 +392,19 @@
               {% for log in item.status_logs.all %}
                 <div class="flex items-start space-x-4">
                   <div class="flex-shrink-0">
-                    <span class="px-2 py-1 text-xs rounded-full" style="background-color: {{ log.new_status.color }}20; color: {{ log.new_status.color }}">
+                    <span class="px-2 py-1 text-xs rounded-full" style="background-color: {{ log.new_status.color }} 20; color: {{ log.new_status.color }}; border: 1px solid {{ log.new_status.color }}">
                       {{ log.new_status.name }}
                     </span>
                   </div>
                   <div class="flex-1">
-                    <p class="text-sm text-gray-900">
+                    <p class="text-sm text-gray-900 dark:text-gray-100">
                       Changed by {{ log.changed_by.get_full_name|default:log.changed_by.username }}
                     </p>
-                    <p class="text-xs text-gray-500">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
                       {{ log.created_at|date:"d M Y H:i" }}
                     </p>
                     {% if log.note %}
-                    <p class="mt-1 text-sm text-gray-600">
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                       {{ log.note }}
                     </p>
                     {% endif %}
@@ -401,7 +413,7 @@
               {% endfor %}
             </div>
           {% else %}
-            <div class="bg-gray-50 rounded-lg p-6 text-center text-gray-500">
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
               No status history available for this analysis.
             </div>
           {% endif %}
@@ -409,17 +421,17 @@
       </div>
 
       <!-- Footer with action buttons -->
-      <div class="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3">
+      <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-end space-x-3">
         {% if perms.lab.change_analysis %}
           <button
-            class="text-green-600 hover:text-green-900 flex items-center"
+            class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 flex items-center transition-colors"
           >
             <i class="fas fa-edit mr-1"></i> Edit Analysis
           </button>
         {% endif %}
         {% if perms.lab.delete_analysis %}
           <button
-            class="text-red-600 hover:text-red-900 flex items-center"
+            class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 flex items-center transition-colors"
           >
             <i class="fas fa-trash-alt mr-1"></i> Delete Analysis
           </button>
