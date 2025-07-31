@@ -142,7 +142,9 @@
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
-        {% include "lab/partials/_infinite_scroll_items.html" %}
+        {% with view_mode='table' %}
+          {% include "lab/partials/_infinite_scroll_items.html" %}
+        {% endwith %}
       </tbody>
     </table>
   </div>

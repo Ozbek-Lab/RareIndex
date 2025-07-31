@@ -166,7 +166,6 @@
 {% endpartialdef card %}
 
 {% partialdef table-row %}
-  <!-- DEBUG: Individual table-row - item.id = {{ item.id }}, item.individual_id = {{ item.individual_id }} -->
   <tr
     class="hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-600"
   >
@@ -243,16 +242,16 @@
         id="page-individual-table-tbody"
         class="divide-y divide-gray-200 dark:divide-gray-600"
       >
-        {% with card='table-row' %}
+
+      {% with view_mode='table' %}
         {% include "lab/partials/_infinite_scroll_items.html" %}
-        {% endwith %}
+      {% endwith %}
       </tbody>
     </table>
   </div>
 {% endpartialdef table %}
 
 {% partialdef detail %}
-<<<<<<< HEAD
   <div id="individual-detail" class="space-y-6" x-data="{ activeTab: 'notes' }">
     <button
       class="text-gray-500 hover:text-gray-700"
@@ -904,68 +903,6 @@
           </button>
         {% endif %}
       </div>
-||||||| 433c89f
-  <div
-    x-init="activeItem = 'detail-individual-{{ item.pk }}'"
-    class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
-  >
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-      Individual: {{ item.individual_id }}
-    </h2>
-    <div class="mb-2">
-      <span class="font-semibold">Full Name:</span> {{ item.full_name }}<br />
-      <span class="font-semibold">Status:</span> {{ item.status.name }}<br />
-      <span class="font-semibold">ICD-11 Code:</span>
-      {{ item.icd11_code|default:'—' }}<br />
-      <span class="font-semibold">Created:</span>
-      {{ item.created_at|date:"M d, Y H:i" }}<br />
-      <span class="font-semibold">Last Updated:</span>
-      {{ item.updated_at|date:"M d, Y H:i" }}
-    </div>
-    <div class="mt-4">
-      <h3 class="font-semibold">Notes</h3>
-      <ul>
-        {% for note in item.notes.all %}
-          <li class="text-sm text-gray-600 dark:text-gray-400">
-            {{ note.content|truncatewords:20 }}
-          </li>
-          {% empty %}
-          <li class="text-sm text-gray-400">No notes available.</li>
-        {% endfor %}
-      </ul>
-=======
-  <div
-    x-init="activeItem = 'detail-individual-{{ item.pk }}'"
-    class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
-  >
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-      Individual: {{ item.individual_id }}
-    </h2>
-    <div class="mb-2">
-      <span class="font-semibold">ID:</span> {{ item.individual_id }}<br />
-      {% if perms.lab.view_individual_sensitive_data %}
-        <span class="font-semibold">Full Name:</span> {{ item.full_name }}<br />
-      {% endif %}
-      <span class="font-semibold">Status:</span> {{ item.status.name }}<br />
-      <span class="font-semibold">ICD-11 Code:</span>
-      {{ item.icd11_code|default:'—' }}<br />
-      <span class="font-semibold">Created:</span>
-      {{ item.created_at|date:"M d, Y H:i" }}<br />
-      <span class="font-semibold">Last Updated:</span>
-      {{ item.updated_at|date:"M d, Y H:i" }}
-    </div>
-    <div class="mt-4">
-      <h3 class="font-semibold">Notes</h3>
-      <ul>
-        {% for note in item.notes.all %}
-          <li class="text-sm text-gray-600 dark:text-gray-400">
-            {{ note.content|truncatewords:20 }}
-          </li>
-          {% empty %}
-          <li class="text-sm text-gray-400">No notes available.</li>
-        {% endfor %}
-      </ul>
->>>>>>> 44294ac7b90c046d3d3ce8fb88e3a317daa8a273
     </div>
   </div>
 {% endpartialdef %}
