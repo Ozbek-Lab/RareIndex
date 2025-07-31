@@ -66,6 +66,8 @@ def generic_search(request):
 
     # The rest of the view remains the same...
     own_search_term = request.GET.get("search", "").strip()
+    card_partial = request.GET.get("card", "card")
+    view_mode = request.GET.get("view_mode", "cards")
     response = render(
         request,
         "lab/index.html#generic-search-results",
@@ -78,6 +80,8 @@ def generic_search(request):
             "all_filters": {
                 k: v for k, v in request.GET.items() if k.startswith("filter_")
             },
+            "view_mode": view_mode,
+            "card": card_partial,
         },
     )
     return response

@@ -1,7 +1,5 @@
 {% load partials %}
 
-{{ view_mode }}
-{{ card }}
 {% for item in items %}
   {% if view_mode == 'table' %}
     <tr
@@ -29,6 +27,14 @@
   {% endif %}
 {% endfor %}
 
-{% if not items.has_next %}
-  <div class="text-orange-300">No more {{ model_name|lower }}s.</div>
+{% if view_mode == 'table' %}
+  {% if not items.has_next %}
+    <tr class="text-orange-300">
+      <td colspan="5">No more {{ model_name|lower }}s.</td>
+    </tr>
+  {% endif %}
+{% else %}
+  {% if not items.has_next %}
+    <div class="text-orange-300">No more {{ model_name|lower }}s.</div>
+  {% endif %}
 {% endif %}
