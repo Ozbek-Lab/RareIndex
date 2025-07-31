@@ -190,8 +190,8 @@
     <div class="h-96 overflow-y-auto">
   {% endif %}
 
-  {% with card='compact-card' %}
-  {% include "lab/partials/_infinite_scroll_items.html" %}
+  {% with view_mode="cards" card='compact-card' %}
+    {% include "lab/partials/_infinite_scroll_items.html" %}
   {% endwith %}
   {% if items.number == 1 %}
     </div>
@@ -210,10 +210,16 @@
 
   {% endif %}
 
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 gap-4 relative h-full overflow-y-auto">
-  {% with card='card' %}
-  {% include "lab/partials/_infinite_scroll_items.html" %}
-  {% endwith %}
+  <!-- Card View -->
+  <div x-show="viewMode === 'cards'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 gap-4 relative h-full overflow-y-auto">
+    {% with view_mode="cards" card='card' %}
+      {% include "lab/partials/_infinite_scroll_items.html" %}
+    {% endwith %}
+  </div>
+
+  <!-- Table View -->
+  <div x-show="viewMode === 'table'" class="relative h-full overflow-y-auto">
+    {% include "lab/"|add:model_name|lower|add:'.html#table' %}
   </div>
   </div>
 
@@ -226,10 +232,32 @@
     @htmx:before-request="isLoading = true"
     @htmx:after-request="isLoading = false"
   >
-    <h2 class="text-gray-900 dark:text-gray-100">
-      <i class="fa-solid {{ icon_class }} fa-lg mx-2"></i>
-      {{ title }}
-    </h2>
+    {% if view == "page" %}
+      <div class="flex justify-between items-center mb-4">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h1>
+        <div class="flex items-center space-x-2">
+          <button
+            @click="viewMode = 'cards'"
+            :class="viewMode === 'cards' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
+            class="px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+          >
+            <i class="fa-solid fa-th-large mr-1"></i>Card
+          </button>
+          <button
+            @click="viewMode = 'table'"
+            :class="viewMode === 'table' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
+            class="px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+          >
+            <i class="fa-solid fa-table mr-1"></i>Table
+          </button>
+        </div>
+      </div>
+    {% else %}
+      <h2 class="text-gray-900 dark:text-gray-100">
+        <i class="fa-solid {{ icon_class }} fa-lg mx-2"></i>
+        {{ title }}
+      </h2>
+    {% endif %}
 
     {# Search and select fields moved to drawer #}
 
@@ -518,10 +546,17 @@
         open: false,
         filters: {},
         detailHtml: null,
+        viewMode: 'cards',
 
         init() {
           this.syncStateFromURL();
           window.addEventListener('popstate', () => this.syncStateFromURL());
+
+          // Load viewMode from localStorage
+          const savedViewMode = localStorage.getItem('viewMode');
+          if (savedViewMode) {
+            this.viewMode = savedViewMode;
+          }
 
           this.$watch("filters", (newFilters) => {
             this.updateURL();
@@ -530,6 +565,11 @@
                 detail: { filters: newFilters },
               }),
             );
+          });
+
+          // Watch viewMode changes and save to localStorage
+          this.$watch("viewMode", (newViewMode) => {
+            localStorage.setItem('viewMode', newViewMode);
           });
         },
 
@@ -597,7 +637,7 @@
           this.navigateTo('index');
         },
 
-        getHxVals(appLabel, modelName, page=1, card=null) {
+        getHxVals(appLabel, modelName, page=1, viewMode=null, card=null) {
           let vals = { app_label: appLabel, model_name: modelName, page: page };
           for (const key in this.filters) {
             if (this.filters[key]) {
@@ -607,6 +647,9 @@
                   vals[`filter_${key}`] = this.filters[key];
               }
             }
+          }
+          if (viewMode) {
+            vals['viewMode'] = viewMode;
           }
           if (card) {
             vals['card'] = card;
