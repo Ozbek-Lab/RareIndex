@@ -4,21 +4,21 @@
 <div class="notes-list space-y-1.5">
   {% if object.notes.all %}
     {% for note in object.notes.all %}
-      <article class="bg-white shadow-sm text-xs leading-snug">
+      <article class="bg-white dark:bg-gray-800 shadow-sm text-xs leading-snug border border-gray-200 dark:border-gray-700 rounded">
         <div
-          class="flex items-center justify-between px-2 py-1 bg-gray-50/80 text-[11px]"
+          class="flex items-center justify-between px-2 py-1 bg-gray-50/80 dark:bg-gray-700/80 text-[11px]"
         >
           <div class="flex items-center gap-1.5">
-            <span class="text-gray-700 font-medium"
+            <span class="text-gray-700 dark:text-gray-300 font-medium"
               >{{ note.user.username }}</span
             >
-            <span class="text-gray-400"
+            <span class="text-gray-400 dark:text-gray-500"
               >{{ note.created_at|date:"Y-m-d H:i" }}</span
             >
           </div>
           {% if user == note.user %}
             <button
-              class="text-gray-400 hover:text-red-500 transition-colors"
+              class="text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
               hx-delete="{% url 'lab:note_delete' note.id %}"
               hx-target="closest .notes-list"
               hx-swap="innerHTML"
@@ -28,11 +28,11 @@
             </button>
           {% endif %}
         </div>
-        <p class="px-2 py-1 text-gray-700">{{ note.content }}</p>
+        <p class="px-2 py-1 text-gray-700 dark:text-gray-300">{{ note.content }}</p>
       </article>
     {% endfor %}
   {% else %}
-    <p class="text-gray-400 text-xs">No notes yet.</p>
+    <p class="text-gray-400 dark:text-gray-500 text-xs">No notes yet.</p>
   {% endif %}
 
   <div class="mt-2">
@@ -48,14 +48,14 @@
       <div class="flex items-end gap-2">
         <textarea
           name="content"
-          class="flex-1 px-2 py-1 text-xs shadow-sm rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none h-[32px]"
+          class="flex-1 px-2 py-1 text-xs shadow-sm rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none h-[32px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 placeholder-gray-400 dark:placeholder-gray-500"
           placeholder="Add a note..."
           required
         ></textarea>
         <button
           type="submit"
           @click="$event.stopPropagation()"
-          class="px-2 py-1 bg-blue-600 text-white text-xs rounded shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 transition-colors whitespace-nowrap"
+          class="px-2 py-1 bg-blue-600 dark:bg-blue-500 text-white text-xs rounded shadow-sm hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors whitespace-nowrap"
         >
           Add
         </button>
@@ -76,15 +76,15 @@
 >
   {% with note_count=object.notes.count %}
     {% if note_count == 0 %}
-      <div class="text-gray-400">
+      <div class="text-gray-400 dark:text-gray-500">
         <i class="fa-solid fa-note-sticky"></i>
       </div>
-      <span class="text-gray-500">No notes</span>
+      <span class="text-gray-500 dark:text-gray-400">No notes</span>
     {% else %}
-      <div class="text-blue-500">
+      <div class="text-blue-500 dark:text-blue-400">
         <i class="fa-solid fa-note-sticky"></i>
       </div>
-      <span class="font-medium text-gray-700"
+      <span class="font-medium text-gray-700 dark:text-gray-300"
         >{{ note_count }} Note{% if note_count != 1 %}s{% endif %}</span
       >
     {% endif %}
@@ -107,7 +107,7 @@
         <button
             type="submit"
             @click="$event.stopPropagation()"
-            class="px-2 py-1 bg-blue-600 text-white text-xs rounded shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 transition-colors whitespace-nowrap"
+            class="px-2 py-1 bg-blue-600 dark:bg-blue-500 text-white text-xs rounded shadow-sm hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors whitespace-nowrap"
         >
             Add
         </button>

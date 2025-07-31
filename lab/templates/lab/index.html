@@ -33,10 +33,10 @@
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
           <i class="fa-solid fa-person mr-2"></i> Individuals
-        </h6>
         {% with app_label='lab' model_name='Individual' %}
           {% partial generic-search %}
         {% endwith %}
+      </h6>
       </div>
       <!-- Samples -->
       <div>
@@ -177,6 +177,11 @@
 
 
 {% partialdef generic-search-results %}
+
+<h2 class="text-gray-900 dark:text-gray-100">
+  <i class="fa-solid {{ icon_class|default:"fa-magnifying-glass" }} fa-lg mx-2"></i>
+</h2>
+
 <div>
   {% if items.number == 1 %}
     <div
@@ -190,9 +195,7 @@
     <div class="h-96 overflow-y-auto">
   {% endif %}
 
-  {% with card='compact-card' %}
-  {% include "lab/partials/_infinite_scroll_items.html" %}
-  {% endwith %}
+  {% include "lab/partials/_infinite_scroll_items.html" with card='compact-card' %}
   {% if items.number == 1 %}
     </div>
   {% endif %}
@@ -211,9 +214,7 @@
   {% endif %}
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 gap-4 relative h-full overflow-y-auto">
-  {% with card='card' %}
-  {% include "lab/partials/_infinite_scroll_items.html" %}
-  {% endwith %}
+  {% include "lab/partials/_infinite_scroll_items.html" with card='card' %}
   </div>
   </div>
 
@@ -226,10 +227,6 @@
     @htmx:before-request="isLoading = true"
     @htmx:after-request="isLoading = false"
   >
-    <h2 class="text-gray-900 dark:text-gray-100">
-      <i class="fa-solid {{ icon_class }} fa-lg mx-2"></i>
-      {{ title }}
-    </h2>
 
     {# Search and select fields moved to drawer #}
 
@@ -238,7 +235,9 @@
 
       {# Results will be loaded into this div #}
       <div id="{{ view }}-{{ model_name|lower }}-results" class="transition" :class="{ 'opacity-50 blur-sm': isLoading }">
-        {% partial generic-search-results %}
+        {% with icon_class=icon_class %}
+          {% partial generic-search-results %}
+        {% endwith %}
       </div>
 
       {# The loading overlay with spinner #}
