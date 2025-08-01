@@ -82,7 +82,7 @@
           @click="showFullName = !showFullName"
           title="Toggle full name visibility"
         >
-          <i class="fas fa-id-card"></i>
+          <i class="fas fa-id-card fa-xs"></i>
         </button>
       </h2>
       <div class="text-right">
@@ -174,14 +174,22 @@
 {% endpartialdef card %}
 
 {% partialdef table-row %}
-    <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 font-medium">
+    <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 font-medium" x-data="{ showFullName: false }">
       {{ item.individual_id }}
-    </td>
-    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+      <button
+        type="button"
+        class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+        @click="showFullName = !showFullName"
+        title="Toggle full name visibility"
+      >
+        <i class="fas fa-id-card"></i>
+      </button>
       {% if perms.lab.view_individual_sensitive_data %}
-        {{ item.full_name|default:"-" }}
-      {% else %}
-        <span class="text-gray-400">***</span>
+        {% if item.full_name %}
+          <p class="text-sm text-blue-700 dark:text-blue-300 mt-1" x-show="showFullName" x-transition>
+            {{ item.full_name }}
+          </p>
+        {% endif %}
       {% endif %}
     </td>
     <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">

@@ -159,13 +159,6 @@
     {{ item.individual.individual_id }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {% if perms.lab.view_individual_sensitive_data %}
-      {{ item.individual.full_name|default:"-" }}
-    {% else %}
-      <span class="text-gray-400">***</span>
-    {% endif %}
-  </td>
-  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     {{ item.receipt_date|date:"M d, Y"|default:"-" }}
   </td>
   <td class="px-4 py-3 text-sm">
@@ -202,11 +195,6 @@
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
             Individual ID
-          </th>
-          <th
-            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-          >
-            Individual Name
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
