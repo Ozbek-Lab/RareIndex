@@ -32,8 +32,7 @@
       <!-- Individuals -->
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          <i class="fa-solid fa-person mr-2"></i> Individuals
-        {% with app_label='lab' model_name='Individual' %}
+        {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
           {% partial generic-search %}
         {% endwith %}
       </h6>
@@ -41,72 +40,65 @@
       <!-- Samples -->
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          <i class="fa-solid fa-vial mr-2"></i> Samples
         </h6>
-        {% with app_label='lab' model_name='Sample' %}
+        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
           {% partial generic-search %}
         {% endwith %}
-        {% with app_label='lab' model_name='Sample' field_name='sample_type' label='Sample Type' %}
+        {% with app_label='lab' model_name='Sample' field_name='sample_type' label='Sample Type' icon_class='fa-vial' %}
           {% partial generic-select %}
         {% endwith %}
       </div>
       <!-- Tests -->
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          <i class="fa-solid fa-flask-vial mr-2"></i> Tests
         </h6>
-        {% with app_label='lab' model_name='Test' %}
+        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
           {% partial generic-search %}
         {% endwith %}
-        {% with app_label='lab' model_name='Test' field_name='test_type' label='Test Type' %}
+        {% with app_label='lab' model_name='Test' field_name='test_type' label='Test Type' icon_class='fa-flask-vial' %}
           {% partial generic-select %}
         {% endwith %}
       </div>
       <!-- Analyses -->
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          <i class="fa-solid fa-laptop mr-2"></i> Analyses
         </h6>
-        {% with app_label='lab' model_name='Analysis' %}
+        {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
           {% partial generic-search %}
         {% endwith %}
-        {% with app_label='lab' model_name='Analysis' field_name='analysis_type' label='Analysis Type' %}
+        {% with app_label='lab' model_name='Analysis' field_name='analysis_type' label='Analysis Type' icon_class='fa-laptop' %}
           {% partial generic-select %}
         {% endwith %}
       </div>
       <!-- Institutions -->
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          <i class="fa-solid fa-building-columns mr-2"></i> Institutions
         </h6>
-        {% with app_label='lab' model_name='Institution' %}
+        {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' %}
           {% partial generic-search %}
         {% endwith %}
       </div>
       <!-- Projects -->
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          <i class="fa-solid fa-diagram-project mr-2"></i> Projects
         </h6>
-        {% with app_label='lab' model_name='Project' %}
+        {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' %}
           {% partial generic-search %}
         {% endwith %}
       </div>
       <!-- Tasks -->
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          <i class="fa-solid fa-list-check mr-2"></i> Tasks
         </h6>
-        {% with app_label='lab' model_name='Task' %}
+        {% with app_label='lab' model_name='Task' icon_class='fa-list-check' %}
           {% partial generic-search %}
         {% endwith %}
       </div>
       <!-- HPO Terms -->
       <div>
         <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          <i class="fa-solid fa-stethoscope mr-2"></i> HPO Terms
         </h6>
-        {% with app_label='ontologies' model_name='Term' %}
+        {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' %}
           {% partial generic-search %}
         {% endwith %}
       </div>
@@ -134,7 +126,7 @@
 {% partialdef generic-search %}
   <div class="relative w-full mb-2">
     <i
-      class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-300"
+      class="fa-solid {{ icon_class }} absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-300"
     ></i>
     <input
       class="form-control w-full pl-10 rounded-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 border border-gray-300 dark:border-gray-700"
@@ -145,33 +137,56 @@
       hx-get="{% url 'lab:generic_search' %}"
       hx-trigger="input changed delay:200ms, filters-updated from:window, load"
       hx-target="#index-{{ model_name|lower }}-results"
-      :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
+      :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', 1, null, null, '{{ icon_class }}')"
     />
   </div>
 {% endpartialdef %}
 
 {% partialdef generic-select %}
 <div class="relative w-full mb-2" >
-  <label for="select-{{ model_name|lower }}-{{ field_name }}" class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">{{ label }}</label>
-  <select
-    class="form-control w-full rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400"
-    name="{{ field_name }}"
-    x-model.debounce.150ms="filters.{{ field_name }}"
-    hx-get="{% url 'lab:get_select_options' %}"
-    hx-trigger="load, filters-updated from:window"
-    hx-target="this"
-    hx-swap="innerHTML"
-    :hx-vals="getSelectHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', '{{ field_name }}')"
-  >
-    <option>Loading...</option>
-  </select>
+  <div class="flex items-stretch">
+    <!-- Left side: Icon and Buttons -->
+    <div class="flex flex-col" style="width: 2.5rem;">
+      <!-- Top 33%: Icon -->
+      <div class="flex items-center justify-center" style="height: 50%;">
+        <i
+          class="fa-solid {{ icon_class }} text-gray-400 dark:text-gray-300"
+        ></i>
+      </div>
+      <!-- Bottom 33%: Clear Button -->
+      <div class="flex items-center justify-center" style="height: 50%;">
+        <button
+          type="button"
+          class="bg-gray-500 hover:bg-gray-600 text-white p-1 rounded transition-colors duration-200 w-6 h-6 flex items-center justify-center"
+          @click="filters.{{ field_name }} = ''; $dispatch('filters-updated')"
+        >
+          <i class="fa-solid fa-ban text-xs"></i>
+        </button>
+      </div>
+    </div>
+    <!-- Right side: Select -->
+    <div class="flex-1 relative">
+      <select
+        class="form-control w-full rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400"
+        name="{{ field_name }}"
+        multiple
+        x-model.debounce.150ms="filters.{{ field_name }}"
+        hx-get="{% url 'lab:get_select_options' %}"
+        hx-trigger="load, onchange, filters-updated from:window"
+        hx-target="this"
+        hx-swap="innerHTML"
+        :hx-vals="getSelectHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', '{{ field_name }}', 1, null, null, '{{ icon_class }}')"
+      >
+        <option>Loading...</option>
+      </select>
+    </div>
+  </div>
 </div>
 {% endpartialdef %}
 
 {% partialdef select-options %}
-  <option value="">Any {{ label }}</option>
   {% for option in options %}
-    <option value="{{ option }}" {% if option == selected_value %}selected{% endif %}>{{ option }}</option>
+    <option value="{{ option }}" {% if option in selected_value %}selected{% endif %}>{{ option }}</option>
   {% endfor %}
 {% endpartialdef %}
 
@@ -184,7 +199,7 @@
       :class="{'text-green-500': {{ num_items }} > 0,
                 'text-red-500': {{ num_items }} == 0}"
     >
-      Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
+    <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
     </div>
 
     <div class="h-96 overflow-y-auto">
@@ -205,7 +220,7 @@
       :class="{'text-green-500': {{ num_items }} > 0,
                 'text-red-500': {{ num_items }} == 0}"
     >
-      Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
+      <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
     </div>
 
   {% endif %}
@@ -252,11 +267,6 @@
           </button>
         </div>
       </div>
-    {% else %}
-      <h2 class="text-gray-900 dark:text-gray-100">
-        <i class="fa-solid {{ icon_class }} fa-lg mx-2"></i>
-        {{ title }}
-      </h2>
     {% endif %}
 
     {# Search and select fields moved to drawer #}
@@ -266,9 +276,7 @@
 
       {# Results will be loaded into this div #}
       <div id="{{ view }}-{{ model_name|lower }}-results" class="transition" :class="{ 'opacity-50 blur-sm': isLoading }">
-        {% with icon_class=icon_class %}
-          {% partial generic-search-results %}
-        {% endwith %}
+        {% partial generic-search-results %}
       </div>
 
       {# The loading overlay with spinner #}
@@ -639,7 +647,7 @@
           this.navigateTo('index');
         },
 
-        getHxVals(appLabel, modelName, page=1, viewMode=null, card=null) {
+        getHxVals(appLabel, modelName, page=1, viewMode=null, card=null, icon_class=null) {
           let vals = { app_label: appLabel, model_name: modelName, page: page };
           for (const key in this.filters) {
             if (this.filters[key]) {
@@ -656,14 +664,27 @@
           if (card) {
             vals['card'] = card;
           }
+          if (icon_class) {
+            vals['icon_class'] = icon_class;
+          }
           return JSON.stringify(vals);
         },
         getSelectHxVals(appLabel, modelName, fieldName) {
+          let selectedValue = this.filters[fieldName] || '';
+          // Ensure selected_value is always sent as a JSON string for consistency
+          if (Array.isArray(selectedValue)) {
+            selectedValue = JSON.stringify(selectedValue);
+          } else if (selectedValue) {
+            selectedValue = JSON.stringify([selectedValue]);
+          } else {
+            selectedValue = JSON.stringify([]);
+          }
+          
           let vals = {
             app_label: appLabel,
             model_name: modelName,
             field_name: fieldName,
-            selected_value: this.filters[fieldName] || ''
+            selected_value: selectedValue
           };
           for (const key in this.filters) {
             if (key !== fieldName && this.filters[key]) {

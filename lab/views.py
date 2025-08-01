@@ -68,6 +68,7 @@ def generic_search(request):
     own_search_term = request.GET.get("search", "").strip()
     card_partial = request.GET.get("card", "card")
     view_mode = request.GET.get("view_mode", "cards")
+    icon_class = request.GET.get("icon_class", "fa-magnifying-glass")
     response = render(
         request,
         "lab/index.html#generic-search-results",
@@ -82,6 +83,7 @@ def generic_search(request):
             },
             "view_mode": view_mode,
             "card": card_partial,
+            "icon_class": icon_class,
         },
     )
     return response
@@ -197,6 +199,19 @@ def get_select_options(request):
     model_name = request.GET.get("model_name")
     field_name = request.GET.get("field_name")
     selected_value = request.GET.get("selected_value")
+
+    # Handle multiple selected values - if it's a JSON array, parse it
+    if selected_value and selected_value.startswith('[') and selected_value.endswith(']'):
+        try:
+            import json
+            selected_value = json.loads(selected_value)
+        except json.JSONDecodeError:
+            selected_value = [selected_value]
+    elif selected_value:
+        # Single value - convert to list for consistency
+        selected_value = [selected_value]
+    else:
+        selected_value = []
 
     config = FILTER_CONFIG.get(model_name, {})
     if not config:

@@ -1,5 +1,7 @@
 from django.apps import apps
 from django.db.models import Q
+import operator
+from functools import reduce
 
 # FILTER_CONFIG defines the search and filter behavior for each model.
 FILTER_CONFIG = {
@@ -147,15 +149,15 @@ def _apply_own_search(queryset, target_model_name, request):
     return queryset
 
 
-def _apply_select_filter(queryset, select_config, filter_value):
+def _apply_select_filter(queryset, select_config, filter_values):
     """Applies an exact match filter for a select field."""
     select_filter_path = select_config.get("select_filter_path")
     if select_filter_path:
-        return queryset.filter(**{f"{select_filter_path}__exact": filter_value})
+        return queryset.filter(**{f"{select_filter_path}__in": filter_values})
     return queryset
 
 
-def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_value):
+def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_values):
     """Applies a text search filter from another model."""
     orm_path = target_config.get("filters", {}).get(filter_key.title())
     if not isinstance(orm_path, str):
@@ -172,7 +174,7 @@ def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_v
 
     q_objects = Q()
     for field in search_fields:
-        q_objects |= Q(**{f"{field}__icontains": filter_value})
+        q_objects |= reduce(operator.or_, [Q(**{f"{field}__icontains": filter_value}) for filter_value in filter_values])
 
     pks_to_filter_by = list(filter_model.objects.filter(q_objects).values_list("pk", flat=True).distinct())
     if not pks_to_filter_by:
@@ -189,18 +191,20 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
     queryset = _apply_own_search(queryset, target_model_name, request)
 
     active_filters = {
-        k.replace("filter_", ""): v
+        k.replace("filter_", ""): v.split(",")
         for k, v in request.GET.items()
         if k.startswith("filter_") and v and k.replace("filter_", "") != exclude_filter
     }
+    print(f"Active filters: {active_filters}")
 
     target_config = FILTER_CONFIG.get(target_model_name, {})
-    for filter_key, filter_value in active_filters.items():
+    for filter_key, filter_values in active_filters.items():
+        print(f"Applying filter: {filter_key} with value(s): {filter_values}")
         select_config = _get_select_field_config(filter_key, target_model_name)
 
         if select_config:
-            queryset = _apply_select_filter(queryset, select_config, filter_value)
+            queryset = _apply_select_filter(queryset, select_config, filter_values)
         else:
-            queryset = _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_value)
-
+            queryset = _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_values)
+    queryset = queryset.order_by("-pk")
     return queryset.distinct()
