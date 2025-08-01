@@ -83,6 +83,8 @@ urlpatterns = [
     path("note/count/", views.note_count, name="note_count"),
     path("note/create/", views.note_create, name="note_create"),
     path("note/<int:pk>/delete/", views.note_delete, name="note_delete"),
+    path("check-notifications/", views.check_notifications, name="check_notifications"),
+    path("notifications/", views.notifications_page, name="notifications"),
     # # Project routes
     # path("projects/", views.project_index, name="projects"),
     # path("project/create/", views.project_create, name="project_create"),

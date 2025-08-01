@@ -2,7 +2,7 @@ from django.apps import apps
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.http import HttpResponseBadRequest, HttpResponseForbidden
+from django.http import HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 import json
@@ -368,3 +368,50 @@ def note_list(request):
                 "user": request.user,
             },
         )
+
+
+@login_required
+def check_notifications(request):
+    """Check if the current user has any unread notifications"""
+    try:
+        from notifications.models import Notification
+        unread_count = Notification.objects.filter(
+            recipient=request.user,
+            unread=True
+        ).count()
+        return JsonResponse({
+            'has_unread': unread_count > 0,
+            'unread_count': unread_count
+        })
+    except ImportError:
+        # If notifications app is not available, return no unread notifications
+        return JsonResponse({
+            'has_unread': False,
+            'unread_count': 0
+        })
+
+
+@login_required
+def notifications_page(request):
+    """Display notifications page"""
+    try:
+        from notifications.models import Notification
+        notifications = Notification.objects.filter(
+            recipient=request.user
+        ).order_by('-timestamp')
+        
+        # Mark notifications as read when viewed
+        unread_notifications = notifications.filter(unread=True)
+        unread_notifications.update(unread=False)
+        
+        context = {
+            'notifications': notifications,
+            'unread_count': unread_notifications.count()
+        }
+    except ImportError:
+        context = {
+            'notifications': [],
+            'unread_count': 0
+        }
+    
+    return render(request, "lab/notifications.html", context)
