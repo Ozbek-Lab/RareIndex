@@ -615,6 +615,12 @@
         },
 
         navigateTo(pageName) {
+          // Handle special cases for external navigation
+          if (pageName === 'notifications') {
+            window.location.href = '{% url "lab:notifications" %}';
+            return;
+          }
+          
           this.activeItem = pageName;
           this.detailHtml = null;
           this.updateURL();
