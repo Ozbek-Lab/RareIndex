@@ -459,6 +459,13 @@
           >
             Projects ({{ item.projects.count }})
           </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'timeline' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'timeline'"
+          >
+            Timeline
+          </button>
         </div>
       </div>
 
@@ -1134,6 +1141,34 @@
         </div>
       </div>
 
+      
+        <!-- Timeline tab -->
+        <div x-show="activeTab === 'timeline'" x-cloak>
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+              <i class="fas fa-clock mr-2"></i>
+              Timeline
+            </h3>
+            <button
+              class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              hx-get="{% url 'lab:individual_timeline' item.pk %}"
+              hx-target="#timeline-content"
+              hx-swap="innerHTML"
+            >
+              <i class="fas fa-sync-alt mr-1"></i>Refresh Timeline
+            </button>
+          </div>
+          
+          <div id="timeline-content" class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+            <div class="flex items-center justify-center h-64">
+              <div class="text-center">
+                <i class="fas fa-clock text-gray-300 dark:text-gray-500 text-4xl mb-3"></i>
+                <p class="text-gray-500 dark:text-gray-400">Click "Refresh Timeline" to load timeline data</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
       <!-- Footer with action buttons -->
       <div class="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-t flex justify-end space-x-3">
         {% if perms.lab.change_individual %}
@@ -1162,17 +1197,103 @@
 
 {% partialdef timeline %}
   <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
-    <p class="text-sm text-gray-900 dark:text-gray-100">
-      Found <span class="font-bold">{{ term_count }}</span> terms for
-      <span class="font-bold">{{ individual_count }} individuals</span> .
-    </p>
-    <div id="plotly-div" style="width: 100%; height: 800px;" class="mt-4"></div>
+    <div class="flex justify-between items-center mb-4">
+      <h4 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+        <i class="fas fa-history mr-2"></i>
+        Timeline for {{ individual.individual_id }}
+      </h4>
+      <div class="text-sm text-gray-500 dark:text-gray-400">
+        <span class="font-bold">{{ event_count }}</span> events found
+      </div>
+    </div>
+    
+    {% if timeline_events %}
+      <div class="mb-4">
+        <div class="flex flex-wrap gap-2">
+          <span class="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
+            <i class="fas fa-user mr-1"></i>Individual
+          </span>
+          <span class="px-2 py-1 text-xs rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200">
+            <i class="fas fa-flask mr-1"></i>Sample
+          </span>
+          <span class="px-2 py-1 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+            <i class="fas fa-vial mr-1"></i>Test
+          </span>
+          <span class="px-2 py-1 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200">
+            <i class="fas fa-chart-line mr-1"></i>Analysis
+          </span>
+          <span class="px-2 py-1 text-xs rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200">
+            <i class="fas fa-tasks mr-1"></i>Task
+          </span>
+          <span class="px-2 py-1 text-xs rounded-full bg-brown-100 dark:bg-brown-900/30 text-brown-800 dark:text-brown-200">
+            <i class="fas fa-sticky-note mr-1"></i>Note
+          </span>
+        </div>
+      </div>
+      
+      <div id="timeline-plot" style="width: 100%; height: 600px;" class="mt-4"></div>
+      
+      <div class="mt-6">
+        <h5 class="text-md font-medium text-gray-900 dark:text-gray-100 mb-3">Recent Events</h5>
+        <div class="space-y-3 max-h-96 overflow-y-auto">
+          {% for event in timeline_events|slice:":20" %}
+            <div class="flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <div class="flex-shrink-0">
+                {% if event.type == 'individual' %}
+                  <i class="fas fa-user text-blue-600 dark:text-blue-400"></i>
+                {% elif event.type == 'sample' %}
+                  <i class="fas fa-flask text-orange-600 dark:text-orange-400"></i>
+                {% elif event.type == 'test' %}
+                  <i class="fas fa-vial text-green-600 dark:text-green-400"></i>
+                {% elif event.type == 'analysis' %}
+                  <i class="fas fa-chart-line text-red-600 dark:text-red-400"></i>
+                {% elif event.type == 'task' %}
+                  <i class="fas fa-tasks text-purple-600 dark:text-purple-400"></i>
+                {% elif event.type == 'note' %}
+                  <i class="fas fa-sticky-note text-brown-600 dark:text-brown-400"></i>
+                {% endif %}
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {{ event.description }}
+                  </p>
+                  <span class="px-2 py-0.5 text-xs rounded-full bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300">
+                    {{ event.action }}
+                  </span>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ event.date|date:"M d, Y H:i" }} by {{ event.user }}
+                </p>
+                {% if event.details %}
+                  <p class="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                    {{ event.details }}
+                  </p>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="flex items-center justify-center h-64">
+        <div class="text-center">
+          <i class="fas fa-clock text-gray-300 dark:text-gray-500 text-4xl mb-3"></i>
+          <p class="text-gray-500 dark:text-gray-400">No timeline events found</p>
+        </div>
+      </div>
+    {% endif %}
   </div>
-  {# prettier-ignore-start #}
-  <script>
-    var plotData = {{ plot_json|safe }};
-    var plotlyDiv = document.getElementById('plotly-div');
-    if (plotlyDiv) { Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout); }
-  </script>
-{# prettier-ignore-end #}
+  
+  {% if plot_json %}
+    {# prettier-ignore-start #}
+    <script>
+      var plotData = {{ plot_json|safe }};
+      var plotlyDiv = document.getElementById('timeline-plot');
+      if (plotlyDiv) { 
+        Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout, {responsive: true}); 
+      }
+    </script>
+    {# prettier-ignore-end #}
+  {% endif %}
 {% endpartialdef %}

@@ -18,6 +18,7 @@ urlpatterns = [
         name="hpo_network_visualization",
     ),
     path("get-select-options/", views.get_select_options, name="get_select_options"),
+    path("individual/<int:pk>/timeline/", views.individual_timeline, name="individual_timeline"),
     # path("", views.dashboard, name="dashboard"),
     # path("select/search/", views.select_search, name="select_search"),
     # # Individual routes
