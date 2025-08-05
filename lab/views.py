@@ -450,6 +450,10 @@ def notifications_page(request):
             'unread_count': 0
         }
     
+    # Handle HTMX requests for partial rendering
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/notifications.html#notifications-content", context)
+    
     return render(request, "lab/notifications.html", context)
 
 
