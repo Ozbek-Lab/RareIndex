@@ -8,7 +8,7 @@ from encrypted_model_fields.fields import (
     EncryptedDateField,
 )
 from simple_history.models import HistoricalRecords
-
+from django.utils import timezone
 
 class Task(models.Model):
     PRIORITY_CHOICES = [
@@ -40,8 +40,8 @@ class Task(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_tasks"
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
     due_date = models.DateTimeField(null=True, blank=True)
 
     # Task management
@@ -59,7 +59,6 @@ class Task(models.Model):
         return self.title
 
     def complete(self, user, notes=""):
-        from django.utils import timezone
 
         # Set status to a 'completed' Status instance
         completed_status = Status.objects.filter(name__iexact="completed").first()
@@ -87,8 +86,8 @@ class Project(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_projects"
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
     # Optional prioritization
     priority = models.CharField(
         max_length=10, choices=Task.PRIORITY_CHOICES, default="medium"
@@ -123,8 +122,8 @@ class Project(models.Model):
 
 class Note(models.Model):
     content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
     user = models.ForeignKey(User, on_delete=models.PROTECT)
 
     # Generic foreign key fields
@@ -142,7 +141,7 @@ class Note(models.Model):
 class TestType(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
@@ -152,7 +151,7 @@ class TestType(models.Model):
 class SampleType(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
@@ -163,7 +162,7 @@ class Institution(models.Model):
     name = models.CharField(max_length=255)
     contact = models.TextField(blank=True)
     notes = GenericRelation("Note")
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
@@ -173,8 +172,8 @@ class Institution(models.Model):
 class Family(models.Model):
     family_id = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     class Meta:
@@ -190,7 +189,7 @@ class Status(models.Model):
     description = models.TextField(blank=True)
     color = models.CharField(max_length=50, default="gray")
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     content_type = models.ForeignKey(
         ContentType, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -211,7 +210,7 @@ class StatusLog(models.Model):
 
     # Status change info
     changed_by = models.ForeignKey(User, on_delete=models.PROTECT)
-    changed_at = models.DateTimeField(auto_now_add=True)
+    changed_at = models.DateTimeField(default=timezone.now)
     previous_status = models.ForeignKey(
         Status, on_delete=models.PROTECT, related_name="+"
     )
@@ -276,7 +275,7 @@ class Individual(models.Model):
         related_name="children_as_father",
     )
     notes = GenericRelation("Note")
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_individuals"
     )
@@ -364,11 +363,11 @@ class Sample(models.Model):
 
     # Notes and tracking
     notes = GenericRelation("Note")
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_samples"
     )
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(default=timezone.now)
 
     tasks = GenericRelation("Task")
 
@@ -401,8 +400,8 @@ class Test(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_tests"
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     notes = GenericRelation("Note")
     tasks = GenericRelation("Task")
@@ -436,7 +435,7 @@ class AnalysisType(models.Model):
         blank=True,
         help_text="URL to view analysis results",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_analysis_types"
     )
@@ -457,7 +456,7 @@ class Analysis(models.Model):
     type = models.ForeignKey(AnalysisType, on_delete=models.PROTECT)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     notes = GenericRelation("Note")
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_analyses"
     )
@@ -474,7 +473,7 @@ class Analysis(models.Model):
 class IdentifierType(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_id_types"
     )
@@ -494,7 +493,7 @@ class CrossIdentifier(models.Model):
         Institution, on_delete=models.PROTECT, blank=True, null=True
     )
     link = models.URLField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
