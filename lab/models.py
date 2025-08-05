@@ -193,6 +193,7 @@ class Status(models.Model):
     content_type = models.ForeignKey(
         ContentType, on_delete=models.CASCADE, null=True, blank=True
     )
+    icon = models.CharField(max_length=255, null=True)
 
     class Meta:
         verbose_name_plural = "statuses"
@@ -238,6 +239,8 @@ class StatusMixin:
             self.save()
 
 
+=======
+>>>>>>> 4a70529b6cc5b02b90f85829be05705da1f8b4ac
 class Individual(models.Model):
     id = models.AutoField(primary_key=True)
     full_name = EncryptedCharField(max_length=255)
@@ -381,7 +384,9 @@ class Sample(models.Model):
 class Test(models.Model):
     """Through model for tracking tests performed on samples"""
 
-    sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name="tests",null=True, blank=True)
+    sample = models.ForeignKey(
+        Sample, on_delete=models.PROTECT, related_name="tests", null=True, blank=True
+    )
     test_type = models.ForeignKey(TestType, on_delete=models.PROTECT)
     performed_date = models.DateField(null=True, blank=True)
     performed_by = models.ForeignKey(
