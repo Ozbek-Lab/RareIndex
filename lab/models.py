@@ -194,6 +194,7 @@ class Status(models.Model):
     content_type = models.ForeignKey(
         ContentType, on_delete=models.CASCADE, null=True, blank=True
     )
+    icon = models.CharField(max_length=255, null=True)
 
     class Meta:
         verbose_name_plural = "statuses"
@@ -201,42 +202,6 @@ class Status(models.Model):
 
     def __str__(self):
         return self.name
-
-
-class StatusLog(models.Model):
-    # Generic foreign key fields
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    content_object = GenericForeignKey("content_type", "object_id")
-
-    # Status change info
-    changed_by = models.ForeignKey(User, on_delete=models.PROTECT)
-    changed_at = models.DateTimeField(auto_now_add=True)
-    previous_status = models.ForeignKey(
-        Status, on_delete=models.PROTECT, related_name="+"
-    )
-    new_status = models.ForeignKey(Status, on_delete=models.PROTECT, related_name="+")
-    notes = models.TextField(blank=True)
-
-    class Meta:
-        ordering = ["-changed_at"]
-        indexes = [
-            models.Index(fields=["content_type", "object_id"]),
-        ]
-
-
-class StatusMixin:
-    def update_status(self, new_status, changed_by, notes=""):
-        if new_status != self.status:
-            StatusLog.objects.create(
-                content_object=self,
-                changed_by=changed_by,
-                previous_status=self.status,
-                new_status=new_status,
-                notes=notes,
-            )
-            self.status = new_status
-            self.save()
 
 
 class Individual(models.Model):
@@ -382,7 +347,9 @@ class Sample(models.Model):
 class Test(models.Model):
     """Through model for tracking tests performed on samples"""
 
-    sample = models.ForeignKey(Sample, on_delete=models.PROTECT, related_name="tests",null=True, blank=True)
+    sample = models.ForeignKey(
+        Sample, on_delete=models.PROTECT, related_name="tests", null=True, blank=True
+    )
     test_type = models.ForeignKey(TestType, on_delete=models.PROTECT)
     performed_date = models.DateField(null=True, blank=True)
     performed_by = models.ForeignKey(
