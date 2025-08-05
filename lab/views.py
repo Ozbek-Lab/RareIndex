@@ -27,7 +27,7 @@ from .visualization.hpo_network_visualization import (
     plotly_hpo_network,
 )
 
-from .filters import apply_filters, FILTER_CONFIG
+from .filters import apply_filters, FILTER_CONFIG, get_available_statuses
 
 
 @login_required
@@ -245,6 +245,43 @@ def get_select_options(request):
             "options": list(options),
             "label": select_config.get("label", ""),
             "selected_value": selected_value,
+        },
+    )
+
+
+@login_required
+def get_status_buttons(request):
+    """Get status buttons for a specific model"""
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+    selected_statuses = request.GET.get("selected_statuses")
+
+    # Handle multiple selected statuses - if it's a JSON array, parse it
+    if selected_statuses and selected_statuses.startswith('[') and selected_statuses.endswith(']'):
+        try:
+            import json
+            selected_statuses = json.loads(selected_statuses)
+        except json.JSONDecodeError:
+            selected_statuses = [selected_statuses]
+    elif selected_statuses:
+        # Single value - convert to list for consistency
+        selected_statuses = [selected_statuses]
+    else:
+        selected_statuses = []
+
+    if not model_name:
+        return HttpResponseBadRequest("Model not specified.")
+
+    # Get available statuses for this model
+    statuses = get_available_statuses(model_name, app_label)
+
+    return render(
+        request,
+        "lab/index.html#status-buttons",
+        {
+            "statuses": statuses,
+            "selected_statuses": selected_statuses,
+            "model_name": model_name,
         },
     )
 
