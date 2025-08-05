@@ -1,27 +1,28 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/x-icon" href="/static/img/fav.ico" />
+    <link rel="icon" type="image/x-icon" href="{% static 'img/fav.ico' %}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RareIndex - Laboratory Information Management System</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{% static 'lab/js/htmx.min.js' %}"></script>
+    <script src="{% static 'lab/js/tailwind.min.js' %}"></script>
     <script>
       tailwind.config = {
         darkMode: "class",
       };
     </script>
 
-    <script defer src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+    <script defer src="{% static 'lab/js/plotly.min.js' %}"></script>
     <script
       defer
-      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+      src="{% static 'lab/js/alpine.min.js' %}"
     ></script>
     <!-- Add Font Awesome -->
     <link
       rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      href="{% static 'lab/css/fontawesome.min.css' %}"
     />
     <style>
       /* Webkit browsers (Chrome, Safari, Edge) */
