@@ -1,236 +1,94 @@
 {% extends "lab/base.html" %}
+{% load partials %}
 
-{% block content %}
-<div class="flex h-screen bg-gray-50 dark:bg-gray-900" x-data="mainController()">
-  {% include "lab/sidebar.html" %}
-  <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900 p-6">
-    <div class="max-w-4xl mx-auto">
-      <!-- Header -->
-      <div class="mb-8">
-        <div class="flex items-center justify-between mb-4">
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">
-            <i class="fas fa-bell text-indigo-500 mr-3"></i>
-            Notifications
-          </h1>
-          <a 
-            href="{% url 'lab:index' %}" 
-            class="inline-flex items-center px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/20 dark:border-indigo-700 dark:hover:bg-indigo-900/40 transition-colors"
-          >
-            <i class="fas fa-arrow-left mr-2"></i>
-            Back to Dashboard
-          </a>
+{% partialdef notifications-content inline %}
+<!-- Notifications Content -->
+<div class="max-w-4xl mx-auto">
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">
+        <i class="fas fa-bell text-indigo-500 mr-3"></i>
+        Notifications
+      </h1>
+      <button 
+        @click="navigateTo('index')"
+        class="inline-flex items-center px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/20 dark:border-indigo-700 dark:hover:bg-indigo-900/40 transition-colors"
+      >
+        <i class="fas fa-arrow-left mr-2"></i>
+        Back to Dashboard
+      </button>
+    </div>
+    <p class="text-gray-600 dark:text-gray-400">
+      Stay updated with the latest changes and activities in your projects.
+    </p>
+  </div>
+
+  <!-- Notifications List -->
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+    {% if notifications %}
+      <div class="divide-y divide-gray-200 dark:divide-gray-700">
+        {% for notification in notifications %}
+          <div class="p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            <div class="flex items-start space-x-4">
+              <!-- Notification Icon -->
+              <div class="flex-shrink-0">
+                {% if notification.unread %}
+                  <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                {% else %}
+                  <div class="w-3 h-3 bg-gray-400 rounded-full"></div>
+                {% endif %}
+              </div>
+              
+              <!-- Notification Content -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {{ notification.verb }}
+                  </p>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ notification.timestamp|timesince }} ago
+                  </span>
+                </div>
+                
+                {% if notification.description %}
+                  <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    {{ notification.description|linebreaksbr }}
+                  </p>
+                {% endif %}
+                
+                {% if notification.target %}
+                  <div class="mt-2">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
+                      <i class="fas fa-link mr-1"></i>
+                      Related Item
+                    </span>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <!-- Empty State -->
+      <div class="p-12 text-center">
+        <div class="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
+          <i class="fas fa-bell text-gray-400 text-2xl"></i>
         </div>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+          No notifications yet
+        </h3>
         <p class="text-gray-600 dark:text-gray-400">
-          Stay updated with the latest changes and activities in your projects.
+          You'll see notifications here when there are updates to your projects, tasks, or other items you're involved with.
         </p>
       </div>
-
-      <!-- Notifications List -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        {% if notifications %}
-          <div class="divide-y divide-gray-200 dark:divide-gray-700">
-            {% for notification in notifications %}
-              <div class="p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <div class="flex items-start space-x-4">
-                  <!-- Notification Icon -->
-                  <div class="flex-shrink-0">
-                    {% if notification.unread %}
-                      <div class="w-3 h-3 bg-red-500 rounded-full"></div>
-                    {% else %}
-                      <div class="w-3 h-3 bg-gray-400 rounded-full"></div>
-                    {% endif %}
-                  </div>
-                  
-                  <!-- Notification Content -->
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between">
-                      <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {{ notification.verb }}
-                      </p>
-                      <span class="text-xs text-gray-500 dark:text-gray-400">
-                        {{ notification.timestamp|timesince }} ago
-                      </span>
-                    </div>
-                    
-                    {% if notification.description %}
-                      <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                        {{ notification.description|linebreaksbr }}
-                      </p>
-                    {% endif %}
-                    
-                    {% if notification.target %}
-                      <div class="mt-2">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
-                          <i class="fas fa-link mr-1"></i>
-                          Related Item
-                        </span>
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-              </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <!-- Empty State -->
-          <div class="p-12 text-center">
-            <div class="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-              <i class="fas fa-bell text-gray-400 text-2xl"></i>
-            </div>
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-              No notifications yet
-            </h3>
-            <p class="text-gray-600 dark:text-gray-400">
-              You'll see notifications here when there are updates to your projects, tasks, or other items you're involved with.
-            </p>
-          </div>
-        {% endif %}
-      </div>
-    </div>
-  </main>
+    {% endif %}
+  </div>
 </div>
+{% endpartialdef %}
 
-<script>
-  function mainController() {
-    return {
-      activeItem: 'notifications',
-      open: false,
-      filters: {},
-      detailHtml: null,
-      viewMode: 'cards',
-      darkMode: false,
-
-      init() {
-        // Check for dark mode preference
-        if (localStorage.getItem('darkMode') === 'true' || 
-            (!localStorage.getItem('darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-          this.darkMode = true;
-          document.documentElement.classList.add('dark');
-        }
-
-        // Load viewMode from localStorage
-        const savedViewMode = localStorage.getItem('viewMode');
-        if (savedViewMode) {
-          this.viewMode = savedViewMode;
-        }
-
-        this.$watch("filters", (newFilters) => {
-          this.updateURL();
-          window.dispatchEvent(
-            new CustomEvent("filters-updated", {
-              detail: { filters: newFilters },
-            }),
-          );
-        });
-
-        // Watch viewMode changes and save to localStorage
-        this.$watch("viewMode", (newViewMode) => {
-          localStorage.setItem('viewMode', newViewMode);
-        });
-
-        // Watch dark mode changes
-        this.$watch("darkMode", (newDarkMode) => {
-          localStorage.setItem('darkMode', newDarkMode);
-          if (newDarkMode) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
-        });
-      },
-
-      syncStateFromURL() {
-        const params = new URLSearchParams(window.location.search);
-        this.activeItem = params.get('page') || 'notifications';
-        
-        const newFilters = {};
-        params.forEach((value, key) => {
-          if (key.startsWith("filter_")) {
-            newFilters[key.replace("filter_", "")] = value;
-          }
-        });
-        this.filters = newFilters;
-
-        if (params.has('pk')) {
-          this.loadDetailView(params);
-        }
-      },
-
-      updateURL() {
-        const newParams = new URLSearchParams();
-        if (this.activeItem && this.activeItem !== 'index') {
-          newParams.set('page', this.activeItem);
-        }
-        for (const modelName in this.filters) {
-          if (this.filters[modelName]) {
-            newParams.set(`filter_${modelName}`, this.filters[modelName]);
-          }
-        }
-        const newPath = newParams.toString() ? `/?${newParams.toString()}` : '/';
-        history.pushState({}, "", newPath);
-      },
-
-      navigateTo(pageName) {
-        // Handle special cases for external navigation
-        if (pageName === 'notifications') {
-          window.location.href = '{% url "lab:notifications" %}';
-          return;
-        }
-        
-        this.activeItem = pageName;
-        this.detailHtml = null;
-        this.updateURL();
-      },
-
-      toggleDark() {
-        this.darkMode = !this.darkMode;
-      },
-
-      openDetail(pk, modelName, appLabel) {
-        const newParams = new URLSearchParams();
-        newParams.set('pk', pk);
-        newParams.set('model_name', modelName);
-        newParams.set('app_label', appLabel);
-        history.pushState({}, "", `/detail/?${newParams.toString()}`);
-        this.loadDetailView(newParams);
-      },
-
-      loadDetailView(params) {
-          const pk = params.get('pk');
-          const modelName = params.get('model_name');
-          const appLabel = params.get('app_label');
-          if (pk && modelName && appLabel) {
-              const detailUrl = `{% url 'lab:generic_detail' %}?${params.toString()}`;
-              htmx.ajax('GET', detailUrl, '#detail-view').then(response => {
-                  this.detailHtml = response;
-                  this.activeItem = `detail-${modelName}-${pk}`;
-              });
-          }
-      },
-
-      getSelectHxVals(appLabel, modelName, fieldName) {
-        let selectedValue = this.filters[fieldName] || '';
-        if (Array.isArray(selectedValue)) {
-          selectedValue = JSON.stringify(selectedValue);
-        } else if (selectedValue) {
-          selectedValue = JSON.stringify([selectedValue]);
-        } else {
-          selectedValue = JSON.stringify([]);
-        }
-        let vals = {
-          app_label: appLabel,
-          model_name: modelName,
-          field_name: fieldName,
-          selected_value: selectedValue
-        };
-        for (const key in this.filters) {
-          if (key !== fieldName && this.filters[key]) {
-            vals[`filter_${key}`] = this.filters[key];
-          }
-        }
-        return JSON.stringify(vals);
-      },
-    };
-  }
-</script>
+{% block content %}
+<!-- This template is now used for both full page and partial rendering -->
+{% partial notifications-content %}
 {% endblock %} 

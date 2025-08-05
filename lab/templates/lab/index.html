@@ -632,6 +632,9 @@
           </div>
         {% endwith %}
       </div>
+      <div x-show="activeItem === 'notifications'" id="notifications-content">
+        <!-- Notifications content will be loaded here via HTMX -->
+      </div>
     </div>
   </main>
 </div>
@@ -715,9 +718,16 @@
         },
 
         navigateTo(pageName) {
-          // Handle special cases for external navigation
+          // Handle notifications navigation
           if (pageName === 'notifications') {
-            window.location.href = '{% url "lab:notifications" %}';
+            this.activeItem = 'notifications';
+            this.detailHtml = null;
+            this.updateURL();
+            
+            // Load notifications content via HTMX
+            htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content').then(() => {
+              // Content loaded successfully
+            });
             return;
           }
           
