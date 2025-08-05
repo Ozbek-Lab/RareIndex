@@ -28,7 +28,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--families', type=int, default=5, help='Number of families to create')
-        parser.add_argument('--samples-per-individual', type=int, default=3, help='Number of samples per individual')
+        parser.add_argument('--samples-per-individual', type=int, default=2, help='Number of samples per individual')
         parser.add_argument('--tests-per-sample', type=int, default=2, help='Number of tests per sample')
         parser.add_argument('--analyses-per-test', type=int, default=2, help='Number of analyses per test')
         parser.add_argument('--tasks-per-object', type=int, default=2, help='Number of tasks per object')
@@ -89,40 +89,52 @@ class Command(BaseCommand):
         all_individuals = []
         for i in range(options['families']):
             family_id = f"RB_2025_{i+1:02d}"
-            family = self._create_family(family_id, user)
-            self._create_note(family, user)
-            self._create_tasks(family, user, statuses['completed'], project, options['tasks_per_object'])
-            mother = self._create_individual("Mother", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
-            self._create_note(mother, user)
+            # Family creation date - start of the process
+            family_creation_date = timezone.now() + timedelta(days=random.randint(1, 30))
+            family = self._create_family(family_id, user, family_creation_date)
+            self._create_note(family, user, creation_date=family_creation_date)
+            # Create tasks for family with future dates
+            family_base_date = family_creation_date + timedelta(days=random.randint(1, 14))
+            self._create_tasks(family, user, statuses['completed'], project, options['tasks_per_object'], family_base_date)
+            # Individual creation dates - after family creation
+            mother_creation_date = family_creation_date + timedelta(days=random.randint(1, 3))
+            mother = self._create_individual("Mother", family, user, institution, statuses['registered'], hpo_terms, is_index=False, creation_date=mother_creation_date)
+            self._create_note(mother, user, creation_date=mother_creation_date)
             self._create_identifiers(mother, identifier_types, f"{family_id}.2", f"RD3.F{i+1:02d}.2", user )
-            father = self._create_individual("Father", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
-            self._create_note(father, user)
+            
+            father_creation_date = family_creation_date + timedelta(days=random.randint(1, 3))
+            father = self._create_individual("Father", family, user, institution, statuses['registered'], hpo_terms, is_index=False, creation_date=father_creation_date)
+            self._create_note(father, user, creation_date=father_creation_date)
             self._create_identifiers(father, identifier_types, f"{family_id}.3", f"RD3.F{i+1:02d}.3", user)
             all_individuals.extend([mother, father])
             multi_child = (i % 2 == 0)
             children = []
             if multi_child:
                 for child_num in range(1, 3):
+                    child_creation_date = family_creation_date + timedelta(days=random.randint(2, 5))
                     proband = self._create_individual(
-                        f"Proband{child_num}", family, user, institution, statuses['active'], hpo_terms, mother=mother, father=father, is_index=True
+                        f"Proband{child_num}", family, user, institution, statuses['active'], hpo_terms, mother=mother, father=father, is_index=True, creation_date=child_creation_date
                     )
-                    self._create_note(proband, user)
+                    self._create_note(proband, user, creation_date=child_creation_date)
                     rb_code = f"{family_id}.1.{child_num}"
                     biobank_code = f"RD3.F{i+1:02d}.1.{child_num}"
                     self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
                     children.append(proband)
             else:
+                child_creation_date = family_creation_date + timedelta(days=random.randint(2, 5))
                 proband = self._create_individual(
-                    "Proband", family, user, institution, statuses['active'], hpo_terms, mother=mother, father=father, is_index=True
+                    "Proband", family, user, institution, statuses['active'], hpo_terms, mother=mother, father=father, is_index=True, creation_date=child_creation_date
                 )
-                self._create_note(proband, user)
+                self._create_note(proband, user, creation_date=child_creation_date)
                 rb_code = f"{family_id}.1"
                 biobank_code = f"RD3.F{i+1:02d}.1"
                 self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
                 children.append(proband)
             all_individuals.extend(children)
             for individual in [mother, father] + children:
-                self._create_tasks(individual, user, statuses['completed'], project, options['tasks_per_object'])
+                # Create tasks for individual with future dates based on individual creation
+                individual_base_date = individual.created_at + timedelta(days=random.randint(1, 21))
+                self._create_tasks(individual, user, statuses['completed'], project, options['tasks_per_object'], individual_base_date)
             for individual in [mother, father] + children:
                 self._create_samples(
                     individual,
@@ -141,13 +153,16 @@ class Command(BaseCommand):
         # Create additional projects and assign random individuals to them
         project_names = ["Cancer Study", "Rare Disease Cohort", "Control Group"]
         for pname in project_names:
+            project_creation_date = timezone.now() + timedelta(days=random.randint(1, 60))
             proj = Project.objects.create(
                 name=pname,
                 description=f"Auto-generated project: {pname}",
                 created_by=user,
-                due_date=timezone.now() + timedelta(days=random.randint(30, 180)),
+                due_date=project_creation_date + timedelta(days=random.randint(60, 365)),
                 status=project_status,
-                priority=random.choice(["low", "medium", "high"])
+                priority=random.choice(["low", "medium", "high"]),
+                created_at=project_creation_date,
+                updated_at=project_creation_date
             )
             # Assign a random subset of individuals to this project
             num_to_add = random.randint(2, min(8, len(all_individuals)))
@@ -249,28 +264,37 @@ class Command(BaseCommand):
         return institution
 
     def _create_project(self, user, status):
+        project_creation_date = timezone.now() + timedelta(days=random.randint(1, 30))
         project, _ = Project.objects.get_or_create(
             name='Sample Data Project',
             defaults={
                 'description': 'Project created by sample data generator',
                 'created_by': user,
-                'due_date': timezone.now() + timedelta(days=90),
-                'status': status
+                'due_date': project_creation_date + timedelta(days=random.randint(60, 180)),
+                'status': status,
+                'created_at': project_creation_date,
+                'updated_at': project_creation_date
             }
         )
         return project
 
-    def _create_family(self, family_id, user):
+    def _create_family(self, family_id, user, creation_date=None):
+        if creation_date is None:
+            creation_date = timezone.now()
         family, _ = Family.objects.get_or_create(
             family_id=family_id,
             defaults={
                 'description': f'Test family {family_id}',
-                'created_by': user
+                'created_by': user,
+                'created_at': creation_date,
+                'updated_at': creation_date
             }
         )
         return family
 
-    def _create_individual(self, role, family, user, institution, status, hpo_terms, mother=None, father=None, is_index=False):
+    def _create_individual(self, role, family, user, institution, status, hpo_terms, mother=None, father=None, is_index=False, creation_date=None):
+        if creation_date is None:
+            creation_date = timezone.now()
         birth_date = timezone.now() - timedelta(days=random.randint(365*20, 365*50))
         individual = Individual.objects.create(
             full_name=f"{role} {family.family_id}",
@@ -282,7 +306,8 @@ class Command(BaseCommand):
             created_by=user,
             status=status,
             institution=institution,
-            is_index=is_index
+            is_index=is_index,
+            created_at=creation_date
         )
         # Add random HPO terms (5-20 terms per individual)
         num_terms = random.randint(5, 20)
@@ -294,67 +319,95 @@ class Command(BaseCommand):
         self.stdout.write(f"Added {len(selected_terms)} HPO terms to {individual.full_name} (is_index={is_index})")
         return individual
 
-    def _create_tasks(self, obj, user, target_status, project, num_tasks):
+    def _create_tasks(self, obj, user, target_status, project, num_tasks, base_date=None):
         priorities = ['low', 'medium', 'high', 'urgent']
+        if base_date is None:
+            base_date = timezone.now()
+        
         for i in range(num_tasks):
+            # Tasks should be due in the future relative to the base date
+            task_due_date = base_date + timedelta(days=random.randint(7, 60))
+            task_creation_date = base_date + timedelta(days=random.randint(0, 2))
             task = Task.objects.create(
                 title=f'Task {i+1}',
                 description=f'Auto task {i+1}',
                 content_object=obj,
                 assigned_to=user,
                 created_by=user,
-                due_date=timezone.now() + timedelta(days=random.randint(1, 30)),
+                due_date=task_due_date,
                 priority=random.choice(priorities),
                 status=target_status,
-                project=project
+                project=project,
+                created_at=task_creation_date,
+                updated_at=task_creation_date
             )
-            self._create_note(task, user, text=f"Auto note for Task {i+1}")
+            self._create_note(task, user, text=f"Auto note for Task {i+1}", creation_date=task_creation_date)
 
     def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, statuses, project):
         for i in range(num_samples):
-            # Create sample
+            # Start with a future base date for this sample
+            base_date = timezone.now() + timedelta(days=random.randint(1, 30))
+            
+            # Sample receipt date (when sample arrives at lab)
+            sample_receipt_date = base_date
+            
+            # Sample creation date (when sample is processed/isolated) - 1-3 days after receipt
+            sample_creation_date = sample_receipt_date + timedelta(days=random.randint(1, 3))
+            
+            # Create sample with realistic creation/update dates
             sample = Sample.objects.create(
                 individual=individual,
                 sample_type=random.choice(sample_types),
                 status=statuses['registered'],
-                receipt_date=timezone.now() - timedelta(days=random.randint(1, 30)),
+                receipt_date=sample_receipt_date,
                 isolation_by=user,
-                created_by=user
+                created_by=user,
+                created_at=sample_creation_date,
+                updated_at=sample_creation_date
             )
-            self._create_note(sample, user)
+            self._create_note(sample, user, sample_creation_date)
 
-            # Create tasks for sample
-            self._create_tasks(sample, user, statuses['completed'], project, tasks_per_object)
+            # Create tasks for sample (due 1-2 weeks after sample creation)
+            self._create_tasks(sample, user, statuses['completed'], project, tasks_per_object, sample_creation_date)
 
             # Create tests for sample
             for j in range(tests_per_sample):
+                # Test performed date - 3-7 days after sample creation
+                test_performed_date = sample_creation_date + timedelta(days=random.randint(3, 7))
+                
                 test = Test.objects.create(
                     test_type=random.choice(test_types),
-                    performed_date=timezone.now() - timedelta(days=random.randint(1, 15)),
+                    performed_date=test_performed_date,
                     performed_by=user,
                     sample=sample,
                     created_by=user,
-                    status=statuses['active']
+                    status=statuses['active'],
+                    created_at=test_performed_date,
+                    updated_at=test_performed_date
                 )
-                self._create_note(test, user)
+                self._create_note(test, user, test_performed_date)
 
-                # Create tasks for test
-                self._create_tasks(test, user, statuses['completed'], project, tasks_per_object)
+                # Create tasks for test (due 1-2 weeks after test performance)
+                self._create_tasks(test, user, statuses['completed'], project, tasks_per_object, test_performed_date)
 
                 # Create analyses for test
                 for k in range(analyses_per_test):
+                    # Analysis performed date - 1-5 days after test performance
+                    analysis_performed_date = test_performed_date + timedelta(days=random.randint(1, 5))
+                    
                     analysis = Analysis.objects.create(
                         test=test,
-                        performed_date=timezone.now() - timedelta(days=random.randint(1, 10)),
+                        performed_date=analysis_performed_date,
                         performed_by=user,
                         type=random.choice(analysis_types),
                         status=statuses['active'],
-                        created_by=user
+                        created_by=user,
+                        created_at=analysis_performed_date
                     )
-                    self._create_note(analysis, user)
+                    self._create_note(analysis, user, analysis_performed_date)
 
-                    # Create tasks for analysis
-                    self._create_tasks(analysis, user, statuses['completed'], project, tasks_per_object)
+                    # Create tasks for analysis (due 1-2 weeks after analysis performance)
+                    self._create_tasks(analysis, user, statuses['completed'], project, tasks_per_object, analysis_performed_date)
 
     def _create_identifier_types(self, user):
         identifier_type_data = {
@@ -389,11 +442,15 @@ class Command(BaseCommand):
                 created_by=user
             )
 
-    def _create_note(self, obj, user, text=None):
+    def _create_note(self, obj, user, text=None, creation_date=None):
         """Create a note for the given object if it supports notes."""
         if hasattr(obj, 'notes'):
+            if creation_date is None:
+                creation_date = timezone.now()
             Note.objects.create(
                 content_object=obj,
                 content=text or f"Auto-generated note for {obj}",
-                user=user
+                user=user,
+                created_at=creation_date,
+                updated_at=creation_date
             )

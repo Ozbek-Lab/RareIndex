@@ -8,8 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 import json
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
-from .models import Note
-from django.contrib.contenttypes.models import ContentType
+from .models import Note, StatusLog
 
 from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
@@ -415,3 +414,477 @@ def notifications_page(request):
         }
     
     return render(request, "lab/notifications.html", context)
+
+
+@login_required
+def individual_timeline(request, pk):
+    """Generate timeline data for an individual and all related objects"""
+    individual = get_object_or_404(Individual, pk=pk)
+    
+    timeline_events = []
+    
+    # Get individual history and important dates
+    for record in individual.history.all():
+        timeline_events.append({
+            'date': record.history_date,
+            'type': 'individual',
+            'action': record.get_history_type_display(),
+            'description': f"Individual {record.get_history_type_display().lower()}",
+            'user': record.history_user.username if record.history_user else 'System',
+            'object_name': 'Individual',
+            'object_id': individual.individual_id,
+            'details': f"Status: {record.status.name if record.status else 'N/A'}"
+        })
+    
+    # Add individual's important dates
+    if individual.council_date:
+        timeline_events.append({
+            'date': individual.council_date,
+            'type': 'individual',
+            'action': 'Council Date',
+            'description': 'Council Date',
+            'user': 'System',
+            'object_name': 'Individual',
+            'object_id': individual.individual_id,
+            'details': f"Council Date: {individual.council_date}"
+        })
+    
+    if individual.diagnosis_date:
+        timeline_events.append({
+            'date': individual.diagnosis_date,
+            'type': 'individual',
+            'action': 'Diagnosis Date',
+            'description': 'Diagnosis Date',
+            'user': 'System',
+            'object_name': 'Individual',
+            'object_id': individual.individual_id,
+            'details': f"Diagnosis Date: {individual.diagnosis_date}"
+        })
+    
+    # Get sample history and important dates
+    for sample in individual.samples.all():
+        for record in sample.history.all():
+            timeline_events.append({
+                'date': record.history_date,
+                'type': 'sample',
+                'action': record.get_history_type_display(),
+                'description': f"Sample {record.get_history_type_display().lower()}",
+                'user': record.history_user.username if record.history_user else 'System',
+                'object_name': 'Sample',
+                'object_id': f"Sample {sample.id}",
+                'details': f"Type: {sample.sample_type.name}, Status: {record.status.name if record.status else 'N/A'}"
+            })
+        
+        # Add sample's important dates
+        if sample.receipt_date:
+            timeline_events.append({
+                'date': sample.receipt_date,
+                'type': 'sample',
+                'action': 'Receipt Date',
+                'description': 'Sample Received',
+                'user': 'System',
+                'object_name': 'Sample',
+                'object_id': f"Sample {sample.id}",
+                'details': f"Sample Type: {sample.sample_type.name}, Receipt Date: {sample.receipt_date}"
+            })
+        
+        if sample.processing_date:
+            timeline_events.append({
+                'date': sample.processing_date,
+                'type': 'sample',
+                'action': 'Processing Date',
+                'description': 'Sample Processed',
+                'user': 'System',
+                'object_name': 'Sample',
+                'object_id': f"Sample {sample.id}",
+                'details': f"Sample Type: {sample.sample_type.name}, Processing Date: {sample.processing_date}"
+            })
+    
+    # Get test history and important dates
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for record in test.history.all():
+                timeline_events.append({
+                    'date': record.history_date,
+                    'type': 'test',
+                    'action': record.get_history_type_display(),
+                    'description': f"Test {record.get_history_type_display().lower()}",
+                    'user': record.history_user.username if record.history_user else 'System',
+                    'object_name': 'Test',
+                    'object_id': f"Test {test.id}",
+                    'details': f"Type: {test.test_type.name}, Status: {record.status.name if record.status else 'N/A'}"
+                })
+            
+            # Add test's important dates
+            if test.performed_date:
+                timeline_events.append({
+                    'date': test.performed_date,
+                    'type': 'test',
+                    'action': 'Performed Date',
+                    'description': 'Test Performed',
+                    'user': test.performed_by.username if test.performed_by else 'System',
+                    'object_name': 'Test',
+                    'object_id': f"Test {test.id}",
+                    'details': f"Test Type: {test.test_type.name}, Performed Date: {test.performed_date}"
+                })
+            
+            if test.service_send_date:
+                timeline_events.append({
+                    'date': test.service_send_date,
+                    'type': 'test',
+                    'action': 'Service Send Date',
+                    'description': 'Test Sent to Service',
+                    'user': 'System',
+                    'object_name': 'Test',
+                    'object_id': f"Test {test.id}",
+                    'details': f"Test Type: {test.test_type.name}, Service Send Date: {test.service_send_date}"
+                })
+            
+            if test.data_receipt_date:
+                timeline_events.append({
+                    'date': test.data_receipt_date,
+                    'type': 'test',
+                    'action': 'Data Receipt Date',
+                    'description': 'Test Data Received',
+                    'user': 'System',
+                    'object_name': 'Test',
+                    'object_id': f"Test {test.id}",
+                    'details': f"Test Type: {test.test_type.name}, Data Receipt Date: {test.data_receipt_date}"
+                })
+    
+    # Get analysis history and important dates
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                for record in analysis.history.all():
+                    timeline_events.append({
+                        'date': record.history_date,
+                        'type': 'analysis',
+                        'action': record.get_history_type_display(),
+                        'description': f"Analysis {record.get_history_type_display().lower()}",
+                        'user': record.history_user.username if record.history_user else 'System',
+                        'object_name': 'Analysis',
+                        'object_id': f"Analysis {analysis.id}",
+                        'details': f"Type: {analysis.type.name}, Status: {record.status.name if record.status else 'N/A'}"
+                    })
+                
+                # Add analysis's important dates
+                if analysis.performed_date:
+                    timeline_events.append({
+                        'date': analysis.performed_date,
+                        'type': 'analysis',
+                        'action': 'Performed Date',
+                        'description': 'Analysis Performed',
+                        'user': analysis.performed_by.username,
+                        'object_name': 'Analysis',
+                        'object_id': f"Analysis {analysis.id}",
+                        'details': f"Analysis Type: {analysis.type.name}, Performed Date: {analysis.performed_date}"
+                    })
+    
+    # Get task history and important dates
+    for task in individual.tasks.all():
+        for record in task.history.all():
+            timeline_events.append({
+                'date': record.history_date,
+                'type': 'task',
+                'action': record.get_history_type_display(),
+                'description': f"Task {record.get_history_type_display().lower()}",
+                'user': record.history_user.username if record.history_user else 'System',
+                'object_name': 'Task',
+                'object_id': task.title,
+                'details': f"Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
+            })
+        
+        # Add task's important dates
+        if task.due_date:
+            timeline_events.append({
+                'date': task.due_date,
+                'type': 'task',
+                'action': 'Due Date',
+                'description': 'Task Due Date',
+                'user': 'System',
+                'object_name': 'Task',
+                'object_id': task.title,
+                'details': f"Task: {task.title}, Due Date: {task.due_date}, Priority: {task.priority}"
+            })
+    
+    # Get notes (created_at and updated_at dates)
+    for note in individual.notes.all():
+        timeline_events.append({
+            'date': note.created_at,
+            'type': 'note',
+            'action': 'Created',
+            'description': 'Note added',
+            'user': note.user.username,
+            'object_name': 'Note',
+            'object_id': f"Note {note.id}",
+            'details': note.content[:100] + '...' if len(note.content) > 100 else note.content
+        })
+        
+        # Add note update if it was modified
+        if note.updated_at and note.updated_at != note.created_at:
+            timeline_events.append({
+                'date': note.updated_at,
+                'type': 'note',
+                'action': 'Updated',
+                'description': 'Note updated',
+                'user': note.user.username,
+                'object_name': 'Note',
+                'object_id': f"Note {note.id}",
+                'details': note.content[:100] + '...' if len(note.content) > 100 else note.content
+            })
+    
+    # Get status log entries
+    for status_log in StatusLog.objects.filter(
+        content_type=ContentType.objects.get_for_model(Individual),
+        object_id=individual.id
+    ):
+        timeline_events.append({
+            'date': status_log.changed_at,
+            'type': 'individual',
+            'action': 'Status Changed',
+            'description': f"Status changed from {status_log.previous_status.name} to {status_log.new_status.name}",
+            'user': status_log.changed_by.username,
+            'object_name': 'Individual',
+            'object_id': individual.individual_id,
+            'details': f"Previous: {status_log.previous_status.name}, New: {status_log.new_status.name}, Notes: {status_log.notes}"
+        })
+    
+    # Convert all dates to timezone-aware datetime.datetime objects and sort timeline events by date
+    from datetime import datetime, time, date
+    from django.utils import timezone
+    
+    for event in timeline_events:
+        if isinstance(event['date'], date) and not isinstance(event['date'], datetime):
+            # Convert date to timezone-aware datetime at midnight
+            event['date'] = timezone.make_aware(datetime.combine(event['date'], time.min))
+        elif isinstance(event['date'], datetime) and timezone.is_naive(event['date']):
+            # Convert naive datetime to timezone-aware
+            event['date'] = timezone.make_aware(event['date'])
+    
+    timeline_events.sort(key=lambda x: x['date'], reverse=True)
+    
+    # Prepare data for Plotly timeline - convert to local time and assign hierarchical positions
+    from django.utils import timezone
+    
+    # Create hierarchical positioning system
+    sample_positions = {}  # Track sample IDs and their y-positions
+    test_positions = {}    # Track test IDs and their y-positions
+    analysis_positions = {} # Track analysis IDs and their y-positions
+    
+    # Assign y-positions based on hierarchy
+    y_positions = []
+    dates = []
+    descriptions = []
+    types = []
+    users = []
+    details = []
+    
+    for event in timeline_events:
+        dates.append(timezone.localtime(event['date']).strftime('%Y-%m-%d %H:%M'))
+        descriptions.append(event['description'])
+        types.append(event['type'])
+        users.append(event['user'])
+        details.append(event['details'])
+        
+        # Determine y-position based on event type and hierarchy
+        if event['type'] == 'individual':
+            y_positions.append(0)  # Main timeline
+        elif event['type'] == 'sample':
+            # Extract sample ID from object_id (format: "Sample {id}")
+            sample_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
+            if sample_id not in sample_positions:
+                # Assign new position above individual line
+                sample_positions[sample_id] = len(sample_positions) + 1
+            y_positions.append(sample_positions[sample_id])
+        elif event['type'] == 'test':
+            # Extract test ID from object_id (format: "Test {id}")
+            test_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
+            if test_id not in test_positions:
+                # Assign new position above sample lines
+                test_positions[test_id] = len(test_positions) + len(sample_positions) + 2
+            y_positions.append(test_positions[test_id])
+        elif event['type'] == 'analysis':
+            # Extract analysis ID from object_id (format: "Analysis {id}")
+            analysis_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
+            if analysis_id not in analysis_positions:
+                # Assign new position above test lines
+                analysis_positions[analysis_id] = len(analysis_positions) + len(test_positions) + len(sample_positions) + 3
+            y_positions.append(analysis_positions[analysis_id])
+        elif event['type'] == 'task':
+            y_positions.append(-1)  # Below individual line
+        elif event['type'] == 'note':
+            y_positions.append(-2)  # Below task line
+        else:
+            y_positions.append(0)  # Default to main timeline
+    
+    # Color mapping for different types
+    color_map = {
+        'individual': '#1f77b4',
+        'sample': '#ff7f0e', 
+        'test': '#2ca02c',
+        'analysis': '#d62728',
+        'task': '#9467bd',
+        'note': '#8c564b'
+    }
+    
+    colors = [color_map.get(event_type, '#7f7f7f') for event_type in types]
+    
+    # Create Plotly figure
+    import plotly.graph_objects as go
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=dates,
+        y=y_positions,  # Use hierarchical y-positions
+        mode='markers',
+        marker=dict(    
+            size=12,
+            color=colors,
+            symbol='circle'
+        ),
+        text=descriptions,
+        textposition='top center',
+        hovertemplate='<b>%{text}</b><br>' +
+                     'Date: %{x}<br>' +
+                     'Action: %{customdata[2]}<br>' +
+                     'User: %{customdata[0]}<br>' +
+                     'Details: %{customdata[1]}<br>' +
+                     '<extra></extra>',
+        customdata=list(zip(users, details, [event['action'] for event in timeline_events])),
+        name='Timeline Events'
+    ))
+    
+    # Add horizontal lines for each level of the hierarchy with proper branching
+    max_y = max(y_positions) if y_positions else 0
+    min_y = min(y_positions) if y_positions else 0
+    
+    # Individual line (main timeline) - full width
+    fig.add_shape(
+        type='line',
+        x0=dates[0] if dates else '2024-01-01',
+        x1=dates[-1] if dates else '2024-12-31',
+        y0=0,
+        y1=0,
+        line=dict(color='gray', width=2)
+    )
+    
+    # Find creation events for proper branching
+    sample_creation_dates = {}
+    test_creation_dates = {}
+    analysis_creation_dates = {}
+    
+    for i, event in enumerate(timeline_events):
+        if event['type'] == 'sample' and event['action'] == 'Created':
+            sample_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
+            sample_creation_dates[sample_id] = dates[i]
+        elif event['type'] == 'test' and event['action'] == 'Created':
+            test_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
+            test_creation_dates[test_id] = dates[i]
+        elif event['type'] == 'analysis' and event['action'] == 'Created':
+            analysis_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
+            analysis_creation_dates[analysis_id] = dates[i]
+    
+    # Sample lines - start from creation event
+    for sample_id, y_pos in sample_positions.items():
+        start_date = sample_creation_dates.get(sample_id, dates[0] if dates else '2024-01-01')
+        fig.add_shape(
+            type='line',
+            x0=start_date,
+            x1=dates[-1] if dates else '2024-12-31',
+            y0=y_pos,
+            y1=y_pos,
+            line=dict(color='lightblue', width=1, dash='dash')
+        )
+    
+    # Test lines - start from creation event
+    for test_id, y_pos in test_positions.items():
+        start_date = test_creation_dates.get(test_id, dates[0] if dates else '2024-01-01')
+        fig.add_shape(
+            type='line',
+            x0=start_date,
+            x1=dates[-1] if dates else '2024-12-31',
+            y0=y_pos,
+            y1=y_pos,
+            line=dict(color='lightgreen', width=1, dash='dot')
+        )
+    
+    # Analysis lines - start from creation event
+    for analysis_id, y_pos in analysis_positions.items():
+        start_date = analysis_creation_dates.get(analysis_id, dates[0] if dates else '2024-01-01')
+        fig.add_shape(
+            type='line',
+            x0=start_date,
+            x1=dates[-1] if dates else '2024-12-31',
+            y0=y_pos,
+            y1=y_pos,
+            line=dict(color='lightcoral', width=1, dash='dashdot')
+        )
+    
+    # Task line - full width (or could be branched too if needed)
+    if -1 in y_positions:
+        fig.add_shape(
+            type='line',
+            x0=dates[0] if dates else '2024-01-01',
+            x1=dates[-1] if dates else '2024-12-31',
+            y0=-1,
+            y1=-1,
+            line=dict(color='lightgray', width=1, dash='dash')
+        )
+    
+    # Note line - full width (or could be branched too if needed)
+    if -2 in y_positions:
+        fig.add_shape(
+            type='line',
+            x0=dates[0] if dates else '2024-01-01',
+            x1=dates[-1] if dates else '2024-12-31',
+            y0=-2,
+            y1=-2,
+            line=dict(color='lightyellow', width=1, dash='dot')
+        )
+    
+    # Update layout
+    fig.update_layout(
+        title=f'Timeline for Individual {individual.individual_id}',
+        xaxis_title='Date',
+        yaxis_title='',
+        showlegend=False,
+        height=600,
+        yaxis=dict(
+            showticklabels=False,
+            range=[min_y - 0.5, max_y + 0.5]
+        ),
+        xaxis=dict(
+            tickangle=45,
+            tickformat='%Y-%m-%d %H:%M'
+        ),
+        # Add text angle for better readability
+        annotations=[
+            dict(
+                x=date,
+                y=y_pos + 0.1,  # Position just above each event's line
+                text=desc,
+                showarrow=False,
+                textangle=-70,  # Bottom-left to top-right orientation
+                font=dict(size=10),
+                xanchor='left',
+                yanchor='bottom'
+            ) for date, desc, y_pos in zip(dates, descriptions, y_positions)
+        ],
+        hovermode='closest'
+    )
+    
+    plot_json = json.dumps(fig.to_dict())
+    
+    context = {
+        'individual': individual,
+        'plot_json': plot_json,
+        'timeline_events': timeline_events,
+        'event_count': len(timeline_events)
+    }
+    
+    if request.htmx:
+        return render(request, 'lab/individual.html#timeline', context)
+    else:
+        return render(request, 'lab/individual.html', context)
