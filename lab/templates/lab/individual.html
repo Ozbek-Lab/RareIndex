@@ -7,7 +7,8 @@
 {% partialdef compact-card %}
   <div
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-1 mb-2"
-    data-item-id="{{ item.id }}" x-data="{ showFullName: false }"
+    data-item-id="{{ item.id }}"
+    x-data="{ showFullName: false }"
   >
     {% with float="float-right" color=item.status.color text=item.status.name %}
       {% include 'lab/partials/badge.html' %}
@@ -25,7 +26,13 @@
       </button>
     </h3>
     {% if perms.lab.view_individual_sensitive_data %}
-      <p class="text-gray-600 dark:text-gray-400" x-show="showFullName" x-transition>{{ item.full_name }}</p>
+      <p
+        class="text-gray-600 dark:text-gray-400"
+        x-show="showFullName"
+        x-transition
+      >
+        {{ item.full_name }}
+      </p>
     {% endif %}
 
     <span class="text-gray-900 dark:text-gray-100">
@@ -35,7 +42,8 @@
       {{ item.institution }}
     </span>
 
-    <div class="flex justify-end mt-3 pt-2 border-t border-gray-200 dark:border-gray-700"
+    <div
+      class="flex justify-end mt-3 pt-2 border-t border-gray-200 dark:border-gray-700"
     >
       <div x-data="{ open: false }" class="relative mr-2">
         <button
@@ -71,7 +79,8 @@
 {% partialdef card %}
   <div
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
-    data-item-id="{{ item.id }}" x-data="{ showFullName: false }"
+    data-item-id="{{ item.id }}"
+    x-data="{ showFullName: false }"
   >
     <div class="flex justify-between items-start">
       <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -94,7 +103,11 @@
 
     <div class="mb-2">
       {% if perms.lab.view_individual_sensitive_data %}
-        <h3 class="text-xl text-gray-700 dark:text-gray-300 font-medium" x-show="showFullName" x-transition>
+        <h3
+          class="text-xl text-gray-700 dark:text-gray-300 font-medium"
+          x-show="showFullName"
+          x-transition
+        >
           {{ item.full_name }}
         </h3>
       {% endif %}
@@ -174,43 +187,50 @@
 {% endpartialdef card %}
 
 {% partialdef table-row %}
-    <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 font-medium" x-data="{ showFullName: false }">
-      {{ item.individual_id }}
-      <button
-        type="button"
-        class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-        @click="showFullName = !showFullName"
-        title="Toggle full name visibility"
-      >
-        <i class="fas fa-id-card"></i>
-      </button>
-      {% if perms.lab.view_individual_sensitive_data %}
-        {% if item.full_name %}
-          <p class="text-sm text-blue-700 dark:text-blue-300 mt-1" x-show="showFullName" x-transition>
-            {{ item.full_name }}
-          </p>
-        {% endif %}
+  <td
+    class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 font-medium"
+    x-data="{ showFullName: false }"
+  >
+    {{ item.individual_id }}
+    <button
+      type="button"
+      class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+      @click="showFullName = !showFullName"
+      title="Toggle full name visibility"
+    >
+      <i class="fas fa-id-card"></i>
+    </button>
+    {% if perms.lab.view_individual_sensitive_data %}
+      {% if item.full_name %}
+        <p
+          class="text-sm text-blue-700 dark:text-blue-300 mt-1"
+          x-show="showFullName"
+          x-transition
+        >
+          {{ item.full_name }}
+        </p>
       {% endif %}
-    </td>
-    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-      {{ item.institution.name|default:"-" }}
-    </td>
-    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-      {{ item.icd11_code|default:"-" }}
-    </td>
-    <td class="px-4 py-3 text-sm">
-      {% with float="" color=item.status.color text=item.status.name %}
-        {% include 'lab/partials/badge.html' %}
-      {% endwith %}
-    </td>
-    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-      <button
-        @click="openDetail({{ item.pk }}, 'Individual', 'lab')"
-        class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-      >
-        <i class="fa-solid fa-eye"></i>
-      </button>
-    </td>
+    {% endif %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {{ item.institution.name|default:"-" }}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {{ item.icd11_code|default:"-" }}
+  </td>
+  <td class="px-4 py-3 text-sm">
+    {% with float="" color=item.status.color text=item.status.name %}
+      {% include 'lab/partials/badge.html' %}
+    {% endwith %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    <button
+      @click="openDetail({{ item.pk }}, 'Individual', 'lab')"
+      class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+    >
+      <i class="fa-solid fa-eye"></i>
+    </button>
+  </td>
 {% endpartialdef table-row %}
 
 {% partialdef table %}
@@ -254,24 +274,28 @@
         id="page-individual-table-tbody"
         class="divide-y divide-gray-200 dark:divide-gray-600"
       >
-
-      {% with view_mode='table' %}
-        {% include "lab/partials/_infinite_scroll_items.html" %}
-      {% endwith %}
+        {% with view_mode='table' %}
+          {% include "lab/partials/_infinite_scroll_items.html" %}
+        {% endwith %}
       </tbody>
     </table>
   </div>
 {% endpartialdef table %}
 
 {% partialdef detail %}
-  <div id="individual-detail" class="space-y-6" x-data="{ activeTab: '{{ activeTab|default:"notes" }}' }">
-
+  <div
+    id="individual-detail"
+    class="space-y-6"
+    x-data="{ activeTab: '{{ activeTab|default:"notes" }}' }"
+  >
     <!-- Individual card -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
       <!-- Header with individual info -->
       <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-2xl font-bold text-white">{{ item.individual_id }}</h2>
+          <h2 class="text-2xl font-bold text-white">
+            {{ item.individual_id }}
+          </h2>
           <span
             class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white"
           >
@@ -296,24 +320,38 @@
                   <span><i class="fas fa-eye"></i> Show Sensitive Info</span>
                 </template>
                 <template x-if="showSensitive">
-                  <span><i class="fas fa-eye-slash"></i> Hide Sensitive Info</span>
+                  <span
+                    ><i class="fas fa-eye-slash"></i> Hide Sensitive Info</span
+                  >
                 </template>
               </button>
               <div x-show="showSensitive" x-transition class="space-y-2">
                 <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name</h3>
+                  <h3
+                    class="text-sm font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    Full Name
+                  </h3>
                   <p class="text-gray-900 dark:text-gray-100 font-medium">
                     {{ item.full_name }}
                   </p>
                 </div>
                 <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">TC Identity</h3>
+                  <h3
+                    class="text-sm font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    TC Identity
+                  </h3>
                   <p class="text-gray-900 dark:text-gray-100">
                     {{ item.tc_identity|default:"—" }}
                   </p>
                 </div>
                 <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Birth Date</h3>
+                  <h3
+                    class="text-sm font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    Birth Date
+                  </h3>
                   <p class="text-gray-900 dark:text-gray-100">
                     {{ item.birth_date|date:"d M Y"|default:"—" }}
                   </p>
@@ -322,7 +360,9 @@
             </div>
           {% endif %}
           <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Family</h3>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Family
+            </h3>
             <p class="text-gray-900 dark:text-gray-100">
               {{ item.family.family_id|default:"—" }}
             </p>
@@ -332,15 +372,25 @@
         <!-- Second column -->
         <div class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">ICD11 Code</h3>
-            <p class="text-gray-900 dark:text-gray-100">{{ item.icd11_code|default:"—" }}</p>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              ICD11 Code
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100">
+              {{ item.icd11_code|default:"—" }}
+            </p>
           </div>
           <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Diagnosis</h3>
-            <p class="text-gray-900 dark:text-gray-100">{{ item.diagnosis|default:"—" }}</p>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Diagnosis
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100">
+              {{ item.diagnosis|default:"—" }}
+            </p>
           </div>
           <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Diagnosis Date</h3>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Diagnosis Date
+            </h3>
             <p class="text-gray-900 dark:text-gray-100">
               {{ item.diagnosis_date|date:"d M Y"|default:"—" }}
             </p>
@@ -351,7 +401,9 @@
         <div class="space-y-4">
           <div>
             <div class="flex items-center justify-between">
-              <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">HPO Terms</h3>
+              <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+                HPO Terms
+              </h3>
               {% if item.hpo_terms.exists %}
                 <button
                   class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
@@ -414,21 +466,21 @@
             Analyses ({{ analyses|length }})
           </button>
           {% if item.family.individuals.count > 1 %}
-          <button
-            class="py-2 px-4 border-b-2 transition-colors"
-            :class="activeTab === 'family' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'family'"
-          >
-            Family Members ({{ item.family.individuals.count|add:"-1" }})
-          </button>
+            <button
+              class="py-2 px-4 border-b-2 transition-colors"
+              :class="activeTab === 'family' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+              @click="activeTab = 'family'"
+            >
+              Family Members ({{ item.family.individuals.count|add:"-1" }})
+            </button>
           {% else %}
-          <button
-            class="py-2 px-4 border-b-2 transition-colors cursor-not-allowed opacity-50"
-            :class="activeTab === 'family' ? 'border-gray-300 text-gray-400 font-medium' : 'border-transparent text-gray-400 font-medium'"
-            disabled
-          >
-            Family Members (0)
-          </button>
+            <button
+              class="py-2 px-4 border-b-2 transition-colors cursor-not-allowed opacity-50"
+              :class="activeTab === 'family' ? 'border-gray-300 text-gray-400 font-medium' : 'border-transparent text-gray-400 font-medium'"
+              disabled
+            >
+              Family Members (0)
+            </button>
           {% endif %}
 
           <button
@@ -473,7 +525,9 @@
       <div class="p-6">
         <!-- Notes tab -->
         <div x-show="activeTab === 'notes'" x-cloak>
-          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Notes</h3>
+          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+            Notes
+          </h3>
           {% with object=item content_type="individual" %}
             {% include "lab/note.html#list" %}
           {% endwith %}
@@ -481,94 +535,94 @@
 
         <!-- Samples tab -->
         <div x-show="activeTab === 'samples'" x-cloak>
-          <div class="flex justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Samples</h3>
-            {% if perms.lab.add_sample %}
-              <button
-                class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded flex items-center"
-                hx-target="#sample-form-container"
-                hx-swap="innerHTML"
-              >
-                <i class="fas fa-plus mr-1"></i> Add Sample
-              </button>
-            {% endif %}
-          </div>
-          <div id="sample-form-container"></div>
-
           {% if item.samples.exists %}
-            <div class="overflow-x-auto bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
-              <table class="min-w-full">
-                <thead>
-                  <tr
-                    class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+            <!-- Use existing sample partials for consistent UI -->
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <!-- View toggle buttons -->
+              <div class="flex justify-end">
+                <div
+                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+                >
+                  <div
+                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                    style="width: calc(50% - 2px);"
+                  ></div>
+
+                  <button
+                    @click="viewMode = 'cards'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
-                    <th class="px-3 py-2">Type</th>
-                    <th class="px-3 py-2">Receipt Date</th>
-                    <th class="px-3 py-2">Status</th>
-                    <th class="px-3 py-2">Tests</th>
-                    <th class="px-3 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200">
-                  {% for sample in item.samples.all %}
-                    <tr class="hover:bg-gray-100 dark:hover:bg-gray-700">
-                      <td class="px-3 py-2 whitespace-nowrap">
-                        <div class="flex items-center">
-                          <span class="font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400" 
-                            @click="openDetail({{ sample.id }}, 'Sample', 'lab')"
-                            >{{ sample.sample_type.name }}</span
-                          >
-                        </div>
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
-                      >
-                        {{ sample.receipt_date|date:"d M Y" }}
-                      </td>
-                      <td class="px-3 py-2 whitespace-nowrap">
-                        <span
-                          class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-{{ sample.status.color|default:'gray' }}-100 dark:bg-{{ sample.status.color|default:'gray' }}-900/30 text-{{ sample.status.color|default:'gray' }}-800 dark:text-{{ sample.status.color|default:'gray' }}-200"
-                        >
-                          {{ sample.status.name }}
-                        </span>
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
-                      >
-                        {% for test in sample.tests.all %}
-                          <span
-                            class="inline-block px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 text-xs font-medium rounded mr-1"
-                            >{{ test.test_type.name }}</span
-                          >
-                          {% empty %} None
-                        {% endfor %}
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-right text-sm font-medium"
-                      >
-                        <button
-                          class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 mr-2"
-                          hx-target="#sample-form-container"
-                          hx-swap="innerHTML"
-                        >
-                          <i class="fas fa-edit"></i>
-                        </button>
-                        <button
-                          class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
-                          hx-confirm="Are you sure you want to delete this sample?"
-                          hx-target="closest tr"
-                          hx-swap="outerHTML swap:1s"
-                        >
-                          <i class="fas fa-trash-alt"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+                    <i
+                      class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+                      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                      >Card</span
+                    >
+                  </button>
+
+                  <button
+                    @click="viewMode = 'table'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i
+                      class="fa-solid fa-table mr-2 transition-transform duration-300"
+                      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                      >Table</span
+                    >
+                  </button>
+                </div>
+              </div>
+
+              <!-- Card View with animated transition -->
+              <div
+                x-show="viewMode === 'cards'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                style="will-change: opacity, transform;"
+              >
+                {% for sample in item.samples.all %}
+                  {% with item=sample %}
+                    {% include "lab/sample.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+
+              <!-- Table View with animated transition -->
+              <div
+                x-show="viewMode === 'table'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+                class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+                style="will-change: opacity, transform;"
+              >
+                {% with items=item.samples.all view_mode='table' model_name='Sample' app_label='lab' card='card' %}
+                  {% include "lab/sample.html#table" %}
+                {% endwith %}
+              </div>
             </div>
           {% else %}
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+            <div
+              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
               No samples available for this individual.
             </div>
           {% endif %}
@@ -576,94 +630,94 @@
 
         <!-- Tests tab -->
         <div x-show="activeTab === 'tests'" x-cloak>
-          <div class="flex justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Tests</h3>
-            {% if perms.lab.add_test %}
-              <button
-                class="bg-blue-500 hover:bg-blue-700 text-white dark:text-gray-900 dark:hover:text-blue-300 text-sm font-bold py-1 px-3 rounded flex items-center"
-                hx-target="#sample-form-container"
-                hx-swap="innerHTML"
-              >
-                <i class="fas fa-plus mr-1"></i> Add Test
-              </button>
-            {% endif %}
-          </div>
-          <div id="sample-form-container"></div>
-
           {% if tests %}
-            <div class="overflow-x-auto bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
-              <table class="min-w-full">
-                <thead>
-                  <tr
-                    class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+            <!-- Use existing test partials for consistent UI -->
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <!-- View toggle buttons -->
+              <div class="flex justify-end">
+                <div
+                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+                >
+                  <div
+                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                    style="width: calc(50% - 2px);"
+                  ></div>
+
+                  <button
+                    @click="viewMode = 'cards'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
-                    <th class="px-3 py-2">Type</th>
-                    <th class="px-3 py-2">Receipt Date</th>
-                    <th class="px-3 py-2">Status</th>
-                    <th class="px-3 py-2">Analyses</th>
-                    <th class="px-3 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200">
-                  {% for test in tests %}
-                    <tr class="hover:bg-gray-100 dark:hover:bg-gray-700">
-                      <td class="px-3 py-2 whitespace-nowrap">
-                        <div class="flex items-center">
-                          <span class="font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                            @click="openDetail({{ test.id }}, 'Test', 'lab')"
-                            >{{ test.test_type.name }}</span
-                          >
-                        </div>
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
-                      >
-                        {{ test.performed_date|date:"d M Y" }}
-                      </td>
-                      <td class="px-3 py-2 whitespace-nowrap">
-                        <span
-                          class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-{{ test.status.color|default:'gray' }}-100 text-{{ test.status.color|default:'gray' }}-800"
-                        >
-                          {{ test.status.name }}
-                        </span>
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-sm text-gray-500"
-                      >
-                        {% for analysis in test.analyses.all %}
-                          <span
-                            class="inline-block px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 text-xs font-medium rounded mr-1"
-                            >{{ analysis.analysis_type.name }}</span
-                          >
-                          {% empty %} None
-                        {% endfor %}
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-right text-sm font-medium"
-                      >
-                        <button
-                          class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 mr-2"
-                          hx-target="#sample-form-container"
-                          hx-swap="innerHTML"
-                        >
-                          <i class="fas fa-edit"></i>
-                        </button>
-                        <button
-                          class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
-                          hx-confirm="Are you sure you want to delete this test?"
-                          hx-target="closest tr"
-                          hx-swap="outerHTML swap:1s"
-                        >
-                          <i class="fas fa-trash-alt"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+                    <i
+                      class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+                      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                      >Card</span
+                    >
+                  </button>
+
+                  <button
+                    @click="viewMode = 'table'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i
+                      class="fa-solid fa-table mr-2 transition-transform duration-300"
+                      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                      >Table</span
+                    >
+                  </button>
+                </div>
+              </div>
+
+              <!-- Card View with animated transition -->
+              <div
+                x-show="viewMode === 'cards'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                style="will-change: opacity, transform;"
+              >
+                {% for test in tests %}
+                  {% with item=test %}
+                    {% include "lab/test.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+
+                            <!-- Table View with animated transition -->
+              <div
+                x-show="viewMode === 'table'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+                class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+                style="will-change: opacity, transform;"
+              >
+                {% with items=tests view_mode='table' model_name='Test' app_label='lab' card='card' %}
+                  {% include "lab/test.html#table" %}
+                {% endwith %}
+              </div>
             </div>
           {% else %}
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+            <div
+              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
               No tests available for this individual.
             </div>
           {% endif %}
@@ -671,88 +725,94 @@
 
         <!-- Analyses tab -->
         <div x-show="activeTab === 'analyses'" x-cloak>
-          <div class="flex justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Analyses</h3>
-            {% if perms.lab.add_analysis %}
-              <button
-                class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded flex items-center"
-                hx-target="#analysis-form-container"
-                hx-swap="innerHTML"
-              >
-                <i class="fas fa-plus mr-1"></i> Add Analysis
-              </button>
-            {% endif %}
-          </div>
-          <div id="analysis-form-container"></div>
-
           {% if analyses %}
-            <div class="overflow-x-auto bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
-              <table class="min-w-full">
-                <thead>
-                  <tr
-                    class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+            <!-- Use existing analysis partials for consistent UI -->
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <!-- View toggle buttons -->
+              <div class="flex justify-end">
+                <div
+                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+                >
+                  <div
+                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                    style="width: calc(50% - 2px);"
+                  ></div>
+
+                  <button
+                    @click="viewMode = 'cards'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
-                    <th class="px-3 py-2">Type</th>
-                    <th class="px-3 py-2">Performed Date</th>
-                    <th class="px-3 py-2">Status</th>
-                    <th class="px-3 py-2">Performed By</th>
-                    <th class="px-3 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
-                  {% for analysis in analyses %}
-                    <tr class="hover:bg-gray-100 dark:hover:bg-gray-700">
-                      <td class="px-3 py-2 whitespace-nowrap">
-                        <div class="flex items-center">
-                          <span class="font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                            @click="openDetail({{ analysis.id }}, 'Analysis', 'lab')"
-                            >{{ analysis.type.name }}</span
-                          >
-                        </div>
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
-                      >
-                        {{ analysis.performed_date|date:"d M Y" }}
-                      </td>
-                      <td class="px-3 py-2 whitespace-nowrap">
-                        <span
-                          class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-{{ analysis.status.color|default:'gray' }}-100 dark:bg-{{ analysis.status.color|default:'gray' }}-900/30 text-{{ analysis.status.color|default:'gray' }}-800 dark:text-{{ analysis.status.color|default:'gray' }}-200"
-                        >
-                          {{ analysis.status.name }}
-                        </span>
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
-                      >
-                        {{ analysis.performed_by.get_full_name|default:analysis.performed_by.username }}
-                      </td>
-                      <td
-                        class="px-3 py-2 whitespace-nowrap text-right text-sm font-medium"
-                      >
-                        <button
-                          class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 mr-2"
-                          hx-target="#analysis-form-container"
-                          hx-swap="innerHTML"
-                        >
-                          <i class="fas fa-edit"></i>
-                        </button>
-                        <button
-                          class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
-                          hx-confirm="Are you sure you want to delete this analysis?"
-                          hx-target="closest tr"
-                          hx-swap="outerHTML swap:1s"
-                        >
-                          <i class="fas fa-trash-alt"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+                    <i
+                      class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+                      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                      >Card</span
+                    >
+                  </button>
+
+                  <button
+                    @click="viewMode = 'table'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i
+                      class="fa-solid fa-table mr-2 transition-transform duration-300"
+                      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                      >Table</span
+                    >
+                  </button>
+                </div>
+              </div>
+
+              <!-- Card View with animated transition -->
+              <div
+                x-show="viewMode === 'cards'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                style="will-change: opacity, transform;"
+              >
+                {% for analysis in analyses %}
+                  {% with item=analysis %}
+                    {% include "lab/analysis.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+
+                            <!-- Table View with animated transition -->
+              <div
+                x-show="viewMode === 'table'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+                class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+                style="will-change: opacity, transform;"
+              >
+                {% with items=analyses view_mode='table' model_name='Analysis' app_label='lab' card='card' %}
+                  {% include "lab/analysis.html#table" %}
+                {% endwith %}
+              </div>
             </div>
           {% else %}
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+            <div
+              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
               No analyses available for this individual.
             </div>
           {% endif %}
@@ -760,60 +820,93 @@
 
         <!-- Family Members tab -->
         <div x-show="activeTab === 'family'" x-cloak>
-          <div class="flex justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Family Members</h3>
-          </div>
-
           {% if item.family %}
             {% with family_members=item.family.individuals.all %}
               {% if family_members.exists %}
-                <div
-                  class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                >
-                  {% for member in family_members %}
-                    {% if member != item %}
+                <!-- Use existing individual partials for consistent UI -->
+                <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+                  <!-- View toggle buttons -->
+                  <div class="flex justify-end">
+                    <div
+                      class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+                    >
                       <div
-                        class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-blue-500"
+                        class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                        :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                        style="width: calc(50% - 2px);"
+                      ></div>
+
+                      <button
+                        @click="viewMode = 'cards'"
+                        class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                        :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                       >
-                        <div class="flex justify-between items-start mb-2">
-                          <div>
-                            <h4 class="font-medium text-gray-900 dark:text-gray-100">
-                              <span class="font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                                @click="openDetail({{ member.id }}, 'Individual', 'lab')"
-                              >
-                                {{ member.individual_id }}
-                              </span>
-                            </h4>
-                            {% if perms.lab.view_individual_sensitive_data %}
-                              <p class="text-sm text-gray-600 dark:text-gray-400">
-                                {{ member.full_name }}
-                              </p>
-                            {% endif %}
-                          </div>
-                          <span
-                            class="px-2 py-1 text-xs rounded-full bg-{{ member.status.color|default:'gray' }}-100 dark:bg-{{ member.status.color|default:'gray' }}-900/30 text-{{ member.status.color|default:'gray' }}-800 dark:text-{{ member.status.color|default:'gray' }}-200"
-                          >
-                            {{ member.status.name }}
-                          </span>
-                        </div>
-                        {% if member.diagnosis %}
-                          <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                            <span class="font-medium">Diagnosis:</span>
-                            {{ member.diagnosis }}
-                          </p>
-                        {% endif %}
-                        <div class="mt-3 flex justify-end">
-                          <button
-                            class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 text-sm"
-                            hx-target="main"
-                            hx-push-url="true"
-                          >
-                            View Details <i class="fas fa-arrow-right ml-1"></i>
-                          </button>
-                        </div>
-                      </div>
-                    {% endif %}
-                  {% endfor %}
+                        <i
+                          class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+                          :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
+                        ></i>
+                        <span
+                          class="transition-all duration-300"
+                          :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                          >Card</span
+                        >
+                      </button>
+
+                      <button
+                        @click="viewMode = 'table'"
+                        class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                        :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                      >
+                        <i
+                          class="fa-solid fa-table mr-2 transition-transform duration-300"
+                          :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
+                        ></i>
+                        <span
+                          class="transition-all duration-300"
+                          :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                          >Table</span
+                        >
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Card View with animated transition -->
+                  <div
+                    x-show="viewMode === 'cards'"
+                    x-transition:enter="transition-all duration-500 ease-out"
+                    x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                    x-transition:leave="transition-all duration-300 ease-in"
+                    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                    x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+                    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                    style="will-change: opacity, transform;"
+                  >
+                    {% for member in family_members %}
+                      {% if member != item %}
+                        {% with item=member %}
+                          {% include "lab/individual.html#card" %}
+                        {% endwith %}
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+
+                  <!-- Table View with animated transition -->
+                  <div
+                    x-show="viewMode === 'table'"
+                    x-transition:enter="transition-all duration-500 ease-out"
+                    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                    x-transition:leave="transition-all duration-300 ease-in"
+                    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+                    class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+                    style="will-change: opacity, transform;"
+                  >
+                    {% with items=family_members view_mode='table' model_name='Individual' app_label='lab' card='card' %}
+                      {% include "lab/individual.html#table" %}
+                    {% endwith %}
+                  </div>
                 </div>
               {% else %}
                 <div
@@ -824,7 +917,9 @@
               {% endif %}
             {% endwith %}
           {% else %}
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+            <div
+              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
               This individual is not associated with any family.
             </div>
           {% endif %}
@@ -835,11 +930,16 @@
           <div class="space-y-6">
             <!-- ICD11 Section -->
             <div>
-              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">ICD-11 Classification</h3>
+              <h3
+                class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4"
+              >
+                ICD-11 Classification
+              </h3>
               {% if item.icd11_code %}
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                   <div class="flex items-start justify-between">
-                    <span class="text-lg font-medium text-gray-900 dark:text-gray-100"
+                    <span
+                      class="text-lg font-medium text-gray-900 dark:text-gray-100"
                       >{{ item.icd11_code }}</span
                     >
                     <button
@@ -855,11 +955,12 @@
                     </button>
                   </div>
                   {% if item.diagnosis %}
-                    <p class="mt-2 text-gray-600 dark:text-gray-400">{{ item.diagnosis }}</p>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">
+                      {{ item.diagnosis }}
+                    </p>
                     {% if item.diagnosis_date %}
                       <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Diagnosed on:
-                        {{ item.diagnosis_date|date:"d M Y" }}
+                        Diagnosed on: {{ item.diagnosis_date|date:"d M Y" }}
                       </p>
                     {% endif %}
                   {% endif %}
@@ -876,7 +977,11 @@
             <!-- HPO Section -->
             <div>
               <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">HPO Terms</h3>
+                <h3
+                  class="text-lg font-medium text-gray-900 dark:text-gray-100"
+                >
+                  HPO Terms
+                </h3>
                 {% if item.hpo_terms.exists %}
                   <button
                     class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
@@ -895,16 +1000,22 @@
                 <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
                   <div class="space-y-4">
                     {% for term in item.hpo_terms.all %}
-                      <div class="flex items-start p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                      <div
+                        class="flex items-start p-2 bg-gray-50 dark:bg-gray-700 rounded"
+                      >
                         <div class="flex-1">
-                          <div class="font-medium text-gray-900 dark:text-gray-100">
+                          <div
+                            class="font-medium text-gray-900 dark:text-gray-100"
+                          >
                             {{ term.label }}
                           </div>
                           <div class="text-sm text-gray-600 dark:text-gray-400">
                             {{ term.term }}
                           </div>
                           {% if term.description %}
-                            <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            <div
+                              class="text-sm text-gray-500 dark:text-gray-400 mt-1"
+                            >
                               {{ term.description }}
                             </div>
                           {% endif %}
@@ -933,91 +1044,94 @@
 
         <!-- Tasks tab -->
         <div x-show="activeTab === 'tasks'" x-cloak>
-          <div class="flex justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Tasks</h3>
-            <button
-              class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded flex items-center"
-              hx-target="#task-form-container"
-              hx-swap="innerHTML"
-            >
-              <i class="fas fa-plus mr-1"></i> Add Task
-            </button>
-          </div>
-          <div id="task-form-container"></div>
-
           {% if item.tasks.exists %}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {% for task in item.tasks.all %}
+            <!-- Use existing task partials for consistent UI -->
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <!-- View toggle buttons -->
+              <div class="flex justify-end">
                 <div
-                  class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 {% if task.is_completed %}border-green-500{% elif task.priority == 'urgent' %}border-red-500{% elif task.priority == 'high' %}border-orange-500{% elif task.priority == 'medium' %}border-yellow-500{% else %}border-blue-500{% endif %}"
+                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
                 >
-                  <div class="flex justify-between items-start">
-                    <h4
-                      class="font-medium {% if task.is_completed %}
-                        line-through text-gray-500 dark:text-gray-400
-                      {% else %}
-                        text-gray-900 dark:text-gray-100
-                      {% endif %}"
-                    >
-                      {{ task.title }}
-                    </h4>
-                    <span
-                      class="px-2 py-1 text-xs rounded-full font-medium {% if task.priority == 'urgent' %}
-                        bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200
-                      {% elif task.priority == 'high' %}
-                        bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200
-                      {% elif task.priority == 'medium' %}
-                        bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200
-                      {% else %}
-                        bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200
-                      {% endif %}"
-                    >
-                      {{ task.priority|title }}
-                    </span>
-                  </div>
-                  <p
-                    class="text-sm text-gray-500 dark:text-gray-400 mt-1 {% if task.is_completed %}line-through{% endif %}"
-                  >
-                    {{ task.description }}
-                  </p>
-                  <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                    <div>
-                      Assigned to:
-                      {{ task.assigned_to.get_full_name|default:task.assigned_to.username }}
-                    </div>
-                    {% if task.due_date %}
-                      <div>Due: {{ task.due_date|date:"d M Y H:i" }}</div>
-                    {% endif %}
-                    <div>Target status: {{ task.target_status.name }}</div>
-                  </div>
+                  <div
+                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                    style="width: calc(50% - 2px);"
+                  ></div>
 
-                  {% if not task.is_completed %}
-                    <div class="mt-3 flex justify-end">
-                      <button
-                        class="bg-green-500 dark:bg-green-600 hover:bg-green-700 dark:hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded"
-                        hx-prompt="Add completion notes (optional):"
-                        hx-target="closest div.bg-white"
-                        hx-swap="outerHTML"
-                      >
-                        Complete
-                      </button>
-                    </div>
-                  {% else %}
-                    <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                      <div>
-                        Completed: {{ task.completed_at|date:"d M Y H:i" }}
-                      </div>
-                      <div>
-                        By:
-                        {{ task.completed_by.get_full_name|default:task.completed_by.username }}
-                      </div>
-                    </div>
-                  {% endif %}
+                  <button
+                    @click="viewMode = 'cards'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i
+                      class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+                      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                      >Card</span
+                    >
+                  </button>
+
+                  <button
+                    @click="viewMode = 'table'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i
+                      class="fa-solid fa-table mr-2 transition-transform duration-300"
+                      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                      >Table</span
+                    >
+                  </button>
                 </div>
-              {% endfor %}
+              </div>
+
+              <!-- Card View with animated transition -->
+              <div
+                x-show="viewMode === 'cards'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                style="will-change: opacity, transform;"
+              >
+                {% for task in item.tasks.all %}
+                  {% with item=task %}
+                    {% include "lab/task.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+
+                                <!-- Table View with animated transition -->
+                  <div
+                    x-show="viewMode === 'table'"
+                    x-transition:enter="transition-all duration-500 ease-out"
+                    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                    x-transition:leave="transition-all duration-300 ease-in"
+                    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+                    class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+                    style="will-change: opacity, transform;"
+                  >
+                    {% with items=item.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                      {% include "lab/task.html#table" %}
+                    {% endwith %}
+                  </div>
             </div>
           {% else %}
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+            <div
+              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
               No tasks available for this individual.
             </div>
           {% endif %}
@@ -1025,11 +1139,11 @@
 
         <!-- Status History tab -->
         <div x-show="activeTab === 'status'" x-cloak>
-          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Status History</h3>
-
           {% if item.status_logs.exists %}
             <div class="relative">
-              <div class="absolute h-full w-0.5 bg-gray-200 dark:bg-gray-600 left-5 top-0"></div>
+              <div
+                class="absolute h-full w-0.5 bg-gray-200 dark:bg-gray-600 left-5 top-0"
+              ></div>
               {% for log in item.status_logs.all %}
                 <div class="mb-4 ml-10 relative">
                   <!-- Status circle -->
@@ -1041,7 +1155,9 @@
                   <!-- Status card -->
                   <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-900 dark:text-gray-100">
+                      <span
+                        class="font-medium text-gray-900 dark:text-gray-100"
+                      >
                         {{ log.previous_status.name }} →
                         <span
                           class="text-{{ log.new_status.color|default:'gray' }}-600 dark:text-{{ log.new_status.color|default:'gray' }}-400"
@@ -1068,7 +1184,9 @@
               {% endfor %}
             </div>
           {% else %}
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+            <div
+              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
               No status history available for this individual.
             </div>
           {% endif %}
@@ -1076,101 +1194,146 @@
 
         <!-- Projects tab -->
         <div x-show="activeTab === 'projects'" x-cloak>
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Projects</h3>
-            <button
-              class="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white text-sm font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors"
-            >
-              Add to Project
-            </button>
-          </div>
-
           {% if item.projects.all %}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {% for project in item.projects.all %}
+            <!-- Use existing project partials for consistent UI -->
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <!-- View toggle buttons -->
+              <div class="flex justify-end">
                 <div
-                  class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
+                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
                 >
-                  <div class="p-4">
-                    <div class="flex justify-between items-start mb-2">
-                      <h4 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                        {{ project.name }}
-                      </h4>
-                      <span
-                        class="px-2 py-1 text-xs rounded-full font-medium {% if project.status.name == 'Active' %}
-                          bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200
-                        {% elif project.status.name == 'Completed' %}
-                          bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200
-                        {% else %}
-                          bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200
-                        {% endif %}"
-                      >
-                        {{ project.status.name }}
-                      </span>
-                    </div>
-                    <div class="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                      <div>Start Date: {{ project.start_date|date:"d M Y" }}</div>
-                      {% if project.end_date %}
-                        <div>End Date: {{ project.end_date|date:"d M Y" }}</div>
-                      {% endif %}
-                      {% if project.description %}
-                        <div class="mt-2 text-gray-600 dark:text-gray-300">
-                          {{ project.description|truncatewords:20 }}
-                        </div>
-                      {% endif %}
-                    </div>
-                    <div class="flex justify-end">
-                      <button
-                        class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 transition-colors"
-                        @click="openDetail({{ project.id }}, 'Project', 'lab')"
-                      >
-                        View Details
-                      </button>
-                    </div>
-                  </div>
+                  <div
+                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                    style="width: calc(50% - 2px);"
+                  ></div>
+
+                  <button
+                    @click="viewMode = 'cards'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i
+                      class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+                      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                      >Card</span
+                    >
+                  </button>
+
+                  <button
+                    @click="viewMode = 'table'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i
+                      class="fa-solid fa-table mr-2 transition-transform duration-300"
+                      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
+                    ></i>
+                    <span
+                      class="transition-all duration-300"
+                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                      >Table</span
+                    >
+                  </button>
                 </div>
-              {% endfor %}
+              </div>
+
+              <!-- Card View with animated transition -->
+              <div
+                x-show="viewMode === 'cards'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                style="will-change: opacity, transform;"
+              >
+                {% for project in item.projects.all %}
+                  {% with item=project %}
+                    {% include "lab/project.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+
+                                <!-- Table View with animated transition -->
+                  <div
+                    x-show="viewMode === 'table'"
+                    x-transition:enter="transition-all duration-500 ease-out"
+                    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                    x-transition:leave="transition-all duration-300 ease-in"
+                    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+                    class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+                    style="will-change: opacity, transform;"
+                  >
+                    {% with items=item.projects.all view_mode='table' model_name='Project' app_label='lab' card='card' %}
+                      {% include "lab/project.html#table" %}
+                    {% endwith %}
+                  </div>
             </div>
           {% else %}
-            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
-              <i class="fas fa-project-diagram text-gray-300 dark:text-gray-500 text-5xl mb-3"></i>
-              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">No projects found</h3>
-              <p class="text-gray-500 dark:text-gray-400 mt-1">Add this individual to a project to get started.</p>
+            <div
+              class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
+              <i
+                class="fas fa-project-diagram text-gray-300 dark:text-gray-500 text-5xl mb-3"
+              ></i>
+              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">
+                No projects found
+              </h3>
+              <p class="text-gray-500 dark:text-gray-400 mt-1">
+                Add this individual to a project to get started.
+              </p>
             </div>
           {% endif %}
         </div>
       </div>
 
-      
-        <!-- Timeline tab -->
-        <div x-show="activeTab === 'timeline'" x-cloak>
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-              <i class="fas fa-clock mr-2"></i>
-              Timeline
-            </h3>
-            <button
-              class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-              hx-get="{% url 'lab:individual_timeline' item.pk %}"
-              hx-target="#timeline-content"
-              hx-swap="innerHTML"
-            >
-              <i class="fas fa-sync-alt mr-1"></i>Refresh Timeline
-            </button>
-          </div>
-          
-          <div id="timeline-content" class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
-            <div class="flex items-center justify-center h-64">
-              <div class="text-center">
-                <i class="fas fa-clock text-gray-300 dark:text-gray-500 text-4xl mb-3"></i>
-                <p class="text-gray-500 dark:text-gray-400">Click "Refresh Timeline" to load timeline data</p>
-              </div>
+      <!-- Timeline tab -->
+      <div x-show="activeTab === 'timeline'" x-cloak>
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+            <i class="fas fa-clock mr-2"></i>
+            Timeline
+          </h3>
+          <button
+            class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            hx-get="{% url 'lab:individual_timeline' item.pk %}"
+            hx-target="#timeline-content"
+            hx-swap="innerHTML"
+          >
+            <i class="fas fa-sync-alt mr-1"></i>Refresh Timeline
+          </button>
+        </div>
+
+        <div
+          id="timeline-content"
+          class="bg-white dark:bg-gray-800 shadow rounded-lg p-4"
+        >
+          <div class="flex items-center justify-center h-64">
+            <div class="text-center">
+              <i
+                class="fas fa-clock text-gray-300 dark:text-gray-500 text-4xl mb-3"
+              ></i>
+              <p class="text-gray-500 dark:text-gray-400">
+                Click "Refresh Timeline" to load timeline data
+              </p>
             </div>
           </div>
         </div>
+      </div>
 
       <!-- Footer with action buttons -->
-      <div class="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-t flex justify-end space-x-3">
+      <div
+        class="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-t flex justify-end space-x-3"
+      >
         {% if perms.lab.change_individual %}
           <button
             class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 flex items-center"
@@ -1193,6 +1356,8 @@
           </button>
         {% endif %}
       </div>
+    </div>
+  </div>
 {% endpartialdef %}
 
 {% partialdef timeline %}
@@ -1206,59 +1371,91 @@
         <span class="font-bold">{{ event_count }}</span> events found
       </div>
     </div>
-    
+
     {% if timeline_events %}
       <div class="mb-4">
         <div class="flex flex-wrap gap-2">
-          <span class="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
+          <span
+            class="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200"
+          >
             <i class="fas fa-user mr-1"></i>Individual
           </span>
-          <span class="px-2 py-1 text-xs rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200">
+          <span
+            class="px-2 py-1 text-xs rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200"
+          >
             <i class="fas fa-flask mr-1"></i>Sample
           </span>
-          <span class="px-2 py-1 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+          <span
+            class="px-2 py-1 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
+          >
             <i class="fas fa-vial mr-1"></i>Test
           </span>
-          <span class="px-2 py-1 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200">
+          <span
+            class="px-2 py-1 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200"
+          >
             <i class="fas fa-chart-line mr-1"></i>Analysis
           </span>
-          <span class="px-2 py-1 text-xs rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200">
+          <span
+            class="px-2 py-1 text-xs rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200"
+          >
             <i class="fas fa-tasks mr-1"></i>Task
           </span>
-          <span class="px-2 py-1 text-xs rounded-full bg-brown-100 dark:bg-brown-900/30 text-brown-800 dark:text-brown-200">
+          <span
+            class="px-2 py-1 text-xs rounded-full bg-brown-100 dark:bg-brown-900/30 text-brown-800 dark:text-brown-200"
+          >
             <i class="fas fa-sticky-note mr-1"></i>Note
           </span>
         </div>
       </div>
-      
-      <div id="timeline-plot" style="width: 100%; height: 600px;" class="mt-4"></div>
-      
+
+      <div
+        id="timeline-plot"
+        style="width: 100%; height: 600px;"
+        class="mt-4"
+      ></div>
+
       <div class="mt-6">
-        <h5 class="text-md font-medium text-gray-900 dark:text-gray-100 mb-3">Recent Events</h5>
+        <h5 class="text-md font-medium text-gray-900 dark:text-gray-100 mb-3">
+          Recent Events
+        </h5>
         <div class="space-y-3 max-h-96 overflow-y-auto">
           {% for event in timeline_events|slice:":20" %}
-            <div class="flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <div
+              class="flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+            >
               <div class="flex-shrink-0">
                 {% if event.type == 'individual' %}
                   <i class="fas fa-user text-blue-600 dark:text-blue-400"></i>
                 {% elif event.type == 'sample' %}
-                  <i class="fas fa-flask text-orange-600 dark:text-orange-400"></i>
+                  <i
+                    class="fas fa-flask text-orange-600 dark:text-orange-400"
+                  ></i>
                 {% elif event.type == 'test' %}
                   <i class="fas fa-vial text-green-600 dark:text-green-400"></i>
                 {% elif event.type == 'analysis' %}
-                  <i class="fas fa-chart-line text-red-600 dark:text-red-400"></i>
+                  <i
+                    class="fas fa-chart-line text-red-600 dark:text-red-400"
+                  ></i>
                 {% elif event.type == 'task' %}
-                  <i class="fas fa-tasks text-purple-600 dark:text-purple-400"></i>
+                  <i
+                    class="fas fa-tasks text-purple-600 dark:text-purple-400"
+                  ></i>
                 {% elif event.type == 'note' %}
-                  <i class="fas fa-sticky-note text-brown-600 dark:text-brown-400"></i>
+                  <i
+                    class="fas fa-sticky-note text-brown-600 dark:text-brown-400"
+                  ></i>
                 {% endif %}
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
-                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <p
+                    class="text-sm font-medium text-gray-900 dark:text-gray-100"
+                  >
                     {{ event.description }}
                   </p>
-                  <span class="px-2 py-0.5 text-xs rounded-full bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300">
+                  <span
+                    class="px-2 py-0.5 text-xs rounded-full bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300"
+                  >
                     {{ event.action }}
                   </span>
                 </div>
@@ -1278,13 +1475,17 @@
     {% else %}
       <div class="flex items-center justify-center h-64">
         <div class="text-center">
-          <i class="fas fa-clock text-gray-300 dark:text-gray-500 text-4xl mb-3"></i>
-          <p class="text-gray-500 dark:text-gray-400">No timeline events found</p>
+          <i
+            class="fas fa-clock text-gray-300 dark:text-gray-500 text-4xl mb-3"
+          ></i>
+          <p class="text-gray-500 dark:text-gray-400">
+            No timeline events found
+          </p>
         </div>
       </div>
     {% endif %}
   </div>
-  
+
   {% if plot_json %}
     {# prettier-ignore-start #}
     <script>
