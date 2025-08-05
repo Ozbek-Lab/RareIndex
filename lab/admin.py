@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.contenttypes.models import ContentType
 from . import models
 
 class ProjectIndividualsInline(admin.TabularInline):
@@ -61,6 +62,14 @@ class IndividualAdmin(admin.ModelAdmin):
     autocomplete_fields = ["hpo_terms"]
     inlines = [IndividualProjectsInline]
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "status":
+            ct = ContentType.objects.get_for_model(self.model)
+            kwargs["queryset"] = models.Status.objects.filter(
+                content_type=ct
+            ) | models.Status.objects.filter(content_type__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def get_hpo_terms(self, obj):
         return ", ".join([term.label for term in obj.hpo_terms.all()])
 
@@ -75,6 +84,14 @@ class SampleAdmin(admin.ModelAdmin):
         "individual__full_name",  # Only direct or forward fields!
     ]
     date_hierarchy = "receipt_date"
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "status":
+            ct = ContentType.objects.get_for_model(self.model)
+            kwargs["queryset"] = models.Status.objects.filter(
+                content_type=ct
+            ) | models.Status.objects.filter(content_type__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_search_results(self, request, queryset, search_term):
         # Get the default search results
@@ -95,6 +112,14 @@ class TestAdmin(admin.ModelAdmin):
     list_filter = ["status", "performed_date", "test_type"]
     search_fields = ["sample__individual__lab_id", "test_type__name"]
     date_hierarchy = "performed_date"
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "status":
+            ct = ContentType.objects.get_for_model(self.model)
+            kwargs["queryset"] = models.Status.objects.filter(
+                content_type=ct
+            ) | models.Status.objects.filter(content_type__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(models.Status)
@@ -132,6 +157,14 @@ class AnalysisAdmin(admin.ModelAdmin):
     search_fields = ["test__sample__individual__lab_id", "type__name"]
     date_hierarchy = "performed_date"
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "status":
+            ct = ContentType.objects.get_for_model(self.model)
+            kwargs["queryset"] = models.Status.objects.filter(
+                content_type=ct
+            ) | models.Status.objects.filter(content_type__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(models.Task)
 class TaskAdmin(admin.ModelAdmin):
@@ -158,6 +191,14 @@ class TaskAdmin(admin.ModelAdmin):
     date_hierarchy = "created_at"
     raw_id_fields = ["project", "assigned_to", "created_by"]
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "status":
+            ct = ContentType.objects.get_for_model(self.model)
+            kwargs["queryset"] = models.Status.objects.filter(
+                content_type=ct
+            ) | models.Status.objects.filter(content_type__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(models.Project)
 class ProjectAdmin(admin.ModelAdmin):
@@ -175,6 +216,14 @@ class ProjectAdmin(admin.ModelAdmin):
     date_hierarchy = "created_at"
     raw_id_fields = ["created_by"]
     inlines = [ProjectIndividualsInline]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "status":
+            ct = ContentType.objects.get_for_model(self.model)
+            kwargs["queryset"] = models.Status.objects.filter(
+                content_type=ct
+            ) | models.Status.objects.filter(content_type__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_completion_percentage(self, obj):
         return f"{obj.get_completion_percentage()}%"
