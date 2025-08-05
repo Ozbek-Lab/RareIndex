@@ -1,4 +1,5 @@
 import random
+import time
 from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
@@ -46,7 +47,7 @@ class Command(BaseCommand):
             normal = User.objects.create_user('normal', 'normal@example.com', 'normal')
 
         # Create statuses if they don't exist
-        statuses = self._create_statuses(user)
+        all_statuses = self._create_statuses(user)
 
         # Create sample types if they don't exist
         sample_types = self._create_sample_types(user)
@@ -88,14 +89,15 @@ class Command(BaseCommand):
 
         all_individuals = []
         for i in range(options['families']):
-            family_id = f"RB_2025_{i+1:02d}"
+            # Generate unique family ID that doesn't conflict with existing ones
+            family_id = self._generate_unique_family_id(i+1)
             family = self._create_family(family_id, user)
             self._create_note(family, user)
-            self._create_tasks(family, user, statuses['completed'], project, options['tasks_per_object'])
-            mother = self._create_individual("Mother", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
+            self._create_tasks(family, user, all_statuses['individual']['completed'], project, options['tasks_per_object'])
+            mother = self._create_individual("Mother", family, user, institution, all_statuses['individual']['registered'], hpo_terms, is_index=False)
             self._create_note(mother, user)
             self._create_identifiers(mother, identifier_types, f"{family_id}.2", f"RD3.F{i+1:02d}.2", user )
-            father = self._create_individual("Father", family, user, institution, statuses['registered'], hpo_terms, is_index=False)
+            father = self._create_individual("Father", family, user, institution, all_statuses['individual']['registered'], hpo_terms, is_index=False)
             self._create_note(father, user)
             self._create_identifiers(father, identifier_types, f"{family_id}.3", f"RD3.F{i+1:02d}.3", user)
             all_individuals.extend([mother, father])
@@ -104,7 +106,7 @@ class Command(BaseCommand):
             if multi_child:
                 for child_num in range(1, 3):
                     proband = self._create_individual(
-                        f"Proband{child_num}", family, user, institution, statuses['active'], hpo_terms, mother=mother, father=father, is_index=True
+                        f"Proband{child_num}", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True
                     )
                     self._create_note(proband, user)
                     rb_code = f"{family_id}.1.{child_num}"
@@ -113,7 +115,7 @@ class Command(BaseCommand):
                     children.append(proband)
             else:
                 proband = self._create_individual(
-                    "Proband", family, user, institution, statuses['active'], hpo_terms, mother=mother, father=father, is_index=True
+                    "Proband", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True
                 )
                 self._create_note(proband, user)
                 rb_code = f"{family_id}.1"
@@ -122,7 +124,7 @@ class Command(BaseCommand):
                 children.append(proband)
             all_individuals.extend(children)
             for individual in [mother, father] + children:
-                self._create_tasks(individual, user, statuses['completed'], project, options['tasks_per_object'])
+                self._create_tasks(individual, user, all_statuses['individual']['completed'], project, options['tasks_per_object'])
             for individual in [mother, father] + children:
                 self._create_samples(
                     individual,
@@ -134,7 +136,7 @@ class Command(BaseCommand):
                     options['analyses_per_test'],
                     options['tasks_per_object'],
                     user,
-                    statuses,
+                    all_statuses,
                     project
                 )
 
@@ -158,28 +160,39 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('Successfully generated sample data'))
 
     def _create_statuses(self, user):
-        for type in [Individual, Sample, Test, Analysis]:
+        """Create statuses for each model type separately"""
+        all_statuses = {}
+        
+        for model_type in [Individual, Sample, Test, Analysis]:
+            model_name = model_type.__name__
             status_data = {
-                'registered': ('Registered', 'gray'),
-                'active': ('Active', 'green'),
-                'completed': ('Completed', 'blue'),
-                'cancelled': ('Cancelled', 'red'),
-                'pending': ('Pending', 'yellow'),
+                'registered': ('Registered', 'gray', 'fa-user-plus'),
+                'active': ('Active', 'green', 'fa-play'),
+                'completed': ('Completed', 'blue', 'fa-check-circle'),
+                'cancelled': ('Cancelled', 'red', 'fa-times-circle'),
+                'pending': ('Pending', 'yellow', 'fa-clock'),
             }
             
-            statuses = {}
-            for key, (name, color) in status_data.items():
+            model_statuses = {}
+            for key, (name, color, icon) in status_data.items():
                 status, _ = Status.objects.get_or_create(
                     name=name,
-                    content_type=ContentType.objects.get_for_model(type),
+                    content_type=ContentType.objects.get_for_model(model_type),
                     defaults={
                         'color': color,
+                        'icon': icon,
                         'created_by': user
                     }
                 )
-                statuses[key] = status
+                # Update icon if it doesn't exist
+                if not status.icon:
+                    status.icon = icon
+                    status.save()
+                model_statuses[key] = status
             
-            return statuses
+            all_statuses[model_name.lower()] = model_statuses
+        
+        return all_statuses
 
     def _create_sample_types(self, user):
         sample_type_names = ['Blood', 'Tissue', 'Saliva', 'Urine']
@@ -310,13 +323,13 @@ class Command(BaseCommand):
             )
             self._create_note(task, user, text=f"Auto note for Task {i+1}")
 
-    def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, statuses, project):
+    def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, all_statuses, project):
         for i in range(num_samples):
             # Create sample
             sample = Sample.objects.create(
                 individual=individual,
                 sample_type=random.choice(sample_types),
-                status=statuses['registered'],
+                status=all_statuses['sample']['registered'],
                 receipt_date=timezone.now() - timedelta(days=random.randint(1, 30)),
                 isolation_by=user,
                 created_by=user
@@ -324,7 +337,7 @@ class Command(BaseCommand):
             self._create_note(sample, user)
 
             # Create tasks for sample
-            self._create_tasks(sample, user, statuses['completed'], project, tasks_per_object)
+            self._create_tasks(sample, user, all_statuses['sample']['completed'], project, tasks_per_object)
 
             # Create tests for sample
             for j in range(tests_per_sample):
@@ -334,12 +347,12 @@ class Command(BaseCommand):
                     performed_by=user,
                     sample=sample,
                     created_by=user,
-                    status=statuses['active']
+                    status=all_statuses['test']['active']
                 )
                 self._create_note(test, user)
 
                 # Create tasks for test
-                self._create_tasks(test, user, statuses['completed'], project, tasks_per_object)
+                self._create_tasks(test, user, all_statuses['test']['completed'], project, tasks_per_object)
 
                 # Create analyses for test
                 for k in range(analyses_per_test):
@@ -348,13 +361,13 @@ class Command(BaseCommand):
                         performed_date=timezone.now() - timedelta(days=random.randint(1, 10)),
                         performed_by=user,
                         type=random.choice(analysis_types),
-                        status=statuses['active'],
+                        status=all_statuses['analysis']['active'],
                         created_by=user
                     )
                     self._create_note(analysis, user)
 
                     # Create tasks for analysis
-                    self._create_tasks(analysis, user, statuses['completed'], project, tasks_per_object)
+                    self._create_tasks(analysis, user, all_statuses['analysis']['completed'], project, tasks_per_object)
 
     def _create_identifier_types(self, user):
         identifier_type_data = {
@@ -367,27 +380,76 @@ class Command(BaseCommand):
         return IdentifierType.objects.all()
 
     def _create_identifiers(self, individual, identifier_types, lab_id, biobank_id, user):
-            CrossIdentifier.objects.create(
-                individual=individual,
-                id_type=identifier_types[0],
-                id_value=lab_id,
-                link=f"https://www.rareboost.com/individual/{lab_id}",
-                created_by=user
-            )
-            CrossIdentifier.objects.create(
-                individual=individual,
-                id_type=identifier_types[1],
-                id_value=biobank_id,
-                link=f"https://www.biobank.com/individual/{biobank_id}",
-                created_by=user
-            )
-            CrossIdentifier.objects.create(
-                individual=individual,
-                id_type=identifier_types[2],
-                id_value=random.randint(1000000000, 9999999999),
-                link=f"https://www.erdera.com/individual/{random.randint(1000000000, 9999999999)}",
-                created_by=user
-            )
+            # Create RareBoost identifier (check for uniqueness and avoid duplicates for same individual)
+            if not CrossIdentifier.objects.filter(id_type=identifier_types[0], id_value=lab_id).exists():
+                if not CrossIdentifier.objects.filter(individual=individual, id_type=identifier_types[0]).exists():
+                    CrossIdentifier.objects.create(
+                        individual=individual,
+                        id_type=identifier_types[0],
+                        id_value=lab_id,
+                        link=f"https://www.rareboost.com/individual/{lab_id}",
+                        created_by=user
+                    )
+            
+            # Create Biobank identifier (check for uniqueness and avoid duplicates for same individual)
+            if not CrossIdentifier.objects.filter(id_type=identifier_types[1], id_value=biobank_id).exists():
+                if not CrossIdentifier.objects.filter(individual=individual, id_type=identifier_types[1]).exists():
+                    CrossIdentifier.objects.create(
+                        individual=individual,
+                        id_type=identifier_types[1],
+                        id_value=biobank_id,
+                        link=f"https://www.biobank.com/individual/{biobank_id}",
+                        created_by=user
+                    )
+            
+            # Create ERDERA identifier (generate unique random ID and avoid duplicates for same individual)
+            if not CrossIdentifier.objects.filter(individual=individual, id_type=identifier_types[2]).exists():
+                erdera_id = self._generate_unique_erdera_id()
+                CrossIdentifier.objects.create(
+                    individual=individual,
+                    id_type=identifier_types[2],
+                    id_value=erdera_id,
+                    link=f"https://www.erdera.com/individual/{erdera_id}",
+                    created_by=user
+                )
+
+    def _generate_unique_family_id(self, family_number):
+        """Generate a unique family ID that doesn't conflict with existing ones."""
+        from lab.models import Family
+        import time
+        
+        # Start with the base pattern
+        base_id = f"RB_2025_{family_number:02d}"
+        
+        # Check if this ID already exists
+        counter = 0
+        family_id = base_id
+        while Family.objects.filter(family_id=family_id).exists():
+            counter += 1
+            family_id = f"{base_id}_{counter}"
+        
+        return family_id
+
+    def _generate_unique_erdera_id(self):
+        """Generate a unique ERDERA ID that doesn't conflict with existing ones."""
+        from lab.models import CrossIdentifier
+        from lab.models import IdentifierType
+        
+        # Get the ERDERA identifier type
+        erdera_type = IdentifierType.objects.filter(name='ERDERA').first()
+        if not erdera_type:
+            # If ERDERA type doesn't exist, just return a random number
+            return random.randint(1000000000, 9999999999)
+        
+        # Generate a unique random ID
+        max_attempts = 100
+        for attempt in range(max_attempts):
+            erdera_id = random.randint(1000000000, 9999999999)
+            if not CrossIdentifier.objects.filter(id_type=erdera_type, id_value=str(erdera_id)).exists():
+                return erdera_id
+        
+        # If we can't find a unique ID after max attempts, add a timestamp
+        return int(f"{random.randint(100000000, 999999999)}{int(time.time()) % 10000}")
 
     def _create_note(self, obj, user, text=None):
         """Create a note for the given object if it supports notes."""
