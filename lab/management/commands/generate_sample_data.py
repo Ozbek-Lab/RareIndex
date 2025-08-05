@@ -91,14 +91,23 @@ class Command(BaseCommand):
         for i in range(options['families']):
             # Generate unique family ID that doesn't conflict with existing ones
             family_id = self._generate_unique_family_id(i+1)
-            family = self._create_family(family_id, user)
-            self._create_note(family, user)
-            self._create_tasks(family, user, all_statuses['individual']['completed'], project, options['tasks_per_object'])
-            mother = self._create_individual("Mother", family, user, institution, all_statuses['individual']['registered'], hpo_terms, is_index=False)
-            self._create_note(mother, user)
+            
+            # Family creation date - start of the process
+            family_creation_date = timezone.now() - timedelta(days=random.randint(30, 365))
+            family = self._create_family(family_id, user, family_creation_date)
+            self._create_note(family, user, creation_date=family_creation_date)
+            self._create_tasks(family, user, all_statuses['individual']['completed'], project, options['tasks_per_object'], family_creation_date)
+            
+            # Mother creation date - after family creation
+            mother_creation_date = family_creation_date + timedelta(days=random.randint(1, 3))
+            mother = self._create_individual("Mother", family, user, institution, all_statuses['individual']['registered'], hpo_terms, is_index=False, creation_date=mother_creation_date)
+            self._create_note(mother, user, creation_date=mother_creation_date)
             self._create_identifiers(mother, identifier_types, f"{family_id}.2", f"RD3.F{i+1:02d}.2", user )
-            father = self._create_individual("Father", family, user, institution, all_statuses['individual']['registered'], hpo_terms, is_index=False)
-            self._create_note(father, user)
+            
+            # Father creation date - after family creation
+            father_creation_date = family_creation_date + timedelta(days=random.randint(1, 3))
+            father = self._create_individual("Father", family, user, institution, all_statuses['individual']['registered'], hpo_terms, is_index=False, creation_date=father_creation_date)
+            self._create_note(father, user, creation_date=father_creation_date)
             self._create_identifiers(father, identifier_types, f"{family_id}.3", f"RD3.F{i+1:02d}.3", user)
             all_individuals.extend([mother, father])
             multi_child = (i % 2 == 0)
@@ -107,7 +116,7 @@ class Command(BaseCommand):
                 for child_num in range(1, 3):
                     child_creation_date = family_creation_date + timedelta(days=random.randint(2, 5))
                     proband = self._create_individual(
-                        f"Proband{child_num}", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True
+                        f"Proband{child_num}", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True, creation_date=child_creation_date
                     )
                     self._create_note(proband, user, creation_date=child_creation_date)
                     rb_code = f"{family_id}.1.{child_num}"
@@ -117,7 +126,7 @@ class Command(BaseCommand):
             else:
                 child_creation_date = family_creation_date + timedelta(days=random.randint(2, 5))
                 proband = self._create_individual(
-                    "Proband", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True
+                    "Proband", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True, creation_date=child_creation_date
                 )
                 self._create_note(proband, user, creation_date=child_creation_date)
                 rb_code = f"{family_id}.1"
@@ -126,7 +135,9 @@ class Command(BaseCommand):
                 children.append(proband)
             all_individuals.extend(children)
             for individual in [mother, father] + children:
-                self._create_tasks(individual, user, all_statuses['individual']['completed'], project, options['tasks_per_object'])
+                # Create tasks for individual with future dates based on individual creation
+                individual_base_date = individual.created_at + timedelta(days=random.randint(1, 21))
+                self._create_tasks(individual, user, all_statuses['individual']['completed'], project, options['tasks_per_object'], individual_base_date)
             for individual in [mother, father] + children:
                 self._create_samples(
                     individual,
@@ -145,7 +156,7 @@ class Command(BaseCommand):
         # Create additional projects and assign random individuals to them
         project_names = ["Cancer Study", "Rare Disease Cohort", "Control Group"]
         for pname in project_names:
-            project_creation_date = timezone.now() + timedelta(days=random.randint(1, 60))
+            project_creation_date = timezone.now() - timedelta(days=random.randint(30, 365))
             proj = Project.objects.create(
                 name=pname,
                 description=f"Auto-generated project: {pname}",
@@ -267,7 +278,7 @@ class Command(BaseCommand):
         return institution
 
     def _create_project(self, user, status):
-        project_creation_date = timezone.now() + timedelta(days=random.randint(1, 30))
+        project_creation_date = timezone.now() - timedelta(days=random.randint(30, 365))
         project, _ = Project.objects.get_or_create(
             name='Sample Data Project',
             defaults={
@@ -348,8 +359,8 @@ class Command(BaseCommand):
 
     def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, all_statuses, project):
         for i in range(num_samples):
-            # Start with a future base date for this sample
-            base_date = timezone.now() + timedelta(days=random.randint(1, 30))
+            # Start with a realistic base date for this sample (after individual creation)
+            base_date = individual.created_at + timedelta(days=random.randint(7, 30))
             
             # Sample receipt date (when sample arrives at lab)
             sample_receipt_date = base_date
@@ -361,17 +372,17 @@ class Command(BaseCommand):
             sample = Sample.objects.create(
                 individual=individual,
                 sample_type=random.choice(sample_types),
-                status=statuses['registered'],
+                status=all_statuses['sample']['registered'],
                 receipt_date=sample_receipt_date,
                 isolation_by=user,
                 created_by=user,
                 created_at=sample_creation_date,
                 updated_at=sample_creation_date
             )
-            self._create_note(sample, user, sample_creation_date)
+            self._create_note(sample, user, creation_date=sample_creation_date)
 
-            # Create tasks for sample
-            self._create_tasks(sample, user, all_statuses['sample']['completed'], project, tasks_per_object)
+            # Create tasks for sample (due 1-2 weeks after sample creation)
+            self._create_tasks(sample, user, all_statuses['sample']['completed'], project, tasks_per_object, sample_creation_date)
 
             # Create tests for sample
             for j in range(tests_per_sample):
@@ -384,12 +395,14 @@ class Command(BaseCommand):
                     performed_by=user,
                     sample=sample,
                     created_by=user,
-                    status=all_statuses['test']['active']
+                    status=all_statuses['test']['active'],
+                    created_at=test_performed_date,
+                    updated_at=test_performed_date
                 )
-                self._create_note(test, user, test_performed_date)
+                self._create_note(test, user, creation_date=test_performed_date)
 
-                # Create tasks for test
-                self._create_tasks(test, user, all_statuses['test']['completed'], project, tasks_per_object)
+                # Create tasks for test (due 1-2 weeks after test performance)
+                self._create_tasks(test, user, all_statuses['test']['completed'], project, tasks_per_object, test_performed_date)
 
                 # Create analyses for test
                 for k in range(analyses_per_test):
@@ -402,12 +415,13 @@ class Command(BaseCommand):
                         performed_by=user,
                         type=random.choice(analysis_types),
                         status=all_statuses['analysis']['active'],
-                        created_by=user
+                        created_by=user,
+                        created_at=analysis_performed_date
                     )
-                    self._create_note(analysis, user, analysis_performed_date)
+                    self._create_note(analysis, user, creation_date=analysis_performed_date)
 
-                    # Create tasks for analysis
-                    self._create_tasks(analysis, user, all_statuses['analysis']['completed'], project, tasks_per_object)
+                    # Create tasks for analysis (due 1-2 weeks after analysis performance)
+                    self._create_tasks(analysis, user, all_statuses['analysis']['completed'], project, tasks_per_object, analysis_performed_date)
 
     def _create_identifier_types(self, user):
         identifier_type_data = {

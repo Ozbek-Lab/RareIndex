@@ -238,9 +238,6 @@ class StatusMixin:
             self.status = new_status
             self.save()
 
-
-=======
->>>>>>> 4a70529b6cc5b02b90f85829be05705da1f8b4ac
 class Individual(models.Model):
     id = models.AutoField(primary_key=True)
     full_name = EncryptedCharField(max_length=255)
