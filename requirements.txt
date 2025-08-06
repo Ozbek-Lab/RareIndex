@@ -18,4 +18,6 @@ django-encrypted-model-fields
 django-simple-history
 # Use the latest git version of django-notifications-hq for Python 3.12+ compatibility
 openpyxl
+numpy
+plotly-express
 git+https://github.com/django-notifications/django-notifications.git@master#egg=django-notifications-hq

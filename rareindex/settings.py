@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "simple_history",
     "notifications",
     "openpyxl",
+    "plotly_express",
 ]
 
 MIDDLEWARE = [

@@ -17,9 +17,12 @@ urlpatterns = [
         views.hpo_network_visualization,
         name="hpo_network_visualization",
     ),
+    path("plots/", views.plots_page, name="plots"),
+    path("pie-chart/<str:model_name>/<str:attribute_name>/", views.pie_chart_view, name="pie_chart"),
     path("get-select-options/", views.get_select_options, name="get_select_options"),
     path("individual/<int:pk>/timeline/", views.individual_timeline, name="individual_timeline"),
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
+    path("get-stats-counts/", views.get_stats_counts, name="get_stats_counts"),
     
     # path("", views.dashboard, name="dashboard"),
     # path("select/search/", views.select_search, name="select_search"),

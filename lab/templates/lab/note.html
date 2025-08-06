@@ -118,7 +118,7 @@
 {% partialdef dropdown %}
 <div x-data="{ open: false }">
   <button @click="open = !open">{% include 'lab/note.html#summary' %}</button>
-  <div x-show="open" @click.outside="open = false">
+  <div x-show="open" @click.outside="open=false">
     {% include 'lab/note.html#list' %}
   </div>
 </div>
