@@ -114,3 +114,11 @@ def filter_by_assigned(tasks, user_id):
             if hasattr(task, "assigned_to") and str(task.assigned_to.id) == str(user_id)
         ]
     return tasks
+
+
+@register.filter
+def js_bool(value):
+    """Convert Python boolean to JavaScript boolean"""
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    return value

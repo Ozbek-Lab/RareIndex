@@ -929,3 +929,386 @@ def individual_timeline(request, pk):
         return render(request, 'lab/individual.html#timeline', context)
     else:
         return render(request, 'lab/individual.html', context)
+
+
+@login_required
+def plots_page(request):
+    """View for the plots page showing various data visualizations."""
+    from django.db.models import Count, Q
+    from .models import Individual, Sample, Test, Analysis, Status, SampleType, TestType, AnalysisType, Institution
+    import plotly.graph_objects as go
+    import plotly.express as px
+    import json
+    
+    # Apply global filters
+    active_filters = request.session.get('active_filters', {})
+    filter_conditions = Q()
+    
+    if active_filters:
+        for filter_key, filter_values in active_filters.items():
+            if filter_values:  # Only apply non-empty filters
+                # Handle different filter types
+                if isinstance(filter_values, list):
+                    if filter_values:  # Non-empty list
+                        filter_conditions &= Q(**{filter_key: filter_values[0]})  # Take first value for now
+                else:
+                    filter_conditions &= Q(**{filter_key: filter_values})
+    
+    # Get counts for stats cards with filters applied
+    individuals_queryset = Individual.objects.all()
+    samples_queryset = Sample.objects.all()
+    tests_queryset = Test.objects.all()
+    analyses_queryset = Analysis.objects.all()
+    
+    if filter_conditions:
+        individuals_queryset = individuals_queryset.filter(filter_conditions)
+        samples_queryset = samples_queryset.filter(filter_conditions)
+        tests_queryset = tests_queryset.filter(filter_conditions)
+        analyses_queryset = analyses_queryset.filter(filter_conditions)
+    
+    individuals_count = individuals_queryset.count()
+    samples_count = samples_queryset.count()
+    tests_count = tests_queryset.count()
+    analyses_count = analyses_queryset.count()
+    
+    # Prepare distribution plots data
+    distribution_plots = []
+    
+    # 1. Individual Status Distribution
+    status_counts = individuals_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
+    if status_counts:
+        fig = go.Figure(data=[
+            go.Pie(
+                labels=[item['status__name'] for item in status_counts],
+                values=[item['count'] for item in status_counts],
+                hole=0.3,
+                marker_colors=['#636EFA', '#EF553B', '#00cc96', '#ab63fa', '#FFA15A', '#19d3f3']
+            )
+        ])
+        fig.update_layout(
+            title='Individual Status Distribution',
+            height=300,
+            template=None
+        )
+        
+        distribution_plots.append({
+            'id': 'individual-status',
+            'title': 'Individual Status Distribution',
+            'description': 'Distribution of individuals by their current status',
+            'icon': 'users',
+            'chart_data': fig.to_dict(),
+            'stats': [
+                {'label': 'Total Individuals', 'value': individuals_count},
+                {'label': 'Active Statuses', 'value': status_counts.count()}
+            ]
+        })
+    
+    # 2. Sample Type Distribution
+    sample_type_counts = samples_queryset.values('sample_type__name').annotate(count=Count('id')).order_by('-count')
+    if sample_type_counts:
+        fig = go.Figure(data=[
+            go.Pie(
+                labels=[item['sample_type__name'] for item in sample_type_counts],
+                values=[item['count'] for item in sample_type_counts],
+                hole=0.3,
+                marker_colors=['#00cc96', '#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF']
+            )
+        ])
+        fig.update_layout(
+            title='Sample Type Distribution',
+            height=300,
+            template=None
+        )
+        
+        distribution_plots.append({
+            'id': 'sample-type',
+            'title': 'Sample Type Distribution',
+            'description': 'Distribution of samples by their type',
+            'icon': 'vial',
+            'chart_data': fig.to_dict(),
+            'stats': [
+                {'label': 'Total Samples', 'value': samples_count},
+                {'label': 'Sample Types', 'value': sample_type_counts.count()}
+            ]
+        })
+    
+    # 3. Test Type Distribution
+    test_type_counts = tests_queryset.values('test_type__name').annotate(count=Count('id')).order_by('-count')
+    if test_type_counts:
+        fig = go.Figure(data=[
+            go.Pie(
+                labels=[item['test_type__name'] for item in test_type_counts],
+                values=[item['count'] for item in test_type_counts],
+                hole=0.3,
+                marker_colors=['#ab63fa', '#FF6692', '#B6E880', '#FF97FF', '#FECB52', '#636EFA']
+            )
+        ])
+        fig.update_layout(
+            title='Test Type Distribution',
+            height=300,
+            template=None
+        )
+        
+        distribution_plots.append({
+            'id': 'test-type',
+            'title': 'Test Type Distribution',
+            'description': 'Distribution of tests by their type',
+            'icon': 'flask-vial',
+            'chart_data': fig.to_dict(),
+            'stats': [
+                {'label': 'Total Tests', 'value': tests_count},
+                {'label': 'Test Types', 'value': test_type_counts.count()}
+            ]
+        })
+    
+    # 4. Analysis Type Distribution
+    analysis_type_counts = analyses_queryset.values('type__name').annotate(count=Count('id')).order_by('-count')
+    if analysis_type_counts:
+        fig = go.Figure(data=[
+            go.Pie(
+                labels=[item['type__name'] for item in analysis_type_counts],
+                values=[item['count'] for item in analysis_type_counts],
+                hole=0.3,
+                marker_colors=['#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52']
+            )
+        ])
+        fig.update_layout(
+            title='Analysis Type Distribution',
+            height=300,
+            template=None
+        )
+        
+        distribution_plots.append({
+            'id': 'analysis-type',
+            'title': 'Analysis Type Distribution',
+            'description': 'Distribution of analyses by their type',
+            'icon': 'laptop',
+            'chart_data': fig.to_dict(),
+            'stats': [
+                {'label': 'Total Analyses', 'value': analyses_count},
+                {'label': 'Analysis Types', 'value': analysis_type_counts.count()}
+            ]
+        })
+    
+    # 5. Institution Distribution
+    institution_counts = individuals_queryset.values('institution__name').annotate(count=Count('id')).order_by('-count')
+    if institution_counts:
+        fig = go.Figure(data=[
+            go.Pie(
+                labels=[item['institution__name'] for item in institution_counts],
+                values=[item['count'] for item in institution_counts],
+                hole=0.3,
+                marker_colors=['#636EFA', '#EF553B', '#00cc96', '#ab63fa', '#FFA15A', '#19d3f3']
+            )
+        ])
+        fig.update_layout(
+            title='Institution Distribution',
+            height=300,
+            template=None
+        )
+        
+        distribution_plots.append({
+            'id': 'institution',
+            'title': 'Institution Distribution',
+            'description': 'Distribution of individuals by institution',
+            'icon': 'building-columns',
+            'chart_data': fig.to_dict(),
+            'stats': [
+                {'label': 'Total Individuals', 'value': individuals_count},
+                {'label': 'Institutions', 'value': institution_counts.count()}
+            ]
+        })
+    
+    # 6. Sample Status Distribution
+    sample_status_counts = samples_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
+    if sample_status_counts:
+        fig = go.Figure(data=[
+            go.Pie(
+                labels=[item['status__name'] for item in sample_status_counts],
+                values=[item['count'] for item in sample_status_counts],
+                hole=0.3,
+                marker_colors=['#00cc96', '#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF']
+            )
+        ])
+        fig.update_layout(
+            title='Sample Status Distribution',
+            height=300,
+            template=None
+        )
+        
+        distribution_plots.append({
+            'id': 'sample-status',
+            'title': 'Sample Status Distribution',
+            'description': 'Distribution of samples by their current status',
+            'icon': 'vial',
+            'chart_data': fig.to_dict(),
+            'stats': [
+                {'label': 'Total Samples', 'value': samples_count},
+                {'label': 'Active Statuses', 'value': sample_status_counts.count()}
+            ]
+        })
+    
+    context = {
+        'individuals_count': individuals_count,
+        'samples_count': samples_count,
+        'tests_count': tests_count,
+        'analyses_count': analyses_count,
+        'distribution_plots': distribution_plots,
+    }
+
+    
+    if request.htmx:
+        return render(request, 'lab/plots.html#plots-content', context)
+    else:
+        return render(request, 'lab/plots.html', context)
+
+
+@login_required
+def pie_chart_view(request, model_name, attribute_name):
+    """
+    Generate a pie chart for any model and attribute combination.
+    
+    Args:
+        model_name: The name of the Django model (e.g., 'Individual', 'Sample')
+        attribute_name: The name of the attribute to group by (e.g., 'status__name', 'type__name')
+    """
+    from django.apps import apps
+    from django.db.models import Count, Q
+    import plotly.graph_objects as go
+    import json
+    
+    try:
+        # Get the model class
+        model_class = apps.get_model('lab', model_name)
+        
+        # Validate that the attribute exists
+        if not hasattr(model_class, attribute_name.split('__')[0]):
+            return JsonResponse({
+                'error': f'Attribute "{attribute_name}" does not exist on model "{model_name}"'
+            }, status=400)
+        
+        # Start with base queryset
+        queryset = model_class.objects.all()
+        
+        # Apply global filters
+        active_filters = request.session.get('active_filters', {})
+        if active_filters:
+            filter_conditions = Q()
+            
+            for filter_key, filter_values in active_filters.items():
+                if filter_values:  # Only apply non-empty filters
+                    # Handle different filter types
+                    if isinstance(filter_values, list):
+                        if filter_values:  # Non-empty list
+                            filter_conditions &= Q(**{filter_key: filter_values[0]})  # Take first value for now
+                    else:
+                        filter_conditions &= Q(**{filter_key: filter_values})
+            
+            if filter_conditions:
+                queryset = queryset.filter(filter_conditions)
+        
+        # Get the data with filters applied
+        queryset = queryset.values(attribute_name).annotate(count=Count('id')).order_by('-count')
+        
+        if not queryset:
+            return JsonResponse({
+                'error': f'No data found for {model_name}.{attribute_name}'
+            }, status=404)
+        
+        # Prepare data for pie chart
+        labels = []
+        values = []
+        
+        for item in queryset:
+            # Handle None values
+            label = item[attribute_name] if item[attribute_name] is not None else 'Unknown'
+            labels.append(str(label))
+            values.append(item['count'])
+        
+        # Create pie chart
+        fig = go.Figure(data=[
+            go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.3,  # Creates a donut chart
+                textinfo='label+percent',
+                textposition='outside',
+                marker=dict(colors=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'])
+            )
+        ])
+        
+        fig.update_layout(
+            title=f'{model_name} Distribution by {attribute_name.replace("__", " ").title()}',
+            height=400,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+        
+        # Calculate percentages
+        total = sum(values)
+        data_with_percentages = []
+        for label, value in zip(labels, values):
+            percentage = (value / total * 100) if total > 0 else 0
+            data_with_percentages.append((label, value, percentage))
+        
+        # Prepare response data
+        chart_data = {
+            'chart_json': json.dumps(fig.to_dict()),
+            'model_name': model_name,
+            'attribute_name': attribute_name,
+            'total_count': total,
+            'unique_values': len(values),
+            'data': data_with_percentages
+        }
+        
+        if request.htmx:
+            return render(request, 'lab/pie_chart_partial.html', chart_data)
+        else:
+            return render(request, 'lab/pie_chart.html', chart_data)
+            
+    except LookupError:
+        return JsonResponse({
+            'error': f'Model "{model_name}" not found in app "lab"'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Error generating pie chart: {str(e)}'
+        }, status=500)
+
+
+@login_required
+def get_stats_counts(request):
+    from .models import Individual, Sample, Test, Analysis
+    from django.db.models import Q
+    active_filters = request.session.get('active_filters', {})
+    filter_conditions = Q()
+    if active_filters:
+        for filter_key, filter_values in active_filters.items():
+            if filter_values:
+                if isinstance(filter_values, list):
+                    if filter_values:
+                        filter_conditions &= Q(**{filter_key: filter_values[0]})
+                else:
+                    filter_conditions &= Q(**{filter_key: filter_values})
+    individuals_queryset = Individual.objects.all()
+    samples_queryset = Sample.objects.all()
+    tests_queryset = Test.objects.all()
+    analyses_queryset = Analysis.objects.all()
+    if filter_conditions:
+        individuals_queryset = individuals_queryset.filter(filter_conditions)
+        samples_queryset = samples_queryset.filter(filter_conditions)
+        tests_queryset = tests_queryset.filter(filter_conditions)
+        analyses_queryset = analyses_queryset.filter(filter_conditions)
+    data = {
+        'individuals': individuals_queryset.count(),
+        'samples': samples_queryset.count(),
+        'tests': tests_queryset.count(),
+        'analyses': analyses_queryset.count(),
+    }
+    return JsonResponse(data)

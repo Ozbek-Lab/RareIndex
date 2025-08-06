@@ -3,123 +3,123 @@
 
 
 {% partialdef drawer %}
-<!-- Alpine.js Right-side Drawer -->
-<div x-show="open" x-cloak>
-  <!-- Overlay -->
-  <div x-show="open" @click="open = false" class="fixed inset-0 bg-black bg-opacity-30 z-40 transition-opacity duration-200" x-transition.opacity></div>
+  <!-- Alpine.js Right-side Drawer -->
+  <div x-show="open" x-cloak>
+    <!-- Overlay -->
+    <div x-show="open" @click="open=false" class="fixed inset-0 bg-black bg-opacity-30 z-40 transition-opacity duration-200" x-transition.opacity></div>
 
-  <!-- Drawer -->
-  <aside
-    x-show="open"
-    x-transition:enter="transition transform duration-300"
-    x-transition:enter-start="translate-x-full"
-    x-transition:enter-end="translate-x-0"
-    x-transition:leave="transition transform duration-200"
-    x-transition:leave-start="translate-x-0"
-    x-transition:leave-end="translate-x-full"
-    class="fixed top-0 right-0 h-full w-80 bg-white dark:bg-gray-800 shadow-lg z-50 flex flex-col"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="filter-drawer-label"
-  >
-    <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-      <h5 id="filter-drawer-label" class="text-base font-semibold text-gray-700 dark:text-gray-200">Filters</h5>
-      <button @click="open = false" type="button" class="text-gray-400 hover:text-gray-700 dark:hover:text-white focus:outline-none">
-        <i class="fa-solid fa-circle-xmark"></i>
-      </button>
-    </div>
-    <div class="p-4 flex-1 overflow-y-auto space-y-6">
-      <!-- Individuals -->
-      <div>
-        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-        {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
-          {% partial generic-search %}
-        {% endwith %}
-        {% with app_label='lab' model_name='Individual' %}
-          {% partial generic-status-filter %}
-        {% endwith %}
-      </h6>
+    <!-- Drawer -->
+    <aside
+      x-show="open"
+      x-transition:enter="transition transform duration-300"
+      x-transition:enter-start="translate-x-full"
+      x-transition:enter-end="translate-x-0"
+      x-transition:leave="transition transform duration-200"
+      x-transition:leave-start="translate-x-0"
+      x-transition:leave-end="translate-x-full"
+      class="fixed top-0 right-0 h-full w-80 bg-white dark:bg-gray-800 shadow-lg z-50 flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="filter-drawer-label"
+    >
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <h5 id="filter-drawer-label" class="text-base font-semibold text-gray-700 dark:text-gray-200">Filters</h5>
+        <button @click="open=false" type="button" class="text-gray-400 hover:text-gray-700 dark:hover:text-white focus:outline-none">
+          <i class="fa-solid fa-circle-xmark"></i>
+        </button>
       </div>
-      <!-- Samples -->
-      <div>
-        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+      <div class="p-4 flex-1 overflow-y-auto space-y-6">
+        <!-- Individuals -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
+            {% partial generic-search %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Individual' %}
+            {% partial generic-status-filter %}
+          {% endwith %}
         </h6>
-        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
-          {% partial generic-search %}
-        {% endwith %}
-        {% with app_label='lab' model_name='Sample' field_name='sample_type' label='Sample Type' icon_class='fa-vial' %}
-          {% partial generic-select %}
-        {% endwith %}
-        {% with app_label='lab' model_name='Sample' %}
-          {% partial generic-status-filter %}
-        {% endwith %}
+        </div>
+        <!-- Samples -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
+            {% partial generic-search %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Sample' field_name='sample_type' label='Sample Type' icon_class='fa-vial' %}
+            {% partial generic-select %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Sample' %}
+            {% partial generic-status-filter %}
+          {% endwith %}
+        </div>
+        <!-- Tests -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
+            {% partial generic-search %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Test' field_name='test_type' label='Test Type' icon_class='fa-flask-vial' %}
+            {% partial generic-select %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Test' %}
+            {% partial generic-status-filter %}
+          {% endwith %}
+        </div>
+        <!-- Analyses -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
+            {% partial generic-search %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Analysis' field_name='analysis_type' label='Analysis Type' icon_class='fa-laptop' %}
+            {% partial generic-select %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Analysis' %}
+            {% partial generic-status-filter %}
+          {% endwith %}
+        </div>
+        <!-- Institutions -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' %}
+            {% partial generic-search %}
+          {% endwith %}
+        </div>
+        <!-- Projects -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' %}
+            {% partial generic-search %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Project' %}
+            {% partial generic-status-filter %}
+          {% endwith %}
+        </div>
+        <!-- Tasks -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Task' icon_class='fa-list-check' %}
+            {% partial generic-search %}
+          {% endwith %}
+        </div>
+        <!-- HPO Terms -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' %}
+            {% partial generic-search %}
+          {% endwith %}
+        </div>
       </div>
-      <!-- Tests -->
-      <div>
-        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-        </h6>
-        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
-          {% partial generic-search %}
-        {% endwith %}
-        {% with app_label='lab' model_name='Test' field_name='test_type' label='Test Type' icon_class='fa-flask-vial' %}
-          {% partial generic-select %}
-        {% endwith %}
-        {% with app_label='lab' model_name='Test' %}
-          {% partial generic-status-filter %}
-        {% endwith %}
-      </div>
-      <!-- Analyses -->
-      <div>
-        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-        </h6>
-        {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
-          {% partial generic-search %}
-        {% endwith %}
-        {% with app_label='lab' model_name='Analysis' field_name='analysis_type' label='Analysis Type' icon_class='fa-laptop' %}
-          {% partial generic-select %}
-        {% endwith %}
-        {% with app_label='lab' model_name='Analysis' %}
-          {% partial generic-status-filter %}
-        {% endwith %}
-      </div>
-      <!-- Institutions -->
-      <div>
-        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-        </h6>
-        {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' %}
-          {% partial generic-search %}
-        {% endwith %}
-      </div>
-      <!-- Projects -->
-      <div>
-        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-        </h6>
-        {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' %}
-          {% partial generic-search %}
-        {% endwith %}
-        {% with app_label='lab' model_name='Project' %}
-          {% partial generic-status-filter %}
-        {% endwith %}
-      </div>
-      <!-- Tasks -->
-      <div>
-        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-        </h6>
-        {% with app_label='lab' model_name='Task' icon_class='fa-list-check' %}
-          {% partial generic-search %}
-        {% endwith %}
-      </div>
-      <!-- HPO Terms -->
-      <div>
-        <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-        </h6>
-        {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' %}
-          {% partial generic-search %}
-        {% endwith %}
-      </div>
-    </div>
-  </aside>
-</div>
+    </aside>
+  </div>
 {% endpartialdef drawer %}
 
 {% partialdef indicator %}
@@ -470,6 +470,185 @@
   </div>
 {% endpartialdef hpo-network-visualization-section %}
 
+{% partialdef plots-section %}
+  <div class="space-y-6">
+    <!-- Welcome Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        <i class="fas fa-chart-bar text-indigo-500 mr-2"></i>
+        Data Visualizations
+      </h2>
+      <p class="text-gray-600 dark:text-gray-300 mb-4">
+        Explore your laboratory data through interactive charts and graphs. This section provides various visualizations to help you understand patterns and trends in your data.
+      </p>
+      
+      <!-- Quick Stats Cards -->
+      <div id="stats-cards-loading" class="hidden text-center py-4"><span class="animate-spin inline-block w-6 h-6 border-4 border-blue-400 border-t-transparent rounded-full"></span> Loading stats...</div>
+      <div id="stats-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
+          <div class="flex items-center">
+            <i class="fas fa-users text-2xl mr-3"></i>
+            <div>
+              <p class="text-sm opacity-90">Total Individuals</p>
+              <p class="text-2xl font-bold" id="stat-individuals">{{ individuals_count|default:"0" }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
+          <div class="flex items-center">
+            <i class="fas fa-vial text-2xl mr-3"></i>
+            <div>
+              <p class="text-sm opacity-90">Total Samples</p>
+              <p class="text-2xl font-bold" id="stat-samples">{{ samples_count|default:"0" }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
+          <div class="flex items-center">
+            <i class="fas fa-flask-vial text-2xl mr-3"></i>
+            <div>
+              <p class="text-sm opacity-90">Total Tests</p>
+              <p class="text-2xl font-bold" id="stat-tests">{{ tests_count|default:"0" }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-4 text-white">
+          <div class="flex items-center">
+            <i class="fas fa-laptop text-2xl mr-3"></i>
+            <div>
+              <p class="text-sm opacity-90">Total Analyses</p>
+              <p class="text-2xl font-bold" id="stat-analyses">{{ analyses_count|default:"0" }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Distribution Plots -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {% for plot_data in distribution_plots %}
+        {% partial plot %}
+      {% endfor %}
+    </div>
+
+    <!-- Interactive Pie Chart Generator -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        <i class="fas fa-chart-pie text-indigo-500 mr-2"></i>
+        Interactive Pie Chart Generator
+      </h3>
+      <div class="mb-4">
+        <h4 class="text-md font-semibold mb-2">Chart will be displayed here</h4>
+        <div id="dynamic-pie-chart-container" class="hidden">
+          <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <div id="dynamic-pie-chart" class="h-96"></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Model
+          </label>
+          <select id="model-select" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">Select Model</option>
+            <option value="Individual">Individual</option>
+            <option value="Sample">Sample</option>
+            <option value="Test">Test</option>
+            <option value="Analysis">Analysis</option>
+            <option value="Project">Project</option>
+            <option value="Task">Task</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Attribute
+          </label>
+          <select id="attribute-select" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">Select Attribute</option>
+            <option value="status__name">Status</option>
+            <option value="type__name">Type</option>
+            <option value="institution__name">Institution</option>
+            <option value="project__name">Project</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button 
+            id="generate-pie-chart"
+            class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
+            <i class="fas fa-chart-pie mr-2"></i>
+            Generate Chart
+          </button>
+        </div>
+      </div>
+      <!-- Loading Indicator -->
+      <div id="loading-indicator" class="htmx-indicator hidden">
+        <div class="flex items-center justify-center py-4">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <span class="ml-2 text-gray-600">Generating chart...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Controls -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        <i class="fas fa-sliders-h text-indigo-500 mr-2"></i>
+        Chart Controls
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Date Range
+          </label>
+          <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="365">Last year</option>
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Chart Type
+          </label>
+          <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="bar">Bar Chart</option>
+            <option value="line" selected>Line Chart</option>
+            <option value="pie">Pie Chart</option>
+            <option value="scatter">Scatter Plot</option>
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Data Source
+          </label>
+          <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="all" selected>All Data</option>
+            <option value="individuals">Individuals Only</option>
+            <option value="samples">Samples Only</option>
+            <option value="tests">Tests Only</option>
+            <option value="analyses">Analyses Only</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="mt-4 flex space-x-3">
+        <button class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
+          <i class="fas fa-refresh mr-2"></i>
+          Refresh Charts
+        </button>
+        <button class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors">
+          <i class="fas fa-download mr-2"></i>
+          Export Data
+        </button>
+      </div>
+    </div>
+  </div>
+{% endpartialdef plots-section %}
+
 
 {% partialdef hpo-network-visualization %}
   <div class="grid grid-cols-12">
@@ -635,6 +814,11 @@
       <div x-show="activeItem === 'notifications'" id="notifications-content">
         <!-- Notifications content will be loaded here via HTMX -->
       </div>
+      <div x-show="activeItem === 'plots'" id="plots-content">
+        {% with view="page" %}
+          {% partial plots-section %}
+        {% endwith %}
+      </div>
     </div>
   </main>
 </div>
@@ -726,6 +910,19 @@
             
             // Load notifications content via HTMX
             htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content').then(() => {
+              // Content loaded successfully
+            });
+            return;
+          }
+          
+          // Handle plots navigation
+          if (pageName === 'plots') {
+            this.activeItem = 'plots';
+            this.detailHtml = null;
+            this.updateURL();
+            
+            // Load plots content via HTMX
+            htmx.ajax('GET', '{% url "lab:plots" %}', '#plots-content').then(() => {
               // Content loaded successfully
             });
             return;
@@ -933,6 +1130,150 @@
         }
       };
     }
+
+    // Interactive Pie Chart Generator
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('Setting up interactive pie chart generator...');
+      
+      // Function to setup pie chart generator
+      function setupPieChartGenerator() {
+        const generatePieChartBtn = document.getElementById('generate-pie-chart');
+        const modelSelect = document.getElementById('model-select');
+        const attributeSelect = document.getElementById('attribute-select');
+        const chartContainer = document.getElementById('dynamic-pie-chart-container');
+        const chartDiv = document.getElementById('dynamic-pie-chart');
+        
+        console.log('Button found:', generatePieChartBtn);
+        console.log('Model select found:', modelSelect);
+        console.log('Attribute select found:', attributeSelect);
+        console.log('Chart container found:', chartContainer);
+        console.log('Chart div found:', chartDiv);
+        
+        if (!generatePieChartBtn) {
+          console.error('Generate chart button not found!');
+          return;
+        }
+        
+        generatePieChartBtn.addEventListener('click', function() {
+          console.log('Generate Chart button clicked');
+          const model = modelSelect.value;
+          const attribute = attributeSelect.value;
+          
+          console.log('Selected model:', model);
+          console.log('Selected attribute:', attribute);
+          
+          if (!model || !attribute) {
+            alert('Please select both model and attribute');
+            return;
+          }
+          
+          // Show loading state
+          generatePieChartBtn.disabled = true;
+          generatePieChartBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
+          
+          // Make request to pie chart view
+          const url = `/pie-chart/${model}/${attribute}/`;
+          console.log('Making request to:', url);
+          
+          // Use fetch to make the request
+          fetch(url, {
+            method: 'GET',
+            headers: {
+              'HX-Request': 'true',
+              'Content-Type': 'application/json',
+            }
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Failed to generate chart');
+            }
+            return response.text();
+          })
+          .then(html => {
+            // Insert the chart HTML
+            chartDiv.innerHTML = html;
+            chartContainer.classList.remove('hidden');
+            
+            // Scroll to the chart
+            chartContainer.scrollIntoView({ behavior: 'smooth' });
+            
+            // Reset button state
+            generatePieChartBtn.disabled = false;
+            generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
+          })
+          .catch(error => {
+            console.error('Error generating chart:', error);
+            alert('Error generating chart. Please try again.');
+            
+            // Reset button state
+            generatePieChartBtn.disabled = false;
+            generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
+          });
+        });
+        
+        // Dynamic attribute options based on model selection
+        modelSelect.addEventListener('change', function() {
+          const model = this.value;
+          const attributeSelect = document.getElementById('attribute-select');
+          
+          // Reset attribute selection
+          attributeSelect.innerHTML = '<option value="">Select Attribute</option>';
+          
+          if (model) {
+            // Add model-specific attributes
+            const attributes = {
+              'Individual': [
+                { value: 'status__name', label: 'Status' },
+                { value: 'institution__name', label: 'Institution' },
+                { value: 'project__name', label: 'Project' }
+              ],
+              'Sample': [
+                { value: 'status__name', label: 'Status' },
+                { value: 'type__name', label: 'Type' },
+                { value: 'individual__institution__name', label: 'Institution' }
+              ],
+              'Test': [
+                { value: 'status__name', label: 'Status' },
+                { value: 'type__name', label: 'Type' },
+                { value: 'sample__individual__institution__name', label: 'Institution' }
+              ],
+              'Analysis': [
+                { value: 'status__name', label: 'Status' },
+                { value: 'type__name', label: 'Type' },
+                { value: 'test__sample__individual__institution__name', label: 'Institution' }
+              ],
+              'Project': [
+                { value: 'status__name', label: 'Status' },
+                { value: 'institution__name', label: 'Institution' }
+              ],
+              'Task': [
+                { value: 'status__name', label: 'Status' },
+                { value: 'content_type__model', label: 'Related Model' }
+              ]
+            };
+            
+            const modelAttributes = attributes[model] || [];
+            modelAttributes.forEach(attr => {
+              const option = document.createElement('option');
+              option.value = attr.value;
+              option.textContent = attr.label;
+              attributeSelect.appendChild(option);
+            });
+          }
+        });
+      }
+      
+      // Setup initially
+      setupPieChartGenerator();
+      
+      // Setup after HTMX content loads
+      document.body.addEventListener('htmx:afterSwap', function(event) {
+        if (event.target.id === 'plots-content') {
+          console.log('Plots content loaded, setting up pie chart generator...');
+          setTimeout(setupPieChartGenerator, 100);
+        }
+      });
+    });
   </script>
 {% endblock content %}
 

@@ -1,0 +1,418 @@
+{% extends "lab/base.html" %}
+{% load partials %}
+
+{% block content %}
+<div class="flex h-screen bg-gray-100 dark:bg-gray-900">
+  {% include "lab/sidebar.html" %}
+  
+  <!-- Main Content Area -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <!-- Header -->
+    <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+      <div class="px-6 py-4">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+          <i class="fas fa-chart-line text-indigo-500 mr-3"></i>
+          Plots & Visualizations
+        </h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Interactive data visualizations and analytics
+        </p>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-6">
+      {% partialdef plots-content %}
+        <div class="space-y-6">
+          <!-- Welcome Section -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              <i class="fas fa-chart-bar text-indigo-500 mr-2"></i>
+              Data Visualizations
+            </h2>
+            <!-- Quick Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
+                <div class="flex items-center">
+                  <i class="fas fa-users text-2xl mr-3"></i>
+                  <div>
+                    <p class="text-sm opacity-90">Total Individuals</p>
+                    <p class="text-2xl font-bold">{{ individuals_count|default:"0" }}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
+                <div class="flex items-center">
+                  <i class="fas fa-vial text-2xl mr-3"></i>
+                  <div>
+                    <p class="text-sm opacity-90">Total Samples</p>
+                    <p class="text-2xl font-bold">{{ samples_count|default:"0" }}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
+                <div class="flex items-center">
+                  <i class="fas fa-flask-vial text-2xl mr-3"></i>
+                  <div>
+                    <p class="text-sm opacity-90">Total Tests</p>
+                    <p class="text-2xl font-bold">{{ tests_count|default:"0" }}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-4 text-white">
+                <div class="flex items-center">
+                  <i class="fas fa-laptop text-2xl mr-3"></i>
+                  <div>
+                    <p class="text-sm opacity-90">Total Analyses</p>
+                    <p class="text-2xl font-bold">{{ analyses_count|default:"0" }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Distribution Plots Section -->
+          {% if distribution_plots %}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {% for plot in distribution_plots %}
+                {% with plot_data=plot %}
+                  {% partial plot %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <!-- Dynamic Pie Chart Container (moved above generator) -->
+          <div id="dynamic-pie-chart-container" class="hidden mb-6">
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div id="dynamic-pie-chart" class="h-96"></div>
+            </div>
+          </div>
+
+          <!-- Interactive Pie Chart Generator -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              <i class="fas fa-chart-pie text-indigo-500 mr-2"></i>
+              Interactive Pie Chart Generator
+              </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Model
+                </label>
+                <select id="model-select" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                  <option value="">Select Model</option>
+                  <option value="Individual">Individual</option>
+                  <option value="Sample">Sample</option>
+                  <option value="Test">Test</option>
+                  <option value="Analysis">Analysis</option>
+                  <option value="Project">Project</option>
+                  <option value="Task">Task</option>
+                </select>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Attribute
+                </label>
+                <select id="attribute-select" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                  <option value="">Select Attribute</option>
+                  <option value="status__name">Status</option>
+                  <option value="type__name">Type</option>
+                  <option value="institution__name">Institution</option>
+                  <option value="project__name">Project</option>
+                </select>
+            </div>
+
+              <div class="flex items-end">
+                <button 
+                  id="generate-pie-chart"
+                  class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
+                  <i class="fas fa-chart-pie mr-2"></i>
+                  Generate Chart
+                </button>
+              </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loading-indicator" class="htmx-indicator hidden">
+              <div class="flex items-center justify-center py-4">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <span class="ml-2 text-gray-600">Generating chart...</span>
+              </div>
+            </div>
+
+            <!-- Dynamic Pie Chart Container -->  
+            <div id="dynamic-pie-chart-container" class="hidden">
+              <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <div id="dynamic-pie-chart" class="h-96"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Controls -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              <i class="fas fa-sliders-h text-indigo-500 mr-2"></i>
+              Chart Controls
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Date Range
+                </label>
+                <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                  <option value="7">Last 7 days</option>
+                  <option value="30" selected>Last 30 days</option>
+                  <option value="90">Last 90 days</option>
+                  <option value="365">Last year</option>
+                </select>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Chart Type
+                </label>
+                <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                  <option value="bar">Bar Chart</option>
+                  <option value="line" selected>Line Chart</option>
+                  <option value="pie">Pie Chart</option>
+                  <option value="scatter">Scatter Plot</option>
+                </select>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Data Source
+                </label>
+                <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                  <option value="all" selected>All Data</option>
+                  <option value="individuals">Individuals Only</option>
+                  <option value="samples">Samples Only</option>
+                  <option value="tests">Tests Only</option>
+                  <option value="analyses">Analyses Only</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="mt-4 flex space-x-3">
+              <button class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
+                <i class="fas fa-refresh mr-2"></i>
+                Refresh Charts
+              </button>
+              <button class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors">
+                <i class="fas fa-download mr-2"></i>
+                Export Data
+              </button>
+            </div>
+          </div>
+        </div>
+      {% endpartialdef %}
+
+      {% partialdef plot %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            <i class="fas fa-{{ plot_data.icon|default:'chart-bar' }} text-indigo-500 mr-2"></i>
+            {{ plot_data.title }}
+          </h3>
+          <p class="text-gray-600 dark:text-gray-300 mb-4">{{ plot_data.description }}</p>
+          
+          <div id="plot-{{ plot_data.id }}" class="h-64">
+
+            
+            <script>
+              {% if plot_data.chart_data and plot_data.chart_data.data %}
+                var plotData = {{ plot_data.chart_data|safe }};
+                var plotDiv = document.getElementById('plot-{{ plot_data.id }}');
+                if (plotDiv && plotData) {
+                  // Clean up the data to remove problematic template
+                  if (plotData.layout && plotData.layout.template) {
+                    delete plotData.layout.template;
+                  }
+                  var config = {responsive: true, displayModeBar: true};
+                  Plotly.newPlot(plotDiv, plotData.data, plotData.layout, config);
+                }
+              {% else %}
+                var plotDiv = document.getElementById('plot-{{ plot_data.id }}');
+                plotDiv.innerHTML = `
+                  <div class="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+                    <div class="text-center">
+                      <i class="fas fa-{{ plot_data.icon|default:'chart-bar' }} text-4xl mb-2"></i>
+                      <p>{{ plot_data.title }} chart will be displayed here</p>
+                    </div>
+                  </div>
+                `;
+              {% endif %}
+            </script>
+          </div>
+          
+          {% if plot_data.stats %}
+            <div class="mt-4 grid grid-cols-2 gap-4">
+              {% for stat in plot_data.stats %}
+                <div class="text-center">
+                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ stat.label }}</p>
+                  <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ stat.value }}</p>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endpartialdef %}
+    </main>
+  </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+  // Initialize charts when the page loads
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('Plots page loaded - initializing charts');
+    
+    // Initialize existing distribution plots
+    const plotElements = document.querySelectorAll('[id^="plot-"]');
+    plotElements.forEach(function(element) {
+      const plotId = element.id;
+      const plotData = window[plotId + '_data'];
+      if (plotData) {
+        Plotly.newPlot(plotId, plotData.data, plotData.layout, {
+          responsive: true,
+          displayModeBar: true,
+          modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+        });
+      }
+    });
+    
+    // Interactive Pie Chart Generator
+    try {
+      console.log('Setting up pie chart generator...');
+      const generatePieChartBtn = document.getElementById('generate-pie-chart');
+      const modelSelect = document.getElementById('model-select');
+      const attributeSelect = document.getElementById('attribute-select');
+      const chartContainer = document.getElementById('dynamic-pie-chart-container');
+      const chartDiv = document.getElementById('dynamic-pie-chart');
+      
+      console.log('Button found:', generatePieChartBtn);
+      console.log('Model select found:', modelSelect);
+      console.log('Attribute select found:', attributeSelect);
+      console.log('Chart container found:', chartContainer);
+      console.log('Chart div found:', chartDiv);
+      
+      if (!generatePieChartBtn) {
+        console.error('Generate chart button not found!');
+        return;
+      }
+    
+    generatePieChartBtn.addEventListener('click', function() {
+      console.log('Generate Chart button clicked');
+      const model = modelSelect.value;
+      const attribute = attributeSelect.value;
+      
+      console.log('Selected model:', model);
+      console.log('Selected attribute:', attribute);
+      
+      if (!model || !attribute) {
+        alert('Please select both model and attribute');
+        return;
+      }
+      
+      // Show loading state
+      generatePieChartBtn.disabled = true;
+      generatePieChartBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
+      
+      // Make HTMX request to pie chart view
+      const url = `/pie-chart/${model}/${attribute}/`;
+      console.log('Making request to:', url);
+      
+      // Use fetch to make the request
+      fetch(url, {
+        method: 'GET',
+        headers: {
+          'HX-Request': 'true',
+          'Content-Type': 'application/json',
+        }
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to generate chart');
+        }
+        return response.text();
+      })
+      .then(html => {
+        // Insert the chart HTML
+        chartDiv.innerHTML = html;
+        chartContainer.classList.remove('hidden');
+        
+        // Scroll to the chart
+        chartContainer.scrollIntoView({ behavior: 'smooth' });
+        
+        // Reset button state
+        generatePieChartBtn.disabled = false;
+        generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
+      })
+      .catch(error => {
+        console.error('Error generating chart:', error);
+        alert('Error generating chart. Please try again.');
+        
+        // Reset button state
+        generatePieChartBtn.disabled = false;
+        generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
+      });
+    });
+    
+    // Dynamic attribute options based on model selection
+    modelSelect.addEventListener('change', function() {
+      const model = this.value;
+      const attributeSelect = document.getElementById('attribute-select');
+      
+      // Reset attribute selection
+      attributeSelect.innerHTML = '<option value="">Select Attribute</option>';
+      
+      if (model) {
+        // Add model-specific attributes
+        const attributes = {
+          'Individual': [
+            { value: 'status__name', label: 'Status' },
+            { value: 'institution__name', label: 'Institution' },
+            { value: 'project__name', label: 'Project' }
+          ],
+          'Sample': [
+            { value: 'status__name', label: 'Status' },
+            { value: 'type__name', label: 'Type' },
+            { value: 'individual__institution__name', label: 'Institution' }
+          ],
+          'Test': [
+            { value: 'status__name', label: 'Status' },
+            { value: 'type__name', label: 'Type' },
+            { value: 'sample__individual__institution__name', label: 'Institution' }
+          ],
+          'Analysis': [
+            { value: 'status__name', label: 'Status' },
+            { value: 'type__name', label: 'Type' },
+            { value: 'test__sample__individual__institution__name', label: 'Institution' }
+          ],
+          'Project': [
+            { value: 'status__name', label: 'Status' },
+            { value: 'institution__name', label: 'Institution' }
+          ],
+          'Task': [
+            { value: 'status__name', label: 'Status' },
+            { value: 'content_type__model', label: 'Related Model' }
+          ]
+        };
+        
+        const modelAttributes = attributes[model] || [];
+        modelAttributes.forEach(attr => {
+          const option = document.createElement('option');
+          option.value = attr.value;
+          option.textContent = attr.label;
+          attributeSelect.appendChild(option);
+        });
+      }
+    });
+    } catch (error) {
+      console.error('Error setting up pie chart generator:', error);
+    }
+  });
+</script>
+{% endblock content %} 
