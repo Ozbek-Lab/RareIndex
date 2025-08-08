@@ -227,7 +227,6 @@ class Command(BaseCommand):
     def _get_or_create_placeholder_sample(self, individual, admin_user):
         # Create a placeholder sample type if it doesn't exist
         placeholder_type = self._get_or_create_sample_type('Placeholder', admin_user)
-        placeholder_sample = self._get_or_create_sample(individual, placeholder_type, admin_user)
         
         # Create a placeholder sample
         sample = Sample.objects.create(
