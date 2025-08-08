@@ -635,6 +635,9 @@
       <div x-show="activeItem === 'notifications'" id="notifications-content">
         <!-- Notifications content will be loaded here via HTMX -->
       </div>
+      <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
+        <!-- Natural language search content will be loaded here via HTMX -->
+      </div>
     </div>
   </main>
 </div>
@@ -726,6 +729,19 @@
             
             // Load notifications content via HTMX
             htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content').then(() => {
+              // Content loaded successfully
+            });
+            return;
+          }
+          
+          // Handle natural language search navigation
+          if (pageName === 'nl-search-page') {
+            this.activeItem = 'nl-search-page';
+            this.detailHtml = null;
+            this.updateURL();
+            
+            // Load natural language search content via HTMX
+            htmx.ajax('GET', '{% url "lab:nl_search_page" %}', '#nl-search-content').then(() => {
               // Content loaded successfully
             });
             return;
