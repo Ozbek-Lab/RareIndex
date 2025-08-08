@@ -462,6 +462,7 @@ class Analysis(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_analyses"
     )
+    tasks = GenericRelation("Task")
     history = HistoricalRecords()
 
     class Meta:

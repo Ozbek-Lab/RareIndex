@@ -122,3 +122,19 @@ def js_bool(value):
     if isinstance(value, bool):
         return 'true' if value else 'false'
     return value
+
+
+@register.filter
+def plotly_safe(value):
+    """Convert Plotly figure data to JavaScript-safe format"""
+    import json
+    import re
+    
+    # Convert the dict to JSON string first
+    json_str = json.dumps(value)
+    
+    # Replace Python booleans with JavaScript booleans
+    json_str = re.sub(r'\bTrue\b', 'true', json_str)
+    json_str = re.sub(r'\bFalse\b', 'false', json_str)
+    
+    return json_str

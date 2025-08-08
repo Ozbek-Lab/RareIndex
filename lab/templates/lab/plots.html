@@ -1,5 +1,6 @@
 {% extends "lab/base.html" %}
 {% load partials %}
+{% load lab_filters %}
 
 {% block content %}
 <div class="flex h-screen bg-gray-100 dark:bg-gray-900">
@@ -68,24 +69,6 @@
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- Distribution Plots Section -->
-          {% if distribution_plots %}
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {% for plot in distribution_plots %}
-                {% with plot_data=plot %}
-                  {% partial plot %}
-                {% endwith %}
-              {% endfor %}
-            </div>
-          {% endif %}
-
-          <!-- Dynamic Pie Chart Container (moved above generator) -->
-          <div id="dynamic-pie-chart-container" class="hidden mb-6">
-            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <div id="dynamic-pie-chart" class="h-96"></div>
             </div>
           </div>
 
@@ -208,6 +191,24 @@
             </div>
           </div>
         </div>
+          <!-- Combined Distribution Plots Section -->
+          {% if distribution_plots %}
+            <div class="w-full">
+              {% for plot in distribution_plots %}
+                {% with plot_data=plot %}
+                  {% partial plot %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <!-- Dynamic Pie Chart Container (moved above generator) -->
+          <div id="dynamic-pie-chart-container" class="hidden mb-6">
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div id="dynamic-pie-chart" class="h-96"></div>
+            </div>
+          </div>
+
       {% endpartialdef %}
 
       {% partialdef plot %}
@@ -216,19 +217,25 @@
             <i class="fas fa-{{ plot_data.icon|default:'chart-bar' }} text-indigo-500 mr-2"></i>
             {{ plot_data.title }}
           </h3>
-          <p class="text-gray-600 dark:text-gray-300 mb-4">{{ plot_data.description }}</p>
-          
           <div id="plot-{{ plot_data.id }}" class="h-64">
 
             
             <script>
               {% if plot_data.chart_data and plot_data.chart_data.data %}
-                var plotData = {{ plot_data.chart_data|safe }};
+                var plotData = {{ plot_data.chart_data|plotly_safe|safe }};
                 var plotDiv = document.getElementById('plot-{{ plot_data.id }}');
                 if (plotDiv && plotData) {
                   // Clean up the data to remove problematic template
                   if (plotData.layout && plotData.layout.template) {
                     delete plotData.layout.template;
+                  }
+                  // Set textinfo to show value (count) only for all pie traces
+                  if (plotData.data) {
+                    plotData.data.forEach(function(trace) {
+                      if (trace.type === 'pie') {
+                        trace.textinfo = 'value';
+                      }
+                    });
                   }
                   var config = {responsive: true, displayModeBar: true};
                   Plotly.newPlot(plotDiv, plotData.data, plotData.layout, config);
@@ -247,16 +254,7 @@
             </script>
           </div>
           
-          {% if plot_data.stats %}
-            <div class="mt-4 grid grid-cols-2 gap-4">
-              {% for stat in plot_data.stats %}
-                <div class="text-center">
-                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ stat.label }}</p>
-                  <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ stat.value }}</p>
-                </div>
-              {% endfor %}
-            </div>
-          {% endif %}
+          {# Removed stats grid below the chart #}
         </div>
       {% endpartialdef %}
     </main>
