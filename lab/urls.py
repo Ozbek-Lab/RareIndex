@@ -21,6 +21,10 @@ urlpatterns = [
     path("individual/<int:pk>/timeline/", views.individual_timeline, name="individual_timeline"),
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
     
+    # Natural language search routes
+    path("nl-search/", views.nl_search, name="nl_search"),
+    path("nl-search/page/", views.nl_search_page, name="nl_search_page"),
+    
     # path("", views.dashboard, name="dashboard"),
     # path("select/search/", views.select_search, name="select_search"),
     # # Individual routes
