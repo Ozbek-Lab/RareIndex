@@ -28,6 +28,9 @@ from .visualization.hpo_network_visualization import (
 
 from .filters import apply_filters, FILTER_CONFIG, get_available_statuses
 
+# Import SQL agent for natural language search
+from .sql_agent import query_natural_language, execute_safe_sql
+
 
 @login_required
 def index(request):
@@ -929,3 +932,54 @@ def individual_timeline(request, pk):
         return render(request, 'lab/individual.html#timeline', context)
     else:
         return render(request, 'lab/individual.html', context)
+
+
+@login_required
+def nl_search(request):
+    """
+    Natural language search view that converts user queries to SQL and returns results.
+    """
+    if request.method == "POST":
+        query = request.POST.get("query", "").strip()
+        
+        if not query:
+            return render(request, "lab/nl_search.html#nl-search-error", {
+                "error": "No query provided."
+            })
+        
+        try:
+            # Process the natural language query using Mistral
+            result = query_natural_language(query, "mistral")
+            
+            if result["success"]:
+                return render(request, "lab/nl_search.html#nl-search-result", {
+                    "query": result["query"],
+                    "sql": result["sql"],
+                    "result": result["result"],
+                    "success": True
+                })
+            else:
+                return render(request, "lab/nl_search.html#nl-search-error", {
+                    "error": result["error"]
+                })
+                
+        except Exception as e:
+            return render(request, "lab/nl_search.html#nl-search-error", {
+                "error": f"An error occurred: {str(e)}"
+            })
+    
+    # GET request - show the search form
+    return render(request, "lab/nl_search.html")
+
+
+@login_required
+def nl_search_page(request):
+    """
+    Standalone page for natural language search.
+    """
+    if request.headers.get("HX-Request"):
+        # Return just the main content for HTMX insertion
+        return render(request, "lab/nl_search.html#nl-search-content", {})
+    else:
+        # Return the full page for direct access
+        return render(request, "lab/nl_search.html")

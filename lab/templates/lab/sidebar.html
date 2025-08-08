@@ -111,6 +111,16 @@
         <span>HPO Network Visualization</span>
       </a>
       
+      <!-- Natural Language Search -->
+      <a
+        @click.prevent="navigateTo('nl-search-page')"
+        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
+        :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'nl-search-page' }"
+      >
+        <i class="fas fa-search-plus text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors dark:text-gray-300 dark:group-hover:text-indigo-400"></i>
+        <span>AI Search</span>
+      </a>
+      
       <!-- Notifications Section -->
       <a
         @click.prevent="navigateTo('notifications')"
