@@ -48,6 +48,7 @@ class InstitutionAdmin(admin.ModelAdmin):
 class IndividualAdmin(admin.ModelAdmin):
     list_display = [
         "full_name",
+        "id",
         "status",
         "family",
         "mother",

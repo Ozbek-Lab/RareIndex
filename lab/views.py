@@ -15,7 +15,7 @@ from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 
 # Import models
-from .models import Individual
+from .models import Individual, Test, Analysis, Sample, Task, Note
 
 # Import forms
 from .forms import NoteForm
@@ -464,18 +464,19 @@ def individual_timeline(request, pk):
     
     timeline_events = []
     
-    # Get individual history and important dates
+    # Get individual history and important dates (excluding creation events)
     for record in individual.history.all():
-        timeline_events.append({
-            'date': record.history_date,
-            'type': 'individual',
-            'action': record.get_history_type_display(),
-            'description': f"Individual {record.get_history_type_display().lower()}",
-            'user': record.history_user.username if record.history_user else 'System',
-            'object_name': 'Individual',
-            'object_id': individual.individual_id,
-            'details': f"Status: {record.status.name if record.status else 'N/A'}"
-        })
+        if 'created' not in record.get_history_type_display().lower():
+            timeline_events.append({
+                'date': record.history_date,
+                'type': 'individual',
+                'action': record.get_history_type_display(),
+                'description': f"Individual {record.get_history_type_display().lower()}",
+                'user': record.history_user.username if record.history_user else 'System',
+                'object_name': 'Individual',
+                'object_id': individual.individual_id,
+                'details': f"Status: {record.status.name if record.status else 'N/A'}"
+            })
     
     # Add individual's important dates
     if individual.council_date:
@@ -504,17 +505,30 @@ def individual_timeline(request, pk):
     
     # Get sample history and important dates
     for sample in individual.samples.all():
+        # Add the actual created_at date
+        timeline_events.append({
+            'date': sample.created_at,
+            'type': 'sample',
+            'action': 'Created',
+            'description': f"Sample {sample.id} created",
+            'user': 'System',
+            'object_name': 'Sample',
+            'object_id': f"Sample {sample.id}",
+            'details': f"Type: {sample.sample_type.name}, Created: {sample.created_at.date()}"
+        })
+        
         for record in sample.history.all():
-            timeline_events.append({
-                'date': record.history_date,
-                'type': 'sample',
-                'action': record.get_history_type_display(),
-                'description': f"Sample {record.get_history_type_display().lower()}",
-                'user': record.history_user.username if record.history_user else 'System',
-                'object_name': 'Sample',
-                'object_id': f"Sample {sample.id}",
-                'details': f"Type: {sample.sample_type.name}, Status: {record.status.name if record.status else 'N/A'}"
-            })
+            if 'created' not in record.get_history_type_display().lower():
+                timeline_events.append({
+                    'date': record.history_date,
+                    'type': 'sample',
+                    'action': record.get_history_type_display()+"Sample",
+                    'description': f"Sample {record.get_history_type_display().lower()}",
+                    'user': record.history_user.username if record.history_user else 'System',
+                    'object_name': 'Sample',
+                    'object_id': f"Sample {sample.id}",
+                    'details': f"Type: {sample.sample_type.name}, Status: {record.status.name if record.status else 'N/A'}"
+                })
         
         # Add sample's important dates
         if sample.receipt_date:
@@ -544,17 +558,30 @@ def individual_timeline(request, pk):
     # Get test history and important dates
     for sample in individual.samples.all():
         for test in sample.tests.all():
+            # Add the actual created_at date
+            timeline_events.append({
+                'date': test.created_at,
+                'type': 'test',
+                'action': 'Created',
+                'description': f"Test {test.id} created",
+                'user': 'System',
+                'object_name': 'Test',
+                'object_id': f"Test {test.id}",
+                'details': f"Type: {test.test_type.name}, Created: {test.created_at.date()}"
+            })
+            
             for record in test.history.all():
-                timeline_events.append({
-                    'date': record.history_date,
-                    'type': 'test',
-                    'action': record.get_history_type_display(),
-                    'description': f"Test {record.get_history_type_display().lower()}",
-                    'user': record.history_user.username if record.history_user else 'System',
-                    'object_name': 'Test',
-                    'object_id': f"Test {test.id}",
-                    'details': f"Type: {test.test_type.name}, Status: {record.status.name if record.status else 'N/A'}"
-                })
+                if 'created' not in record.get_history_type_display().lower():
+                    timeline_events.append({
+                        'date': record.history_date,
+                        'type': 'test',
+                        'action': record.get_history_type_display(),
+                        'description': f"Test {record.get_history_type_display().lower()}",
+                        'user': record.history_user.username if record.history_user else 'System',
+                        'object_name': 'Test',
+                        'object_id': f"Test {test.id}",
+                        'details': f"Type: {test.test_type.name}, Status: {record.status.name if record.status else 'N/A'}"
+                    })
             
             # Add test's important dates
             if test.performed_date:
@@ -597,17 +624,30 @@ def individual_timeline(request, pk):
     for sample in individual.samples.all():
         for test in sample.tests.all():
             for analysis in test.analyses.all():
+                # Add the actual created_at date
+                timeline_events.append({
+                    'date': analysis.created_at,
+                    'type': 'analysis',
+                    'action': 'Created',
+                    'description': f"Analysis {analysis.id} created",
+                    'user': 'System',
+                    'object_name': 'Analysis',
+                    'object_id': f"Analysis {analysis.id}",
+                    'details': f"Type: {analysis.type.name}, Created: {analysis.created_at.date()}"
+                })
+                
                 for record in analysis.history.all():
-                    timeline_events.append({
-                        'date': record.history_date,
-                        'type': 'analysis',
-                        'action': record.get_history_type_display(),
-                        'description': f"Analysis {record.get_history_type_display().lower()}",
-                        'user': record.history_user.username if record.history_user else 'System',
-                        'object_name': 'Analysis',
-                        'object_id': f"Analysis {analysis.id}",
-                        'details': f"Type: {analysis.type.name}, Status: {record.status.name if record.status else 'N/A'}"
-                    })
+                    if 'created' not in record.get_history_type_display().lower():
+                        timeline_events.append({
+                            'date': record.history_date,
+                            'type': 'analysis',
+                            'action': record.get_history_type_display(),
+                            'description': f"Analysis {record.get_history_type_display().lower()}",
+                            'user': record.history_user.username if record.history_user else 'System',
+                            'object_name': 'Analysis',
+                            'object_id': f"Analysis {analysis.id}",
+                            'details': f"Type: {analysis.type.name}, Status: {record.status.name if record.status else 'N/A'}"
+                        })
                 
                 # Add analysis's important dates
                 if analysis.performed_date:
@@ -624,17 +664,30 @@ def individual_timeline(request, pk):
     
     # Get task history and important dates
     for task in individual.tasks.all():
+        # Add the actual created_at date
+        timeline_events.append({
+            'date': task.created_at,
+            'type': 'task',
+            'action': 'Created',
+            'description': f"Task {task.id} created",
+            'user': 'System',
+            'object_name': 'Task',
+            'object_id': f"Task {task.id}",
+            'details': f"Title: {task.title}, Created: {task.created_at.date()}"
+        })
+        
         for record in task.history.all():
-            timeline_events.append({
-                'date': record.history_date,
-                'type': 'task',
-                'action': record.get_history_type_display(),
-                'description': f"Task {record.get_history_type_display().lower()}",
-                'user': record.history_user.username if record.history_user else 'System',
-                'object_name': 'Task',
-                'object_id': task.title,
-                'details': f"Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
-            })
+            if 'created' not in record.get_history_type_display().lower():
+                timeline_events.append({
+                    'date': record.history_date,
+                    'type': 'task',
+                    'action': record.get_history_type_display(),
+                    'description': f"Task {record.get_history_type_display().lower()}",
+                    'user': record.history_user.username if record.history_user else 'System',
+                    'object_name': 'Task',
+                    'object_id': f"Task {task.id}",
+                    'details': f"Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
+                })
         
         # Add task's important dates
         if task.due_date:
@@ -645,7 +698,7 @@ def individual_timeline(request, pk):
                 'description': 'Task Due Date',
                 'user': 'System',
                 'object_name': 'Task',
-                'object_id': task.title,
+                'object_id': f"Task {task.id}",
                 'details': f"Task: {task.title}, Due Date: {task.due_date}, Priority: {task.priority}"
             })
     
@@ -675,6 +728,212 @@ def individual_timeline(request, pk):
                 'details': note.content[:100] + '...' if len(note.content) > 100 else note.content
             })
     
+    # Get sample tasks and notes
+    for sample in individual.samples.all():
+        # Sample tasks
+        for task in sample.tasks.all():
+            timeline_events.append({
+                'date': task.created_at,
+                'type': 'task',
+                'action': 'Created',
+                'description': f"Task {task.id} created",
+                'user': 'System',
+                'object_name': 'Task',
+                'object_id': f"Task {task.id}",
+                'details': f"Sample: {sample.id}, Title: {task.title}, Created: {task.created_at.date()}"
+            })
+            
+            for record in task.history.all():
+                if 'created' not in record.get_history_type_display().lower():
+                    timeline_events.append({
+                        'date': record.history_date,
+                        'type': 'task',
+                        'action': record.get_history_type_display(),
+                        'description': f"Task {record.get_history_type_display().lower()}",
+                        'user': record.history_user.username if record.history_user else 'System',
+                        'object_name': 'Task',
+                        'object_id': f"Task {task.id}",
+                        'details': f"Sample: {sample.id}, Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
+                    })
+            
+            # Add task's important dates
+            if task.due_date:
+                timeline_events.append({
+                    'date': task.due_date,
+                    'type': 'task',
+                    'action': 'Due Date',
+                    'description': 'Task Due Date',
+                    'user': 'System',
+                    'object_name': 'Task',
+                    'object_id': f"Task {task.id}",
+                    'details': f"Sample: {sample.id}, Task: {task.title}, Due Date: {task.due_date}, Priority: {task.priority}"
+                })
+        
+        # Sample notes
+        for note in sample.notes.all():
+            timeline_events.append({
+                'date': note.created_at,
+                'type': 'note',
+                'action': 'Created',
+                'description': 'Note added',
+                'user': note.user.username,
+                'object_name': 'Note',
+                'object_id': f"Note {note.id}",
+                'details': f"Sample: {sample.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+            })
+            
+            # Add note update if it was modified
+            if note.updated_at and note.updated_at != note.created_at:
+                    timeline_events.append({
+                        'date': note.updated_at,
+                        'type': 'note',
+                        'action': 'Updated',
+                        'description': 'Note updated',
+                        'user': note.user.username,
+                        'object_name': 'Note',
+                        'object_id': f"Note {note.id}",
+                        'details': f"Sample: {sample.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                    })
+    
+    # Get test tasks and notes
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            # Test tasks
+            for task in test.tasks.all():
+                timeline_events.append({
+                    'date': task.created_at,
+                    'type': 'task',
+                    'action': 'Created',
+                    'description': f"Task {task.id} created",
+                    'user': 'System',
+                    'object_name': 'Task',
+                    'object_id': f"Task {task.id}",
+                    'details': f"Test: {test.id}, Title: {task.title}, Created: {task.created_at.date()}"
+                })
+                
+                for record in task.history.all():
+                    if 'created' not in record.get_history_type_display().lower():
+                        timeline_events.append({
+                            'date': record.history_date,
+                            'type': 'task',
+                            'action': record.get_history_type_display(),
+                            'description': f"Task {record.get_history_type_display().lower()}",
+                            'user': record.history_user.username if record.history_user else 'System',
+                            'object_name': 'Task',
+                            'object_id': f"Task {task.id}",
+                            'details': f"Test: {test.id}, Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
+                        })
+                
+                # Add task's important dates
+                if task.due_date:
+                    timeline_events.append({
+                        'date': task.due_date,
+                        'type': 'task',
+                        'action': 'Due Date',
+                        'description': 'Task Due Date',
+                        'user': 'System',
+                        'object_name': 'Task',
+                        'object_id': f"Task {task.id}",
+                        'details': f"Test: {test.id}, Task: {task.title}, Due Date: {task.due_date}, Priority: {task.priority}"
+                    })
+            
+            # Test notes
+            for note in test.notes.all():
+                timeline_events.append({
+                    'date': note.created_at,
+                    'type': 'note',
+                    'action': 'Created',
+                    'description': 'Note added',
+                    'user': note.user.username,
+                    'object_name': 'Note',
+                    'object_id': f"Note {note.id}",
+                    'details': f"Test: {test.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                })
+                
+                # Add note update if it was modified
+                if note.updated_at and note.updated_at != note.created_at:
+                    timeline_events.append({
+                        'date': note.updated_at,
+                        'type': 'note',
+                        'action': 'Updated',
+                        'description': 'Note updated',
+                        'user': note.user.username,
+                        'object_name': 'Note',
+                        'object_id': f"Note {note.id}",
+                        'details': f"Test: {test.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                    })
+    
+    # Get analysis tasks and notes
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                # Analysis tasks
+                for task in analysis.tasks.all():
+                    timeline_events.append({
+                        'date': task.created_at,
+                        'type': 'task',
+                        'action': 'Created',
+                        'description': f"Task {task.id} created",
+                        'user': 'System',
+                        'object_name': 'Task',
+                        'object_id': f"Task {task.id}",
+                        'details': f"Analysis: {analysis.id}, Title: {task.title}, Created: {task.created_at.date()}"
+                    })
+                    
+                    for record in task.history.all():
+                        if 'created' not in record.get_history_type_display().lower():
+                            timeline_events.append({
+                                'date': record.history_date,
+                                'type': 'task',
+                                'action': record.get_history_type_display(),
+                                'description': f"Task {record.get_history_type_display().lower()}",
+                                'user': record.history_user.username if record.history_user else 'System',
+                                'object_name': 'Task',
+                                'object_id': f"Task {task.id}",
+                                'details': f"Analysis: {analysis.id}, Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
+                            })
+                    
+                    # Add task's important dates
+                    if task.due_date:
+                        timeline_events.append({
+                            'date': task.due_date,
+                            'type': 'task',
+                            'action': 'Due Date',
+                            'description': 'Task Due Date',
+                            'user': 'System',
+                            'object_name': 'Task',
+                            'object_id': f"Task {task.id}",
+                            'details': f"Analysis: {analysis.id}, Task: {task.title}, Due Date: {task.due_date}, Priority: {task.priority}"
+                        })
+                
+                # Analysis notes
+                for note in analysis.notes.all():
+                    timeline_events.append({
+                        'date': note.created_at,
+                        'type': 'note',
+                        'action': 'Created',
+                        'description': 'Note added',
+                        'user': note.user.username,
+                        'object_name': 'Note',
+                        'object_id': f"Note {note.id}",
+                        'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                    })
+                    
+                    # Add note update if it was modified
+                    if note.updated_at and note.updated_at != note.created_at:
+                        timeline_events.append({
+                            'date': note.updated_at,
+                            'type': 'note',
+                            'action': 'Updated',
+                            'description': 'Note updated',
+                            'user': note.user.username,
+                            'object_name': 'Note',
+                            'object_id': f"Note {note.id}",
+                            'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                        })
+    
+
+    
     # Get status log entries
     for status_log in StatusLog.objects.filter(
         content_type=ContentType.objects.get_for_model(Individual),
@@ -703,17 +962,78 @@ def individual_timeline(request, pk):
             # Convert naive datetime to timezone-aware
             event['date'] = timezone.make_aware(event['date'])
     
+    for event in timeline_events:
+        if isinstance(event['date'], datetime):
+            # Convert datetime to date
+            event['date'] = event['date'].date()
+    # If it's already a date (but not a datetime), leave as is
+
     timeline_events.sort(key=lambda x: x['date'], reverse=True)
-    
-    # Prepare data for Plotly timeline - convert to local time and assign hierarchical positions
+
+    # Prepare data for Plotly timeline - use only date objects and assign hierarchical positions
     from django.utils import timezone
     
-    # Create hierarchical positioning system
-    sample_positions = {}  # Track sample IDs and their y-positions
-    test_positions = {}    # Track test IDs and their y-positions
-    analysis_positions = {} # Track analysis IDs and their y-positions
+    # Pre-calculate y-positions using depth-first search
+    sample_positions = {}
+    test_positions = {}
+    analysis_positions = {}
+    task_positions = {}
+    note_positions = {}
     
-    # Assign y-positions based on hierarchy
+    # Configuration
+    sample_offset = 1
+    test_offset = 0.5
+    analysis_offset = 0.25
+    
+    # Assign y-positions using depth-first search with chronological ordering within each level
+    current_y = 0  # Individual is at 0
+    
+    # Process samples and their children in chronological order
+    all_samples = list(individual.samples.all())
+    all_samples.sort(key=lambda s: s.created_at.date() if s.created_at else date(2025, 1, 1))
+    
+    for sample in all_samples:
+        # Assign sample position
+        sample_positions[sample.id] = current_y + sample_offset
+        current_y = sample_positions[sample.id]
+        
+        # Process tests for this sample in chronological order
+        all_tests = list(sample.tests.all())
+        all_tests.sort(key=lambda t: t.created_at.date() if t.created_at else date(2025, 1, 1))
+        
+        for test in all_tests:
+            # Assign test position
+            test_positions[test.id] = current_y + test_offset
+            current_y = test_positions[test.id]
+            
+            # Process analyses for this test in chronological order
+            all_analyses = list(test.analyses.all())
+            all_analyses.sort(key=lambda a: a.created_at.date() if a.created_at else date(2025, 1, 1))
+            
+            for analysis in all_analyses:
+                # Assign analysis position
+                analysis_positions[analysis.id] = current_y + analysis_offset
+                current_y = analysis_positions[analysis.id]
+    
+    # Process individual tasks and notes in chronological order (mixed together)
+    current_y = -0.25  # Start at -0.25 for individual tasks and notes
+    
+    all_tasks = list(individual.tasks.all())
+    all_notes = list(individual.notes.all())
+    
+    # Combine and sort by creation date
+    tasks_and_notes = [(task, 'task') for task in all_tasks] + [(note, 'note') for note in all_notes]
+    tasks_and_notes.sort(key=lambda x: x[0].created_at.date() if x[0].created_at else date(2025, 1, 1))
+    
+    for obj, obj_type in tasks_and_notes:
+        if obj_type == 'task':
+            task_positions[obj.id] = current_y
+            current_y -= 0.25
+        elif obj_type == 'note':
+            note_positions[obj.id] = current_y
+            current_y -= 0.25
+    
+    # Now process timeline events with pre-assigned positions
     y_positions = []
     dates = []
     descriptions = []
@@ -722,42 +1042,34 @@ def individual_timeline(request, pk):
     details = []
     
     for event in timeline_events:
-        dates.append(timezone.localtime(event['date']).strftime('%Y-%m-%d %H:%M'))
+        # Convert dates to ISO format strings for Plotly (YYYY-MM-DD)
+        dates.append(event['date'].isoformat())
         descriptions.append(event['description'])
         types.append(event['type'])
         users.append(event['user'])
         details.append(event['details'])
         
-        # Determine y-position based on event type and hierarchy
+        # Assign y-position based on pre-calculated positions
         if event['type'] == 'individual':
             y_positions.append(0)  # Main timeline
         elif event['type'] == 'sample':
-            # Extract sample ID from object_id (format: "Sample {id}")
-            sample_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
-            if sample_id not in sample_positions:
-                # Assign new position above individual line
-                sample_positions[sample_id] = len(sample_positions) + 1
-            y_positions.append(sample_positions[sample_id])
+            sample_id = int(event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id'])
+            y_positions.append(sample_positions.get(sample_id, 0))
         elif event['type'] == 'test':
-            # Extract test ID from object_id (format: "Test {id}")
-            test_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
-            if test_id not in test_positions:
-                # Assign new position above sample lines
-                test_positions[test_id] = len(test_positions) + len(sample_positions) + 2
-            y_positions.append(test_positions[test_id])
+            test_id = int(event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id'])
+            y_positions.append(test_positions.get(test_id, 0))
         elif event['type'] == 'analysis':
-            # Extract analysis ID from object_id (format: "Analysis {id}")
-            analysis_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
-            if analysis_id not in analysis_positions:
-                # Assign new position above test lines
-                analysis_positions[analysis_id] = len(analysis_positions) + len(test_positions) + len(sample_positions) + 3
-            y_positions.append(analysis_positions[analysis_id])
+            analysis_id = int(event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id'])
+            y_positions.append(analysis_positions.get(analysis_id, 0))
         elif event['type'] == 'task':
-            y_positions.append(-1)  # Below individual line
+            task_id = int(event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id'])
+            y_positions.append(task_positions.get(task_id, 0))
         elif event['type'] == 'note':
-            y_positions.append(-2)  # Below task line
+            note_id = int(event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id'])
+            y_positions.append(note_positions.get(note_id, 0))
         else:
             y_positions.append(0)  # Default to main timeline
+    
     
     # Color mapping for different types
     color_map = {
@@ -767,6 +1079,16 @@ def individual_timeline(request, pk):
         'analysis': '#d62728',
         'task': '#9467bd',
         'note': '#8c564b'
+    }
+    
+    # Width mapping for different types
+    width_map = {
+        'individual': 3,
+        'sample': 2, 
+        'test': 2,
+        'analysis': 2,
+        'task': 2,
+        'note': 2
     }
     
     colors = [color_map.get(event_type, '#7f7f7f') for event_type in types]
@@ -796,94 +1118,395 @@ def individual_timeline(request, pk):
         customdata=list(zip(users, details, [event['action'] for event in timeline_events])),
         name='Timeline Events'
     ))
+
+    # Add lines connecting events for the same object
+    from collections import defaultdict
+    object_event_lines = defaultdict(list)
+    for i, event in enumerate(timeline_events):
+        object_event_lines[event['object_id']].append((dates[i], y_positions[i]))
+
+    for object_id, points in object_event_lines.items():
+        if len(points) > 1:
+            points.sort()
+            x_vals, y_vals = zip(*points)
+            # Determine the color based on the object type
+            object_type = None
+            for event in timeline_events:
+                if event['object_id'] == object_id:
+                    object_type = event['type']
+                    break
+            line_color = color_map.get(object_type, '#7f7f7f')
+            fig.add_trace(go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode='lines',
+                line=dict(width=2, color=line_color),
+                showlegend=False,
+                hoverinfo='skip',
+            ))
     
     # Add horizontal lines for each level of the hierarchy with proper branching
     max_y = max(y_positions) if y_positions else 0
     min_y = min(y_positions) if y_positions else 0
     
-    # Individual line (main timeline) - full width
+    # Individual line - from created_at to now
+    from datetime import date
+    individual_created = individual.created_at.date().isoformat() if individual.created_at else '2025-01-01'
     fig.add_shape(
         type='line',
-        x0=dates[0] if dates else '2024-01-01',
-        x1=dates[-1] if dates else '2024-12-31',
+        x0=individual_created,
+        x1=date.today().isoformat(),
         y0=0,
         y1=0,
-        line=dict(color='gray', width=2)
+        line=dict(color=color_map['individual'], width=width_map['individual'])
     )
     
-    # Find creation events for proper branching
+    # Get actual creation dates from models
     sample_creation_dates = {}
     test_creation_dates = {}
     analysis_creation_dates = {}
     
-    for i, event in enumerate(timeline_events):
-        if event['type'] == 'sample' and event['action'] == 'Created':
-            sample_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
-            sample_creation_dates[sample_id] = dates[i]
-        elif event['type'] == 'test' and event['action'] == 'Created':
-            test_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
-            test_creation_dates[test_id] = dates[i]
-        elif event['type'] == 'analysis' and event['action'] == 'Created':
-            analysis_id = event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id']
-            analysis_creation_dates[analysis_id] = dates[i]
+    # Get sample creation dates
+    for sample in individual.samples.all():
+        sample_creation_dates[sample.id] = sample.created_at.date().isoformat()
     
-    # Sample lines - start from creation event
-    for sample_id, y_pos in sample_positions.items():
-        start_date = sample_creation_dates.get(sample_id, dates[0] if dates else '2024-01-01')
-        fig.add_shape(
-            type='line',
-            x0=start_date,
-            x1=dates[-1] if dates else '2024-12-31',
-            y0=y_pos,
-            y1=y_pos,
-            line=dict(color='lightblue', width=1, dash='dash')
-        )
+    # Get test creation dates
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            test_creation_dates[test.id] = test.created_at.date().isoformat()
     
-    # Test lines - start from creation event
-    for test_id, y_pos in test_positions.items():
-        start_date = test_creation_dates.get(test_id, dates[0] if dates else '2024-01-01')
-        fig.add_shape(
-            type='line',
-            x0=start_date,
-            x1=dates[-1] if dates else '2024-12-31',
-            y0=y_pos,
-            y1=y_pos,
-            line=dict(color='lightgreen', width=1, dash='dot')
-        )
+    # Get analysis creation dates
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                analysis_creation_dates[analysis.id] = analysis.created_at.date().isoformat()
     
-    # Analysis lines - start from creation event
-    for analysis_id, y_pos in analysis_positions.items():
-        start_date = analysis_creation_dates.get(analysis_id, dates[0] if dates else '2024-01-01')
-        fig.add_shape(
-            type='line',
-            x0=start_date,
-            x1=dates[-1] if dates else '2024-12-31',
-            y0=y_pos,
-            y1=y_pos,
-            line=dict(color='lightcoral', width=1, dash='dashdot')
-        )
+
     
-    # Task line - full width (or could be branched too if needed)
-    if -1 in y_positions:
-        fig.add_shape(
-            type='line',
-            x0=dates[0] if dates else '2024-01-01',
-            x1=dates[-1] if dates else '2024-12-31',
-            y0=-1,
-            y1=-1,
-            line=dict(color='lightgray', width=1, dash='dash')
-        )
+    # Sample lines - from created_at to now
+    for sample in individual.samples.all():
+        if sample.id in sample_positions:
+            sample_created = sample.created_at.date().isoformat() if sample.created_at else '2025-01-01'
+            fig.add_shape(
+                type='line',
+                x0=sample_created,
+                x1=date.today().isoformat(),
+                y0=sample_positions[sample.id],
+                y1=sample_positions[sample.id],
+                line=dict(color=color_map['sample'], width=width_map['sample'])
+            )
     
-    # Note line - full width (or could be branched too if needed)
-    if -2 in y_positions:
-        fig.add_shape(
-            type='line',
-            x0=dates[0] if dates else '2024-01-01',
-            x1=dates[-1] if dates else '2024-12-31',
-            y0=-2,
-            y1=-2,
-            line=dict(color='lightyellow', width=1, dash='dot')
-        )
+    # Test lines - from created_at to now
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            if test.id in test_positions:
+                test_created = test.created_at.date().isoformat() if test.created_at else '2025-01-01'
+                fig.add_shape(
+                    type='line',
+                    x0=test_created,
+                    x1=date.today().isoformat(),
+                    y0=test_positions[test.id],
+                    y1=test_positions[test.id],
+                    line=dict(color=color_map['test'], width=width_map['test'])
+                )
+    
+    # Analysis lines - from created_at to now
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                if analysis.id in analysis_positions:
+                    analysis_created = analysis.created_at.date().isoformat() if analysis.created_at else '2025-01-01'
+                    fig.add_shape(
+                        type='line',
+                        x0=analysis_created,
+                        x1=date.today().isoformat(),
+                        y0=analysis_positions[analysis.id],
+                        y1=analysis_positions[analysis.id],
+                        line=dict(color=color_map['analysis'], width=width_map['analysis'])
+                    )
+    
+    # Task lines - from created_at to due_date (or now if no due_date)
+    for task in individual.tasks.all():
+        if task.id in task_positions:
+            task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+            task_end = task.due_date.isoformat() if task.due_date else date.today().isoformat()
+            fig.add_shape(
+                type='line',
+                x0=task_created,
+                x1=task_end,
+                y0=task_positions[task.id],
+                y1=task_positions[task.id],
+                line=dict(color=color_map['task'], width=width_map['task'])
+            )
+    
+    # Note lines - from created_at to now
+    for note in individual.notes.all():
+        if note.id in note_positions:
+            note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+            fig.add_shape(
+                type='line',
+                x0=note_created,
+                x1=date.today().isoformat(),
+                y0=note_positions[note.id],
+                y1=note_positions[note.id],
+                line=dict(color=color_map['note'], width=width_map['note'])
+            )
+    
+    # Sample task lines - from created_at to due_date (or now if no due_date)
+    for sample in individual.samples.all():
+        for task in sample.tasks.all():
+            if task.id in task_positions:
+                task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                task_end = task.due_date.isoformat() if task.due_date else date.today().isoformat()
+                fig.add_shape(
+                    type='line',
+                    x0=task_created,
+                    x1=task_end,
+                    y0=task_positions[task.id],
+                    y1=task_positions[task.id],
+                    line=dict(color=color_map['task'], width=width_map['task'])
+                )
+    
+    # Sample note lines - from created_at to now
+    for sample in individual.samples.all():
+        for note in sample.notes.all():
+            if note.id in note_positions:
+                note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                fig.add_shape(
+                    type='line',
+                    x0=note_created,
+                    x1=date.today().isoformat(),
+                    y0=note_positions[note.id],
+                    y1=note_positions[note.id],
+                    line=dict(color=color_map['note'], width=width_map['note'])
+                )
+    
+    # Test task lines - from created_at to due_date (or now if no due_date)
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for task in test.tasks.all():
+                if task.id in task_positions:
+                    task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                    task_end = task.due_date.isoformat() if task.due_date else date.today().isoformat()
+                    fig.add_shape(
+                        type='line',
+                        x0=task_created,
+                        x1=task_end,
+                        y0=task_positions[task.id],
+                        y1=task_positions[task.id],
+                        line=dict(color=color_map['task'], width=width_map['task'])
+                    )
+    
+    # Test note lines - from created_at to now
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for note in test.notes.all():
+                if note.id in note_positions:
+                    note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                    fig.add_shape(
+                        type='line',
+                        x0=note_created,
+                        x1=date.today().isoformat(),
+                        y0=note_positions[note.id],
+                        y1=note_positions[note.id],
+                        line=dict(color=color_map['note'], width=width_map['note'])
+                    )
+    
+    # Analysis task lines - from created_at to due_date (or now if no due_date)
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                for task in analysis.tasks.all():
+                    if task.id in task_positions:
+                        task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                        task_end = task.due_date.isoformat() if task.due_date else date.today().isoformat()
+                        fig.add_shape(
+                            type='line',
+                            x0=task_created,
+                            x1=task_end,
+                            y0=task_positions[task.id],
+                            y1=task_positions[task.id],
+                            line=dict(color=color_map['task'], width=width_map['task'])
+                        )
+    
+    # Analysis note lines - from created_at to now
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                for note in analysis.notes.all():
+                    if note.id in note_positions:
+                        note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                        fig.add_shape(
+                            type='line',
+                            x0=note_created,
+                            x1=date.today().isoformat(),
+                            y0=note_positions[note.id],
+                            y1=note_positions[note.id],
+                            line=dict(color=color_map['note'], width=width_map['note'])
+                        )
+    
+
+    
+    # Add vertical lines connecting object creation points hierarchically
+    # Sample creation vertical lines - connect to individual
+    for sample in individual.samples.all():
+        if sample.id in sample_positions:
+            sample_created = sample.created_at.date().isoformat() if sample.created_at else '2025-01-01'
+            fig.add_shape(
+                type='line',
+                x0=sample_created,
+                x1=sample_created,
+                y0=0,  # Individual timeline
+                y1=sample_positions[sample.id],  # Sample position
+                line=dict(color=color_map['sample'], width=width_map['sample'], dash='dot')
+            )
+    
+    # Test creation vertical lines - connect to their sample
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            if test.id in test_positions and sample.id in sample_positions:
+                test_created = test.created_at.date().isoformat() if test.created_at else '2025-01-01'
+                fig.add_shape(
+                    type='line',
+                    x0=test_created,
+                    x1=test_created,
+                    y0=sample_positions[sample.id],  # Sample position
+                    y1=test_positions[test.id],  # Test position
+                    line=dict(color=color_map['test'], width=width_map['test'], dash='dot')
+                )
+    
+    # Analysis creation vertical lines - connect to their test
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                if analysis.id in analysis_positions and test.id in test_positions:
+                    analysis_created = analysis.created_at.date().isoformat() if analysis.created_at else '2025-01-01'
+                    fig.add_shape(
+                        type='line',
+                        x0=analysis_created,
+                        x1=analysis_created,
+                        y0=test_positions[test.id],  # Test position
+                        y1=analysis_positions[analysis.id],  # Analysis position
+                        line=dict(color=color_map['analysis'], width=width_map['analysis'], dash='dot')
+                    )
+    
+    # Task creation vertical lines - connect to individual
+    for task in individual.tasks.all():
+        if task.id in task_positions:
+            task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+            fig.add_shape(
+                type='line',
+                x0=task_created,
+                x1=task_created,
+                y0=0,  # Individual timeline
+                y1=task_positions[task.id],  # Task position
+                line=dict(color=color_map['task'], width=width_map['task'], dash='dot')
+            )
+    
+    # Note creation vertical lines - connect to individual
+    for note in individual.notes.all():
+        if note.id in note_positions:
+            note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+            fig.add_shape(
+                type='line',
+                x0=note_created,
+                x1=note_created,
+                y0=0,  # Individual timeline
+                y1=note_positions[note.id],  # Note position
+                line=dict(color=color_map['note'], width=width_map['note'], dash='dot')
+            )
+    
+    # Sample task creation vertical lines - connect to sample
+    for sample in individual.samples.all():
+        for task in sample.tasks.all():
+            if task.id in task_positions and sample.id in sample_positions:
+                task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                fig.add_shape(
+                    type='line',
+                    x0=task_created,
+                    x1=task_created,
+                    y0=sample_positions[sample.id],  # Sample position
+                    y1=task_positions[task.id],  # Task position
+                    line=dict(color=color_map['task'], width=width_map['task'], dash='dot')
+                )
+    
+    # Sample note creation vertical lines - connect to sample
+    for sample in individual.samples.all():
+        for note in sample.notes.all():
+            if note.id in note_positions and sample.id in sample_positions:
+                note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                fig.add_shape(
+                    type='line',
+                    x0=note_created,
+                    x1=note_created,
+                    y0=sample_positions[sample.id],  # Sample position
+                    y1=note_positions[note.id],  # Note position
+                    line=dict(color=color_map['note'], width=width_map['note'], dash='dot')
+                )
+    
+    # Test task creation vertical lines - connect to test
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for task in test.tasks.all():
+                if task.id in task_positions and test.id in test_positions:
+                    task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                    fig.add_shape(
+                        type='line',
+                        x0=task_created,
+                        x1=task_created,
+                        y0=test_positions[test.id],  # Test position
+                        y1=task_positions[task.id],  # Task position
+                        line=dict(color=color_map['task'], width=width_map['task'], dash='dot')
+                    )
+    
+    # Test note creation vertical lines - connect to test
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for note in test.notes.all():
+                if note.id in note_positions and test.id in test_positions:
+                    note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                    fig.add_shape(
+                        type='line',
+                        x0=note_created,
+                        x1=note_created,
+                        y0=test_positions[test.id],  # Test position
+                        y1=note_positions[note.id],  # Note position
+                        line=dict(color=color_map['note'], width=width_map['note'], dash='dot')
+                    )
+    
+    # Analysis task creation vertical lines - connect to analysis
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                for task in analysis.tasks.all():
+                    if task.id in task_positions and analysis.id in analysis_positions:
+                        task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                        fig.add_shape(
+                            type='line',
+                            x0=task_created,
+                            x1=task_created,
+                            y0=analysis_positions[analysis.id],  # Analysis position
+                            y1=task_positions[task.id],  # Task position
+                            line=dict(color=color_map['task'], width=width_map['task'], dash='dot')
+                        )
+    
+    # Analysis note creation vertical lines - connect to analysis
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                for note in analysis.notes.all():
+                    if note.id in note_positions and analysis.id in analysis_positions:
+                        note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                        fig.add_shape(
+                            type='line',
+                            x0=note_created,
+                            x1=note_created,
+                            y0=analysis_positions[analysis.id],  # Analysis position
+                            y1=note_positions[note.id],  # Note position
+                            line=dict(color=color_map['note'], width=width_map['note'], dash='dot')
+                        )
+    
+
     
     # Update layout
     fig.update_layout(
@@ -897,17 +1520,18 @@ def individual_timeline(request, pk):
             range=[min_y - 0.5, max_y + 0.5]
         ),
         xaxis=dict(
-            tickangle=45,
-            tickformat='%Y-%m-%d %H:%M'
+            tickangle=20,
+            tickformat='%d %b %Y',
+            type='date',
         ),
         # Add text angle for better readability
         annotations=[
             dict(
                 x=date,
                 y=y_pos + 0.1,  # Position just above each event's line
-                text=desc,
+                text='',
                 showarrow=False,
-                textangle=-70,  # Bottom-left to top-right orientation
+                textangle=0,
                 font=dict(size=10),
                 xanchor='left',
                 yanchor='bottom'
@@ -974,177 +1598,253 @@ def plots_page(request):
     # Prepare distribution plots data
     distribution_plots = []
     
-    # 1. Individual Status Distribution
-    status_counts = individuals_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
-    if status_counts:
-        fig = go.Figure(data=[
-            go.Pie(
-                labels=[item['status__name'] for item in status_counts],
-                values=[item['count'] for item in status_counts],
-                hole=0.3,
-                marker_colors=['#636EFA', '#EF553B', '#00cc96', '#ab63fa', '#FFA15A', '#19d3f3']
-            )
-        ])
-        fig.update_layout(
-            title='Individual Status Distribution',
-            height=300,
-            template=None
-        )
-        
-        distribution_plots.append({
-            'id': 'individual-status',
-            'title': 'Individual Status Distribution',
-            'description': 'Distribution of individuals by their current status',
-            'icon': 'users',
-            'chart_data': fig.to_dict(),
-            'stats': [
-                {'label': 'Total Individuals', 'value': individuals_count},
-                {'label': 'Active Statuses', 'value': status_counts.count()}
-            ]
-        })
-    
-    # 2. Sample Type Distribution
-    sample_type_counts = samples_queryset.values('sample_type__name').annotate(count=Count('id')).order_by('-count')
-    if sample_type_counts:
-        fig = go.Figure(data=[
-            go.Pie(
-                labels=[item['sample_type__name'] for item in sample_type_counts],
-                values=[item['count'] for item in sample_type_counts],
-                hole=0.3,
-                marker_colors=['#00cc96', '#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF']
-            )
-        ])
-        fig.update_layout(
-            title='Sample Type Distribution',
-            height=300,
-            template=None
-        )
-        
-        distribution_plots.append({
-            'id': 'sample-type',
-            'title': 'Sample Type Distribution',
-            'description': 'Distribution of samples by their type',
-            'icon': 'vial',
-            'chart_data': fig.to_dict(),
-            'stats': [
-                {'label': 'Total Samples', 'value': samples_count},
-                {'label': 'Sample Types', 'value': sample_type_counts.count()}
-            ]
-        })
-    
-    # 3. Test Type Distribution
-    test_type_counts = tests_queryset.values('test_type__name').annotate(count=Count('id')).order_by('-count')
-    if test_type_counts:
-        fig = go.Figure(data=[
-            go.Pie(
-                labels=[item['test_type__name'] for item in test_type_counts],
-                values=[item['count'] for item in test_type_counts],
-                hole=0.3,
-                marker_colors=['#ab63fa', '#FF6692', '#B6E880', '#FF97FF', '#FECB52', '#636EFA']
-            )
-        ])
-        fig.update_layout(
-            title='Test Type Distribution',
-            height=300,
-            template=None
-        )
-        
-        distribution_plots.append({
-            'id': 'test-type',
-            'title': 'Test Type Distribution',
-            'description': 'Distribution of tests by their type',
-            'icon': 'flask-vial',
-            'chart_data': fig.to_dict(),
-            'stats': [
-                {'label': 'Total Tests', 'value': tests_count},
-                {'label': 'Test Types', 'value': test_type_counts.count()}
-            ]
-        })
-    
-    # 4. Analysis Type Distribution
-    analysis_type_counts = analyses_queryset.values('type__name').annotate(count=Count('id')).order_by('-count')
-    if analysis_type_counts:
-        fig = go.Figure(data=[
-            go.Pie(
-                labels=[item['type__name'] for item in analysis_type_counts],
-                values=[item['count'] for item in analysis_type_counts],
-                hole=0.3,
-                marker_colors=['#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52']
-            )
-        ])
-        fig.update_layout(
-            title='Analysis Type Distribution',
-            height=300,
-            template=None
-        )
-        
-        distribution_plots.append({
-            'id': 'analysis-type',
-            'title': 'Analysis Type Distribution',
-            'description': 'Distribution of analyses by their type',
-            'icon': 'laptop',
-            'chart_data': fig.to_dict(),
-            'stats': [
-                {'label': 'Total Analyses', 'value': analyses_count},
-                {'label': 'Analysis Types', 'value': analysis_type_counts.count()}
-            ]
-        })
-    
-    # 5. Institution Distribution
-    institution_counts = individuals_queryset.values('institution__name').annotate(count=Count('id')).order_by('-count')
-    if institution_counts:
-        fig = go.Figure(data=[
-            go.Pie(
-                labels=[item['institution__name'] for item in institution_counts],
-                values=[item['count'] for item in institution_counts],
-                hole=0.3,
-                marker_colors=['#636EFA', '#EF553B', '#00cc96', '#ab63fa', '#FFA15A', '#19d3f3']
-            )
-        ])
-        fig.update_layout(
-            title='Institution Distribution',
-            height=300,
-            template=None
-        )
-        
-        distribution_plots.append({
-            'id': 'institution',
-            'title': 'Institution Distribution',
-            'description': 'Distribution of individuals by institution',
-            'icon': 'building-columns',
-            'chart_data': fig.to_dict(),
-            'stats': [
-                {'label': 'Total Individuals', 'value': individuals_count},
-                {'label': 'Institutions', 'value': institution_counts.count()}
-            ]
-        })
-    
-    # 6. Sample Status Distribution
+    # Get all data for the combined distribution plot
+    individual_status_counts = individuals_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
     sample_status_counts = samples_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
+    test_status_counts = tests_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
+    analysis_status_counts = analyses_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
+    
+    # Get other distribution data
+    sample_type_counts = samples_queryset.values('sample_type__name').annotate(count=Count('id')).order_by('-count')
+    test_type_counts = tests_queryset.values('test_type__name').annotate(count=Count('id')).order_by('-count')
+    analysis_type_counts = analyses_queryset.values('type__name').annotate(count=Count('id')).order_by('-count')
+    institution_counts = individuals_queryset.values('institution__name').annotate(count=Count('id')).order_by('-count')
+    
+    # Create a combined distribution plot with all subplots
+    traces = []
+    positions = []
+    subplot_titles = []
+    
+    # Color maps
+    status_colors = {
+        'Active': '#00cc96',      # Green
+        'Registered': '#636EFA',   # Blue
+        'Completed': '#FFA15A',    # Orange
+        'Pending': '#ab63fa',      # Purple
+        'Cancelled': '#EF553B',    # Red
+        'Failed': '#FF6692',       # Pink
+        'In Progress': '#19d3f3',  # Light Blue
+        'On Hold': '#FECB52',      # Yellow
+        'Archived': '#8c564b',     # Brown
+        'Draft': '#B6E880',        # Light Green
+    }
+    
+    # 1. Individual Status Distribution
+    if individual_status_counts:
+        labels = [item['status__name'] for item in individual_status_counts]
+        values = [item['count'] for item in individual_status_counts]
+        colors = [status_colors.get(item['status__name'], '#7f7f7f') for item in individual_status_counts]
+            
+        traces.append(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.3,
+            marker_colors=colors,
+            name="Individual Status",
+            domain={'row': 0, 'column': 0},
+            textinfo='value',
+            showlegend=True,
+            legendgroup="individual_status"
+        ))
+        positions.append((0, 0))
+        subplot_titles.append("Individual Status")
+    
+    # 2. Sample Status Distribution
     if sample_status_counts:
-        fig = go.Figure(data=[
-            go.Pie(
-                labels=[item['status__name'] for item in sample_status_counts],
-                values=[item['count'] for item in sample_status_counts],
-                hole=0.3,
-                marker_colors=['#00cc96', '#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF']
-            )
-        ])
+        labels = [item['status__name'] for item in sample_status_counts]
+        values = [item['count'] for item in sample_status_counts]
+        colors = [status_colors.get(item['status__name'], '#7f7f7f') for item in sample_status_counts]
+        
+        traces.append(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.3,
+            marker_colors=colors,
+            name="Sample Status",
+            domain={'row': 0, 'column': 1},
+            textinfo='value',
+            showlegend=True,
+            legendgroup="sample_status"
+        ))
+        positions.append((0, 1))
+        subplot_titles.append("Sample Status")
+    
+    # 3. Test Status Distribution
+    if test_status_counts:
+        labels = [item['status__name'] for item in test_status_counts]
+        values = [item['count'] for item in test_status_counts]
+        colors = [status_colors.get(item['status__name'], '#7f7f7f') for item in test_status_counts]
+        
+        traces.append(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.3,
+            marker_colors=colors,
+            name="Test Status",
+            domain={'row': 0, 'column': 2},
+            textinfo='value',
+            showlegend=True,
+            legendgroup="test_status"
+        ))
+        positions.append((0, 2))
+        subplot_titles.append("Test Status")
+    
+    # 4. Analysis Status Distribution
+    if analysis_status_counts:
+        labels = [item['status__name'] for item in analysis_status_counts]
+        values = [item['count'] for item in analysis_status_counts]
+        colors = [status_colors.get(item['status__name'], '#7f7f7f') for item in analysis_status_counts]
+        
+        traces.append(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.3,
+            marker_colors=colors,
+            name="Analysis Status",
+            domain={'row': 0, 'column': 3},
+            textinfo='value',
+            showlegend=True,
+            legendgroup="analysis_status"
+        ))
+        positions.append((0, 3))
+        subplot_titles.append("Analysis Status")
+    
+    # 5. Sample Type Distribution
+    if sample_type_counts:
+        labels = [item['sample_type__name'] for item in sample_type_counts]
+        values = [item['count'] for item in sample_type_counts]
+        
+        traces.append(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.3,
+            marker_colors=['#00cc96', '#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF'],
+            name="Sample Type",
+            domain={'row': 1, 'column': 0},
+            textinfo='value',
+            showlegend=True,
+            legendgroup="sample_type"
+        ))
+        positions.append((1, 0))
+        subplot_titles.append("Sample Type")
+    
+    # 6. Test Type Distribution
+    if test_type_counts:
+        labels = [item['test_type__name'] for item in test_type_counts]
+        values = [item['count'] for item in test_type_counts]
+        
+        traces.append(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.3,
+            marker_colors=['#ab63fa', '#FF6692', '#B6E880', '#FF97FF', '#FECB52', '#636EFA'],
+            name="Test Type",
+            domain={'row': 1, 'column': 1},
+            textinfo='value',
+            showlegend=True,
+            legendgroup="test_type"
+        ))
+        positions.append((1, 1))
+        subplot_titles.append("Test Type")
+    
+    # 7. Analysis Type Distribution
+    if analysis_type_counts:
+        labels = [item['type__name'] for item in analysis_type_counts]
+        values = [item['count'] for item in analysis_type_counts]
+        
+        traces.append(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.3,
+            marker_colors=['#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'],
+            name="Analysis Type",
+            domain={'row': 1, 'column': 2},
+            textinfo='value',
+            showlegend=True,
+            legendgroup="analysis_type"
+        ))
+        positions.append((1, 2))
+        subplot_titles.append("Analysis Type")
+    
+    # 8. Institution Distribution
+    if institution_counts:
+        labels = [item['institution__name'] for item in institution_counts]
+        values = [item['count'] for item in institution_counts]
+        
+        traces.append(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.3,
+            marker_colors=['#636EFA', '#EF553B', '#00cc96', '#ab63fa', '#FFA15A', '#19d3f3'],
+            name="Institution",
+            domain={'row': 1, 'column': 3},
+            textinfo='value',
+            showlegend=True,
+            legendgroup="institution"
+        ))
+        positions.append((1, 3))
+        subplot_titles.append("Institution")
+    
+    # Create the combined subplot figure
+    if traces:
+        # Create subplot layout
+        fig = go.Figure(data=traces)
+        
+        # Calculate grid dimensions (2 rows, 4 columns)
         fig.update_layout(
-            title='Sample Status Distribution',
-            height=300,
-            template=None
+            height=900,
+            template=None,
+            grid=dict(
+                rows=2,
+                columns=4,
+                pattern='independent'
+            ),
+            showlegend=True,
+            margin=dict(l=50, r=50, t=100, b=50)
         )
         
+        # Add subplot titles with better positioning
+        annotations = []
+        title_positions = [
+            (0.125, 0.98, "Individual Status"),
+            (0.375, 0.98, "Sample Status"),
+            (0.625, 0.98, "Test Status"),
+            (0.875, 0.98, "Analysis Status"),
+            (0.125, 0.48, "Sample Type"),
+            (0.375, 0.48, "Test Type"),
+            (0.625, 0.48, "Analysis Type"),
+            (0.875, 0.48, "Institution")
+        ]
+        
+        for i, (x, y, title) in enumerate(title_positions):
+            if i < len(subplot_titles):
+                annotations.append(dict(
+                    text=subplot_titles[i],
+                    x=x,
+                    y=y,
+                    xref='paper',
+                    yref='paper',
+                    showarrow=False,
+                    font=dict(size=16, color='black', weight='bold'),
+                    xanchor='center',
+                    yanchor='top'
+                ))
+        
+        fig.update_layout(annotations=annotations)
+        
+        # Convert the figure to dict and ensure proper JSON serialization
+        chart_dict = fig.to_dict()
+        
         distribution_plots.append({
-            'id': 'sample-status',
-            'title': 'Sample Status Distribution',
-            'description': 'Distribution of samples by their current status',
-            'icon': 'vial',
-            'chart_data': fig.to_dict(),
+            'id': 'combined-distributions',
+            'title': 'All Distributions',
+            'icon': 'chart-pie',
+            'chart_data': chart_dict,
             'stats': [
+                {'label': 'Total Individuals', 'value': individuals_count},
                 {'label': 'Total Samples', 'value': samples_count},
-                {'label': 'Active Statuses', 'value': sample_status_counts.count()}
+                {'label': 'Total Tests', 'value': tests_count},
+                {'label': 'Total Analyses', 'value': analyses_count}
             ]
         })
     
@@ -1231,7 +1931,7 @@ def pie_chart_view(request, model_name, attribute_name):
                 labels=labels,
                 values=values,
                 hole=0.3,  # Creates a donut chart
-                textinfo='label+percent',
+                textinfo='value',
                 textposition='outside',
                 marker=dict(colors=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'])
             )

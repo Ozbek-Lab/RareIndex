@@ -28,7 +28,7 @@ class Command(BaseCommand):
     help = 'Generate sample data for testing'
 
     def add_arguments(self, parser):
-        parser.add_argument('--families', type=int, default=5, help='Number of families to create')
+        parser.add_argument('--families', type=int, default=3, help='Number of families to create')
         parser.add_argument('--samples-per-individual', type=int, default=2, help='Number of samples per individual')
         parser.add_argument('--tests-per-sample', type=int, default=2, help='Number of tests per sample')
         parser.add_argument('--analyses-per-test', type=int, default=2, help='Number of analyses per test')
@@ -93,10 +93,10 @@ class Command(BaseCommand):
             family_id = self._generate_unique_family_id(i+1)
             
             # Family creation date - start of the process
-            family_creation_date = timezone.now() - timedelta(days=random.randint(30, 365))
+            family_creation_date = timezone.now() - timedelta(days=100)
             family = self._create_family(family_id, user, family_creation_date)
             self._create_note(family, user, creation_date=family_creation_date)
-            self._create_tasks(family, user, all_statuses['individual']['completed'], project, options['tasks_per_object'], family_creation_date)
+            self._create_tasks(family, user, all_statuses, project, options['tasks_per_object'], family_creation_date)
             
             # Mother creation date - after family creation
             mother_creation_date = family_creation_date + timedelta(days=random.randint(1, 3))
@@ -137,7 +137,7 @@ class Command(BaseCommand):
             for individual in [mother, father] + children:
                 # Create tasks for individual with future dates based on individual creation
                 individual_base_date = individual.created_at + timedelta(days=random.randint(1, 21))
-                self._create_tasks(individual, user, all_statuses['individual']['completed'], project, options['tasks_per_object'], individual_base_date)
+                self._create_tasks(individual, user, all_statuses, project, options['tasks_per_object'], individual_base_date)
             for individual in [mother, father] + children:
                 self._create_samples(
                     individual,
@@ -156,7 +156,7 @@ class Command(BaseCommand):
         # Create additional projects and assign random individuals to them
         project_names = ["Cancer Study", "Rare Disease Cohort", "Control Group"]
         for pname in project_names:
-            project_creation_date = timezone.now() - timedelta(days=random.randint(30, 365))
+            project_creation_date = timezone.now() - timedelta(days=100) - timedelta(days=random.randint(30, 365))
             proj = Project.objects.create(
                 name=pname,
                 description=f"Auto-generated project: {pname}",
@@ -179,7 +179,7 @@ class Command(BaseCommand):
         """Create statuses for each model type separately"""
         all_statuses = {}
         
-        for model_type in [Individual, Sample, Test, Analysis]:
+        for model_type in [Individual, Sample, Test, Analysis, Task]:
             model_name = model_type.__name__
             status_data = {
                 'registered': ('Registered', 'gray', 'fa-user-plus'),
@@ -278,7 +278,7 @@ class Command(BaseCommand):
         return institution
 
     def _create_project(self, user, status):
-        project_creation_date = timezone.now() - timedelta(days=random.randint(30, 365))
+        project_creation_date = timezone.now() - timedelta(days=100) - timedelta(days=random.randint(30, 365))
         project, _ = Project.objects.get_or_create(
             name='Sample Data Project',
             defaults={
@@ -294,7 +294,7 @@ class Command(BaseCommand):
 
     def _create_family(self, family_id, user, creation_date=None):
         if creation_date is None:
-            creation_date = timezone.now()
+            creation_date = timezone.now() - timedelta(days=100)
         family, _ = Family.objects.get_or_create(
             family_id=family_id,
             defaults={
@@ -308,8 +308,8 @@ class Command(BaseCommand):
 
     def _create_individual(self, role, family, user, institution, status, hpo_terms, mother=None, father=None, is_index=False, creation_date=None):
         if creation_date is None:
-            creation_date = timezone.now()
-        birth_date = timezone.now() - timedelta(days=random.randint(365*20, 365*50))
+            creation_date = timezone.now() - timedelta(days=100)
+        birth_date = timezone.now() - timedelta(days=100) - timedelta(days=random.randint(365*20, 365*50))
         individual = Individual.objects.create(
             full_name=f"{role} {family.family_id}",
             tc_identity=random.randint(1000000000, 9999999999),
@@ -333,15 +333,28 @@ class Command(BaseCommand):
         self.stdout.write(f"Added {len(selected_terms)} HPO terms to {individual.full_name} (is_index={is_index})")
         return individual
 
-    def _create_tasks(self, obj, user, target_status, project, num_tasks, base_date=None):
+    def _create_tasks(self, obj, user, all_statuses, project, num_tasks, base_date=None):
         priorities = ['low', 'medium', 'high', 'urgent']
         if base_date is None:
-            base_date = timezone.now()
+            base_date = timezone.now() - timedelta(days=100)
         
         for i in range(num_tasks):
             # Tasks should be due in the future relative to the base date
             task_due_date = base_date + timedelta(days=random.randint(7, 60))
             task_creation_date = base_date + timedelta(days=random.randint(0, 2))
+            
+            # Randomly assign a task status (mostly pending/active, some completed)
+            status_weights = {
+                'pending': 0.4,
+                'active': 0.4,
+                'completed': 0.15,
+                'cancelled': 0.05
+            }
+            task_status = random.choices(
+                list(status_weights.keys()),
+                weights=list(status_weights.values())
+            )[0]
+            
             task = Task.objects.create(
                 title=f'Task {i+1}',
                 description=f'Auto task {i+1}',
@@ -350,7 +363,7 @@ class Command(BaseCommand):
                 created_by=user,
                 due_date=task_due_date,
                 priority=random.choice(priorities),
-                status=target_status,
+                status=all_statuses['task'][task_status],
                 project=project,
                 created_at=task_creation_date,
                 updated_at=task_creation_date
@@ -382,7 +395,7 @@ class Command(BaseCommand):
             self._create_note(sample, user, creation_date=sample_creation_date)
 
             # Create tasks for sample (due 1-2 weeks after sample creation)
-            self._create_tasks(sample, user, all_statuses['sample']['completed'], project, tasks_per_object, sample_creation_date)
+            self._create_tasks(sample, user, all_statuses, project, tasks_per_object, sample_creation_date)
 
             # Create tests for sample
             for j in range(tests_per_sample):
@@ -402,7 +415,7 @@ class Command(BaseCommand):
                 self._create_note(test, user, creation_date=test_performed_date)
 
                 # Create tasks for test (due 1-2 weeks after test performance)
-                self._create_tasks(test, user, all_statuses['test']['completed'], project, tasks_per_object, test_performed_date)
+                self._create_tasks(test, user, all_statuses, project, tasks_per_object, test_performed_date)
 
                 # Create analyses for test
                 for k in range(analyses_per_test):
@@ -421,7 +434,7 @@ class Command(BaseCommand):
                     self._create_note(analysis, user, creation_date=analysis_performed_date)
 
                     # Create tasks for analysis (due 1-2 weeks after analysis performance)
-                    self._create_tasks(analysis, user, all_statuses['analysis']['completed'], project, tasks_per_object, analysis_performed_date)
+                    self._create_tasks(analysis, user, all_statuses, project, tasks_per_object, analysis_performed_date)
 
     def _create_identifier_types(self, user):
         identifier_type_data = {
@@ -509,7 +522,7 @@ class Command(BaseCommand):
         """Create a note for the given object if it supports notes."""
         if hasattr(obj, 'notes'):
             if creation_date is None:
-                creation_date = timezone.now()
+                creation_date = timezone.now() - timedelta(days=100) + timedelta(days=random.randint(3, 5))
             Note.objects.create(
                 content_object=obj,
                 content=text or f"Auto-generated note for {obj}",
