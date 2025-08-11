@@ -28,3 +28,6 @@ langchain-community
 langchain-core
 sqlalchemy
 requests
+django-environ
+gunicorn
+psycopg2-binary
