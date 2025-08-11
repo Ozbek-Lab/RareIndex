@@ -29,12 +29,12 @@ WORKDIR /app
 # Install dependencies
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
-RUN chmod +x /app/scripts/entrypoint.sh
-# Use the non-root user
-USER app
 
 # Copy project
 COPY . /app/
+RUN chmod +x /app/scripts/entrypoint.sh
+# Use the non-root user
+USER app
 
 # Expose the port the app runs on
 EXPOSE 8000
