@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database
+*.sqlite3
+db.sqlite3
+rareindex.db
+test.db
+
+# Environment
+.env
+
+# IDEs
+.idea/
+.vscode/
+
+# Static files
+staticfiles/
+
+# Docker
+Dockerfile
+docker-compose.yml
+docker-compose.prod.yml
+.dockerignore
