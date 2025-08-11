@@ -8,6 +8,7 @@ ENV PYTHONUNBUFFERED 1
 # Install system dependencies
 RUN apt-get update && \
     apt-get install -y \
+    gcc \
     # for psycopg2
     libpq-dev \
     # for pygraphviz
@@ -28,7 +29,7 @@ WORKDIR /app
 # Install dependencies
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
-
+RUN chmod +x /app/scripts/entrypoint.sh
 # Use the non-root user
 USER app
 
@@ -37,7 +38,6 @@ COPY . /app/
 
 # Expose the port the app runs on
 EXPOSE 8000
-
 # Entrypoint command
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "rareindex.wsgi:application"]
