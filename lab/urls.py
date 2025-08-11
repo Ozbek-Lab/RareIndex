@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .visualization import plots
 
 app_name = "lab"
 
@@ -18,11 +19,11 @@ urlpatterns = [
         name="hpo_network_visualization",
     ),
     path("plots/", views.plots_page, name="plots"),
-    path("pie-chart/<str:model_name>/<str:attribute_name>/", views.pie_chart_view, name="pie_chart"),
+    path("pie-chart/<str:model_name>/<str:attribute_name>/", plots.pie_chart_view, name="pie_chart"),
     path("get-select-options/", views.get_select_options, name="get_select_options"),
     path("individual/<int:pk>/timeline/", views.individual_timeline, name="individual_timeline"),
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
-    path("get-stats-counts/", views.get_stats_counts, name="get_stats_counts"),
+    path("get-stats-counts/", plots.get_stats_counts, name="get_stats_counts"),
     
     # Natural language search routes
     path("nl-search/", views.nl_search, name="nl_search"),
