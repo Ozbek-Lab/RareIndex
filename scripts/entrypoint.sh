@@ -11,6 +11,14 @@ while ! nc -z $DATABASE_HOST $DATABASE_PORT; do
 done
 echo "Database started"
 
+# Export email secrets to environment variables if they exist
+if [ -f /run/secrets/email_host_user ]; then
+    export EMAIL_HOST_USER=$(cat /run/secrets/email_host_user)
+fi
+if [ -f /run/secrets/email_host_password ]; then
+    export EMAIL_HOST_PASSWORD=$(cat /run/secrets/email_host_password)
+fi
+
 # Apply database migrations
 echo "Applying database migrations..."
 python manage.py migrate
