@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    env_file:
+      - ./.env.prod
+    depends_on:
+      - db
+    volumes:
+      - static_volume:/app/staticfiles
+
+  db:
+    image: postgres:14
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - ./.env.prod
+    secrets:
+      - postgres_password
+
+  caddy:
+    image: caddy:2
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - static_volume:/app/staticfiles
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
+  caddy_data:
+  static_volume:
+
+secrets:
+  postgres_password:
+    file: ./postgres_password.txt

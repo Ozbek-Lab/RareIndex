@@ -19,3 +19,6 @@ django-simple-history
 # Use the latest git version of django-notifications-hq for Python 3.12+ compatibility
 openpyxl
 git+https://github.com/django-notifications/django-notifications.git@master#egg=django-notifications-hq
+django-environ
+gunicorn
+psycopg2-binary

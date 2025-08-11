@@ -1,0 +1,7 @@
+{$DOMAIN_NAME}:80 {
+    # Set this path to be the same as the STATIC_ROOT in settings.py
+    root * /app/staticfiles
+    file_server
+
+    reverse_proxy web:8000
+}
