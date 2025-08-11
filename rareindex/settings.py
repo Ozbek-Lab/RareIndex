@@ -12,22 +12,32 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import os
+import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-FIELD_ENCRYPTION_KEY = b"4B3JfhEn0rSFtdf1fhlLZK1iMJUuL0SCFnNgvjQ2ToE="
+# Initialize django-environ
+env = environ.Env(
+    # set casting, default value
+    DEBUG=(bool, False)
+)
+# reading .env file
+environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
+
+
+FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY").encode("utf-8")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-=k1hia4jdzk4nz^8xg5^^1ein#u(lex)(2lgg-#^xrwn96@k($"
+SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = ["*"]  # For development only
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
 
 # Application definition
@@ -55,6 +65,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -110,10 +121,10 @@ WSGI_APPLICATION = "rareindex.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "test.db" if os.getenv("TEST_DB") else BASE_DIR / "rareindex.db",
-    }
+    "default": env.db(
+        "DATABASE_URL",
+        default="sqlite:///" + os.path.join(BASE_DIR, "db.sqlite3"),
+    ),
 }
 
 
