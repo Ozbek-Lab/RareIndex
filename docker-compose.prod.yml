@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    env_file:
+      - ./.env.prod
+    depends_on:
+      - db
+    volumes:
+      - static_volume:/app/staticfiles
+    secrets:
+      - email_host_user
+      - email_host_password
+
+  db:
+    image: postgres:14
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+    secrets:
+      - postgres_password
+
+  caddy:
+    image: caddy:2
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - static_volume:/app/staticfiles
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
+  caddy_data:
+  static_volume:
+
+secrets:
+  postgres_password:
+    file: ./postgres_password.txt
+  email_host_user:
+    file: ./email_host_user.txt
+  email_host_password:
+    file: ./email_host_password.txt
