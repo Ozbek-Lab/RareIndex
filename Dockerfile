@@ -20,9 +20,6 @@ RUN apt-get update && \
     netcat-openbsd && \
     apt-get clean
 
-# Create a non-root user
-RUN addgroup --system app && adduser --system --group app
-
 # Set workdir
 WORKDIR /app
 
@@ -30,14 +27,5 @@ WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project
-COPY . /app/
-RUN chmod +x /app/scripts/entrypoint.sh
-# Use the non-root user
-USER app
-
-# Expose the port the app runs on
-EXPOSE 8000
-# Entrypoint command
-ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "rareindex.wsgi:application"]
+# Copy the rest of the project
+COPY . .
