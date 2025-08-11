@@ -21,3 +21,10 @@ openpyxl
 numpy
 plotly-express
 git+https://github.com/django-notifications/django-notifications.git@master#egg=django-notifications-hq
+
+# LLM and LangChain dependencies
+langchain
+langchain-community
+langchain-core
+sqlalchemy
+requests

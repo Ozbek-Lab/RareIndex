@@ -24,6 +24,10 @@ urlpatterns = [
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
     path("get-stats-counts/", views.get_stats_counts, name="get_stats_counts"),
     
+    # Natural language search routes
+    path("nl-search/", views.nl_search, name="nl_search"),
+    path("nl-search/page/", views.nl_search_page, name="nl_search_page"),
+    
     # path("", views.dashboard, name="dashboard"),
     # path("select/search/", views.select_search, name="select_search"),
     # # Individual routes
