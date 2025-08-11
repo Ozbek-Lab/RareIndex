@@ -9,6 +9,9 @@ services:
       - db
     volumes:
       - static_volume:/app/staticfiles
+    secrets:
+      - email_host_user
+      - email_host_password
 
   db:
     image: postgres:14
@@ -41,3 +44,7 @@ volumes:
 secrets:
   postgres_password:
     file: ./postgres_password.txt
+  email_host_user:
+    file: ./email_host_user.txt
+  email_host_password:
+    file: ./email_host_password.txt
