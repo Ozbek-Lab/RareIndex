@@ -1,6 +1,56 @@
 {% extends "lab/base.html" %}
 {% load partials %}
 
+<style>
+  /* Form field styling for better visibility */
+  .form-field-wrapper input,
+  .form-field-wrapper select,
+  .form-field-wrapper textarea {
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md;
+    @apply bg-white dark:bg-gray-700;
+    @apply text-gray-900 dark:text-gray-100;
+    @apply placeholder-gray-500 dark:placeholder-gray-400;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    @apply transition-colors duration-200;
+  }
+  
+  .form-field-wrapper input:focus,
+  .form-field-wrapper select:focus,
+  .form-field-wrapper textarea:focus {
+    @apply border-blue-500 dark:border-blue-400;
+  }
+  
+  /* Dark mode specific adjustments */
+  .dark .form-field-wrapper input,
+  .dark .form-field-wrapper select,
+  .dark .form-field-wrapper textarea {
+    @apply bg-gray-700 border-gray-600 text-gray-100;
+  }
+  
+  .dark .form-field-wrapper input:focus,
+  .dark .form-field-wrapper select:focus,
+  .dark .form-field-wrapper textarea:focus {
+    @apply bg-gray-700 border-blue-400 ring-blue-400;
+  }
+  
+  /* Textarea specific styling */
+  .form-field-wrapper textarea {
+    @apply resize-vertical min-h-[80px];
+  }
+  
+  /* Select dropdown styling */
+  .form-field-wrapper select {
+    @apply appearance-none bg-no-repeat bg-right;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+  
+  .dark .form-field-wrapper select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23d1d5db' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  }
+</style>
+
 
 {% partialdef drawer %}
   <!-- Alpine.js Right-side Drawer -->
@@ -323,6 +373,16 @@
       <div class="flex justify-between items-center mb-4">
         <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h1>
         <div class="flex items-center">
+          <!-- Add New button -->
+          <button
+            hx-get="{% url 'lab:generic_create' %}?model_name={{ model_name }}&app_label={{ app_label }}"
+            hx-target="#modal-root"
+            hx-swap="innerHTML"
+            class="mr-3 inline-flex items-center px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          >
+            <i class="fa-solid fa-plus mr-2"></i>
+            Add New {{ model_name }}
+          </button>
           <!-- Slick joined toggle buttons with animations -->
           <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center">
             <!-- Animated background slider -->
@@ -723,104 +783,108 @@
   x-data="mainController()"
   class="flex h-screen bg-gray-50 dark:bg-gray-900">
   {% include "lab/sidebar.html" %}
-  <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900 p-6">
-    <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
-      <button @click="open = true" type="button"
-        class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
-        aria-label="Open filters">
-        <i class="fa-solid fa-filter"></i>
-      </button>
-      <!-- Clear Filters Button -->
-      <button
-        x-show="Object.values(filters).some(v => v)"
-        @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
-        class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
-        type="button"
-      >
-        <i class="fa-solid fa-filter-circle-xmark"></i>
-      </button>
-    </div>
-    {% partial drawer %}
-    <!-- Detail View Container -->
-    <div x-show="activeItem && activeItem.startsWith('detail-')" id="detail-view" class="relative">
-      <template x-if="detailHtml">
-        <div x-html="detailHtml"></div>
-      </template>
-      <button @click="closeDetail()" class="absolute top-2 right-2 z-10 bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Close</button>
-    </div>
-    <!-- Hide main content when detail is open -->
-    <div x-show="!activeItem || !activeItem.startsWith('detail-')">
-      <div x-show="activeItem === 'index'">
-        <div class="grid grid-cols-4 gap-4 relative">
-          {% with view="index" %}
-          {% partial individual-section %}
-          {% partial sample-section %}
-          {% partial test-section %}
-          {% partial analysis-section %}
-          {% partial institution-section %}
-          {% partial project-section %}
-          {% partial task-section %}
-          {% partial hpo-term-section %}
+  <main class="flex-1 overflow-y-auto p-6">
+    <div id="main-content">
+      <div id="modal-root"></div>
+      <!-- Main content area for HTMX operations -->
+      <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
+        <button @click="open = true" type="button"
+          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
+          aria-label="Open filters">
+          <i class="fa-solid fa-filter"></i>
+        </button>
+        <!-- Clear Filters Button -->
+        <button
+          x-show="Object.values(filters).some(v => v)"
+          @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
+          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
+          type="button"
+        >
+          <i class="fa-solid fa-filter-circle-xmark"></i>
+        </button>
+      </div>
+      {% partial drawer %}
+      <!-- Detail View Container -->
+      <div x-show="activeItem && activeItem.startsWith('detail-')" id="detail-view" class="relative">
+        <template x-if="detailHtml">
+          <div x-html="detailHtml"></div>
+        </template>
+        <button @click="closeDetail()" class="absolute top-2 right-2 z-10 bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Close</button>
+      </div>
+      <!-- Hide main content when detail is open -->
+      <div x-show="!activeItem || !activeItem.startsWith('detail-')">
+        <div x-show="activeItem === 'index'">
+          <div class="grid grid-cols-4 gap-4 relative">
+            {% with view="index" %}
+            {% partial individual-section %}
+            {% partial sample-section %}
+            {% partial test-section %}
+            {% partial analysis-section %}
+            {% partial institution-section %}
+            {% partial project-section %}
+            {% partial task-section %}
+            {% partial hpo-term-section %}
+            {% endwith %}
+          </div>
+        </div>
+        <div x-show="activeItem === 'individual'">
+          {% with view="page" %}
+            {% partial individual-section %}
           {% endwith %}
         </div>
-      </div>
-      <div x-show="activeItem === 'individual'">
-        {% with view="page" %}
-          {% partial individual-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'sample'">
-        {% with view="page" %}
-          {% partial sample-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'test'">
-        {% with view="page" %}
-          {% partial test-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'analysis'">
-        {% with view="page" %}
-          {% partial analysis-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'institution'">
-        {% with view="page" %}
-          {% partial institution-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'project'">
-        {% with view="page" %}
-          {% partial project-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'task'">
-        {% with view="page" %}
-          {% partial task-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'hpo-term'">
-        {% with view="page" %}
-          {% partial hpo-term-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'hpo-network-visualization'">
-        {% with view="page" %}
-          <div x-data="hpoController()">
-            {% partial hpo-network-visualization-section %}
-          </div>
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'notifications'" id="notifications-content">
-        <!-- Notifications content will be loaded here via HTMX -->
-      </div>
-      <div x-show="activeItem === 'plots'" id="plots-content">
-        {% with view="page" %}
-          {% partial plots-section %}
-        {% endwith %}
-      </div>
-      <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
-        <!-- Natural language search content will be loaded here via HTMX -->
+        <div x-show="activeItem === 'sample'">
+          {% with view="page" %}
+            {% partial sample-section %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'test'">
+          {% with view="page" %}
+            {% partial test-section %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'analysis'">
+          {% with view="page" %}
+            {% partial analysis-section %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'institution'">
+          {% with view="page" %}
+            {% partial institution-section %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'project'">
+          {% with view="page" %}
+            {% partial project-section %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'task'">
+          {% with view="page" %}
+            {% partial task-section %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'hpo-term'">
+          {% with view="page" %}
+            {% partial hpo-term-section %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'hpo-network-visualization'">
+          {% with view="page" %}
+            <div x-data="hpoController()">
+              {% partial hpo-network-visualization-section %}
+            </div>
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'notifications'" id="notifications-content">
+          <!-- Notifications content will be loaded here via HTMX -->
+        </div>
+        <div x-show="activeItem === 'plots'" id="plots-content">
+          {% with view="page" %}
+            {% partial plots-section %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
+          <!-- Natural language search content will be loaded here via HTMX -->
+        </div>
       </div>
     </div>
   </main>
@@ -835,9 +899,14 @@
         detailHtml: null,
         viewMode: 'cards',
 
+        clearModal() {
+          const modalRoot = document.getElementById('modal-root');
+          if (modalRoot) modalRoot.innerHTML = '';
+        },
+
         init() {
           this.syncStateFromURL();
-          window.addEventListener('popstate', () => this.syncStateFromURL());
+          window.addEventListener('popstate', () => { this.clearModal(); this.syncStateFromURL(); });
 
           // Load viewMode from localStorage
           const savedViewMode = localStorage.getItem('viewMode');
@@ -858,11 +927,20 @@
           this.$watch("viewMode", (newViewMode) => {
             localStorage.setItem('viewMode', newViewMode);
           });
+
+          // Close modal on page section changes
+          this.$watch('activeItem', () => { this.clearModal(); });
+
+          // Close modal on Escape
+          document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') this.clearModal();
+          });
         },
 
         syncStateFromURL() {
           const params = new URLSearchParams(window.location.search);
           this.activeItem = params.get('page') || 'index';
+          this.clearModal();
           
           const newFilters = {};
           params.forEach((value, key) => {
@@ -905,6 +983,7 @@
         },
 
         navigateTo(pageName) {
+          this.clearModal();
           // Handle notifications navigation
           if (pageName === 'notifications') {
             this.activeItem = 'notifications';
@@ -950,6 +1029,7 @@
         },
 
         openDetail(pk, modelName, appLabel) {
+          this.clearModal();
           const newParams = new URLSearchParams();
           newParams.set('pk', pk);
           newParams.set('model_name', modelName);
@@ -973,16 +1053,18 @@
 
         closeDetail() {
           this.detailHtml = null;
+          this.clearModal();
           this.navigateTo('index');
         },
 
         showNLSearch() {
           this.activeItem = 'nl-search-page';
           this.detailHtml = null;
+          this.clearModal();
           this.updateURL();
           
           // Load natural language search content via HTMX
-          htmx.ajax('GET', '{% url "lab:nl_search_page" %}', '#nl-search-content').then(() => {
+          htmx.ajax('GET', '{% url 'lab:nl_search_page' %}', '#nl-search-content').then(() => {
             // Content loaded successfully
           });
         },
@@ -1303,6 +1385,291 @@
     });
   </script>
 {% endblock content %}
+
+{% partialdef create-form %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Create New {{ model_name }}
+        </h2>
+        <button @click="document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="max-h-[75vh] overflow-y-auto pr-1">
+        <form hx-post="{% url 'lab:generic_create' %}" hx-target="#modal-root" hx-swap="innerHTML">
+          {% csrf_token %}
+          <input type="hidden" name="model_name" value="{{ model_name }}">
+          <input type="hidden" name="app_label" value="{{ app_label }}">
+          
+          <div class="flex flex-col md:flex-row gap-6">
+            <div class="flex-1 space-y-4">
+              {% for field in form %}
+                {% if forloop.counter0|divisibleby:2 %}
+                  <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {{ field.label }}
+                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% if field.errors %}
+                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+            <div class="flex-1 space-y-4">
+              {% for field in form %}
+                {% if not forloop.counter0|divisibleby:2 %}
+                  <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {{ field.label }}
+                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% if field.errors %}
+                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+          
+          <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" @click="document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
+            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Create {{ model_name }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef edit-form %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Edit {{ model_name }}
+        </h2>
+        <button @click="document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="max-h-[75vh] overflow-y-auto pr-1">
+        <form hx-post="{% url 'lab:generic_edit' %}" hx-target="#modal-root" hx-swap="innerHTML">
+          {% csrf_token %}
+          <input type="hidden" name="model_name" value="{{ model_name }}">
+          <input type="hidden" name="app_label" value="{{ app_label }}">
+          <input type="hidden" name="pk" value="{{ object.pk }}">
+          
+          <div class="flex flex-col md:flex-row gap-6">
+            <div class="flex-1 space-y-4">
+              {% for field in form %}
+                {% if forloop.counter0|divisibleby:2 %}
+                  <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {{ field.label }}
+                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% if field.errors %}
+                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+            <div class="flex-1 space-y-4">
+              {% for field in form %}
+                {% if not forloop.counter0|divisibleby:2 %}
+                  <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {{ field.label }}
+                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% if field.errors %}
+                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+          
+          <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" @click="document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
+            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Update {{ model_name }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef delete-confirm %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Delete {{ model_name }}
+        </h2>
+        <button 
+          @click="document.getElementById('modal-root').innerHTML = ''" 
+          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <div class="mb-6">
+        <p class="text-gray-700 dark:text-gray-300">
+          Are you sure you want to delete <strong>{{ object }}</strong>?
+        </p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+          This action cannot be undone.
+        </p>
+      </div>
+      
+      <form hx-post="{% url 'lab:generic_delete' %}" hx-target="#modal-root" hx-swap="innerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="model_name" value="{{ model_name }}">
+        <input type="hidden" name="app_label" value="{{ app_label }}">
+        <input type="hidden" name="pk" value="{{ object.pk }}">
+        
+        <div class="flex justify-end space-x-3">
+          <button 
+            type="button" 
+            @click="document.getElementById('modal-root').innerHTML = ''"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Cancel
+          </button>
+          <button 
+            type="submit"
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+          >
+            Delete {{ model_name }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef create-success %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Success!
+      </h2>
+      <p class="text-gray-700 dark:text-gray-300 mb-6">
+        {{ model_name }} "{{ object }}" has been created successfully.
+      </p>
+      <div class="flex justify-center space-x-3">
+        <button 
+          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'index'"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+        >
+          Back to Index
+        </button>
+        <button 
+          hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+          hx-target="#main-content"
+          hx-swap="innerHTML"
+          @click="document.getElementById('modal-root').innerHTML = ''"
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          View Details
+        </button>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef edit-success %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Success!
+      </h2>
+      <p class="text-gray-700 dark:text-gray-300 mb-6">
+        {{ model_name }} "{{ object }}" has been updated successfully.
+      </p>
+      <div class="flex justify-center space-x-3">
+        <button 
+          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'index'"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+        >
+          Back to Index
+        </button>
+        <button 
+          hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+          hx-target="#main-content"
+          hx-swap="innerHTML"
+          @click="document.getElementById('modal-root').innerHTML = ''"
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          View Details
+        </button>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef delete-success %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Success!
+      </h2>
+      <p class="text-gray-700 dark:text-gray-300 mb-6">
+        {{ model_name }} "{{ object_name }}" has been deleted successfully.
+      </p>
+      <div class="flex justify-center">
+        <button 
+          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'index'"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+        >
+          Back to Index
+        </button>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
 
 {% if initial_detail_html %}
 <script>
