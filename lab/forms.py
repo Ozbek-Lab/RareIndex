@@ -10,11 +10,44 @@ from .models import (
     Status,
     Project,
     Test,
+    Analysis,
+    AnalysisType,
+    Institution,
+    Family,
 )
 from django.contrib.contenttypes.models import ContentType
 
 
-class ProjectForm(forms.ModelForm):
+class BaseForm(forms.ModelForm):
+    """Base form class with consistent styling for all form fields"""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Apply consistent styling to all fields
+        for field_name, field in self.fields.items():
+            if isinstance(field.widget, forms.TextInput):
+                field.widget.attrs.update({
+                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200'
+                })
+            elif isinstance(field.widget, forms.Textarea):
+                field.widget.attrs.update({
+                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical min-h-[80px]'
+                })
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.update({
+                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10'
+                })
+            elif isinstance(field.widget, forms.DateInput):
+                field.widget.attrs.update({
+                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200'
+                })
+            elif isinstance(field.widget, forms.NumberInput):
+                field.widget.attrs.update({
+                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200'
+                })
+
+
+class ProjectForm(BaseForm):
     class Meta:
         model = Project
         fields = ["name", "description", "due_date", "priority"]
@@ -25,7 +58,7 @@ class ProjectForm(forms.ModelForm):
 
 
 # Update the TaskForm to include project field
-class TaskForm(forms.ModelForm):
+class TaskForm(BaseForm):
     class Meta:
         model = Task
         fields = [
@@ -48,7 +81,7 @@ class TaskForm(forms.ModelForm):
         self.fields["project"].queryset = Project.objects.all().order_by("name")
 
 
-class IndividualForm(forms.ModelForm):
+class IndividualForm(BaseForm):
     class Meta:
         model = Individual
         fields = [
@@ -57,7 +90,6 @@ class IndividualForm(forms.ModelForm):
             "tc_identity",
             "birth_date",
             "icd11_code",
-            "hpo_terms",
             "council_date",
             "family",
             "mother",
@@ -75,7 +107,7 @@ class IndividualForm(forms.ModelForm):
         }
 
 
-class SampleForm(forms.ModelForm):
+class SampleForm(BaseForm):
     class Meta:
         model = Sample
         fields = [
@@ -93,7 +125,7 @@ class SampleForm(forms.ModelForm):
         }
 
 
-class NoteForm(forms.ModelForm):
+class NoteForm(BaseForm):
     class Meta:
         model = Note
         fields = ["content"]
@@ -108,13 +140,13 @@ class NoteForm(forms.ModelForm):
         }
 
 
-class TestTypeForm(forms.ModelForm):
+class TestTypeForm(BaseForm):
     class Meta:
         model = TestType
         fields = ["name", "description"]
 
 
-class SampleTypeForm(forms.ModelForm):
+class SampleTypeForm(BaseForm):
     class Meta:
         model = SampleType
         fields = ["name", "description"]
@@ -133,7 +165,7 @@ class SampleTypeForm(forms.ModelForm):
         }
 
 
-class TestForm(forms.ModelForm):
+class TestForm(BaseForm):
     class Meta:
         model = Test
         fields = [
@@ -148,3 +180,102 @@ class TestForm(forms.ModelForm):
         widgets = {
             "performed_date": forms.DateInput(attrs={"type": "date"}),
         }
+
+
+class AnalysisForm(BaseForm):
+    class Meta:
+        model = Analysis
+        fields = [
+            "test",
+            "performed_date",
+            "performed_by",
+            "type",
+            "status",
+        ]
+        widgets = {
+            "performed_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+
+class AnalysisTypeForm(BaseForm):
+    class Meta:
+        model = AnalysisType
+        fields = [
+            "name",
+            "description",
+            "version",
+            "parent_types",
+            "source_url",
+            "results_url",
+        ]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "source_url": forms.URLInput(attrs={"placeholder": "https://..."}),
+            "results_url": forms.URLInput(attrs={"placeholder": "https://..."}),
+        }
+
+
+class InstitutionForm(BaseForm):
+    class Meta:
+        model = Institution
+        fields = [
+            "name",
+            "contact",
+        ]
+        widgets = {
+            "contact": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class FamilyForm(BaseForm):
+    class Meta:
+        model = Family
+        fields = [
+            "family_id",
+            "description",
+        ]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class StatusForm(BaseForm):
+    class Meta:
+        model = Status
+        fields = [
+            "name",
+            "description",
+            "color",
+            "icon",
+        ]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "color": forms.Select(choices=[
+                ("gray", "Gray"),
+                ("red", "Red"),
+                ("yellow", "Yellow"),
+                ("green", "Green"),
+                ("blue", "Blue"),
+                ("indigo", "Indigo"),
+                ("purple", "Purple"),
+                ("pink", "Pink"),
+            ]),
+        }
+
+
+# Forms mapping for generic views
+FORMS_MAPPING = {
+    'Individual': IndividualForm,
+    'Sample': SampleForm,
+    'Test': TestForm,
+    'Analysis': AnalysisForm,
+    'Note': NoteForm,
+    'Task': TaskForm,
+    'Project': ProjectForm,
+    'TestType': TestTypeForm,
+    'SampleType': SampleTypeForm,
+    'AnalysisType': AnalysisTypeForm,
+    'Institution': InstitutionForm,
+    'Family': FamilyForm,
+    'Status': StatusForm,
+}

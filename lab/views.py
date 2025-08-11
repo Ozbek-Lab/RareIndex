@@ -5,10 +5,11 @@ from django.core.paginator import Paginator
 from django.http import HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
+from django.utils import timezone
 import json
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
-from .models import Note, StatusLog
+from .models import Note, StatusLog, Status
 
 from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
@@ -508,6 +509,292 @@ def nl_search(request):
     
     # GET request - show the search form
     return render(request, "lab/nl_search.html")
+
+
+@login_required
+def generic_create(request):
+    """
+    Generic view for creating objects of any model type.
+    """
+    if request.method == "POST":
+        model_name = request.POST.get("model_name")
+        app_label = request.POST.get("app_label", "lab")
+        
+        if not model_name:
+            return HttpResponseBadRequest("Model name not specified.")
+        
+        # Get the model class
+        try:
+            model_class = apps.get_model(app_label=app_label, model_name=model_name)
+        except LookupError:
+            return HttpResponseBadRequest(f"Model {model_name} not found.")
+        
+        # Get the appropriate form
+        from .forms import FORMS_MAPPING
+        form_class = FORMS_MAPPING.get(model_name)
+        if not form_class:
+            return HttpResponseBadRequest(f"No form available for {model_name}.")
+        
+        form = form_class(request.POST)
+        if form.is_valid():
+            # Set created_by field if it exists
+            obj = form.save(commit=False)
+            if hasattr(obj, 'created_by') and not getattr(obj, 'created_by_id', None):
+                obj.created_by = request.user
+            # Default status: prefer model-specific, else any status
+            if hasattr(obj, 'status') and not getattr(obj, 'status_id', None):
+                model_ct = None
+                try:
+                    model_ct = ContentType.objects.get_for_model(model_class)
+                except Exception:
+                    model_ct = None
+                default_status = None
+                if model_ct:
+                    default_status = Status.objects.filter(content_type=model_ct).first()
+                if not default_status:
+                    default_status = Status.objects.first()
+                if default_status:
+                    obj.status = default_status
+            obj.save()
+            form.save_m2m()  # Save many-to-many relationships
+            
+            # Return success response for HTMX
+            if request.htmx:
+                return render(request, "lab/index.html#create-success", {
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+            else:
+                return redirect('lab:generic_detail', 
+                              app_label=app_label, 
+                              model_name=model_name, 
+                              pk=obj.pk)
+        else:
+            # Form validation failed
+            if request.htmx:
+                return render(request, "lab/index.html#create-form", {
+                    "form": form,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+            else:
+                return render(request, "lab/index.html", {
+                    "create_form": form,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+    
+    # GET request - show the form
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+    
+    if not model_name:
+        return HttpResponseBadRequest("Model name not specified.")
+    
+    # Get the model class
+    try:
+        model_class = apps.get_model(app_label=app_label, model_name=model_name)
+    except LookupError:
+        return HttpResponseBadRequest(f"Model {model_name} not found.")
+    
+    # Get the appropriate form
+    from .forms import FORMS_MAPPING
+    form_class = FORMS_MAPPING.get(model_name)
+    if not form_class:
+        return HttpResponseBadRequest(f"No form available for {model_name}.")
+    
+    form = form_class()
+    
+    if request.htmx:
+        return render(request, "lab/index.html#create-form", {
+            "form": form,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+    else:
+        return render(request, "lab/index.html", {
+            "create_form": form,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+
+
+@login_required
+def generic_edit(request):
+    """
+    Generic view for editing objects of any model type.
+    """
+    if request.method == "POST":
+        model_name = request.POST.get("model_name")
+        app_label = request.POST.get("app_label", "lab")
+        pk = request.POST.get("pk")
+        
+        if not all([model_name, pk]):
+            return HttpResponseBadRequest("Model name and pk not specified.")
+        
+        # Get the model class
+        try:
+            model_class = apps.get_model(app_label=app_label, model_name=model_name)
+        except LookupError:
+            return HttpResponseBadRequest(f"Model {model_name} not found.")
+        
+        # Get the object
+        obj = get_object_or_404(model_class, pk=pk)
+        
+        # Get the appropriate form
+        from .forms import FORMS_MAPPING
+        form_class = FORMS_MAPPING.get(model_name)
+        if not form_class:
+            return HttpResponseBadRequest(f"No form available for {model_name}.")
+        
+        form = form_class(request.POST, instance=obj)
+        if form.is_valid():
+            # Set updated_at field if it exists
+            obj = form.save(commit=False)
+            if hasattr(obj, 'updated_at'):
+                obj.updated_at = timezone.now()
+            obj.save()
+            form.save_m2m()  # Save many-to-many relationships
+            
+            # Return success response for HTMX
+            if request.htmx:
+                return render(request, "lab/index.html#edit-success", {
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+            else:
+                return redirect('lab:generic_detail', 
+                              app_label=app_label, 
+                              model_name=model_name, 
+                              pk=obj.pk)
+        else:
+            # Form validation failed
+            if request.htmx:
+                return render(request, "lab/index.html#edit-form", {
+                    "form": form,
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+            else:
+                return render(request, "lab/index.html", {
+                    "edit_form": form,
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+    
+    # GET request - show the form
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+    pk = request.GET.get("pk")
+    
+    if not all([model_name, pk]):
+        return HttpResponseBadRequest("Model name and pk not specified.")
+    
+    # Get the model class
+    try:
+        model_class = apps.get_model(app_label=app_label, model_name=model_name)
+    except LookupError:
+        return HttpResponseBadRequest(f"Model {model_name} not found.")
+    
+    # Get the object
+    obj = get_object_or_404(model_class, pk=pk)
+    
+    # Get the appropriate form
+    from .forms import FORMS_MAPPING
+    form_class = FORMS_MAPPING.get(model_name)
+    if not form_class:
+        return HttpResponseBadRequest(f"No form available for {model_name}.")
+    
+    form = form_class(instance=obj)
+    
+    if request.htmx:
+        return render(request, "lab/index.html#edit-form", {
+            "form": form,
+            "object": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+    else:
+        return render(request, "lab/index.html", {
+            "edit_form": form,
+            "object": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+
+
+@login_required
+def generic_delete(request):
+    """
+    Generic view for deleting objects of any model type.
+    """
+    if request.method == "POST":
+        model_name = request.POST.get("model_name")
+        app_label = request.POST.get("app_label", "lab")
+        pk = request.POST.get("pk")
+        
+        if not all([model_name, pk]):
+            return HttpResponseBadRequest("Model name and pk not specified.")
+        
+        # Get the model class
+        try:
+            model_class = apps.get_model(app_label=app_label, model_name=model_name)
+        except LookupError:
+            return HttpResponseBadRequest(f"Model {model_name} not found.")
+        
+        # Get the object
+        obj = get_object_or_404(model_class, pk=pk)
+        
+        # Store info before deletion for response
+        object_name = str(obj)
+        
+        # Delete the object
+        obj.delete()
+        
+        # Return success response for HTMX
+        if request.htmx:
+            return render(request, "lab/index.html#delete-success", {
+                "model_name": model_name,
+                "app_label": app_label,
+                "object_name": object_name,
+            })
+        else:
+            # Redirect to index or search page
+            return redirect('lab:index')
+    
+    # GET request - show confirmation
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+    pk = request.GET.get("pk")
+    
+    if not all([model_name, pk]):
+        return HttpResponseBadRequest("Model name and pk not specified.")
+    
+    # Get the model class
+    try:
+        model_class = apps.get_model(app_label=app_label, model_name=model_name)
+    except LookupError:
+        return HttpResponseBadRequest(f"Model {model_name} not found.")
+    
+    # Get the object
+    obj = get_object_or_404(model_class, pk=pk)
+    
+    if request.htmx:
+        return render(request, "lab/index.html#delete-confirm", {
+            "object": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+    else:
+        return render(request, "lab/index.html", {
+            "delete_confirm": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
 
 
 @login_required
