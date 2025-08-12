@@ -383,6 +383,20 @@
             <i class="fa-solid fa-plus mr-2"></i>
             Add New {{ model_name }}
           </button>
+          
+          <!-- Family Creation Button (only show for Individual model) -->
+          {% if model_name == 'Individual' %}
+          <button
+            hx-get="{% url 'lab:family_create_segway' %}"
+            hx-target="#modal-root"
+            hx-swap="innerHTML"
+            class="mr-3 inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            title="Create Family with Multiple Individuals"
+          >
+            <i class="fas fa-users mr-2"></i>
+            Create Family
+          </button>
+          {% endif %}
           <!-- Slick joined toggle buttons with animations -->
           <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center">
             <!-- Animated background slider -->
@@ -1692,3 +1706,8 @@
   });
 </script>
 {% endif %}
+
+<!-- Hidden family creation form template -->
+<div id="family-create-form" class="hidden">
+  {% include "lab/individual.html#family-create-form" %}
+</div>
