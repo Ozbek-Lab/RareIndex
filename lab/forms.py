@@ -104,6 +104,13 @@ class IndividualForm(BaseForm):
             "council_date": forms.DateInput(attrs={"type": "date"}),
             "diagnosis_date": forms.DateInput(attrs={"type": "date"}),
             "hpo_terms": forms.SelectMultiple(attrs={"class": "form-select"}),
+            "tc_identity": forms.NumberInput(attrs={
+                "type": "number",
+                "min": "10000000000",
+                "max": "99999999999",
+                "step": "1",
+                "placeholder": "Enter TC identity (11 digits)"
+            }),
         }
 
 
