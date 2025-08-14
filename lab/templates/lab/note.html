@@ -13,7 +13,7 @@
               >{{ note.user.username }}</span
             >
             <span class="text-gray-400 dark:text-gray-500"
-              >{{ note.created_at|date:"Y-m-d H:i" }}</span
+              >{{ note.get_created_at|date:"Y-m-d H:i"|default:"Unknown" }}</span
             >
           </div>
           {% if user == note.user %}

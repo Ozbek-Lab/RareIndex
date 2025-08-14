@@ -163,7 +163,7 @@
     </div>
     <div class="text-sm text-gray-500 dark:text-gray-400">
       <i class="fa-solid fa-calendar mr-1"></i>
-      Last updated: {{ item.updated_at|date:"M d, Y H:i"|default:"Unknown" }}
+      Last updated: {{ item.get_updated_at|date:"M d, Y H:i"|default:"Unknown" }}
     </div>
 
     <div
@@ -292,16 +292,16 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
       <!-- Header with individual info -->
       <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
-        <div class="flex items-center justify-between">
-          <h2 class="text-2xl font-bold text-white">
-            {{ item.individual_id }}
-          </h2>
-          <span
-            class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white"
-          >
-            {{ item.status.name }}
-          </span>
-        </div>
+                  <div class="flex items-center justify-between">
+            <h2 class="text-2xl font-bold text-white">
+              {{ item.individual_id }}
+            </h2>
+            <span
+              class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white"
+            >
+              {{ item.status.name }}
+            </span>
+          </div>
         <p class="text-blue-100 mt-1">{{ item.all_ids|join:' - ' }}</p>
       </div>
 
@@ -1494,3 +1494,1394 @@
     {# prettier-ignore-end #}
   {% endif %}
 {% endpartialdef %}
+
+{% partialdef create-form %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="saveFormData(); document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Create New Individual
+        </h2>
+        <button @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="max-h-[75vh] overflow-y-auto pr-1">
+        <form hx-post="{% url 'lab:generic_create' %}" hx-target="#modal-root" hx-swap="innerHTML">
+          {% csrf_token %}
+          <input type="hidden" name="model_name" value="Individual">
+          <input type="hidden" name="app_label" value="lab">
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- First Column -->
+            <div class="space-y-4">
+              <div>
+                <label for="{{ form.id.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.id.label }}
+                  {% if form.id.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.id }}
+                {% if form.id.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.id.help_text }}</p>
+                {% endif %}
+                {% if form.id.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.id.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.full_name.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.full_name.label }}
+                  {% if form.full_name.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.full_name }}
+                {% if form.full_name.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.full_name.help_text }}</p>
+                {% endif %}
+                {% if form.full_name.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.full_name.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.tc_identity.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.tc_identity.label }}
+                  {% if form.tc_identity.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.tc_identity }}
+                {% if form.tc_identity.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.tc_identity.help_text }}</p>
+                {% endif %}
+                {% if form.tc_identity.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.tc_identity.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.birth_date.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.birth_date.label }}
+                  {% if form.birth_date.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.birth_date }}
+                {% if form.birth_date.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.birth_date.help_text }}</p>
+                {% endif %}
+                {% if form.birth_date.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.birth_date.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Second Column -->
+            <div class="space-y-4">
+              <div>
+                <label for="{{ form.icd11_code.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.icd11_code.label }}
+                  {% if form.icd11_code.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.icd11_code }}
+                {% if form.icd11_code.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.icd11_code.help_text }}</p>
+                {% endif %}
+                {% if form.icd11_code.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.icd11_code.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.council_date.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.council_date.label }}
+                  {% if form.council_date.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.council_date }}
+                {% if form.council_date.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.council_date.help_text }}</p>
+                {% endif %}
+                {% if form.council_date.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.council_date.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.diagnosis.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.diagnosis.label }}
+                  {% if form.diagnosis.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.diagnosis }}
+                {% if form.diagnosis.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.diagnosis.help_text }}</p>
+                {% endif %}
+                {% if form.diagnosis.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.diagnosis.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.diagnosis_date.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.diagnosis_date.label }}
+                  {% if form.diagnosis_date.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.diagnosis_date }}
+                {% if form.diagnosis_date.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.diagnosis_date.help_text }}</p>
+                {% endif %}
+                {% if form.diagnosis_date.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.diagnosis_date.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Third Column -->
+            <div class="space-y-4">
+              <div>
+                <label for="{{ form.family.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.family.label }}
+                  {% if form.family.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.family }}
+                {% if form.family.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.family.help_text }}</p>
+                {% endif %}
+                {% if form.family.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.family.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.mother.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.mother.label }}
+                  {% if form.mother.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.mother }}
+                {% if form.mother.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.mother.help_text }}</p>
+                {% endif %}
+                {% if form.mother.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.mother.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.father.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.father.label }}
+                  {% if form.father.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.father }}
+                {% if form.father.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.father.help_text }}</p>
+                {% endif %}
+                {% if form.father.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.father.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.institution.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.institution.label }}
+                  {% if form.institution.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {{ form.institution }}
+                {% if form.institution.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.institution.help_text }}</p>
+                {% endif %}
+                {% if form.institution.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.institution.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {{ form.status.label }}
+                  {% if form.status.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </label>
+                {% if form.status.queryset.count > 0 %}
+                  {{ form.status }}
+                {% else %}
+                  <div class="px-3 py-2 ml-2 border border-red-300 dark:border-red-600 rounded-md bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    No statuses available for this model. Please contact an administrator.
+                  </div>
+                {% endif %}
+                {% if form.status.help_text %}
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.status.help_text }}</p>
+                {% endif %}
+                {% if form.status.errors %}
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {% for error in form.status.errors %}<p>{{ error }}</p>{% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
+            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Create Individual</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef family-create-form %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="handleCloseWithConfirmation()">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-7xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Create New Family with Individuals
+        </h2>
+        <button @click="handleCloseWithConfirmation()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <form id="family-create-form" hx-post="{% url 'lab:family_create_segway' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit="if (!prepareFormSubmission()) { $event.preventDefault(); return false; } debugFormSubmission($event)">
+        {% csrf_token %}
+        
+        <!-- Family Information Section -->
+        <div class="mb-8 p-6 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+            <i class="fas fa-home mr-2 text-blue-600"></i>
+            Family Information
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label for="family_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Family ID <span class="text-red-500">*</span>
+              </label>
+              <select 
+                name="family_id" 
+                id="family_id" 
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+                onchange="handleFamilySelection(this)"
+              >
+                <option value="">-- Select existing family or type new ID --</option>
+                {% for family in existing_families %}
+                  <option value="{{ family.family_id }}">{{ family.family_id }} ({{ family.individuals.count }} members)</option>
+                {% endfor %}
+              </select>
+              <div class="mt-2">
+                <label for="new_family_id" class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Or enter new family ID:
+                </label>
+                <input 
+                  type="text" 
+                  id="new_family_id" 
+                  placeholder="Type new family ID here"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+                  oninput="handleNewFamilyInput(this)"
+                >
+              </div>
+            </div>
+            <div>
+              <label for="family_description" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description
+              </label>
+              <textarea 
+                name="family_description" 
+                id="family_description" 
+                rows="3"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
+                placeholder="Enter family description"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Individuals Section -->
+        <div class="mb-8">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+              <i class="fas fa-users mr-2 text-green-600"></i>
+              Family Members
+            </h3>
+            <button 
+              type="button" 
+              @click="addIndividualForm()"
+              class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center space-x-2"
+            >
+              <i class="fas fa-plus"></i>
+              <span>Add Member</span>
+            </button>
+          </div>
+          
+          <div id="individuals-container" class="space-y-6">
+            <!-- Individual forms will be added here dynamically -->
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex justify-between items-center pt-6 border-t border-gray-200 dark:border-gray-700">
+          <!-- Left side - Restore button -->
+          <div>
+            <button 
+              type="button" 
+              @click="restoreFormData()" 
+              class="px-4 py-2 text-sm font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-md hover:bg-green-200 dark:hover:bg-green-800/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              title="Restore previously saved form data"
+            >
+              <i class="fas fa-undo mr-2"></i>
+              Restore Saved Data
+            </button>
+          </div>
+          
+          <!-- Right side - Action buttons -->
+          <div class="flex space-x-3">
+            <button 
+              type="button" 
+              @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''; showToast('Form data saved and popup closed', 'success')" 
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Save & Close
+            </button>
+            <button 
+              type="button" 
+              @click="clearFormData(); document.getElementById('modal-root').innerHTML = ''" 
+              class="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-md hover:bg-red-200 dark:hover:bg-red-800/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Clear & Close
+            </button>
+            <button 
+              type="submit" 
+              class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Create Family & Individuals
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Individual Form Template (hidden) -->
+  <template id="individual-form-template">
+    <div class="individual-form bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-6" x-data="{ showSensitive: false }">
+      <div class="flex items-center justify-between mb-4">
+        <h4 class="text-md font-medium text-gray-900 dark:text-white flex items-center">
+          <i class="fas fa-user mr-2 text-blue-600"></i>
+          Family Member <span class="member-number"></span>
+        </h4>
+        <button 
+          type="button" 
+          @click="removeIndividualForm($el.closest('.individual-form'))"
+          class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+          title="Remove this member"
+        >
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Column 1 -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Role in Family <span class="text-red-500">*</span>
+            </label>
+            <select 
+              name="individuals[INDEX][role]" 
+              required
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+            >
+              <option value="">Select Role</option>
+              <option value="proband">Proband</option>
+              <option value="mother">Mother</option>
+              <option value="father">Father</option>
+              <option value="sibling">Sibling</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Full Name <span class="text-red-500">*</span>
+            </label>
+            <input 
+              type="text" 
+              name="individuals[INDEX][full_name]" 
+              required
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+              placeholder="Enter full name"
+            >
+          </div>
+
+          <!-- TC Identity -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              TC Identity
+            </label>
+            <input 
+              type="number" 
+              name="individuals[INDEX][tc_identity]" 
+              min="10000000000"
+              max="99999999999"
+              step="1"
+              pattern="[0-9]{11}"
+              title="TC Identity must be exactly 11 digits"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+              placeholder="Enter TC identity (11 digits)"
+            >
+          </div>
+
+          <!-- IDs Box (multiple rows) -->
+          <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IDs</label>
+              <button type="button" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700" @click="addIdRow($el.closest('.individual-form'))">
+                <i class="fas fa-plus mr-1"></i> Add ID
+              </button>
+            </div>
+            <div class="space-y-2 id-rows" data-row-index="0">
+              <!-- rows injected here by JS -->
+            </div>
+            <!-- Hidden template for an ID row -->
+            <template class="id-row-template">
+              <div class="id-row grid grid-cols-7 gap-2 items-center">
+                <div class="col-span-3">
+                  <label class="sr-only">ID Type</label>
+                  <select name="individuals[INDEX][ids][ROW][type]" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    {% for idt in identifier_types %}
+                      <option value="{{ idt.id }}">{{ idt.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-span-3">
+                  <label class="sr-only">ID</label>
+                  <input type="text" name="individuals[INDEX][ids][ROW][value]" placeholder="ID" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                </div>
+                <div class="col-span-1 flex justify-end">
+                  <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click="removeIdRow($el.closest('.id-row'))" title="Remove this ID row">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+        </div>
+
+        <!-- Column 2 -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Birth Date
+            </label>
+            <input 
+              type="date" 
+              name="individuals[INDEX][birth_date]" 
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+            >
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              ICD-11 Code
+            </label>
+            <input 
+              type="text" 
+              name="individuals[INDEX][icd11_code]" 
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+              placeholder="Enter ICD-11 code"
+            >
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Council Date
+            </label>
+            <input 
+              type="date" 
+              name="individuals[INDEX][council_date]" 
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+            >
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Diagnosis
+            </label>
+            <textarea 
+              name="individuals[INDEX][diagnosis]" 
+              rows="2"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
+              placeholder="Enter diagnosis"
+            ></textarea>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Diagnosis Date
+            </label>
+            <input 
+              type="date" 
+              name="individuals[INDEX][diagnosis_date]" 
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+            >
+          </div>
+        </div>
+
+        <!-- Column 3 -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Institution <span class="text-red-500">*</span>
+            </label>
+            <select 
+              name="individuals[INDEX][institution]" 
+              required
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+            >
+              <option value="">Select Institution</option>
+              {% for institution in institutions %}
+                <option value="{{ institution.id }}">{{ institution.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Status <span class="text-red-500">*</span>
+            </label>
+            <select 
+              name="individuals[INDEX][status]" 
+              required
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+            >
+              <option value="">Select Status</option>
+              {% for status in individual_statuses %}
+                <option value="{{ status.id }}">{{ status.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Is Index Case
+            </label>
+            <div class="flex items-center space-x-3">
+              <label class="flex items-center">
+                <input 
+                  type="radio" 
+                  name="individuals[INDEX][is_index]" 
+                  value="true"
+                  class="mr-2 text-blue-600 focus:ring-blue-500"
+                >
+                <span class="text-sm text-gray-700 dark:text-gray-300">Yes</span>
+              </label>
+              <label class="flex items-center">
+                <input 
+                  type="radio" 
+                  name="individuals[INDEX][is_index]" 
+                  value="false"
+                  checked
+                  class="mr-2 text-blue-600 focus:ring-blue-500"
+                >
+                <span class="text-sm text-gray-700 dark:text-gray-300">No</span>
+              </label>
+            </div>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Is Affected
+            </label>
+            <div class="flex items-center space-x-3">
+              <label class="flex items-center">
+                <input 
+                  type="radio" 
+                  name="individuals[INDEX][is_affected]" 
+                  value="true"
+                  class="mr-2 text-blue-600 focus:ring-blue-500"
+                >
+                <span class="text-sm text-gray-700 dark:text-gray-300">Yes</span>
+              </label>
+              <label class="flex items-center">
+                <input 
+                  type="radio" 
+                  name="individuals[INDEX][is_affected]" 
+                  value="false"
+                  checked
+                  class="mr-2 text-blue-600 focus:ring-blue-500"
+                >
+                <span class="text-sm text-gray-700 dark:text-gray-300">No</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 4 -->
+        <div class="space-y-4">
+          <!-- Notes Box (multiple rows) -->
+          <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+              <button type="button" class="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700" @click="addNoteRow($el.closest('.individual-form'))">
+                <i class="fas fa-plus mr-1"></i> Add Note
+              </button>
+            </div>
+            <div class="space-y-2 note-rows" data-row-index="0">
+              <!-- rows injected here by JS -->
+            </div>
+            <!-- Hidden template for a note row -->
+            <template class="note-row-template">
+              <div class="note-row grid grid-cols-6 gap-2 items-center">
+                <div class="col-span-5">
+                  <label class="sr-only">Note Content</label>
+                  <textarea 
+                    name="individuals[INDEX][notes][ROW][content]" 
+                    rows="2"
+                    placeholder="Enter note content"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
+                  ></textarea>
+                </div>
+                <div class="col-span-1 flex justify-end">
+                  <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click="removeNoteRow($el.closest('.note-row'))" title="Remove this note">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    // Family selection handling functions
+    function handleFamilySelection(selectElement) {
+      const newFamilyInput = document.getElementById('new_family_id');
+      if (selectElement.value) {
+        // An existing family was selected, clear the new family input
+        newFamilyInput.value = '';
+        newFamilyInput.disabled = true;
+        newFamilyInput.classList.add('opacity-50', 'cursor-not-allowed');
+      } else {
+        // No family selected, enable new family input
+        newFamilyInput.disabled = false;
+        newFamilyInput.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+    
+    function handleNewFamilyInput(inputElement) {
+      const familySelect = document.getElementById('family_id');
+      if (inputElement.value.trim()) {
+        // New family ID entered, clear the select
+        familySelect.value = '';
+        // Update the hidden input that will be submitted
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'family_id';
+        hiddenInput.value = inputElement.value.trim();
+        // Remove any existing hidden input
+        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (existingHidden) {
+          existingHidden.remove();
+        }
+        // Add the new hidden input
+        inputElement.parentNode.appendChild(hiddenInput);
+      } else {
+        // Clear input, remove hidden input
+        const hiddenInput = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (hiddenInput) {
+          existingHidden.remove();
+        }
+      }
+    }
+    
+    // Function to ensure form submission includes the correct family_id
+    function prepareFormSubmission() {
+      const familySelect = document.getElementById('family_id');
+      const newFamilyInput = document.getElementById('new_family_id');
+      
+      // Validate that either existing family is selected or new family ID is entered
+      const hasExistingFamily = familySelect.value && familySelect.value !== '';
+      const hasNewFamily = newFamilyInput.value.trim() !== '';
+      
+      if (!hasExistingFamily && !hasNewFamily) {
+        alert('Please either select an existing family or enter a new family ID.');
+        return false;
+      }
+      
+      // Validate that all individuals have required fields
+      const individualForms = document.querySelectorAll('.individual-form');
+      if (individualForms.length > 1) {
+        let hasMother = false;
+        let hasFather = false;
+        
+        for (let form of individualForms) {
+          const fullName = form.querySelector('input[name*="[full_name]"]')?.value || '';
+          const role = form.querySelector('select[name*="[role]"]')?.value || '';
+          
+          if (!fullName.trim()) {
+            alert('All individuals must have a full name.');
+            return false;
+          }
+          
+          if (!role) {
+            alert('All individuals must have a role in family.');
+            return false;
+          }
+          
+          if (role === 'mother') hasMother = true;
+          if (role === 'father') hasFather = true;
+        }
+        
+        if (!hasMother || !hasFather) {
+          alert('For families with multiple members, at least one mother and one father must be specified.');
+          return false;
+        }
+      } else {
+        // Single individual - just check required fields
+        for (let form of individualForms) {
+          const fullName = form.querySelector('input[name*="[full_name]"]')?.value || '';
+          const role = form.querySelector('select[name*="[role]"]')?.value || '';
+          
+          if (!fullName.trim()) {
+            alert('All individuals must have a full name.');
+            return false;
+          }
+          
+          if (!role) {
+            alert('All individuals must have a role in family.');
+            return false;
+          }
+        }
+      }
+      
+      // If new family input has a value, use that; otherwise use the select value
+      if (newFamilyInput.value.trim()) {
+        // Clear the select field to avoid conflicts
+        familySelect.value = '';
+        
+        // Remove any existing hidden input
+        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (existingHidden) {
+          existingHidden.remove();
+        }
+        // Add hidden input with new family ID
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'family_id';
+        hiddenInput.value = newFamilyInput.value.trim();
+        newFamilyInput.parentNode.appendChild(hiddenInput);
+        
+        console.log(`=== DEBUG: Using new family ID: ${newFamilyInput.value.trim()} ===`);
+      } else {
+        // Ensure no hidden input exists when using select
+        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (existingHidden) {
+          existingHidden.remove();
+        }
+      }
+      
+      return true;
+    }
+    
+    let individualIndex = 0;
+    
+    // Form data persistence functions
+    function saveFormData() {
+      const form = document.getElementById('family-create-form');
+      if (!form) return;
+      
+      const formData = {
+        family_id: form.querySelector('#family_id')?.value || '',
+        family_description: form.querySelector('#family_description')?.value || '',
+        individuals: []
+      };
+      
+      // Save individual form data
+      const individualForms = form.querySelectorAll('.individual-form');
+      individualForms.forEach((individualForm, index) => {
+        const individualData = {
+          full_name: individualForm.querySelector('input[name*="[full_name]"]')?.value || '',
+          tc_identity: individualForm.querySelector('input[name*="[tc_identity]"]')?.value || '',
+          birth_date: individualForm.querySelector('input[name*="[birth_date]"]')?.value || '',
+          icd11_code: individualForm.querySelector('input[name*="[icd11_code]"]')?.value || '',
+          council_date: individualForm.querySelector('input[name*="[council_date]"]')?.value || '',
+          diagnosis: individualForm.querySelector('textarea[name*="[diagnosis]"]')?.value || '',
+          diagnosis_date: individualForm.querySelector('input[name*="[diagnosis_date]"]')?.value || '',
+          institution: individualForm.querySelector('select[name*="[institution]"]')?.value || '',
+          status: individualForm.querySelector('select[name*="[status]"]')?.value || '',
+          is_index: individualForm.querySelector('input[name*="[is_index]"]:checked')?.value || 'false',
+          is_affected: individualForm.querySelector('input[name*="[is_affected]"]:checked')?.value || 'false',
+
+          role: individualForm.querySelector('select[name*="[role]"]')?.value || '',
+          ids: [],
+          notes: []
+        };
+        
+        // Save ID rows data
+        const idRows = individualForm.querySelectorAll('.id-row');
+        idRows.forEach(idRow => {
+          const idType = idRow.querySelector('select[name*="[type]"]')?.value || '';
+          const idValue = idRow.querySelector('input[name*="[value]"]')?.value || '';
+          if (idType && idValue) {
+            individualData.ids.push({ type: idType, value: idValue });
+          }
+        });
+        
+        // Save note rows data
+        const noteRows = individualForm.querySelectorAll('.note-row');
+        noteRows.forEach(noteRow => {
+          const noteContent = noteRow.querySelector('textarea[name*="[content]"]')?.value || '';
+          if (noteContent.trim()) {
+            individualData.notes.push({ content: noteContent });
+          }
+        });
+        
+        formData.individuals.push(individualData);
+      });
+      
+      localStorage.setItem('familyCreationFormData', JSON.stringify(formData));
+      console.log('Form data saved to localStorage:', formData);
+      showToast('Form data saved successfully!', 'success');
+    }
+    
+    function restoreFormData() {
+      const savedData = localStorage.getItem('familyCreationFormData');
+      if (!savedData) {
+        showToast('No saved data found', 'warning');
+        return;
+      }
+      
+      try {
+        const formData = JSON.parse(savedData);
+        const form = document.getElementById('family-create-form');
+        if (!form) return;
+        
+        // Restore family data
+        const familyIdField = form.querySelector('#family_id');
+        const familyDescField = form.querySelector('#family_description');
+        
+        if (familyIdField && formData.family_id) {
+          familyIdField.value = formData.family_id;
+        }
+        if (familyDescField && formData.family_description) {
+          familyDescField.value = formData.family_description;
+        }
+        
+        // Clear existing individual forms and restore saved ones
+        const container = document.getElementById('individuals-container');
+        if (container) {
+          container.innerHTML = '';
+          individualIndex = 0;
+          
+          // Restore individual forms
+          formData.individuals.forEach((individualData, index) => {
+            addIndividualForm();
+            
+            // Get the newly added form
+            const individualForms = container.querySelectorAll('.individual-form');
+            const currentForm = individualForms[index];
+            if (!currentForm) return;
+            
+            // Restore individual data
+            const fullNameField = currentForm.querySelector('input[name*="[full_name]"]');
+            const tcIdentityField = currentForm.querySelector('input[name*="[tc_identity]"]');
+            const birthDateField = currentForm.querySelector('input[name*="[birth_date]"]');
+            const icd11Field = currentForm.querySelector('input[name*="[icd11_code]"]');
+            const councilDateField = currentForm.querySelector('input[name*="[council_date]"]');
+            const diagnosisField = currentForm.querySelector('textarea[name*="[diagnosis]"]');
+            const diagnosisDateField = currentForm.querySelector('input[name*="[diagnosis_date]"]');
+            const institutionField = currentForm.querySelector('select[name*="[institution]"]');
+            const statusField = currentForm.querySelector('select[name*="[status]"]');
+            const motherField = currentForm.querySelector('select[name*="[mother]"]');
+            const fatherField = currentForm.querySelector('select[name*="[father]"]');
+            const roleField = currentForm.querySelector('select[name*="[role]"]');
+
+            
+            // Set values
+            if (fullNameField) fullNameField.value = individualData.full_name || '';
+            if (tcIdentityField) tcIdentityField.value = individualData.tc_identity || '';
+            if (birthDateField) birthDateField.value = individualData.birth_date || '';
+            if (icd11Field) icd11Field.value = individualData.icd11_code || '';
+            if (councilDateField) councilDateField.value = individualData.council_date || '';
+            if (diagnosisField) diagnosisField.value = individualData.diagnosis || '';
+            if (diagnosisDateField) diagnosisDateField.value = individualData.diagnosis_date || '';
+            if (institutionField) institutionField.value = individualData.institution || '';
+            if (statusField) statusField.value = individualData.status || '';
+            if (motherField) motherField.value = individualData.mother || '';
+            if (fatherField) fatherField.value = individualData.father || '';
+            if (roleField) roleField.value = individualData.role || '';
+            
+            // Set radio button values
+            const isIndexRadios = currentForm.querySelectorAll('input[name*="[is_index]"]');
+            isIndexRadios.forEach(radio => {
+              radio.checked = radio.value === individualData.is_index;
+            });
+            
+            const isAffectedRadios = currentForm.querySelectorAll('input[name*="[is_affected]"]');
+            isAffectedRadios.forEach(radio => {
+              radio.checked = radio.value === individualData.is_affected;
+            });
+            
+            // Restore ID rows
+            if (individualData.ids && individualData.ids.length > 0) {
+              individualData.ids.forEach(idData => {
+                addIdRow(currentForm);
+                
+                // Get the newly added ID row
+                const idRows = currentForm.querySelectorAll('.id-row');
+                const lastIdRow = idRows[idRows.length - 1];
+                if (lastIdRow) {
+                  const typeField = lastIdRow.querySelector('select[name*="[type]"]');
+                  const valueField = lastIdRow.querySelector('input[name*="[value]"]');
+                  
+                  if (typeField) typeField.value = idData.type;
+                  if (valueField) valueField.value = idData.value;
+                }
+              });
+            }
+            
+            // Restore note rows
+            if (individualData.notes && individualData.notes.length > 0) {
+              individualData.notes.forEach(noteData => {
+                addNoteRow(currentForm);
+                
+                // Get the newly added note row
+                const noteRows = currentForm.querySelectorAll('.note-row');
+                const lastNoteRow = noteRows[noteRows.length - 1];
+                if (lastNoteRow) {
+                  const contentField = lastNoteRow.querySelector('textarea[name*="[content]"]');
+                  
+                  if (contentField) contentField.value = noteData.content;
+                }
+              });
+            }
+          });
+          
+          // Update individual index
+          individualIndex = formData.individuals.length;
+        }
+        
+        console.log('Form data restored from localStorage:', formData);
+        showToast(`Restored ${formData.individuals.length} individual(s) and family data`, 'success');
+      } catch (error) {
+        console.error('Error restoring form data:', error);
+        localStorage.removeItem('familyCreationFormData');
+        showToast('Error restoring form data', 'error');
+      }
+    }
+    
+    function clearFormData() {
+      localStorage.removeItem('familyCreationFormData');
+      console.log('Form data cleared from localStorage');
+      showToast('Form data cleared', 'info');
+    }
+    
+    function hasSavedData() {
+      return localStorage.getItem('familyCreationFormData') !== null;
+    }
+    
+    function showSavedDataIndicator() {
+      if (hasSavedData()) {
+        // Add a small indicator to the restore button
+        const restoreButton = document.querySelector('button[onclick*="restoreFormData"]');
+        if (restoreButton) {
+          restoreButton.classList.add('ring-2', 'ring-green-400', 'ring-opacity-50');
+          restoreButton.innerHTML = '<i class="fas fa-undo mr-2"></i>Restore Saved Data <span class="ml-2 px-2 py-1 text-xs bg-green-500 text-white rounded-full">Saved</span>';
+        }
+      }
+    }
+    
+    function showToast(message, type = 'info') {
+      // Create toast element
+      const toast = document.createElement('div');
+      toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 translate-x-full`;
+      
+      // Set color based on type
+      switch (type) {
+        case 'success':
+          toast.className += ' bg-green-600';
+          break;
+        case 'error':
+          toast.className += ' bg-red-600';
+          break;
+        case 'warning':
+          toast.className += ' bg-yellow-600';
+          break;
+        default:
+          toast.className += ' bg-blue-600';
+      }
+      
+      toast.innerHTML = `
+        <div class="flex items-center space-x-2">
+          <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : type === 'warning' ? 'exclamation' : 'info'}-circle"></i>
+          <span>${message}</span>
+        </div>
+      `;
+      
+      // Add to page
+      document.body.appendChild(toast);
+      
+      // Animate in
+      setTimeout(() => {
+        toast.classList.remove('translate-x-full');
+      }, 100);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => {
+          document.body.removeChild(toast);
+        }, 300);
+      }, 3000);
+    }
+    
+    function handleCloseWithConfirmation() {
+      // Check if there's any data entered
+      const form = document.getElementById('family-create-form');
+      if (!form) return;
+      
+      const familyId = form.querySelector('#family_id')?.value || '';
+      const familyDesc = form.querySelector('#family_description')?.value || '';
+      const individualForms = form.querySelectorAll('.individual-form');
+      
+      let hasData = false;
+      if (familyId.trim() || familyDesc.trim()) {
+        hasData = true;
+      } else {
+        individualForms.forEach(individualForm => {
+          const fullName = individualForm.querySelector('input[name*="[full_name]"]')?.value || '';
+          if (fullName.trim()) {
+            hasData = true;
+          }
+        });
+      }
+      
+      if (hasData) {
+        // Automatically save data and close
+        saveFormData();
+        document.getElementById('modal-root').innerHTML = '';
+        showToast('Form data saved automatically', 'success');
+      } else {
+        // No data to save, just close
+        document.getElementById('modal-root').innerHTML = '';
+      }
+    }
+    
+    function debugFormSubmission(event) {
+      console.log("=== DEBUG: Form submission started ===");
+      const form = event.target;
+      const formData = new FormData(form);
+      
+      console.log("=== DEBUG: Form data being sent ===");
+      for (let [key, value] of formData.entries()) {
+        console.log(`${key}: ${value}`);
+      }
+      console.log("=== END Form data ===");
+      
+      // Also check the DOM elements directly
+      console.log("=== DEBUG: Checking DOM elements ===");
+      const individualForms = document.querySelectorAll('.individual-form');
+      console.log(`Found ${individualForms.length} individual forms`);
+      
+      individualForms.forEach((form, index) => {
+        const fullName = form.querySelector('input[name*="[full_name]"]');
+        const institution = form.querySelector('select[name*="[institution]"]');
+        const status = form.querySelector('select[name*="[status]"]');
+        const tcIdentity = form.querySelector('input[name*="[tc_identity]"]');
+        
+        console.log(`Individual ${index}:`);
+        console.log(`  Full Name: ${fullName ? fullName.value : 'NOT FOUND'}`);
+        console.log(`  Institution: ${institution ? institution.value : 'NOT FOUND'}`);
+        console.log(`  Status: ${status ? status.value : 'NOT FOUND'}`);
+        console.log(`  TC Identity: ${tcIdentity ? tcIdentity.value : 'NOT FOUND'}`);
+      });
+      console.log("=== END DOM check ===");
+      
+      // Validate required fields before submission
+      let isValid = true;
+      const errors = [];
+      
+      // Check family ID
+      const familyId = document.getElementById('family_id');
+      if (!familyId || !familyId.value.trim()) {
+        errors.push('Family ID is required');
+        isValid = false;
+      }
+      
+      // Check each individual form
+      individualForms.forEach((form, index) => {
+        const fullName = form.querySelector('input[name*="[full_name]"]');
+        const institution = form.querySelector('select[name*="[institution]"]');
+        const status = form.querySelector('select[name*="[status]"]');
+        const tcIdentity = form.querySelector('input[name*="[tc_identity]"]');
+        
+        if (!fullName || !fullName.value.trim()) {
+          errors.push(`Individual ${index + 1}: Full name is required`);
+          isValid = false;
+        }
+        
+        if (!institution || !institution.value) {
+          errors.push(`Individual ${index + 1}: Institution is required`);
+          isValid = false;
+        }
+        
+        if (!status || !status.value) {
+          errors.push(`Individual ${index + 1}: Status is required`);
+          isValid = false;
+        }
+        
+        // Validate TC Identity if provided
+        if (tcIdentity && tcIdentity.value.trim()) {
+          const tcValue = tcIdentity.value.trim();
+          if (!/^\d{11}$/.test(tcValue)) {
+            errors.push(`Individual ${index + 1}: TC Identity must be exactly 11 digits`);
+            isValid = false;
+          }
+        }
+      });
+      
+      if (!isValid) {
+        event.preventDefault();
+        event.stopPropagation();
+        console.error("=== VALIDATION ERRORS ===");
+        errors.forEach(error => console.error(error));
+        console.error("=== END VALIDATION ERRORS ===");
+        
+        // Show error message to user
+        alert('Please fill in all required fields:\n\n' + errors.join('\n'));
+        return false;
+      }
+      
+      console.log("=== Form validation passed, proceeding with submission ===");
+    }
+    
+    function addIndividualForm() {
+      const container = document.getElementById('individuals-container');
+      const template = document.getElementById('individual-form-template');
+      const clone = template.content.cloneNode(true);
+      
+      // Update all the INDEX placeholders
+      const inputs = clone.querySelectorAll('input, select, textarea');
+      inputs.forEach(input => {
+        if (input.name) {
+          input.name = input.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+        }
+      });
+      
+      // Also update any template elements that might contain INDEX placeholders
+      const templates = clone.querySelectorAll('template');
+      templates.forEach(tmpl => {
+        const templateInputs = tmpl.content.querySelectorAll('input, select, textarea');
+        templateInputs.forEach(input => {
+          if (input.name) {
+            input.name = input.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+          }
+        });
+      });
+      
+      // Update member number
+      const memberNumber = clone.querySelector('.member-number');
+      if (memberNumber) {
+        memberNumber.textContent = individualIndex + 1;
+      }
+      
+      container.appendChild(clone);
+      individualIndex++;
+    }
+    
+        function addIdRow(individualFormEl) {
+          // Find the id-rows container and its template within this individual form
+          const rowsContainer = individualFormEl.querySelector('.id-rows');
+          const tmpl = individualFormEl.querySelector('template.id-row-template');
+          if (!rowsContainer || !tmpl) return;
+          const rowIndex = parseInt(rowsContainer.getAttribute('data-row-index') || '0', 10);
+
+          const fragment = tmpl.content.cloneNode(true);
+          
+          // First, find the individual index from the form's existing inputs
+          const individualIndex = individualFormEl.querySelector('input, select, textarea')?.name?.match(/individuals\[(\d+)\]/)?.[1] || '0';
+          
+          // Replace both INDEX and ROW placeholders
+          fragment.querySelectorAll('input, select').forEach(el => {
+            if (el.name) {
+              el.name = el.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+              el.name = el.name.replace(/\[ROW\]/g, `[${rowIndex}]`);
+            }
+          });
+          
+          rowsContainer.appendChild(fragment);
+          rowsContainer.setAttribute('data-row-index', String(rowIndex + 1));
+        }
+
+        function removeIdRow(rowEl) {
+          if (!rowEl) return;
+          rowEl.remove();
+        }
+
+        function addNoteRow(individualFormEl) {
+          // Find the note-rows container and its template within this individual form
+          const rowsContainer = individualFormEl.querySelector('.note-rows');
+          const tmpl = individualFormEl.querySelector('template.note-row-template');
+          if (!rowsContainer || !tmpl) return;
+          const rowIndex = parseInt(rowsContainer.getAttribute('data-row-index') || '0', 10);
+
+          const fragment = tmpl.content.cloneNode(true);
+          
+          // First, find the individual index from the form's existing inputs
+          const individualIndex = individualFormEl.querySelector('input, select, textarea')?.name?.match(/individuals\[(\d+)\]/)?.[1] || '0';
+          
+          // Replace both INDEX and ROW placeholders
+          fragment.querySelectorAll('input, textarea, select').forEach(el => {
+            if (el.name) {
+              el.name = el.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+              el.name = el.name.replace(/\[ROW\]/g, `[${rowIndex}]`);
+            }
+          });
+          
+          rowsContainer.appendChild(fragment);
+          rowsContainer.setAttribute('data-row-index', String(rowIndex + 1));
+        }
+
+        function removeNoteRow(rowEl) {
+          if (!rowEl) return;
+          rowEl.remove();
+        }
+
+    function removeIndividualForm(formElement) {
+      if (document.querySelectorAll('.individual-form').length > 1) {
+        formElement.remove();
+      }
+    }
+    
+    // Add the first individual form when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+          addIndividualForm();
+          // Restore saved form data if available
+          setTimeout(() => {
+            restoreFormData();
+            showSavedDataIndicator();
+          }, 100); // Small delay to ensure DOM is ready
+    });
+  </script>
+{% endpartialdef %}
+
+{% partialdef family-create-success %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-2xl w-full mx-4">
+      <div class="text-center">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
+          <i class="fas fa-check text-green-600 dark:text-green-400 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          {% if family_was_created %}
+            Family Created Successfully!
+          {% else %}
+            Family Updated Successfully!
+          {% endif %}
+        </h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
+          {% if family_was_created %}
+            Family "{{ family.family_id }}" has been created with {{ count }} individual{{ count|pluralize }}.
+          {% else %}
+            Family "{{ family.family_id }}" has been updated with {{ count }} new individual{{ count|pluralize }}.
+          {% endif %}
+        </p>
+        
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">
+            {% if family_was_created %}
+              Created Family:
+            {% else %}
+              Updated Family:
+            {% endif %}
+          </h4>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            <strong>ID:</strong> {{ family.family_id }}<br>
+            <strong>Description:</strong> {{ family.description|default:"No description" }}
+          </p>
+        </div>
+        
+        {% if individuals %}
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Created Individuals:</h4>
+          <div class="space-y-2">
+            {% for individual in individuals %}
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-gray-600 dark:text-gray-300">{{ individual.full_name }}</span>
+              <span class="text-gray-500 dark:text-gray-400">({{ individual.id }})</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        
+        <div class="flex justify-center space-x-3">
+          <button 
+            type="button" 
+            @click="document.getElementById('modal-root').innerHTML = ''" 
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef family-create-error %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-2xl w-full mx-4">
+      <div class="text-center">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+          <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          Error Creating Family
+        </h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
+          {{ error }}
+        </p>
+        
+        <div class="flex justify-center space-x-3">
+          <button 
+            type="button" 
+            @click="document.getElementById('modal-root').innerHTML = ''" 
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Close
+          </button>
+          <button 
+            type="button" 
+            @click="document.getElementById('modal-root').innerHTML = ''; document.getElementById('modal-root').innerHTML = document.getElementById('family-create-form').innerHTML"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+

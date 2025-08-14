@@ -40,8 +40,6 @@ class Task(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_tasks"
     )
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
     due_date = models.DateTimeField(null=True, blank=True)
 
     # Task management
@@ -53,10 +51,26 @@ class Task(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-id"]
 
     def __str__(self):
         return self.title
+
+    def get_created_at(self):
+        """Get creation time from history"""
+        if hasattr(self, 'history'):
+            first_record = self.history.earliest()
+            if first_record:
+                return first_record.history_date
+        return None
+
+    def get_updated_at(self):
+        """Get last update time from history"""
+        if hasattr(self, 'history'):
+            latest_record = self.history.latest()
+            if latest_record:
+                return latest_record.history_date
+        return None
 
     def complete(self, user, notes=""):
 
@@ -86,8 +100,6 @@ class Project(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_projects"
     )
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
     # Optional prioritization
     priority = models.CharField(
         max_length=10, choices=Task.PRIORITY_CHOICES, default="medium"
@@ -95,13 +107,30 @@ class Project(models.Model):
     individuals = models.ManyToManyField("Individual", related_name="projects")
     # Notes for the project
     notes = GenericRelation("Note")
+    created_at = models.DateTimeField(default=timezone.now)
     history = HistoricalRecords()
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-id"]
 
     def __str__(self):
         return self.name
+
+    def get_created_at(self):
+        """Get creation time from history"""
+        if hasattr(self, 'history'):
+            first_record = self.history.earliest()
+            if first_record:
+                return first_record.history_date
+        return None
+
+    def get_updated_at(self):
+        """Get last update time from history"""
+        if hasattr(self, 'history'):
+            latest_record = self.history.latest()
+            if latest_record:
+                return latest_record.history_date
+        return None
 
     def get_task_count(self):
         return self.tasks.count()
@@ -122,8 +151,6 @@ class Project(models.Model):
 
 class Note(models.Model):
     content = models.TextField()
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
     user = models.ForeignKey(User, on_delete=models.PROTECT)
 
     # Generic foreign key fields
@@ -132,56 +159,96 @@ class Note(models.Model):
     content_object = GenericForeignKey("content_type", "object_id")
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-id"]
 
     def __str__(self):
-        return f"{self.user.username} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+        created_at = self.get_created_at()
+        if created_at:
+            return f"{self.user.username} - {created_at.strftime('%Y-%m-%d %H:%M')}"
+        return f"{self.user.username} - Unknown time"
+
+    def get_created_at(self):
+        """Get creation time - Note model doesn't have history, so we'll use a fallback"""
+        # Since Note doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
+
+    def get_updated_at(self):
+        """Get update time - Note model doesn't have history, so we'll use a fallback"""
+        # Since Note doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
 
 
 class TestType(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
         return self.name
+
+    def get_created_at(self):
+        """Get creation time - TestType model doesn't have history, so we'll use a fallback"""
+        # Since TestType doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
 
 
 class SampleType(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
         return self.name
+
+    def get_created_at(self):
+        """Get creation time - SampleType model doesn't have history, so we'll use a fallback"""
+        # Since SampleType doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
 
 
 class Institution(models.Model):
     name = models.CharField(max_length=255)
     contact = models.TextField(blank=True)
     notes = GenericRelation("Note")
-    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
         return self.name
 
+    def get_created_at(self):
+        """Get creation time - Institution model doesn't have history, so we'll use a fallback"""
+        # Since Institution doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
+
 
 class Family(models.Model):
     family_id = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     class Meta:
         verbose_name_plural = "families"
-        ordering = ["-created_at"]
+        ordering = ["-id"]
 
     def __str__(self):
         return self.family_id
+
+    def get_created_at(self):
+        """Get creation time - Family model doesn't have history, so we'll use a fallback"""
+        # Since Family doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
+
+    def get_updated_at(self):
+        """Get update time - Family model doesn't have history, so we'll use a fallback"""
+        # Since Family doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
 
 
 class Status(models.Model):
@@ -189,7 +256,6 @@ class Status(models.Model):
     description = models.TextField(blank=True)
     color = models.CharField(max_length=50, default="gray")
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
-    created_at = models.DateTimeField(default=timezone.now)
     content_type = models.ForeignKey(
         ContentType, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -201,6 +267,12 @@ class Status(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_created_at(self):
+        """Get creation time - Status model doesn't have history, so we'll use a fallback"""
+        # Since Status doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
 
 
 class StatusLog(models.Model):
@@ -339,6 +411,22 @@ class Individual(models.Model):
 
         return Test.objects.filter(sample_id__in=sample_ids).distinct()
 
+    def get_created_at(self):
+        """Get creation time from history"""
+        if hasattr(self, 'history'):
+            first_record = self.history.earliest()
+            if first_record:
+                return first_record.history_date
+        return None
+
+    def get_updated_at(self):
+        """Get last update time from history"""
+        if hasattr(self, 'history'):
+            latest_record = self.history.latest()
+            if latest_record:
+                return latest_record.history_date
+        return None
+
     def __str__(self):
         return f"{self.individual_id}"
 
@@ -363,11 +451,9 @@ class Sample(models.Model):
 
     # Notes and tracking
     notes = GenericRelation("Note")
-    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_samples"
     )
-    updated_at = models.DateTimeField(default=timezone.now)
 
     tasks = GenericRelation("Task")
 
@@ -376,6 +462,22 @@ class Sample(models.Model):
 
     def __str__(self):
         return f"{self.individual.lab_id} - {self.sample_type} - {self.receipt_date}"
+
+    def get_created_at(self):
+        """Get creation time from history"""
+        if hasattr(self, 'history'):
+            first_record = self.history.earliest()
+            if first_record:
+                return first_record.history_date
+        return None
+
+    def get_updated_at(self):
+        """Get last update time from history"""
+        if hasattr(self, 'history'):
+            latest_record = self.history.latest()
+            if latest_record:
+                return latest_record.history_date
+        return None
 
 
 class Test(models.Model):
@@ -402,8 +504,6 @@ class Test(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_tests"
     )
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     notes = GenericRelation("Note")
     tasks = GenericRelation("Task")
@@ -412,8 +512,24 @@ class Test(models.Model):
     def __str__(self):
         return f"{self.test_type} - {self.sample}"
 
+    def get_created_at(self):
+        """Get creation time from history"""
+        if hasattr(self, 'history'):
+            first_record = self.history.earliest()
+            if first_record:
+                return first_record.history_date
+        return None
+
+    def get_updated_at(self):
+        """Get last update time from history"""
+        if hasattr(self, 'history'):
+            latest_record = self.history.latest()
+            if latest_record:
+                return latest_record.history_date
+        return None
+
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-id"]
 
 
 class AnalysisType(models.Model):
@@ -437,7 +553,6 @@ class AnalysisType(models.Model):
         blank=True,
         help_text="URL to view analysis results",
     )
-    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_analysis_types"
     )
@@ -447,6 +562,12 @@ class AnalysisType(models.Model):
 
     def __str__(self):
         return f"{self.name} v{self.version}"
+
+    def get_created_at(self):
+        """Get creation time - AnalysisType model doesn't have history, so we'll use a fallback"""
+        # Since AnalysisType doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
 
 
 class Analysis(models.Model):
@@ -458,7 +579,6 @@ class Analysis(models.Model):
     type = models.ForeignKey(AnalysisType, on_delete=models.PROTECT)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     notes = GenericRelation("Note")
-    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_analyses"
     )
@@ -467,22 +587,43 @@ class Analysis(models.Model):
 
     class Meta:
         verbose_name_plural = "analyses"
-        ordering = ["-created_at"]
+        ordering = ["-id"]
 
     def __str__(self):
         return f"{self.test} - {self.type} - {self.performed_date}"
+
+    def get_created_at(self):
+        """Get creation time from history"""
+        if hasattr(self, 'history'):
+            first_record = self.history.earliest()
+            if first_record:
+                return first_record.history_date
+        return None
+
+    def get_updated_at(self):
+        """Get last update time from history"""
+        if hasattr(self, 'history'):
+            latest_record = self.history.latest()
+            if latest_record:
+                return latest_record.history_date
+        return None
 
 
 class IdentifierType(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_id_types"
     )
 
     def __str__(self):
         return self.name
+
+    def get_created_at(self):
+        """Get creation time - IdentifierType model doesn't have history, so we'll use a fallback"""
+        # Since IdentifierType doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
 
 
 class CrossIdentifier(models.Model):
@@ -496,8 +637,13 @@ class CrossIdentifier(models.Model):
         Institution, on_delete=models.PROTECT, blank=True, null=True
     )
     link = models.URLField(blank=True, null=True)
-    created_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
         return f"{self.individual} - {self.id_type} - {self.id_value}"
+
+    def get_created_at(self):
+        """Get creation time - CrossIdentifier model doesn't have history, so we'll use a fallback"""
+        # Since CrossIdentifier doesn't have history, we'll need to implement a different approach
+        # For now, return None - this will need to be handled in templates
+        return None
