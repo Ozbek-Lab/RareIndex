@@ -10,6 +10,7 @@ from encrypted_model_fields.fields import (
 from simple_history.models import HistoricalRecords
 from django.utils import timezone
 
+
 class Task(models.Model):
     PRIORITY_CHOICES = [
         ("low", "Low"),
@@ -58,7 +59,7 @@ class Task(models.Model):
 
     def get_created_at(self):
         """Get creation time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             first_record = self.history.earliest()
             if first_record:
                 return first_record.history_date
@@ -66,7 +67,7 @@ class Task(models.Model):
 
     def get_updated_at(self):
         """Get last update time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             latest_record = self.history.latest()
             if latest_record:
                 return latest_record.history_date
@@ -118,7 +119,7 @@ class Project(models.Model):
 
     def get_created_at(self):
         """Get creation time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             first_record = self.history.earliest()
             if first_record:
                 return first_record.history_date
@@ -126,7 +127,7 @@ class Project(models.Model):
 
     def get_updated_at(self):
         """Get last update time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             latest_record = self.history.latest()
             if latest_record:
                 return latest_record.history_date
@@ -297,19 +298,6 @@ class StatusLog(models.Model):
         ]
 
 
-class StatusMixin:
-    def update_status(self, new_status, changed_by, notes=""):
-        if new_status != self.status:
-            StatusLog.objects.create(
-                content_object=self,
-                changed_by=changed_by,
-                previous_status=self.status,
-                new_status=new_status,
-                notes=notes,
-            )
-            self.status = new_status
-            self.save()
-
 class Individual(models.Model):
     id = models.AutoField(primary_key=True)
     full_name = EncryptedCharField(max_length=255)
@@ -413,7 +401,7 @@ class Individual(models.Model):
 
     def get_created_at(self):
         """Get creation time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             first_record = self.history.earliest()
             if first_record:
                 return first_record.history_date
@@ -421,7 +409,7 @@ class Individual(models.Model):
 
     def get_updated_at(self):
         """Get last update time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             latest_record = self.history.latest()
             if latest_record:
                 return latest_record.history_date
@@ -465,7 +453,7 @@ class Sample(models.Model):
 
     def get_created_at(self):
         """Get creation time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             first_record = self.history.earliest()
             if first_record:
                 return first_record.history_date
@@ -473,7 +461,7 @@ class Sample(models.Model):
 
     def get_updated_at(self):
         """Get last update time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             latest_record = self.history.latest()
             if latest_record:
                 return latest_record.history_date
@@ -514,7 +502,7 @@ class Test(models.Model):
 
     def get_created_at(self):
         """Get creation time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             first_record = self.history.earliest()
             if first_record:
                 return first_record.history_date
@@ -522,7 +510,7 @@ class Test(models.Model):
 
     def get_updated_at(self):
         """Get last update time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             latest_record = self.history.latest()
             if latest_record:
                 return latest_record.history_date
@@ -594,7 +582,7 @@ class Analysis(models.Model):
 
     def get_created_at(self):
         """Get creation time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             first_record = self.history.earliest()
             if first_record:
                 return first_record.history_date
@@ -602,7 +590,7 @@ class Analysis(models.Model):
 
     def get_updated_at(self):
         """Get last update time from history"""
-        if hasattr(self, 'history'):
+        if hasattr(self, "history"):
             latest_record = self.history.latest()
             if latest_record:
                 return latest_record.history_date
