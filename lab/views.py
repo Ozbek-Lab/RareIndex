@@ -1,21 +1,34 @@
 from django.apps import apps
 from django.shortcuts import render, redirect
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
+from django.utils import timezone
 import json
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
-from .models import Note, StatusLog
+from .models import Note, StatusLog, Status
 
 from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 
 # Import models
-from .models import Individual, Test, Analysis, Sample, Task, Note
+from .models import (
+    Individual,
+    Test,
+    Analysis,
+    Sample,
+    Task,
+    Note,
+    Institution,
+    IdentifierType,
+    CrossIdentifier,
+    Family,
+)
 
 # Import forms
 from .forms import NoteForm
@@ -34,7 +47,13 @@ from .sql_agent import query_natural_language, execute_safe_sql
 
 @login_required
 def index(request):
-    context = {}
+    context = {
+        "institutions": Institution.objects.all(),
+        "individual_statuses": Status.objects.filter(
+            Q(content_type=ContentType.objects.get_for_model(Individual)) | 
+            Q(content_type__isnull=True)
+        ).order_by('name')
+    }
     print("index 00")
 
     if request.headers.get("HX-Request"):
@@ -511,6 +530,322 @@ def nl_search(request):
 
 
 @login_required
+def generic_create(request):
+    """
+    Generic view for creating objects of any model type.
+    """
+    if request.method == "POST":
+        model_name = request.POST.get("model_name")
+        app_label = request.POST.get("app_label", "lab")
+        
+        if not model_name:
+            return HttpResponseBadRequest("Model name not specified.")
+        
+        # Get the model class
+        try:
+            model_class = apps.get_model(app_label=app_label, model_name=model_name)
+        except LookupError:
+            return HttpResponseBadRequest(f"Model {model_name} not found.")
+        
+        # Get the appropriate form
+        from .forms import FORMS_MAPPING
+        form_class = FORMS_MAPPING.get(model_name)
+        if not form_class:
+            return HttpResponseBadRequest(f"No form available for {model_name}.")
+        
+        form = form_class(request.POST)
+        if form.is_valid():
+            # Save the object with the user context for created_by field
+            obj = form.save(user=request.user)
+            
+            # Default status: prefer model-specific, else any status
+            if hasattr(obj, 'status') and not getattr(obj, 'status_id', None):
+                model_ct = None
+                try:
+                    model_ct = ContentType.objects.get_for_model(model_class)
+                    # Try to get a model-specific status first
+                    default_status = Status.objects.filter(content_type=model_ct).first()
+                    # If no model-specific status, fall back to any status
+                    if not default_status:
+                        default_status = Status.objects.first()
+                except Exception:
+                    # Fallback to any status if there's an error
+                    default_status = Status.objects.first()
+                
+                if default_status:
+                    obj.status = default_status
+                    obj.save()
+            
+            # Return success response for HTMX
+            if request.htmx:
+                return render(request, "lab/index.html#create-success", {
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+            else:
+                return redirect('lab:generic_detail', 
+                              app_label=app_label, 
+                              model_name=model_name, 
+                              pk=obj.pk)
+        else:
+            # Form validation failed
+            if request.htmx:
+                return render(request, "lab/index.html#create-form", {
+                    "form": form,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+            else:
+                return render(request, "lab/index.html", {
+                    "create_form": form,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+    
+    # GET request - show the form
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+    
+    if not model_name:
+        return HttpResponseBadRequest("Model name not specified.")
+    
+    # Get the model class
+    try:
+        model_class = apps.get_model(app_label=app_label, model_name=model_name)
+    except LookupError:
+        return HttpResponseBadRequest(f"Model {model_name} not found.")
+    
+    # Get the appropriate form
+    from .forms import FORMS_MAPPING
+    form_class = FORMS_MAPPING.get(model_name)
+    if not form_class:
+        return HttpResponseBadRequest(f"No form available for {model_name}.")
+    
+    form = form_class()
+    
+    # Filter status field to only show statuses for this model class
+    if hasattr(form, 'fields') and 'status' in form.fields:
+        try:
+            model_ct = ContentType.objects.get_for_model(model_class)
+            # Filter statuses to only show those for this model type
+            filtered_statuses = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by('name')
+            form.fields['status'].queryset = filtered_statuses
+            print(f"DEBUG: Filtered statuses for {model_name}: {filtered_statuses.count()} statuses found")
+            print(f"DEBUG: Model CT: {model_ct}")
+            print(f"DEBUG: Available statuses: {[s.name for s in filtered_statuses]}")
+        except Exception as e:
+            print(f"Error filtering statuses for {model_name}: {e}")
+            # Fallback to all statuses if filtering fails
+            form.fields['status'].queryset = Status.objects.all().order_by('name')
+    
+    if request.htmx:
+        return render(request, "lab/index.html#create-form", {
+            "form": form,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+    else:
+        return render(request, "lab/index.html", {
+            "create_form": form,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+
+
+@login_required
+def generic_edit(request):
+    """
+    Generic view for editing objects of any model type.
+    """
+    if request.method == "POST":
+        model_name = request.POST.get("model_name")
+        app_label = request.POST.get("app_label", "lab")
+        pk = request.POST.get("pk")
+        
+        if not all([model_name, pk]):
+            return HttpResponseBadRequest("Model name and pk not specified.")
+        
+        # Get the model class
+        try:
+            model_class = apps.get_model(app_label=app_label, model_name=model_name)
+        except LookupError:
+            return HttpResponseBadRequest(f"Model {model_name} not found.")
+        
+        # Get the object
+        obj = get_object_or_404(model_class, pk=pk)
+        
+        # Get the appropriate form
+        from .forms import FORMS_MAPPING
+        form_class = FORMS_MAPPING.get(model_name)
+        if not form_class:
+            return HttpResponseBadRequest(f"No form available for {model_name}.")
+        
+        form = form_class(request.POST, instance=obj)
+        if form.is_valid():
+            # Save the object with updated_at handled by the form
+            obj = form.save()
+            
+            # Return success response for HTMX
+            if request.htmx:
+                return render(request, "lab/index.html#edit-success", {
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+            else:
+                return redirect('lab:generic_detail', 
+                              app_label=app_label, 
+                              model_name=model_name, 
+                              pk=obj.pk)
+        else:
+            # Form validation failed
+            if request.htmx:
+                return render(request, "lab/index.html#edit-form", {
+                    "form": form,
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+            else:
+                return render(request, "lab/index.html", {
+                    "edit_form": form,
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                })
+    
+    # GET request - show the form
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+    pk = request.GET.get("pk")
+    
+    if not all([model_name, pk]):
+        return HttpResponseBadRequest("Model name and pk not specified.")
+    
+    # Get the model class
+    try:
+        model_class = apps.get_model(app_label=app_label, model_name=model_name)
+    except LookupError:
+        return HttpResponseBadRequest(f"Model {model_name} not found.")
+    
+    # Get the object
+    obj = get_object_or_404(model_class, pk=pk)
+    
+    # Get the appropriate form
+    from .forms import FORMS_MAPPING
+    form_class = FORMS_MAPPING.get(model_name)
+    if not form_class:
+        return HttpResponseBadRequest(f"No form available for {model_name}.")
+    
+    form = form_class(instance=obj)
+    
+    # Filter status field to only show statuses for this model class
+    if hasattr(form, 'fields') and 'status' in form.fields:
+        try:
+            model_ct = ContentType.objects.get_for_model(model_class)
+            # Filter statuses to only show those for this model type
+            filtered_statuses = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by('name')
+            form.fields['status'].queryset = filtered_statuses
+            print(f"DEBUG: Filtered statuses for {model_name}: {filtered_statuses.count()} statuses found")
+            print(f"DEBUG: Model CT: {model_ct}")
+            print(f"DEBUG: Available statuses: {[s.name for s in filtered_statuses]}")
+        except Exception as e:
+            print(f"Error filtering statuses for {model_name}: {e}")
+            # Fallback to all statuses if filtering fails
+            form.fields['status'].queryset = Status.objects.all().order_by('name')
+    
+    if request.htmx:
+        return render(request, "lab/index.html#edit-form", {
+            "form": form,
+            "object": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+    else:
+        return render(request, "lab/index.html", {
+            "edit_form": form,
+            "object": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+
+
+@login_required
+def generic_delete(request):
+    """
+    Generic view for deleting objects of any model type.
+    """
+    if request.method == "POST":
+        model_name = request.POST.get("model_name")
+        app_label = request.POST.get("app_label", "lab")
+        pk = request.POST.get("pk")
+        
+        if not all([model_name, pk]):
+            return HttpResponseBadRequest("Model name and pk not specified.")
+        
+        # Get the model class
+        try:
+            model_class = apps.get_model(app_label=app_label, model_name=model_name)
+        except LookupError:
+            return HttpResponseBadRequest(f"Model {model_name} not found.")
+        
+        # Get the object
+        obj = get_object_or_404(model_class, pk=pk)
+        
+        # Store info before deletion for response
+        object_name = str(obj)
+        
+        # Delete the object
+        obj.delete()
+        
+        # Return success response for HTMX
+        if request.htmx:
+            return render(request, "lab/index.html#delete-success", {
+                "model_name": model_name,
+                "app_label": app_label,
+                "object_name": object_name,
+            })
+        else:
+            # Redirect to index or search page
+            return redirect('lab:index')
+    
+    # GET request - show confirmation
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+    pk = request.GET.get("pk")
+    
+    if not all([model_name, pk]):
+        return HttpResponseBadRequest("Model name and pk not specified.")
+    
+    # Get the model class
+    try:
+        model_class = apps.get_model(app_label=app_label, model_name=model_name)
+    except LookupError:
+        return HttpResponseBadRequest(f"Model {model_name} not found.")
+    
+    # Get the object
+    obj = get_object_or_404(model_class, pk=pk)
+    
+    if request.htmx:
+        return render(request, "lab/index.html#delete-confirm", {
+            "object": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+    else:
+        return render(request, "lab/index.html", {
+            "delete_confirm": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+        })
+
+
+@login_required
 def nl_search_page(request):
     """
     Standalone page for natural language search.
@@ -527,3 +862,355 @@ def nl_search_page(request):
         
         # Return the main index page with the nl-search content injected
         return render(request, "lab/index.html", {"initial_nl_search_html": nl_search_html})
+
+
+
+
+
+@login_required
+def family_create_segway(request):
+    """
+    Segway view that handles family creation with multiple individuals.
+    Parses the form data and calls generic_create for the family and individuals.
+    """
+    if request.method == "POST":
+        try:
+            # Debug: Print all POST data
+            print("=== DEBUG: All POST data ===")
+            for key, value in request.POST.items():
+                print(f"{key}: {value}")
+            print("=== END POST data ===")
+            
+            # Extract family data
+            family_id = request.POST.get('family_id')
+            family_description = request.POST.get('family_description', '')
+            
+            print(f"=== DEBUG: Received family_id: '{family_id}' ===")
+            print(f"=== DEBUG: Received family_description: '{family_description}' ===")
+            
+            if not family_id:
+                return HttpResponseBadRequest("Family ID is required.")
+            
+            # Check if family already exists
+            existing_family = None
+            try:
+                existing_family = Family.objects.get(family_id=family_id)
+                print(f"=== DEBUG: Family with ID '{family_id}' already exists ===")
+            except Family.DoesNotExist:
+                print(f"=== DEBUG: Family with ID '{family_id}' does not exist, will create new ===")
+            
+            # If family exists, use it; otherwise create new one
+            if existing_family:
+                family = existing_family
+                family_was_created = False
+                print(f"=== DEBUG: Using existing family with ID: {family.id} ===")
+            else:
+                # Create new family directly without form validation
+                # This bypasses the ChoiceField validation issue
+                try:
+                    family = Family.objects.create(
+                        family_id=family_id,
+                        description=family_description,
+                        created_by=request.user
+                    )
+                    family_was_created = True
+                    print(f"=== DEBUG: Family created with ID: {family.id} ===")
+                except Exception as e:
+                    error_msg = f"Error creating family: {str(e)}"
+                    print(f"=== DEBUG: {error_msg} ===")
+                    if request.htmx:
+                        return render(
+                            request,
+                            "lab/individual.html#family-create-error",
+                            {
+                                "error": error_msg,
+                            },
+                        )
+                    else:
+                        return HttpResponseBadRequest(error_msg)
+            
+            # Extract individual data
+            individuals_data = {}
+            for key, value in request.POST.items():
+                if key.startswith('individuals[') and ']' in key:
+                    # Parse key like "individuals[0][full_name]" -> index=0, field=full_name
+                    parts = key.split('[')
+                    if len(parts) == 3:
+                        index = parts[1].rstrip(']')
+                        field = parts[2].rstrip(']')
+                        
+                        if index not in individuals_data:
+                            individuals_data[index] = {}
+                        individuals_data[index][field] = value
+            
+            print(f"=== DEBUG: Extracted individuals data: {individuals_data} ===")
+            
+            created_individuals = []  # list of tuples: (index, individual)
+            mother_individual = None
+            father_individual = None
+            
+            # First pass: create all individuals
+            # Pre-compute a default status for Individuals if not provided
+            try:
+                indiv_ct = ContentType.objects.get_for_model(Individual)
+                default_individual_status = (
+                    Status.objects.filter(Q(content_type=indiv_ct) | Q(content_type__isnull=True))
+                    .order_by('name')
+                    .first()
+                )
+                print(f"=== DEBUG: Default individual status: {default_individual_status} ===")
+            except Exception as e:
+                print(f"=== DEBUG: Error getting default status: {e} ===")
+                default_individual_status = None
+
+            for index, individual_data in individuals_data.items():
+                print(f"=== DEBUG: Processing individual {index}: {individual_data} ===")
+                # Only require full_name, role and minimal fields; id is optional (auto field)
+                if not individual_data.get('full_name'):
+                    print(f"=== DEBUG: Skipping individual {index} - no full_name ===")
+                    continue
+                
+                if not individual_data.get('role'):
+                    print(f"=== DEBUG: Skipping individual {index} - no role ===")
+                    continue
+                
+                # Get required fields
+                individual_form_data = {
+                    # If explicit id is provided, pass it through; otherwise omit
+                    'id': individual_data.get('id'),
+                    'full_name': individual_data.get('full_name'),
+                    'tc_identity': individual_data.get('tc_identity') or None,
+                    'birth_date': individual_data.get('birth_date') or None,
+                    'icd11_code': individual_data.get('icd11_code') or None,
+                    'council_date': individual_data.get('council_date') or None,
+                    'diagnosis': individual_data.get('diagnosis') or None,
+                    'diagnosis_date': individual_data.get('diagnosis_date') or None,
+                    'institution': individual_data.get('institution'),
+                    'status': individual_data.get('status'),
+                    'family': family.id,
+                    'is_index': individual_data.get('is_index') == 'true',
+                    'is_affected': individual_data.get('is_affected') == 'true',
+                }
+                
+                print(f"=== DEBUG: Individual form data for {index}: {individual_form_data} ===")
+                
+                # Create the individual
+                from .forms import IndividualForm
+                # Remove id if blank to avoid validation errors
+                if not individual_form_data.get('id'):
+                    individual_form_data.pop('id', None)
+
+                # If status not provided, inject a default one
+                if not individual_form_data.get('status') and default_individual_status:
+                    individual_form_data['status'] = default_individual_status.id
+                    print(f"=== DEBUG: Added default status {default_individual_status.id} for individual {index} ===")
+
+                individual_form = IndividualForm(individual_form_data)
+                print(f"=== DEBUG: Individual form is_valid: {individual_form.is_valid()} ===")
+                if individual_form.is_valid():
+                    individual = individual_form.save(commit=False)
+                    individual.created_by = request.user
+                    individual.save()
+                    individual_form.save_m2m()
+                    
+                    print(f"=== DEBUG: Individual {index} created successfully with ID: {individual.id} ===")
+                    created_individuals.append((index, individual))
+                    
+                    # Store mother and father for later reference
+                    role = individual_data.get('role', '')
+                    if role == 'mother':
+                        mother_individual = individual
+                        print(f"=== DEBUG: Individual {index} marked as mother ===")
+                    elif role == 'father':
+                        father_individual = individual
+                        print(f"=== DEBUG: Individual {index} marked as father ===")
+                else:
+                    print(f"=== DEBUG: Individual form validation failed for {index}: {individual_form.errors} ===")
+            
+            print(f"=== DEBUG: Total individuals created: {len(created_individuals)} ===")
+            
+            # Validate that we have at least one mother and one father if there are multiple individuals
+            if len(created_individuals) > 1:
+                has_mother = any(individuals_data.get(idx, {}).get('role') == 'mother' for idx, _ in created_individuals)
+                has_father = any(individuals_data.get(idx, {}).get('role') == 'father' for idx, _ in created_individuals)
+                
+                if not has_mother or not has_father:
+                    error_msg = "For families with multiple members, at least one mother and one father must be specified."
+                    print(f"=== DEBUG: Validation error: {error_msg} ===")
+                    if request.htmx:
+                        return render(request, "lab/individual.html#family-create-error", {
+                            "error": error_msg
+                        })
+                    else:
+                        return HttpResponseBadRequest(error_msg)
+            
+            # Second pass: update mother/father relationships based on role and create cross identifiers
+            for idx, individual in created_individuals:
+                # Find the corresponding individual data directly by index
+                individual_data = individuals_data.get(idx, {})
+                
+                if individual_data:
+                    # Automatically set mother/father relationships based on role in family
+                    role = individual_data.get('role', '')
+                    
+                    # For siblings and probands, set mother and father if they exist
+                    if role in ['sibling', 'proband', 'other']:
+                        if mother_individual:
+                            individual.mother = mother_individual
+                            print(f"=== DEBUG: Set mother for {role} individual {idx} ===")
+                        if father_individual:
+                            individual.father = father_individual
+                            print(f"=== DEBUG: Set father for {role} individual {idx} ===")
+                    
+                    # For mother, set as mother for all other individuals
+                    elif role == 'mother':
+                        mother_individual = individual
+                        print(f"=== DEBUG: Individual {idx} is mother ===")
+                    
+                    # For father, set as father for all other individuals
+                    elif role == 'father':
+                        father_individual = individual
+                        print(f"=== DEBUG: Individual {idx} is father ===")
+                
+                individual.save()
+
+                # Create CrossIdentifier rows for this individual
+                try:
+                    idx_prefix = f"individuals[{idx}]"
+                    # discover all rows present for this individual's ids
+                    rows = set()
+                    for key in request.POST.keys():
+                        if key.startswith(f"{idx_prefix}[ids][") and key.endswith("][value]"):
+                            try:
+                                after_ids = key.split("[ids][", 1)[1]
+                                row_str = after_ids.split("]", 1)[0]
+                                rows.add(row_str)
+                            except Exception:
+                                continue
+                    for row in rows:
+                        value_key = f"{idx_prefix}[ids][{row}][value]"
+                        value = request.POST.get(value_key, "").strip()
+                        type_key = f"{idx_prefix}[ids][{row}][type]"
+                        type_id = request.POST.get(type_key, "").strip()
+                        if value and type_id:
+                            try:
+                                CrossIdentifier.objects.create(
+                                    individual=individual,
+                                    id_type_id=int(type_id),
+                                    id_value=value,
+                                    created_by=request.user,
+                                )
+                                print(f"=== DEBUG: Created CrossIdentifier for individual {idx}: {type_id}={value} ===")
+                            except Exception as e:
+                                print(f"=== DEBUG: Error creating CrossIdentifier for individual {idx}: {e} ===")
+                                # Ignore malformed IDs silently for now
+                                pass
+                except Exception as e:
+                    print(f"=== DEBUG: Error processing IDs for individual {idx}: {e} ===")
+                    # If parsing fails, skip creating IDs for this individual
+                    pass
+
+                # Create Note rows for this individual
+                try:
+                    idx_prefix = f"individuals[{idx}]"
+                    print(f"=== DEBUG: Processing notes for individual {idx} with prefix: {idx_prefix} ===")
+                    
+                    # discover all rows present for this individual's notes
+                    note_rows = set()
+                    print(f"=== DEBUG: All POST keys for notes processing: ===")
+                    for key in request.POST.keys():
+                        if key.startswith(f"{idx_prefix}[notes][") and key.endswith("][content]"):
+                            print(f"  Found note key: {key}")
+                            try:
+                                after_notes = key.split("[notes][", 1)[1]
+                                row_str = after_notes.split("]", 1)[0]
+                                note_rows.add(row_str)
+                                print(f"  Extracted row: {row_str}")
+                            except Exception as e:
+                                print(f"  Error parsing key {key}: {e}")
+                                continue
+                    
+                    print(f"=== DEBUG: Total note rows found for individual {idx}: {len(note_rows)} ===")
+                    print(f"=== DEBUG: Note rows set: {note_rows} ===")
+                    
+                    for row in note_rows:
+                        content_key = f"{idx_prefix}[notes][{row}][content]"
+                        content = request.POST.get(content_key, "").strip()
+                        print(f"=== DEBUG: Processing note row {row}: ===")
+                        print(f"  Content key: {content_key}")
+                        print(f"  Raw content: '{content}'")
+                        print(f"  Content length: {len(content)}")
+                        print(f"  Content trimmed: '{content.strip()}'")
+                        
+                        if content:
+                            try:
+                                print(f"=== DEBUG: Creating Note object for individual {idx}, row {row} ===")
+                                print(f"  Content: {content[:100]}...")
+                                print(f"  User: {request.user}")
+                                print(f"  Content type: {ContentType.objects.get_for_model(Individual)}")
+                                print(f"  Object ID: {individual.id}")
+                                
+                                Note.objects.create(
+                                    content=content,
+                                    user=request.user,
+                                    content_type=ContentType.objects.get_for_model(Individual),
+                                    object_id=individual.id,
+                                )
+                                print(f"=== DEBUG: Successfully created Note for individual {idx}, row {row}: {content[:50]}... ===")
+                            except Exception as e:
+                                print(f"=== DEBUG: Error creating Note for individual {idx}, row {row}: {e} ===")
+                                print(f"  Exception type: {type(e).__name__}")
+                                import traceback
+                                traceback.print_exc()
+                                # Ignore malformed notes silently for now
+                                pass
+                        else:
+                            print(f"=== DEBUG: Skipping empty note for individual {idx}, row {row} ===")
+                except Exception as e:
+                    print(f"=== DEBUG: Error processing notes for individual {idx}: {e} ===")
+                    print(f"  Exception type: {type(e).__name__}")
+                    import traceback
+                    traceback.print_exc()
+                    # If parsing fails, skip creating notes for this individual
+                    pass
+            
+            # Return success response
+            if request.htmx:
+                return render(
+                    request,
+                    "lab/individual.html#family-create-success",
+                    {
+                        "family": family,
+                        "individuals": [ind for _, ind in created_individuals],
+                        "count": len(created_individuals),
+                        "family_was_created": family_was_created,
+                    },
+                )
+            else:
+                # Redirect to the family detail page
+                return redirect(f"/detail/?app_label=lab&model_name=Family&pk={family.pk}")
+                
+        except Exception as e:
+            print(f"Error in family_create_segway: {e}")
+            import traceback
+            traceback.print_exc()
+            if request.htmx:
+                return render(request, "lab/individual.html#family-create-error", {
+                    "error": str(e)
+                })
+            else:
+                return HttpResponseBadRequest(f"Error creating family: {str(e)}")
+    
+    # GET request - show the form
+    if request.htmx:
+        return render(request, "lab/individual.html#family-create-form", {
+            "institutions": Institution.objects.all(),
+            "individual_statuses": Status.objects.filter(
+                Q(content_type=ContentType.objects.get_for_model(Individual)) | 
+                Q(content_type__isnull=True)
+            ).order_by('name'),
+            "identifier_types": IdentifierType.objects.all().order_by('name'),
+            "existing_families": Family.objects.all().order_by('family_id'),
+        })
+    else:
+        return redirect('lab:index')
