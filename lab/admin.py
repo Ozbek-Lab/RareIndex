@@ -34,7 +34,7 @@ class NoteAdmin(admin.ModelAdmin):
 
 @admin.register(models.TestType)
 class TestTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "created_by", "get_created_at"]
+    list_display = ["name", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name", "description"]
     list_filter = ["created_by"]
 
@@ -42,11 +42,16 @@ class TestTypeAdmin(admin.ModelAdmin):
         return obj.get_created_at()
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
 
 @admin.register(models.SampleType)
 class SampleTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "created_by", "get_created_at"]
+    list_display = ["name", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name", "description"]
     list_filter = ["created_by"]
 
@@ -55,10 +60,15 @@ class SampleTypeAdmin(admin.ModelAdmin):
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
 
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
 
 @admin.register(models.Institution)
 class InstitutionAdmin(admin.ModelAdmin):
-    list_display = ["name", "created_by", "get_created_at"]
+    list_display = ["name", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name"]
     list_filter = ["created_by"]
 
@@ -66,6 +76,11 @@ class InstitutionAdmin(admin.ModelAdmin):
         return obj.get_created_at()
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
 
 @admin.register(models.Individual)
@@ -79,6 +94,7 @@ class IndividualAdmin(admin.ModelAdmin):
         "father",
         "created_by",
         "get_created_at",
+        "get_updated_at",
         "get_hpo_terms",
     ]
     list_filter = ["status", "family", "mother", "father"]
@@ -88,6 +104,12 @@ class IndividualAdmin(admin.ModelAdmin):
         return obj.get_created_at()
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
     autocomplete_fields = ["hpo_terms"]
     inlines = [IndividualProjectsInline]
 
@@ -107,12 +129,22 @@ class IndividualAdmin(admin.ModelAdmin):
 
 @admin.register(models.Sample)
 class SampleAdmin(admin.ModelAdmin):
-    list_display = ["individual", "sample_type", "status", "receipt_date", "created_by"]
+    list_display = ["individual", "sample_type", "status", "receipt_date", "created_by", "get_created_at", "get_updated_at"]
     list_filter = ["status", "sample_type", "receipt_date"]
     search_fields = [
         "individual__full_name",  # Only direct or forward fields!
     ]
     date_hierarchy = "receipt_date"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "status":
@@ -137,10 +169,20 @@ class SampleAdmin(admin.ModelAdmin):
 
 @admin.register(models.Test)
 class TestAdmin(admin.ModelAdmin):
-    list_display = ["sample", "test_type", "status", "performed_date", "performed_by"]
+    list_display = ["sample", "test_type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
     list_filter = ["status", "performed_date", "test_type"]
     search_fields = ["sample__individual__lab_id", "test_type__name"]
     date_hierarchy = "performed_date"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "status":
@@ -153,7 +195,7 @@ class TestAdmin(admin.ModelAdmin):
 
 @admin.register(models.Status)
 class StatusAdmin(admin.ModelAdmin):
-    list_display = ["name", "content_type", "color", "created_by", "get_created_at"]
+    list_display = ["name", "content_type", "color", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name", "description"]
     list_filter = ["content_type"]
 
@@ -161,6 +203,11 @@ class StatusAdmin(admin.ModelAdmin):
         return obj.get_created_at()
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
 
 @admin.register(models.Family)
@@ -181,7 +228,7 @@ class FamilyAdmin(admin.ModelAdmin):
 
 @admin.register(models.AnalysisType)
 class AnalysisTypeAdmin(admin.ModelAdmin):
-    list_display = ("name", "version", "created_by", "get_created_at")
+    list_display = ("name", "version", "created_by", "get_created_at", "get_updated_at")
     search_fields = ("name", "description", "version")
     filter_horizontal = ("parent_types",)
     readonly_fields = ("created_by",)
@@ -191,6 +238,11 @@ class AnalysisTypeAdmin(admin.ModelAdmin):
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
 
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
     def save_model(self, request, obj, form, change):
         if not change:  # Only set created_by on creation
             obj.created_by = request.user
@@ -199,10 +251,20 @@ class AnalysisTypeAdmin(admin.ModelAdmin):
 
 @admin.register(models.Analysis)
 class AnalysisAdmin(admin.ModelAdmin):
-    list_display = ["test", "type", "status", "performed_date", "performed_by"]
+    list_display = ["test", "type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
     list_filter = ["type", "status", "performed_date"]
     search_fields = ["test__sample__individual__lab_id", "type__name"]
     date_hierarchy = "performed_date"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "status":
@@ -225,6 +287,7 @@ class TaskAdmin(admin.ModelAdmin):
         "status",
         "due_date",
         "get_created_at",
+        "get_updated_at",
     ]
     list_filter = [
         "status",
@@ -239,6 +302,12 @@ class TaskAdmin(admin.ModelAdmin):
         return obj.get_created_at()
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
     raw_id_fields = ["project", "assigned_to", "created_by"]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -259,6 +328,7 @@ class ProjectAdmin(admin.ModelAdmin):
         "status",
         "due_date",
         "get_created_at",
+        "get_updated_at",
         "get_completion_percentage",
     ]
     list_filter = ["status", "priority", "due_date", "created_by"]
@@ -268,6 +338,12 @@ class ProjectAdmin(admin.ModelAdmin):
         return obj.get_created_at()
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
     raw_id_fields = ["created_by"]
     inlines = [ProjectIndividualsInline]
 
@@ -287,7 +363,7 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(models.IdentifierType)
 class IdentifierTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "description", "get_created_at", "created_by"]
+    list_display = ["name", "description", "get_created_at", "get_updated_at", "created_by"]
     list_filter = ["name", "description", "created_by"]
     search_fields = ["name", "description"]
 
@@ -295,6 +371,11 @@ class IdentifierTypeAdmin(admin.ModelAdmin):
         return obj.get_created_at()
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
 
 @admin.register(models.CrossIdentifier)
@@ -306,6 +387,7 @@ class CrossIdentifierAdmin(admin.ModelAdmin):
         "id_description",
         "institution",
         "get_created_at",
+        "get_updated_at",
         "created_by",
     ]
     list_filter = ["individual", "id_type", "id_value", "institution", "created_by"]
@@ -315,3 +397,8 @@ class CrossIdentifierAdmin(admin.ModelAdmin):
         return obj.get_created_at()
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
