@@ -136,7 +136,11 @@ class Command(BaseCommand):
             all_individuals.extend(children)
             for individual in [mother, father] + children:
                 # Create tasks for individual with future dates based on individual creation
-                individual_base_date = individual.created_at + timedelta(days=random.randint(1, 21))
+                individual_created_at = individual.get_created_at()
+                if individual_created_at:
+                    individual_base_date = individual_created_at + timedelta(days=random.randint(1, 21))
+                else:
+                    individual_base_date = timezone.now() - timedelta(days=random.randint(1, 21))
                 self._create_tasks(individual, user, all_statuses, project, options['tasks_per_object'], individual_base_date)
             for individual in [mother, father] + children:
                 self._create_samples(
@@ -163,9 +167,7 @@ class Command(BaseCommand):
                 created_by=user,
                 due_date=project_creation_date + timedelta(days=random.randint(60, 365)),
                 status=project_status,
-                priority=random.choice(["low", "medium", "high"]),
-                created_at=project_creation_date,
-                updated_at=project_creation_date
+                priority=random.choice(["low", "medium", "high"])
             )
             # Assign a random subset of individuals to this project
             num_to_add = random.randint(2, min(8, len(all_individuals)))
@@ -285,9 +287,7 @@ class Command(BaseCommand):
                 'description': 'Project created by sample data generator',
                 'created_by': user,
                 'due_date': project_creation_date + timedelta(days=random.randint(60, 180)),
-                'status': status,
-                'created_at': project_creation_date,
-                'updated_at': project_creation_date
+                'status': status
             }
         )
         return project
@@ -299,9 +299,7 @@ class Command(BaseCommand):
             family_id=family_id,
             defaults={
                 'description': f'Test family {family_id}',
-                'created_by': user,
-                'created_at': creation_date,
-                'updated_at': creation_date
+                'created_by': user
             }
         )
         return family
@@ -320,8 +318,7 @@ class Command(BaseCommand):
             created_by=user,
             status=status,
             institution=institution,
-            is_index=is_index,
-            created_at=creation_date
+            is_index=is_index
         )
         # Add random HPO terms (5-20 terms per individual)
         num_terms = random.randint(5, 20)
@@ -364,16 +361,18 @@ class Command(BaseCommand):
                 due_date=task_due_date,
                 priority=random.choice(priorities),
                 status=all_statuses['task'][task_status],
-                project=project,
-                created_at=task_creation_date,
-                updated_at=task_creation_date
+                project=project
             )
             self._create_note(task, user, text=f"Auto note for Task {i+1}", creation_date=task_creation_date)
 
     def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, all_statuses, project):
         for i in range(num_samples):
             # Start with a realistic base date for this sample (after individual creation)
-            base_date = individual.created_at + timedelta(days=random.randint(7, 30))
+            individual_created_at = individual.get_created_at()
+            if individual_created_at:
+                base_date = individual_created_at + timedelta(days=random.randint(7, 30))
+            else:
+                base_date = timezone.now() - timedelta(days=random.randint(7, 30))
             
             # Sample receipt date (when sample arrives at lab)
             sample_receipt_date = base_date
@@ -388,9 +387,7 @@ class Command(BaseCommand):
                 status=all_statuses['sample']['registered'],
                 receipt_date=sample_receipt_date,
                 isolation_by=user,
-                created_by=user,
-                created_at=sample_creation_date,
-                updated_at=sample_creation_date
+                created_by=user
             )
             self._create_note(sample, user, creation_date=sample_creation_date)
 
@@ -408,9 +405,7 @@ class Command(BaseCommand):
                     performed_by=user,
                     sample=sample,
                     created_by=user,
-                    status=all_statuses['test']['active'],
-                    created_at=test_performed_date,
-                    updated_at=test_performed_date
+                    status=all_statuses['test']['active']
                 )
                 self._create_note(test, user, creation_date=test_performed_date)
 
@@ -428,8 +423,7 @@ class Command(BaseCommand):
                         performed_by=user,
                         type=random.choice(analysis_types),
                         status=all_statuses['analysis']['active'],
-                        created_by=user,
-                        created_at=analysis_performed_date
+                        created_by=user
                     )
                     self._create_note(analysis, user, creation_date=analysis_performed_date)
 
@@ -526,7 +520,5 @@ class Command(BaseCommand):
             Note.objects.create(
                 content_object=obj,
                 content=text or f"Auto-generated note for {obj}",
-                user=user,
-                created_at=creation_date,
-                updated_at=creation_date
+                user=user
             )

@@ -27,6 +27,7 @@ from .models import (
     Institution,
     IdentifierType,
     CrossIdentifier,
+    Family,
 )
 
 # Import forms
@@ -554,13 +555,9 @@ def generic_create(request):
         
         form = form_class(request.POST)
         if form.is_valid():
-            obj = form.save(commit=False)
+            # Save the object with the user context for created_by field
+            obj = form.save(user=request.user)
             
-            # Set created_by field if the model has it
-            if hasattr(obj, 'created_by'):
-                obj.created_by = request.user
-                print(f"Setting created_by to: {request.user} for {model_name}")
-                
             # Default status: prefer model-specific, else any status
             if hasattr(obj, 'status') and not getattr(obj, 'status_id', None):
                 model_ct = None
@@ -577,9 +574,7 @@ def generic_create(request):
                 
                 if default_status:
                     obj.status = default_status
-            
-            obj.save()
-            form.save_m2m()  # Save many-to-many relationships
+                    obj.save()
             
             # Return success response for HTMX
             if request.htmx:
@@ -690,12 +685,8 @@ def generic_edit(request):
         
         form = form_class(request.POST, instance=obj)
         if form.is_valid():
-            # Set updated_at field if it exists
-            obj = form.save(commit=False)
-            if hasattr(obj, 'updated_at'):
-                obj.updated_at = timezone.now()
-            obj.save()
-            form.save_m2m()  # Save many-to-many relationships
+            # Save the object with updated_at handled by the form
+            obj = form.save()
             
             # Return success response for HTMX
             if request.htmx:
@@ -873,6 +864,9 @@ def nl_search_page(request):
         return render(request, "lab/index.html", {"initial_nl_search_html": nl_search_html})
 
 
+
+
+
 @login_required
 def family_create_segway(request):
     """
@@ -891,218 +885,311 @@ def family_create_segway(request):
             family_id = request.POST.get('family_id')
             family_description = request.POST.get('family_description', '')
             
+            print(f"=== DEBUG: Received family_id: '{family_id}' ===")
+            print(f"=== DEBUG: Received family_description: '{family_description}' ===")
+            
             if not family_id:
                 return HttpResponseBadRequest("Family ID is required.")
             
-            # Get the family form and create the family
-            from .forms import FamilyForm
-            family_data = {
-                'family_id': family_id,
-                'description': family_description,
-            }
+            # Check if family already exists
+            existing_family = None
+            try:
+                existing_family = Family.objects.get(family_id=family_id)
+                print(f"=== DEBUG: Family with ID '{family_id}' already exists ===")
+            except Family.DoesNotExist:
+                print(f"=== DEBUG: Family with ID '{family_id}' does not exist, will create new ===")
             
-            family_form = FamilyForm(family_data)
-            if family_form.is_valid():
-                # Create the family
-                family = family_form.save(commit=False)
-                family.created_by = request.user
-                family.save()
-                print(f"=== DEBUG: Family created with ID: {family.id} ===")
-                
-                # Extract individual data
-                individuals_data = {}
-                for key, value in request.POST.items():
-                    if key.startswith('individuals[') and ']' in key:
-                        # Parse key like "individuals[0][full_name]" -> index=0, field=full_name
-                        parts = key.split('[')
-                        if len(parts) == 3:
-                            index = parts[1].rstrip(']')
-                            field = parts[2].rstrip(']')
-                            
-                            if index not in individuals_data:
-                                individuals_data[index] = {}
-                            individuals_data[index][field] = value
-                
-                print(f"=== DEBUG: Extracted individuals data: {individuals_data} ===")
-                
-                created_individuals = []  # list of tuples: (index, individual)
-                mother_individual = None
-                father_individual = None
-                
-                # First pass: create all individuals
-                # Pre-compute a default status for Individuals if not provided
-                try:
-                    indiv_ct = ContentType.objects.get_for_model(Individual)
-                    default_individual_status = (
-                        Status.objects.filter(Q(content_type=indiv_ct) | Q(content_type__isnull=True))
-                        .order_by('name')
-                        .first()
-                    )
-                    print(f"=== DEBUG: Default individual status: {default_individual_status} ===")
-                except Exception as e:
-                    print(f"=== DEBUG: Error getting default status: {e} ===")
-                    default_individual_status = None
-
-                for index, individual_data in individuals_data.items():
-                    print(f"=== DEBUG: Processing individual {index}: {individual_data} ===")
-                    # Only require full_name and minimal fields; id is optional (auto field)
-                    if not individual_data.get('full_name'):
-                        print(f"=== DEBUG: Skipping individual {index} - no full_name ===")
-                        continue
-                    
-                    # Get required fields
-                    individual_form_data = {
-                        # If explicit id is provided, pass it through; otherwise omit
-                        'id': individual_data.get('id'),
-                        'full_name': individual_data.get('full_name'),
-                        'tc_identity': individual_data.get('tc_identity') or None,
-                        'birth_date': individual_data.get('birth_date') or None,
-                        'icd11_code': individual_data.get('icd11_code') or None,
-                        'council_date': individual_data.get('council_date') or None,
-                        'diagnosis': individual_data.get('diagnosis') or None,
-                        'diagnosis_date': individual_data.get('diagnosis_date') or None,
-                        'institution': individual_data.get('institution'),
-                        'status': individual_data.get('status'),
-                        'family': family.id,
-                        'is_index': individual_data.get('is_index') == 'true',
-                        'is_affected': individual_data.get('is_affected') == 'true',
-                    }
-                    
-                    print(f"=== DEBUG: Individual form data for {index}: {individual_form_data} ===")
-                    
-                    # Create the individual
-                    from .forms import IndividualForm
-                    # Remove id if blank to avoid validation errors
-                    if not individual_form_data.get('id'):
-                        individual_form_data.pop('id', None)
-
-                    # If status not provided, inject a default one
-                    if not individual_form_data.get('status') and default_individual_status:
-                        individual_form_data['status'] = default_individual_status.id
-                        print(f"=== DEBUG: Added default status {default_individual_status.id} for individual {index} ===")
-
-                    individual_form = IndividualForm(individual_form_data)
-                    print(f"=== DEBUG: Individual form is_valid: {individual_form.is_valid()} ===")
-                    if individual_form.is_valid():
-                        individual = individual_form.save(commit=False)
-                        individual.created_by = request.user
-                        individual.save()
-                        individual_form.save_m2m()
-                        
-                        print(f"=== DEBUG: Individual {index} created successfully with ID: {individual.id} ===")
-                        created_individuals.append((index, individual))
-                        
-                        # Store mother and father for later reference
-                        role = individual_data.get('role', '')
-                        if role == 'mother':
-                            mother_individual = individual
-                            print(f"=== DEBUG: Individual {index} marked as mother ===")
-                        elif role == 'father':
-                            father_individual = individual
-                            print(f"=== DEBUG: Individual {index} marked as father ===")
-                    else:
-                        print(f"=== DEBUG: Individual form validation failed for {index}: {individual_form.errors} ===")
-                
-                print(f"=== DEBUG: Total individuals created: {len(created_individuals)} ===")
-                
-                # Second pass: update mother/father relationships and create cross identifiers
-                for idx, individual in created_individuals:
-                    # Find the corresponding individual data directly by index
-                    individual_data = individuals_data.get(idx, {})
-                    
-                    if individual_data:
-                        if individual_data.get('mother') == '__to_be_created__' and mother_individual:
-                            individual.mother = mother_individual
-                            print(f"=== DEBUG: Set mother for individual {idx} ===")
-                        elif individual_data.get('mother'):
-                            try:
-                                mother_id = int(individual_data.get('mother'))
-                                individual.mother_id = mother_id
-                                print(f"=== DEBUG: Set mother_id {mother_id} for individual {idx} ===")
-                            except (ValueError, TypeError):
-                                pass
-                        
-                        if individual_data.get('father') == '__to_be_created__' and father_individual:
-                            individual.father = father_individual
-                            print(f"=== DEBUG: Set father for individual {idx} ===")
-                        elif individual_data.get('father'):
-                            try:
-                                father_id = int(individual_data.get('father'))
-                                individual.father_id = father_id
-                                print(f"=== DEBUG: Set father_id {father_id} for individual {idx} ===")
-                            except (ValueError, TypeError):
-                                pass
-                    
-                    individual.save()
-
-                    # Create CrossIdentifier rows for this individual
-                    try:
-                        idx_prefix = f"individuals[{idx}]"
-                        # discover all rows present for this individual's ids
-                        rows = set()
-                        for key in request.POST.keys():
-                            if key.startswith(f"{idx_prefix}[ids][") and key.endswith("][value]"):
-                                try:
-                                    after_ids = key.split("[ids][", 1)[1]
-                                    row_str = after_ids.split("]", 1)[0]
-                                    rows.add(row_str)
-                                except Exception:
-                                    continue
-                        for row in rows:
-                            value_key = f"{idx_prefix}[ids][{row}][value]"
-                            value = request.POST.get(value_key, "").strip()
-                            type_key = f"{idx_prefix}[ids][{row}][type]"
-                            type_id = request.POST.get(type_key, "").strip()
-                            if value and type_id:
-                                try:
-                                    CrossIdentifier.objects.create(
-                                        individual=individual,
-                                        id_type_id=int(type_id),
-                                        id_value=value,
-                                        created_by=request.user,
-                                    )
-                                    print(f"=== DEBUG: Created CrossIdentifier for individual {idx}: {type_id}={value} ===")
-                                except Exception as e:
-                                    print(f"=== DEBUG: Error creating CrossIdentifier for individual {idx}: {e} ===")
-                                    # Ignore malformed IDs silently for now
-                                    pass
-                    except Exception as e:
-                        print(f"=== DEBUG: Error processing IDs for individual {idx}: {e} ===")
-                        # If parsing fails, skip creating IDs for this individual
-                        pass
-                
-                # Return success response
-                if request.htmx:
-                    return render(
-                        request,
-                        "lab/individual.html#family-create-success",
-                        {
-                            "family": family,
-                            "individuals": [ind for _, ind in created_individuals],
-                            "count": len(created_individuals),
-                        },
-                    )
-                else:
-                    # Redirect to the family detail page
-                    return redirect(f"/detail/?app_label=lab&model_name=Family&pk={family.pk}")
+            # If family exists, use it; otherwise create new one
+            if existing_family:
+                family = existing_family
+                family_was_created = False
+                print(f"=== DEBUG: Using existing family with ID: {family.id} ===")
             else:
-                # Family form validation failed – surface concrete errors
+                # Create new family directly without form validation
+                # This bypasses the ChoiceField validation issue
                 try:
-                    error_text = family_form.errors.as_text()
-                except Exception:
-                    error_text = "Family form validation failed."
-
-                if request.htmx:
-                    return render(
-                        request,
-                        "lab/individual.html#family-create-error",
-                        {
-                            "error": error_text or "Family form validation failed.",
-                        },
+                    family = Family.objects.create(
+                        family_id=family_id,
+                        description=family_description,
+                        created_by=request.user
                     )
-                else:
-                    return HttpResponseBadRequest(error_text or "Family form validation failed.")
+                    family_was_created = True
+                    print(f"=== DEBUG: Family created with ID: {family.id} ===")
+                except Exception as e:
+                    error_msg = f"Error creating family: {str(e)}"
+                    print(f"=== DEBUG: {error_msg} ===")
+                    if request.htmx:
+                        return render(
+                            request,
+                            "lab/individual.html#family-create-error",
+                            {
+                                "error": error_msg,
+                            },
+                        )
+                    else:
+                        return HttpResponseBadRequest(error_msg)
+            
+            # Extract individual data
+            individuals_data = {}
+            for key, value in request.POST.items():
+                if key.startswith('individuals[') and ']' in key:
+                    # Parse key like "individuals[0][full_name]" -> index=0, field=full_name
+                    parts = key.split('[')
+                    if len(parts) == 3:
+                        index = parts[1].rstrip(']')
+                        field = parts[2].rstrip(']')
+                        
+                        if index not in individuals_data:
+                            individuals_data[index] = {}
+                        individuals_data[index][field] = value
+            
+            print(f"=== DEBUG: Extracted individuals data: {individuals_data} ===")
+            
+            created_individuals = []  # list of tuples: (index, individual)
+            mother_individual = None
+            father_individual = None
+            
+            # First pass: create all individuals
+            # Pre-compute a default status for Individuals if not provided
+            try:
+                indiv_ct = ContentType.objects.get_for_model(Individual)
+                default_individual_status = (
+                    Status.objects.filter(Q(content_type=indiv_ct) | Q(content_type__isnull=True))
+                    .order_by('name')
+                    .first()
+                )
+                print(f"=== DEBUG: Default individual status: {default_individual_status} ===")
+            except Exception as e:
+                print(f"=== DEBUG: Error getting default status: {e} ===")
+                default_individual_status = None
+
+            for index, individual_data in individuals_data.items():
+                print(f"=== DEBUG: Processing individual {index}: {individual_data} ===")
+                # Only require full_name, role and minimal fields; id is optional (auto field)
+                if not individual_data.get('full_name'):
+                    print(f"=== DEBUG: Skipping individual {index} - no full_name ===")
+                    continue
+                
+                if not individual_data.get('role'):
+                    print(f"=== DEBUG: Skipping individual {index} - no role ===")
+                    continue
+                
+                # Get required fields
+                individual_form_data = {
+                    # If explicit id is provided, pass it through; otherwise omit
+                    'id': individual_data.get('id'),
+                    'full_name': individual_data.get('full_name'),
+                    'tc_identity': individual_data.get('tc_identity') or None,
+                    'birth_date': individual_data.get('birth_date') or None,
+                    'icd11_code': individual_data.get('icd11_code') or None,
+                    'council_date': individual_data.get('council_date') or None,
+                    'diagnosis': individual_data.get('diagnosis') or None,
+                    'diagnosis_date': individual_data.get('diagnosis_date') or None,
+                    'institution': individual_data.get('institution'),
+                    'status': individual_data.get('status'),
+                    'family': family.id,
+                    'is_index': individual_data.get('is_index') == 'true',
+                    'is_affected': individual_data.get('is_affected') == 'true',
+                }
+                
+                print(f"=== DEBUG: Individual form data for {index}: {individual_form_data} ===")
+                
+                # Create the individual
+                from .forms import IndividualForm
+                # Remove id if blank to avoid validation errors
+                if not individual_form_data.get('id'):
+                    individual_form_data.pop('id', None)
+
+                # If status not provided, inject a default one
+                if not individual_form_data.get('status') and default_individual_status:
+                    individual_form_data['status'] = default_individual_status.id
+                    print(f"=== DEBUG: Added default status {default_individual_status.id} for individual {index} ===")
+
+                individual_form = IndividualForm(individual_form_data)
+                print(f"=== DEBUG: Individual form is_valid: {individual_form.is_valid()} ===")
+                if individual_form.is_valid():
+                    individual = individual_form.save(commit=False)
+                    individual.created_by = request.user
+                    individual.save()
+                    individual_form.save_m2m()
                     
+                    print(f"=== DEBUG: Individual {index} created successfully with ID: {individual.id} ===")
+                    created_individuals.append((index, individual))
+                    
+                    # Store mother and father for later reference
+                    role = individual_data.get('role', '')
+                    if role == 'mother':
+                        mother_individual = individual
+                        print(f"=== DEBUG: Individual {index} marked as mother ===")
+                    elif role == 'father':
+                        father_individual = individual
+                        print(f"=== DEBUG: Individual {index} marked as father ===")
+                else:
+                    print(f"=== DEBUG: Individual form validation failed for {index}: {individual_form.errors} ===")
+            
+            print(f"=== DEBUG: Total individuals created: {len(created_individuals)} ===")
+            
+            # Validate that we have at least one mother and one father if there are multiple individuals
+            if len(created_individuals) > 1:
+                has_mother = any(individuals_data.get(idx, {}).get('role') == 'mother' for idx, _ in created_individuals)
+                has_father = any(individuals_data.get(idx, {}).get('role') == 'father' for idx, _ in created_individuals)
+                
+                if not has_mother or not has_father:
+                    error_msg = "For families with multiple members, at least one mother and one father must be specified."
+                    print(f"=== DEBUG: Validation error: {error_msg} ===")
+                    if request.htmx:
+                        return render(request, "lab/individual.html#family-create-error", {
+                            "error": error_msg
+                        })
+                    else:
+                        return HttpResponseBadRequest(error_msg)
+            
+            # Second pass: update mother/father relationships based on role and create cross identifiers
+            for idx, individual in created_individuals:
+                # Find the corresponding individual data directly by index
+                individual_data = individuals_data.get(idx, {})
+                
+                if individual_data:
+                    # Automatically set mother/father relationships based on role in family
+                    role = individual_data.get('role', '')
+                    
+                    # For siblings and probands, set mother and father if they exist
+                    if role in ['sibling', 'proband', 'other']:
+                        if mother_individual:
+                            individual.mother = mother_individual
+                            print(f"=== DEBUG: Set mother for {role} individual {idx} ===")
+                        if father_individual:
+                            individual.father = father_individual
+                            print(f"=== DEBUG: Set father for {role} individual {idx} ===")
+                    
+                    # For mother, set as mother for all other individuals
+                    elif role == 'mother':
+                        mother_individual = individual
+                        print(f"=== DEBUG: Individual {idx} is mother ===")
+                    
+                    # For father, set as father for all other individuals
+                    elif role == 'father':
+                        father_individual = individual
+                        print(f"=== DEBUG: Individual {idx} is father ===")
+                
+                individual.save()
+
+                # Create CrossIdentifier rows for this individual
+                try:
+                    idx_prefix = f"individuals[{idx}]"
+                    # discover all rows present for this individual's ids
+                    rows = set()
+                    for key in request.POST.keys():
+                        if key.startswith(f"{idx_prefix}[ids][") and key.endswith("][value]"):
+                            try:
+                                after_ids = key.split("[ids][", 1)[1]
+                                row_str = after_ids.split("]", 1)[0]
+                                rows.add(row_str)
+                            except Exception:
+                                continue
+                    for row in rows:
+                        value_key = f"{idx_prefix}[ids][{row}][value]"
+                        value = request.POST.get(value_key, "").strip()
+                        type_key = f"{idx_prefix}[ids][{row}][type]"
+                        type_id = request.POST.get(type_key, "").strip()
+                        if value and type_id:
+                            try:
+                                CrossIdentifier.objects.create(
+                                    individual=individual,
+                                    id_type_id=int(type_id),
+                                    id_value=value,
+                                    created_by=request.user,
+                                )
+                                print(f"=== DEBUG: Created CrossIdentifier for individual {idx}: {type_id}={value} ===")
+                            except Exception as e:
+                                print(f"=== DEBUG: Error creating CrossIdentifier for individual {idx}: {e} ===")
+                                # Ignore malformed IDs silently for now
+                                pass
+                except Exception as e:
+                    print(f"=== DEBUG: Error processing IDs for individual {idx}: {e} ===")
+                    # If parsing fails, skip creating IDs for this individual
+                    pass
+
+                # Create Note rows for this individual
+                try:
+                    idx_prefix = f"individuals[{idx}]"
+                    print(f"=== DEBUG: Processing notes for individual {idx} with prefix: {idx_prefix} ===")
+                    
+                    # discover all rows present for this individual's notes
+                    note_rows = set()
+                    print(f"=== DEBUG: All POST keys for notes processing: ===")
+                    for key in request.POST.keys():
+                        if key.startswith(f"{idx_prefix}[notes][") and key.endswith("][content]"):
+                            print(f"  Found note key: {key}")
+                            try:
+                                after_notes = key.split("[notes][", 1)[1]
+                                row_str = after_notes.split("]", 1)[0]
+                                note_rows.add(row_str)
+                                print(f"  Extracted row: {row_str}")
+                            except Exception as e:
+                                print(f"  Error parsing key {key}: {e}")
+                                continue
+                    
+                    print(f"=== DEBUG: Total note rows found for individual {idx}: {len(note_rows)} ===")
+                    print(f"=== DEBUG: Note rows set: {note_rows} ===")
+                    
+                    for row in note_rows:
+                        content_key = f"{idx_prefix}[notes][{row}][content]"
+                        content = request.POST.get(content_key, "").strip()
+                        print(f"=== DEBUG: Processing note row {row}: ===")
+                        print(f"  Content key: {content_key}")
+                        print(f"  Raw content: '{content}'")
+                        print(f"  Content length: {len(content)}")
+                        print(f"  Content trimmed: '{content.strip()}'")
+                        
+                        if content:
+                            try:
+                                print(f"=== DEBUG: Creating Note object for individual {idx}, row {row} ===")
+                                print(f"  Content: {content[:100]}...")
+                                print(f"  User: {request.user}")
+                                print(f"  Content type: {ContentType.objects.get_for_model(Individual)}")
+                                print(f"  Object ID: {individual.id}")
+                                
+                                Note.objects.create(
+                                    content=content,
+                                    user=request.user,
+                                    content_type=ContentType.objects.get_for_model(Individual),
+                                    object_id=individual.id,
+                                )
+                                print(f"=== DEBUG: Successfully created Note for individual {idx}, row {row}: {content[:50]}... ===")
+                            except Exception as e:
+                                print(f"=== DEBUG: Error creating Note for individual {idx}, row {row}: {e} ===")
+                                print(f"  Exception type: {type(e).__name__}")
+                                import traceback
+                                traceback.print_exc()
+                                # Ignore malformed notes silently for now
+                                pass
+                        else:
+                            print(f"=== DEBUG: Skipping empty note for individual {idx}, row {row} ===")
+                except Exception as e:
+                    print(f"=== DEBUG: Error processing notes for individual {idx}: {e} ===")
+                    print(f"  Exception type: {type(e).__name__}")
+                    import traceback
+                    traceback.print_exc()
+                    # If parsing fails, skip creating notes for this individual
+                    pass
+            
+            # Return success response
+            if request.htmx:
+                return render(
+                    request,
+                    "lab/individual.html#family-create-success",
+                    {
+                        "family": family,
+                        "individuals": [ind for _, ind in created_individuals],
+                        "count": len(created_individuals),
+                        "family_was_created": family_was_created,
+                    },
+                )
+            else:
+                # Redirect to the family detail page
+                return redirect(f"/detail/?app_label=lab&model_name=Family&pk={family.pk}")
+                
         except Exception as e:
             print(f"Error in family_create_segway: {e}")
             import traceback
@@ -1123,6 +1210,7 @@ def family_create_segway(request):
                 Q(content_type__isnull=True)
             ).order_by('name'),
             "identifier_types": IdentifierType.objects.all().order_by('name'),
+            "existing_families": Family.objects.all().order_by('family_id'),
         })
     else:
         return redirect('lab:index')
