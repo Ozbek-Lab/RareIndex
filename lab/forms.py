@@ -1,5 +1,6 @@
 # forms.py
 from django import forms
+from django.utils import timezone
 from .models import (
     Task,
     Individual,
@@ -45,6 +46,23 @@ class BaseForm(forms.ModelForm):
                 field.widget.attrs.update({
                     'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200'
                 })
+    
+    def save(self, commit=True, **kwargs):
+        """Override save to handle created_by field automatically"""
+        obj = super().save(commit=False)
+        
+        # Set created_by if the model has this field and it's not already set
+        if hasattr(obj, 'created_by') and not getattr(obj, 'created_by_id', None):
+            # Get the user from kwargs or try to get it from the request
+            user = kwargs.get('user')
+            if user:
+                obj.created_by = user
+        
+        if commit:
+            obj.save()
+            self.save_m2m()
+        
+        return obj
 
 
 class ProjectForm(BaseForm):
@@ -244,6 +262,24 @@ class FamilyForm(BaseForm):
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Create choices for existing families plus option for new family
+        from .models import Family
+        existing_families = Family.objects.all().order_by('family_id')
+        choices = [('', '-- Select existing family or type new ID --')]
+        choices.extend([(family.family_id, f"{family.family_id} ({family.individuals.count()} members)") for family in existing_families])
+        
+        # Replace the family_id field with a choice field
+        self.fields['family_id'] = forms.ChoiceField(
+            choices=choices,
+            required=True,
+            widget=forms.Select(attrs={
+                'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10',
+                'data-family-select': 'true'
+            })
+        )
 
 
 class StatusForm(BaseForm):

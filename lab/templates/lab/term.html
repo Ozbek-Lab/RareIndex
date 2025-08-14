@@ -221,9 +221,9 @@
       {{ item.ontology.name|default:'—' }}<br />
       <span class="font-semibold">URI:</span> {{ item.uri|default:'—' }}<br />
       <span class="font-semibold">Created:</span>
-      {{ item.created_at|date:"M d, Y H:i" }}<br />
+      {{ item.get_created_at|date:"M d, Y H:i"|default:"Unknown" }}<br />
       <span class="font-semibold">Last Updated:</span>
-      {{ item.updated_at|date:"M d, Y H:i" }}
+      {{ item.get_updated_at|date:"M d, Y H:i"|default:"Unknown" }}
     </div>
     <div class="mt-4">
       <h3 class="font-semibold">Notes</h3>

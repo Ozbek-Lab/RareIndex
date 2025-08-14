@@ -163,7 +163,7 @@
     </div>
     <div class="text-sm text-gray-500 dark:text-gray-400">
       <i class="fa-solid fa-calendar mr-1"></i>
-      Last updated: {{ item.updated_at|date:"M d, Y H:i"|default:"Unknown" }}
+      Last updated: {{ item.get_updated_at|date:"M d, Y H:i"|default:"Unknown" }}
     </div>
 
     <div
@@ -1496,13 +1496,13 @@
 {% endpartialdef %}
 
 {% partialdef create-form %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="saveFormData(); document.getElementById('modal-root').innerHTML = ''">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
           Create New Individual
         </h2>
-        <button @click="document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+        <button @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
           <i class="fa-solid fa-times text-xl"></i>
         </button>
       </div>
@@ -1739,7 +1739,7 @@
           </div>
           
           <div class="flex justify-end space-x-3 mt-6">
-            <button type="button" @click="document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
+            <button type="button" @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
             <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Create Individual</button>
           </div>
         </form>
@@ -1749,18 +1749,18 @@
 {% endpartialdef %}
 
 {% partialdef family-create-form %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="handleCloseWithConfirmation()">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-7xl w-full mx-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
           Create New Family with Individuals
         </h2>
-        <button @click="document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+        <button @click="handleCloseWithConfirmation()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
           <i class="fa-solid fa-times text-xl"></i>
         </button>
       </div>
       
-      <form id="family-create-form" hx-post="{% url 'lab:family_create_segway' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit="debugFormSubmission($event)">
+      <form id="family-create-form" hx-post="{% url 'lab:family_create_segway' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit="if (!prepareFormSubmission()) { $event.preventDefault(); return false; } debugFormSubmission($event)">
         {% csrf_token %}
         
         <!-- Family Information Section -->
@@ -1774,14 +1774,29 @@
               <label for="family_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Family ID <span class="text-red-500">*</span>
               </label>
-              <input 
-                type="text" 
+              <select 
                 name="family_id" 
                 id="family_id" 
-                required
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-                placeholder="Enter family identifier"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+                onchange="handleFamilySelection(this)"
               >
+                <option value="">-- Select existing family or type new ID --</option>
+                {% for family in existing_families %}
+                  <option value="{{ family.family_id }}">{{ family.family_id }} ({{ family.individuals.count }} members)</option>
+                {% endfor %}
+              </select>
+              <div class="mt-2">
+                <label for="new_family_id" class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Or enter new family ID:
+                </label>
+                <input 
+                  type="text" 
+                  id="new_family_id" 
+                  placeholder="Type new family ID here"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+                  oninput="handleNewFamilyInput(this)"
+                >
+              </div>
             </div>
             <div>
               <label for="family_description" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1821,20 +1836,43 @@
         </div>
 
         <!-- Form Actions -->
-        <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <button 
-            type="button" 
-            @click="document.getElementById('modal-root').innerHTML = ''" 
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-          >
-            Cancel
-          </button>
-          <button 
-            type="submit" 
-            class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Create Family & Individuals
-          </button>
+        <div class="flex justify-between items-center pt-6 border-t border-gray-200 dark:border-gray-700">
+          <!-- Left side - Restore button -->
+          <div>
+            <button 
+              type="button" 
+              @click="restoreFormData()" 
+              class="px-4 py-2 text-sm font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-md hover:bg-green-200 dark:hover:bg-green-800/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              title="Restore previously saved form data"
+            >
+              <i class="fas fa-undo mr-2"></i>
+              Restore Saved Data
+            </button>
+          </div>
+          
+          <!-- Right side - Action buttons -->
+          <div class="flex space-x-3">
+            <button 
+              type="button" 
+              @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''; showToast('Form data saved and popup closed', 'success')" 
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Save & Close
+            </button>
+            <button 
+              type="button" 
+              @click="clearFormData(); document.getElementById('modal-root').innerHTML = ''" 
+              class="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-md hover:bg-red-200 dark:hover:bg-red-800/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Clear & Close
+            </button>
+            <button 
+              type="submit" 
+              class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Create Family & Individuals
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -1861,6 +1899,24 @@
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Column 1 -->
         <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Role in Family <span class="text-red-500">*</span>
+            </label>
+            <select 
+              name="individuals[INDEX][role]" 
+              required
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+            >
+              <option value="">Select Role</option>
+              <option value="proband">Proband</option>
+              <option value="mother">Mother</option>
+              <option value="father">Father</option>
+              <option value="sibling">Sibling</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Full Name <span class="text-red-500">*</span>
@@ -2080,59 +2136,36 @@
 
         <!-- Column 4 -->
         <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Mother (from family)
-            </label>
-            <select 
-              name="individuals[INDEX][mother]" 
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
-            >
-              <option value="">Select Mother</option>
-              <option value="__to_be_created__">Will be created</option>
-            </select>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Father (from family)
-            </label>
-            <select 
-              name="individuals[INDEX][father]" 
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-right pr-10"
-            >
-              <option value="">Select Father</option>
-              <option value="__to_be_created__">Will be created</option>
-            </select>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Role in Family
-            </label>
-            <select 
-              name="individuals[INDEX][role]" 
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
-            >
-              <option value="">Select Role</option>
-              <option value="proband">Proband</option>
-              <option value="mother">Mother</option>
-              <option value="father">Father</option>
-              <option value="sibling">Sibling</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Notes
-            </label>
-            <textarea 
-              name="individuals[INDEX][notes]" 
-              rows="2"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
-              placeholder="Additional notes"
-            ></textarea>
+          <!-- Notes Box (multiple rows) -->
+          <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+              <button type="button" class="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700" @click="addNoteRow($el.closest('.individual-form'))">
+                <i class="fas fa-plus mr-1"></i> Add Note
+              </button>
+            </div>
+            <div class="space-y-2 note-rows" data-row-index="0">
+              <!-- rows injected here by JS -->
+            </div>
+            <!-- Hidden template for a note row -->
+            <template class="note-row-template">
+              <div class="note-row grid grid-cols-6 gap-2 items-center">
+                <div class="col-span-5">
+                  <label class="sr-only">Note Content</label>
+                  <textarea 
+                    name="individuals[INDEX][notes][ROW][content]" 
+                    rows="2"
+                    placeholder="Enter note content"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
+                  ></textarea>
+                </div>
+                <div class="col-span-1 flex justify-end">
+                  <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click="removeNoteRow($el.closest('.note-row'))" title="Remove this note">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
       </div>
@@ -2140,7 +2173,419 @@
   </template>
 
   <script>
+    // Family selection handling functions
+    function handleFamilySelection(selectElement) {
+      const newFamilyInput = document.getElementById('new_family_id');
+      if (selectElement.value) {
+        // An existing family was selected, clear the new family input
+        newFamilyInput.value = '';
+        newFamilyInput.disabled = true;
+        newFamilyInput.classList.add('opacity-50', 'cursor-not-allowed');
+      } else {
+        // No family selected, enable new family input
+        newFamilyInput.disabled = false;
+        newFamilyInput.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+    
+    function handleNewFamilyInput(inputElement) {
+      const familySelect = document.getElementById('family_id');
+      if (inputElement.value.trim()) {
+        // New family ID entered, clear the select
+        familySelect.value = '';
+        // Update the hidden input that will be submitted
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'family_id';
+        hiddenInput.value = inputElement.value.trim();
+        // Remove any existing hidden input
+        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (existingHidden) {
+          existingHidden.remove();
+        }
+        // Add the new hidden input
+        inputElement.parentNode.appendChild(hiddenInput);
+      } else {
+        // Clear input, remove hidden input
+        const hiddenInput = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (hiddenInput) {
+          existingHidden.remove();
+        }
+      }
+    }
+    
+    // Function to ensure form submission includes the correct family_id
+    function prepareFormSubmission() {
+      const familySelect = document.getElementById('family_id');
+      const newFamilyInput = document.getElementById('new_family_id');
+      
+      // Validate that either existing family is selected or new family ID is entered
+      const hasExistingFamily = familySelect.value && familySelect.value !== '';
+      const hasNewFamily = newFamilyInput.value.trim() !== '';
+      
+      if (!hasExistingFamily && !hasNewFamily) {
+        alert('Please either select an existing family or enter a new family ID.');
+        return false;
+      }
+      
+      // Validate that all individuals have required fields
+      const individualForms = document.querySelectorAll('.individual-form');
+      if (individualForms.length > 1) {
+        let hasMother = false;
+        let hasFather = false;
+        
+        for (let form of individualForms) {
+          const fullName = form.querySelector('input[name*="[full_name]"]')?.value || '';
+          const role = form.querySelector('select[name*="[role]"]')?.value || '';
+          
+          if (!fullName.trim()) {
+            alert('All individuals must have a full name.');
+            return false;
+          }
+          
+          if (!role) {
+            alert('All individuals must have a role in family.');
+            return false;
+          }
+          
+          if (role === 'mother') hasMother = true;
+          if (role === 'father') hasFather = true;
+        }
+        
+        if (!hasMother || !hasFather) {
+          alert('For families with multiple members, at least one mother and one father must be specified.');
+          return false;
+        }
+      } else {
+        // Single individual - just check required fields
+        for (let form of individualForms) {
+          const fullName = form.querySelector('input[name*="[full_name]"]')?.value || '';
+          const role = form.querySelector('select[name*="[role]"]')?.value || '';
+          
+          if (!fullName.trim()) {
+            alert('All individuals must have a full name.');
+            return false;
+          }
+          
+          if (!role) {
+            alert('All individuals must have a role in family.');
+            return false;
+          }
+        }
+      }
+      
+      // If new family input has a value, use that; otherwise use the select value
+      if (newFamilyInput.value.trim()) {
+        // Clear the select field to avoid conflicts
+        familySelect.value = '';
+        
+        // Remove any existing hidden input
+        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (existingHidden) {
+          existingHidden.remove();
+        }
+        // Add hidden input with new family ID
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'family_id';
+        hiddenInput.value = newFamilyInput.value.trim();
+        newFamilyInput.parentNode.appendChild(hiddenInput);
+        
+        console.log(`=== DEBUG: Using new family ID: ${newFamilyInput.value.trim()} ===`);
+      } else {
+        // Ensure no hidden input exists when using select
+        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (existingHidden) {
+          existingHidden.remove();
+        }
+      }
+      
+      return true;
+    }
+    
     let individualIndex = 0;
+    
+    // Form data persistence functions
+    function saveFormData() {
+      const form = document.getElementById('family-create-form');
+      if (!form) return;
+      
+      const formData = {
+        family_id: form.querySelector('#family_id')?.value || '',
+        family_description: form.querySelector('#family_description')?.value || '',
+        individuals: []
+      };
+      
+      // Save individual form data
+      const individualForms = form.querySelectorAll('.individual-form');
+      individualForms.forEach((individualForm, index) => {
+        const individualData = {
+          full_name: individualForm.querySelector('input[name*="[full_name]"]')?.value || '',
+          tc_identity: individualForm.querySelector('input[name*="[tc_identity]"]')?.value || '',
+          birth_date: individualForm.querySelector('input[name*="[birth_date]"]')?.value || '',
+          icd11_code: individualForm.querySelector('input[name*="[icd11_code]"]')?.value || '',
+          council_date: individualForm.querySelector('input[name*="[council_date]"]')?.value || '',
+          diagnosis: individualForm.querySelector('textarea[name*="[diagnosis]"]')?.value || '',
+          diagnosis_date: individualForm.querySelector('input[name*="[diagnosis_date]"]')?.value || '',
+          institution: individualForm.querySelector('select[name*="[institution]"]')?.value || '',
+          status: individualForm.querySelector('select[name*="[status]"]')?.value || '',
+          is_index: individualForm.querySelector('input[name*="[is_index]"]:checked')?.value || 'false',
+          is_affected: individualForm.querySelector('input[name*="[is_affected]"]:checked')?.value || 'false',
+
+          role: individualForm.querySelector('select[name*="[role]"]')?.value || '',
+          ids: [],
+          notes: []
+        };
+        
+        // Save ID rows data
+        const idRows = individualForm.querySelectorAll('.id-row');
+        idRows.forEach(idRow => {
+          const idType = idRow.querySelector('select[name*="[type]"]')?.value || '';
+          const idValue = idRow.querySelector('input[name*="[value]"]')?.value || '';
+          if (idType && idValue) {
+            individualData.ids.push({ type: idType, value: idValue });
+          }
+        });
+        
+        // Save note rows data
+        const noteRows = individualForm.querySelectorAll('.note-row');
+        noteRows.forEach(noteRow => {
+          const noteContent = noteRow.querySelector('textarea[name*="[content]"]')?.value || '';
+          if (noteContent.trim()) {
+            individualData.notes.push({ content: noteContent });
+          }
+        });
+        
+        formData.individuals.push(individualData);
+      });
+      
+      localStorage.setItem('familyCreationFormData', JSON.stringify(formData));
+      console.log('Form data saved to localStorage:', formData);
+      showToast('Form data saved successfully!', 'success');
+    }
+    
+    function restoreFormData() {
+      const savedData = localStorage.getItem('familyCreationFormData');
+      if (!savedData) {
+        showToast('No saved data found', 'warning');
+        return;
+      }
+      
+      try {
+        const formData = JSON.parse(savedData);
+        const form = document.getElementById('family-create-form');
+        if (!form) return;
+        
+        // Restore family data
+        const familyIdField = form.querySelector('#family_id');
+        const familyDescField = form.querySelector('#family_description');
+        
+        if (familyIdField && formData.family_id) {
+          familyIdField.value = formData.family_id;
+        }
+        if (familyDescField && formData.family_description) {
+          familyDescField.value = formData.family_description;
+        }
+        
+        // Clear existing individual forms and restore saved ones
+        const container = document.getElementById('individuals-container');
+        if (container) {
+          container.innerHTML = '';
+          individualIndex = 0;
+          
+          // Restore individual forms
+          formData.individuals.forEach((individualData, index) => {
+            addIndividualForm();
+            
+            // Get the newly added form
+            const individualForms = container.querySelectorAll('.individual-form');
+            const currentForm = individualForms[index];
+            if (!currentForm) return;
+            
+            // Restore individual data
+            const fullNameField = currentForm.querySelector('input[name*="[full_name]"]');
+            const tcIdentityField = currentForm.querySelector('input[name*="[tc_identity]"]');
+            const birthDateField = currentForm.querySelector('input[name*="[birth_date]"]');
+            const icd11Field = currentForm.querySelector('input[name*="[icd11_code]"]');
+            const councilDateField = currentForm.querySelector('input[name*="[council_date]"]');
+            const diagnosisField = currentForm.querySelector('textarea[name*="[diagnosis]"]');
+            const diagnosisDateField = currentForm.querySelector('input[name*="[diagnosis_date]"]');
+            const institutionField = currentForm.querySelector('select[name*="[institution]"]');
+            const statusField = currentForm.querySelector('select[name*="[status]"]');
+            const motherField = currentForm.querySelector('select[name*="[mother]"]');
+            const fatherField = currentForm.querySelector('select[name*="[father]"]');
+            const roleField = currentForm.querySelector('select[name*="[role]"]');
+
+            
+            // Set values
+            if (fullNameField) fullNameField.value = individualData.full_name || '';
+            if (tcIdentityField) tcIdentityField.value = individualData.tc_identity || '';
+            if (birthDateField) birthDateField.value = individualData.birth_date || '';
+            if (icd11Field) icd11Field.value = individualData.icd11_code || '';
+            if (councilDateField) councilDateField.value = individualData.council_date || '';
+            if (diagnosisField) diagnosisField.value = individualData.diagnosis || '';
+            if (diagnosisDateField) diagnosisDateField.value = individualData.diagnosis_date || '';
+            if (institutionField) institutionField.value = individualData.institution || '';
+            if (statusField) statusField.value = individualData.status || '';
+            if (motherField) motherField.value = individualData.mother || '';
+            if (fatherField) fatherField.value = individualData.father || '';
+            if (roleField) roleField.value = individualData.role || '';
+            
+            // Set radio button values
+            const isIndexRadios = currentForm.querySelectorAll('input[name*="[is_index]"]');
+            isIndexRadios.forEach(radio => {
+              radio.checked = radio.value === individualData.is_index;
+            });
+            
+            const isAffectedRadios = currentForm.querySelectorAll('input[name*="[is_affected]"]');
+            isAffectedRadios.forEach(radio => {
+              radio.checked = radio.value === individualData.is_affected;
+            });
+            
+            // Restore ID rows
+            if (individualData.ids && individualData.ids.length > 0) {
+              individualData.ids.forEach(idData => {
+                addIdRow(currentForm);
+                
+                // Get the newly added ID row
+                const idRows = currentForm.querySelectorAll('.id-row');
+                const lastIdRow = idRows[idRows.length - 1];
+                if (lastIdRow) {
+                  const typeField = lastIdRow.querySelector('select[name*="[type]"]');
+                  const valueField = lastIdRow.querySelector('input[name*="[value]"]');
+                  
+                  if (typeField) typeField.value = idData.type;
+                  if (valueField) valueField.value = idData.value;
+                }
+              });
+            }
+            
+            // Restore note rows
+            if (individualData.notes && individualData.notes.length > 0) {
+              individualData.notes.forEach(noteData => {
+                addNoteRow(currentForm);
+                
+                // Get the newly added note row
+                const noteRows = currentForm.querySelectorAll('.note-row');
+                const lastNoteRow = noteRows[noteRows.length - 1];
+                if (lastNoteRow) {
+                  const contentField = lastNoteRow.querySelector('textarea[name*="[content]"]');
+                  
+                  if (contentField) contentField.value = noteData.content;
+                }
+              });
+            }
+          });
+          
+          // Update individual index
+          individualIndex = formData.individuals.length;
+        }
+        
+        console.log('Form data restored from localStorage:', formData);
+        showToast(`Restored ${formData.individuals.length} individual(s) and family data`, 'success');
+      } catch (error) {
+        console.error('Error restoring form data:', error);
+        localStorage.removeItem('familyCreationFormData');
+        showToast('Error restoring form data', 'error');
+      }
+    }
+    
+    function clearFormData() {
+      localStorage.removeItem('familyCreationFormData');
+      console.log('Form data cleared from localStorage');
+      showToast('Form data cleared', 'info');
+    }
+    
+    function hasSavedData() {
+      return localStorage.getItem('familyCreationFormData') !== null;
+    }
+    
+    function showSavedDataIndicator() {
+      if (hasSavedData()) {
+        // Add a small indicator to the restore button
+        const restoreButton = document.querySelector('button[onclick*="restoreFormData"]');
+        if (restoreButton) {
+          restoreButton.classList.add('ring-2', 'ring-green-400', 'ring-opacity-50');
+          restoreButton.innerHTML = '<i class="fas fa-undo mr-2"></i>Restore Saved Data <span class="ml-2 px-2 py-1 text-xs bg-green-500 text-white rounded-full">Saved</span>';
+        }
+      }
+    }
+    
+    function showToast(message, type = 'info') {
+      // Create toast element
+      const toast = document.createElement('div');
+      toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 translate-x-full`;
+      
+      // Set color based on type
+      switch (type) {
+        case 'success':
+          toast.className += ' bg-green-600';
+          break;
+        case 'error':
+          toast.className += ' bg-red-600';
+          break;
+        case 'warning':
+          toast.className += ' bg-yellow-600';
+          break;
+        default:
+          toast.className += ' bg-blue-600';
+      }
+      
+      toast.innerHTML = `
+        <div class="flex items-center space-x-2">
+          <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : type === 'warning' ? 'exclamation' : 'info'}-circle"></i>
+          <span>${message}</span>
+        </div>
+      `;
+      
+      // Add to page
+      document.body.appendChild(toast);
+      
+      // Animate in
+      setTimeout(() => {
+        toast.classList.remove('translate-x-full');
+      }, 100);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => {
+          document.body.removeChild(toast);
+        }, 300);
+      }, 3000);
+    }
+    
+    function handleCloseWithConfirmation() {
+      // Check if there's any data entered
+      const form = document.getElementById('family-create-form');
+      if (!form) return;
+      
+      const familyId = form.querySelector('#family_id')?.value || '';
+      const familyDesc = form.querySelector('#family_description')?.value || '';
+      const individualForms = form.querySelectorAll('.individual-form');
+      
+      let hasData = false;
+      if (familyId.trim() || familyDesc.trim()) {
+        hasData = true;
+      } else {
+        individualForms.forEach(individualForm => {
+          const fullName = individualForm.querySelector('input[name*="[full_name]"]')?.value || '';
+          if (fullName.trim()) {
+            hasData = true;
+          }
+        });
+      }
+      
+      if (hasData) {
+        // Automatically save data and close
+        saveFormData();
+        document.getElementById('modal-root').innerHTML = '';
+        showToast('Form data saved automatically', 'success');
+      } else {
+        // No data to save, just close
+        document.getElementById('modal-root').innerHTML = '';
+      }
+    }
     
     function debugFormSubmission(event) {
       console.log("=== DEBUG: Form submission started ===");
@@ -2239,8 +2684,19 @@
       const inputs = clone.querySelectorAll('input, select, textarea');
       inputs.forEach(input => {
         if (input.name) {
-          input.name = input.name.replace('[INDEX]', `[${individualIndex}]`);
+          input.name = input.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
         }
+      });
+      
+      // Also update any template elements that might contain INDEX placeholders
+      const templates = clone.querySelectorAll('template');
+      templates.forEach(tmpl => {
+        const templateInputs = tmpl.content.querySelectorAll('input, select, textarea');
+        templateInputs.forEach(input => {
+          if (input.name) {
+            input.name = input.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+          }
+        });
       });
       
       // Update member number
@@ -2261,17 +2717,52 @@
           const rowIndex = parseInt(rowsContainer.getAttribute('data-row-index') || '0', 10);
 
           const fragment = tmpl.content.cloneNode(true);
-          // Replace ROW placeholder with rowIndex
+          
+          // First, find the individual index from the form's existing inputs
+          const individualIndex = individualFormEl.querySelector('input, select, textarea')?.name?.match(/individuals\[(\d+)\]/)?.[1] || '0';
+          
+          // Replace both INDEX and ROW placeholders
           fragment.querySelectorAll('input, select').forEach(el => {
             if (el.name) {
-              el.name = el.name.replace('[ROW]', `[${rowIndex}]`);
+              el.name = el.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+              el.name = el.name.replace(/\[ROW\]/g, `[${rowIndex}]`);
             }
           });
+          
           rowsContainer.appendChild(fragment);
           rowsContainer.setAttribute('data-row-index', String(rowIndex + 1));
         }
 
         function removeIdRow(rowEl) {
+          if (!rowEl) return;
+          rowEl.remove();
+        }
+
+        function addNoteRow(individualFormEl) {
+          // Find the note-rows container and its template within this individual form
+          const rowsContainer = individualFormEl.querySelector('.note-rows');
+          const tmpl = individualFormEl.querySelector('template.note-row-template');
+          if (!rowsContainer || !tmpl) return;
+          const rowIndex = parseInt(rowsContainer.getAttribute('data-row-index') || '0', 10);
+
+          const fragment = tmpl.content.cloneNode(true);
+          
+          // First, find the individual index from the form's existing inputs
+          const individualIndex = individualFormEl.querySelector('input, select, textarea')?.name?.match(/individuals\[(\d+)\]/)?.[1] || '0';
+          
+          // Replace both INDEX and ROW placeholders
+          fragment.querySelectorAll('input, textarea, select').forEach(el => {
+            if (el.name) {
+              el.name = el.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+              el.name = el.name.replace(/\[ROW\]/g, `[${rowIndex}]`);
+            }
+          });
+          
+          rowsContainer.appendChild(fragment);
+          rowsContainer.setAttribute('data-row-index', String(rowIndex + 1));
+        }
+
+        function removeNoteRow(rowEl) {
           if (!rowEl) return;
           rowEl.remove();
         }
@@ -2285,6 +2776,11 @@
     // Add the first individual form when the page loads
     document.addEventListener('DOMContentLoaded', function() {
           addIndividualForm();
+          // Restore saved form data if available
+          setTimeout(() => {
+            restoreFormData();
+            showSavedDataIndicator();
+          }, 100); // Small delay to ensure DOM is ready
     });
   </script>
 {% endpartialdef %}
@@ -2297,14 +2793,28 @@
           <i class="fas fa-check text-green-600 dark:text-green-400 text-xl"></i>
         </div>
         <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
-          Family Created Successfully!
+          {% if family_was_created %}
+            Family Created Successfully!
+          {% else %}
+            Family Updated Successfully!
+          {% endif %}
         </h3>
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          Family "{{ family.family_id }}" has been created with {{ count }} individual{{ count|pluralize }}.
+          {% if family_was_created %}
+            Family "{{ family.family_id }}" has been created with {{ count }} individual{{ count|pluralize }}.
+          {% else %}
+            Family "{{ family.family_id }}" has been updated with {{ count }} new individual{{ count|pluralize }}.
+          {% endif %}
         </p>
         
         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
-          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Created Family:</h4>
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">
+            {% if family_was_created %}
+              Created Family:
+            {% else %}
+              Updated Family:
+            {% endif %}
+          </h4>
           <p class="text-sm text-gray-600 dark:text-gray-300">
             <strong>ID:</strong> {{ family.family_id }}<br>
             <strong>Description:</strong> {{ family.description|default:"No description" }}

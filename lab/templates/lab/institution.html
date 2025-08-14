@@ -15,7 +15,7 @@
       <p class="text-gray-600 dark:text-gray-400">{{ item.contact }}</p>
     {% endif %}
     <p class="text-sm text-gray-500 dark:text-gray-400">
-      Created: {{ item.created_at|date:"M d, Y" }}
+      Created: {{ item.get_created_at|date:"M d, Y"|default:"Unknown" }}
     </p>
     <div class="flex justify-end mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
       <button
@@ -59,14 +59,14 @@
         <div class="flex items-center">
           <i class="fa-solid fa-calendar mr-2 text-blue-600 dark:text-blue-400"></i>
           <span class="text-blue-900 dark:text-blue-100 font-medium">
-            Created: {{ item.created_at|date:"M d, Y" }}
+            Created: {{ item.get_created_at|date:"M d, Y"|default:"Unknown" }}
           </span>
         </div>
-        {% if item.updated_at %}
+        {% if item.get_updated_at %}
           <div class="flex items-center">
             <i class="fa-solid fa-clock mr-2 text-blue-600 dark:text-blue-400"></i>
             <span class="text-blue-900 dark:text-blue-100 font-medium">
-              Last updated: {{ item.updated_at|date:"M d, Y H:i" }}
+              Last updated: {{ item.get_updated_at|date:"M d, Y H:i"|default:"Unknown" }}
             </span>
           </div>
         {% endif %}
@@ -118,7 +118,7 @@
       {{ item.institution_type|default:"-" }}
     </td>
     <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-      {{ item.created_at|date:"M d, Y" }}
+      {{ item.get_created_at|date:"M d, Y"|default:"Unknown" }}
     </td>
     <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
       <button @click="openDetail({{ item.pk }}, 'Institution', 'lab')" 
@@ -157,8 +157,8 @@
     </h2>
     <div class="mb-2">
       <span class="font-semibold">Type:</span> {{ item.institution_type|default:'—' }}<br>
-      <span class="font-semibold">Created:</span> {{ item.created_at|date:"M d, Y H:i" }}<br>
-      <span class="font-semibold">Last Updated:</span> {{ item.updated_at|date:"M d, Y H:i" }}
+      <span class="font-semibold">Created:</span> {{ item.get_created_at|date:"M d, Y H:i"|default:"Unknown" }}<br>
+      <span class="font-semibold">Last Updated:</span> {{ item.get_updated_at|date:"M d, Y H:i"|default:"Unknown" }}
     </div>
     <div class="mt-4">
       <h3 class="font-semibold">Notes</h3>
