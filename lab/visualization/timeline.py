@@ -28,16 +28,18 @@ def timeline(request, pk):
             })
     
     # Add individual's created_at date
-    timeline_events.append({
-        'date': individual.created_at,
-        'type': 'individual',
-        'action': 'Created',
-        'description': f"Individual {individual.individual_id} created",
-        'user': 'System',
-        'object_name': 'Individual',
-        'object_id': individual.individual_id,
-        'details': f"Individual ID: {individual.individual_id}, Created: {individual.created_at.date()}"
-    })
+    created_at = individual.get_created_at()
+    if created_at:
+        timeline_events.append({
+            'date': created_at,
+            'type': 'individual',
+            'action': 'Created',
+            'description': f"Individual {individual.individual_id} created",
+            'user': 'System',
+            'object_name': 'Individual',
+            'object_id': individual.individual_id,
+            'details': f"Individual ID: {individual.individual_id}, Created: {created_at.date()}"
+        })
     
     # Add individual's important dates
     if individual.council_date:
@@ -67,16 +69,18 @@ def timeline(request, pk):
     # Get sample history and important dates
     for sample in individual.samples.all():
         # Add the actual created_at date
-        timeline_events.append({
-            'date': sample.created_at,
-            'type': 'sample',
-            'action': 'Created',
-            'description': f"Sample {sample.id} created",
-            'user': 'System',
-            'object_name': 'Sample',
-            'object_id': f"Sample {sample.id}",
-            'details': f"Type: {sample.sample_type.name}, Created: {sample.created_at.date()}"
-        })
+        sample_created_at = sample.get_created_at()
+        if sample_created_at:
+            timeline_events.append({
+                'date': sample_created_at,
+                'type': 'sample',
+                'action': 'Created',
+                'description': f"Sample {sample.id} created",
+                'user': 'System',
+                'object_name': 'Sample',
+                'object_id': f"Sample {sample.id}",
+                'details': f"Type: {sample.sample_type.name}, Created: {sample_created_at.date()}"
+            })
         
         for record in sample.history.all():
             if 'created' not in record.get_history_type_display().lower():
@@ -120,16 +124,18 @@ def timeline(request, pk):
     for sample in individual.samples.all():
         for test in sample.tests.all():
             # Add the actual created_at date
-            timeline_events.append({
-                'date': test.created_at,
-                'type': 'test',
-                'action': 'Created',
-                'description': f"Test {test.id} created",
-                'user': 'System',
-                'object_name': 'Test',
-                'object_id': f"Test {test.id}",
-                'details': f"Type: {test.test_type.name}, Created: {test.created_at.date()}"
-            })
+            test_created_at = test.get_created_at()
+            if test_created_at:
+                timeline_events.append({
+                    'date': test_created_at,
+                    'type': 'test',
+                    'action': 'Created',
+                    'description': f"Test {test.id} created",
+                    'user': 'System',
+                    'object_name': 'Test',
+                    'object_id': f"Test {test.id}",
+                    'details': f"Type: {test.test_type.name}, Created: {test_created_at.date()}"
+                })
             
             for record in test.history.all():
                 if 'created' not in record.get_history_type_display().lower():
@@ -186,16 +192,18 @@ def timeline(request, pk):
         for test in sample.tests.all():
             for analysis in test.analyses.all():
                 # Add the actual created_at date
-                timeline_events.append({
-                    'date': analysis.created_at,
-                    'type': 'analysis',
-                    'action': 'Created',
-                    'description': f"Analysis {analysis.id} created",
-                    'user': 'System',
-                    'object_name': 'Analysis',
-                    'object_id': f"Analysis {analysis.id}",
-                    'details': f"Type: {analysis.type.name}, Created: {analysis.created_at.date()}"
-                })
+                analysis_created_at = analysis.get_created_at()
+                if analysis_created_at:
+                    timeline_events.append({
+                        'date': analysis_created_at,
+                        'type': 'analysis',
+                        'action': 'Created',
+                        'description': f"Analysis {analysis.id} created",
+                        'user': 'System',
+                        'object_name': 'Analysis',
+                        'object_id': f"Analysis {analysis.id}",
+                        'details': f"Type: {analysis.type.name}, Created: {analysis_created_at.date()}"
+                    })
                 
                 for record in analysis.history.all():
                     if 'created' not in record.get_history_type_display().lower():
@@ -226,16 +234,18 @@ def timeline(request, pk):
     # Get task history and important dates
     for task in individual.tasks.all():
         # Add the actual created_at date
-        timeline_events.append({
-            'date': task.created_at,
-            'type': 'task',
-            'action': 'Created',
-            'description': f"Task {task.id} created",
-            'user': 'System',
-            'object_name': 'Task',
-            'object_id': f"Task {task.id}",
-            'details': f"Title: {task.title}, Created: {task.created_at.date()}"
-        })
+        task_created_at = task.get_created_at()
+        if task_created_at:
+            timeline_events.append({
+                'date': task_created_at,
+                'type': 'task',
+                'action': 'Created',
+                'description': f"Task {task.id} created",
+                'user': 'System',
+                'object_name': 'Task',
+                'object_id': f"Task {task.id}",
+                'details': f"Title: {task.title}, Created: {task_created_at.date()}"
+            })
         
         for record in task.history.all():
             if 'created' not in record.get_history_type_display().lower():
@@ -265,21 +275,24 @@ def timeline(request, pk):
     
     # Get notes (created_at and updated_at dates)
     for note in individual.notes.all():
-        timeline_events.append({
-            'date': note.created_at,
-            'type': 'note',
-            'action': 'Created',
-            'description': 'Note added',
-            'user': note.user.username,
-            'object_name': 'Note',
-            'object_id': f"Note {note.id}",
-            'details': note.content[:100] + '...' if len(note.content) > 100 else note.content
-        })
+        note_created_at = note.get_created_at()
+        if note_created_at:
+            timeline_events.append({
+                'date': note_created_at,
+                'type': 'note',
+                'action': 'Created',
+                'description': 'Note added',
+                'user': note.user.username,
+                'object_name': 'Note',
+                'object_id': f"Note {note.id}",
+                'details': note.content[:100] + '...' if len(note.content) > 100 else note.content
+            })
         
         # Add note update if it was modified
-        if note.updated_at and note.updated_at != note.created_at:
+        note_updated_at = note.get_updated_at()
+        if note_updated_at and note_updated_at != note_created_at:
             timeline_events.append({
-                'date': note.updated_at,
+                'date': note_updated_at,
                 'type': 'note',
                 'action': 'Updated',
                 'description': 'Note updated',
@@ -293,16 +306,18 @@ def timeline(request, pk):
     for sample in individual.samples.all():
         # Sample tasks
         for task in sample.tasks.all():
-            timeline_events.append({
-                'date': task.created_at,
-                'type': 'task',
-                'action': 'Created',
-                'description': f"Task {task.id} created",
-                'user': 'System',
-                'object_name': 'Task',
-                'object_id': f"Task {task.id}",
-                'details': f"Sample: {sample.id}, Title: {task.title}, Created: {task.created_at.date()}"
-            })
+            task_created_at = task.get_created_at()
+            if task_created_at:
+                timeline_events.append({
+                    'date': task_created_at,
+                    'type': 'task',
+                    'action': 'Created',
+                    'description': f"Task {task.id} created",
+                    'user': 'System',
+                    'object_name': 'Task',
+                    'object_id': f"Task {task.id}",
+                    'details': f"Sample: {sample.id}, Title: {task.title}, Created: {task_created_at.date()}"
+                })
             
             for record in task.history.all():
                 if 'created' not in record.get_history_type_display().lower():
@@ -332,21 +347,24 @@ def timeline(request, pk):
         
         # Sample notes
         for note in sample.notes.all():
-            timeline_events.append({
-                'date': note.created_at,
-                'type': 'note',
-                'action': 'Created',
-                'description': 'Note added',
-                'user': note.user.username,
-                'object_name': 'Note',
-                'object_id': f"Note {note.id}",
-                'details': f"Sample: {sample.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
-            })
+            note_created_at = note.get_created_at()
+            if note_created_at:
+                timeline_events.append({
+                    'date': note_created_at,
+                    'type': 'note',
+                    'action': 'Created',
+                    'description': 'Note added',
+                    'user': note.user.username,
+                    'object_name': 'Note',
+                    'object_id': f"Note {note.id}",
+                    'details': f"Sample: {sample.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                })
             
             # Add note update if it was modified
-            if note.updated_at and note.updated_at != note.created_at:
+            note_updated_at = note.get_updated_at()
+            if note_updated_at and note_updated_at != note_created_at:
                     timeline_events.append({
-                        'date': note.updated_at,
+                        'date': note_updated_at,
                         'type': 'note',
                         'action': 'Updated',
                         'description': 'Note updated',
@@ -361,16 +379,18 @@ def timeline(request, pk):
         for test in sample.tests.all():
             # Test tasks
             for task in test.tasks.all():
-                timeline_events.append({
-                    'date': task.created_at,
-                    'type': 'task',
-                    'action': 'Created',
-                    'description': f"Task {task.id} created",
-                    'user': 'System',
-                    'object_name': 'Task',
-                    'object_id': f"Task {task.id}",
-                    'details': f"Test: {test.id}, Title: {task.title}, Created: {task.created_at.date()}"
-                })
+                task_created_at = task.get_created_at()
+                if task_created_at:
+                    timeline_events.append({
+                        'date': task_created_at,
+                        'type': 'task',
+                        'action': 'Created',
+                        'description': f"Task {task.id} created",
+                        'user': 'System',
+                        'object_name': 'Task',
+                        'object_id': f"Task {task.id}",
+                        'details': f"Test: {test.id}, Title: {task.title}, Created: {task_created_at.date()}"
+                    })
                 
                 for record in task.history.all():
                     if 'created' not in record.get_history_type_display().lower():
@@ -400,21 +420,24 @@ def timeline(request, pk):
             
             # Test notes
             for note in test.notes.all():
-                timeline_events.append({
-                    'date': note.created_at,
-                    'type': 'note',
-                    'action': 'Created',
-                    'description': 'Note added',
-                    'user': note.user.username,
-                    'object_name': 'Note',
-                    'object_id': f"Note {note.id}",
-                    'details': f"Test: {test.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
-                })
+                note_created_at = note.get_created_at()
+                if note_created_at:
+                    timeline_events.append({
+                        'date': note_created_at,
+                        'type': 'note',
+                        'action': 'Created',
+                        'description': 'Note added',
+                        'user': note.user.username,
+                        'object_name': 'Note',
+                        'object_id': f"Note {note.id}",
+                        'details': f"Test: {test.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                    })
                 
                 # Add note update if it was modified
-                if note.updated_at and note.updated_at != note.created_at:
+                note_updated_at = note.get_updated_at()
+                if note_updated_at and note_updated_at != note_created_at:
                     timeline_events.append({
-                        'date': note.updated_at,
+                        'date': note_updated_at,
                         'type': 'note',
                         'action': 'Updated',
                         'description': 'Note updated',
@@ -430,16 +453,18 @@ def timeline(request, pk):
             for analysis in test.analyses.all():
                 # Analysis tasks
                 for task in analysis.tasks.all():
-                    timeline_events.append({
-                        'date': task.created_at,
-                        'type': 'task',
-                        'action': 'Created',
-                        'description': f"Task {task.id} created",
-                        'user': 'System',
-                        'object_name': 'Task',
-                        'object_id': f"Task {task.id}",
-                        'details': f"Analysis: {analysis.id}, Title: {task.title}, Created: {task.created_at.date()}"
-                    })
+                    task_created_at = task.get_created_at()
+                    if task_created_at:
+                        timeline_events.append({
+                            'date': task_created_at,
+                            'type': 'task',
+                            'action': 'Created',
+                            'description': f"Task {task.id} created",
+                            'user': 'System',
+                            'object_name': 'Task',
+                            'object_id': f"Task {task.id}",
+                            'details': f"Analysis: {analysis.id}, Title: {task.title}, Created: {task_created_at.date()}"
+                        })
                     
                     for record in task.history.all():
                         if 'created' not in record.get_history_type_display().lower():
@@ -469,21 +494,24 @@ def timeline(request, pk):
                 
                 # Analysis notes
                 for note in analysis.notes.all():
-                    timeline_events.append({
-                        'date': note.created_at,
-                        'type': 'note',
-                        'action': 'Created',
-                        'description': 'Note added',
-                        'user': note.user.username,
-                        'object_name': 'Note',
-                        'object_id': f"Note {note.id}",
-                        'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
-                    })
+                    note_created_at = note.get_created_at()
+                    if note_created_at:
+                        timeline_events.append({
+                            'date': note_created_at,
+                            'type': 'note',
+                            'action': 'Created',
+                            'description': 'Note added',
+                            'user': note.user.username,
+                            'object_name': 'Note',
+                            'object_id': f"Note {note.id}",
+                            'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                        })
                     
                     # Add note update if it was modified
-                    if note.updated_at and note.updated_at != note.created_at:
+                    note_updated_at = note.get_updated_at()
+                    if note_updated_at and note_updated_at != note_created_at:
                         timeline_events.append({
-                            'date': note.updated_at,
+                            'date': note_updated_at,
                             'type': 'note',
                             'action': 'Updated',
                             'description': 'Note updated',
@@ -551,7 +579,7 @@ def timeline(request, pk):
     
     # Process samples and their children in chronological order
     all_samples = list(individual.samples.all())
-    all_samples.sort(key=lambda s: s.created_at.date() if s.created_at else date(2025, 1, 1))
+    all_samples.sort(key=lambda s: s.get_created_at().date() if s.get_created_at() else date(2025, 1, 1))
     
     for sample in all_samples:
         # Assign sample position
@@ -560,7 +588,7 @@ def timeline(request, pk):
         
         # Process tests for this sample in chronological order
         all_tests = list(sample.tests.all())
-        all_tests.sort(key=lambda t: t.created_at.date() if t.created_at else date(2025, 1, 1))
+        all_tests.sort(key=lambda t: t.get_created_at().date() if t.get_created_at() else date(2025, 1, 1))
         
         for test in all_tests:
             # Assign test position
@@ -569,7 +597,7 @@ def timeline(request, pk):
             
             # Process analyses for this test in chronological order
             all_analyses = list(test.analyses.all())
-            all_analyses.sort(key=lambda a: a.created_at.date() if a.created_at else date(2025, 1, 1))
+            all_analyses.sort(key=lambda a: a.get_created_at().date() if a.get_created_at() else date(2025, 1, 1))
             
             for analysis in all_analyses:
                 # Assign analysis position
@@ -584,7 +612,7 @@ def timeline(request, pk):
     
     # Combine and sort by creation date
     tasks_and_notes = [(task, 'task') for task in all_tasks] + [(note, 'note') for note in all_notes]
-    tasks_and_notes.sort(key=lambda x: x[0].created_at.date() if x[0].created_at else date(2025, 1, 1))
+    tasks_and_notes.sort(key=lambda x: x[0].get_created_at().date() if x[0].get_created_at() else date(2025, 1, 1))
     
     for obj, obj_type in tasks_and_notes:
         if obj_type == 'task':
@@ -712,7 +740,8 @@ def timeline(request, pk):
     
     # Individual line - from created_at to now
     from datetime import date
-    individual_created = individual.created_at.date().isoformat() if individual.created_at else '2025-01-01'
+    individual_created_at = individual.get_created_at()
+    individual_created = individual_created_at.date().isoformat() if individual_created_at else '2025-01-01'
     fig.add_shape(
         type='line',
         x0=individual_created,
@@ -729,25 +758,32 @@ def timeline(request, pk):
     
     # Get sample creation dates
     for sample in individual.samples.all():
-        sample_creation_dates[sample.id] = sample.created_at.date().isoformat()
+        sample_created_at = sample.get_created_at()
+        if sample_created_at:
+            sample_creation_dates[sample.id] = sample_created_at.date().isoformat()
     
     # Get test creation dates
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            test_creation_dates[test.id] = test.created_at.date().isoformat()
+            test_created_at = test.get_created_at()
+            if test_created_at:
+                test_creation_dates[test.id] = test_created_at.date().isoformat()
     
     # Get analysis creation dates
     for sample in individual.samples.all():
         for test in sample.tests.all():
             for analysis in test.analyses.all():
-                analysis_creation_dates[analysis.id] = analysis.created_at.date().isoformat()
+                analysis_created_at = analysis.get_created_at()
+                if analysis_created_at:
+                    analysis_creation_dates[analysis.id] = analysis_created_at.date().isoformat()
     
 
     
     # Sample lines - from created_at to now
     for sample in individual.samples.all():
         if sample.id in sample_positions:
-            sample_created = sample.created_at.date().isoformat() if sample.created_at else '2025-01-01'
+            sample_created_at = sample.get_created_at()
+            sample_created = sample_created_at.date().isoformat() if sample_created_at else '2025-01-01'
             fig.add_shape(
                 type='line',
                 x0=sample_created,
@@ -761,7 +797,8 @@ def timeline(request, pk):
     for sample in individual.samples.all():
         for test in sample.tests.all():
             if test.id in test_positions:
-                test_created = test.created_at.date().isoformat() if test.created_at else '2025-01-01'
+                test_created_at = test.get_created_at()
+                test_created = test_created_at.date().isoformat() if test_created_at else '2025-01-01'
                 fig.add_shape(
                     type='line',
                     x0=test_created,
@@ -776,7 +813,8 @@ def timeline(request, pk):
         for test in sample.tests.all():
             for analysis in test.analyses.all():
                 if analysis.id in analysis_positions:
-                    analysis_created = analysis.created_at.date().isoformat() if analysis.created_at else '2025-01-01'
+                    analysis_created_at = analysis.get_created_at()
+                    analysis_created = analysis_created_at.date().isoformat() if analysis_created_at else '2025-01-01'
                     fig.add_shape(
                         type='line',
                         x0=analysis_created,
@@ -789,7 +827,8 @@ def timeline(request, pk):
     # Task lines - from created_at to due_date (or now if no due_date)
     for task in individual.tasks.all():
         if task.id in task_positions:
-            task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+            task_created_at = task.get_created_at()
+            task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
             task_end = task.due_date.isoformat() if task.due_date else date.today().isoformat()
             fig.add_shape(
                 type='line',
@@ -803,7 +842,8 @@ def timeline(request, pk):
     # Note lines - from created_at to now
     for note in individual.notes.all():
         if note.id in note_positions:
-            note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+            note_created_at = note.get_created_at()
+            note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
             fig.add_shape(
                 type='line',
                 x0=note_created,
@@ -817,7 +857,8 @@ def timeline(request, pk):
     for sample in individual.samples.all():
         for task in sample.tasks.all():
             if task.id in task_positions:
-                task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                task_created_at = task.get_created_at()
+                task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
                 task_end = task.due_date.isoformat() if task.due_date else date.today().isoformat()
                 fig.add_shape(
                     type='line',
@@ -832,7 +873,8 @@ def timeline(request, pk):
     for sample in individual.samples.all():
         for note in sample.notes.all():
             if note.id in note_positions:
-                note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                note_created_at = note.get_created_at()
+                note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
                 fig.add_shape(
                     type='line',
                     x0=note_created,
@@ -847,7 +889,8 @@ def timeline(request, pk):
         for test in sample.tests.all():
             for task in test.tasks.all():
                 if task.id in task_positions:
-                    task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                    task_created_at = task.get_created_at()
+                    task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
                     task_end = task.due_date.isoformat() if task.due_date else date.today().isoformat()
                     fig.add_shape(
                         type='line',
@@ -863,7 +906,8 @@ def timeline(request, pk):
         for test in sample.tests.all():
             for note in test.notes.all():
                 if note.id in note_positions:
-                    note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                    note_created_at = note.get_created_at()
+                    note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
                     fig.add_shape(
                         type='line',
                         x0=note_created,
@@ -879,7 +923,8 @@ def timeline(request, pk):
             for analysis in test.analyses.all():
                 for task in analysis.tasks.all():
                     if task.id in task_positions:
-                        task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                        task_created_at = task.get_created_at()
+                        task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
                         task_end = task.due_date.isoformat() if task.due_date else date.today().isoformat()
                         fig.add_shape(
                             type='line',
@@ -896,7 +941,8 @@ def timeline(request, pk):
             for analysis in test.analyses.all():
                 for note in analysis.notes.all():
                     if note.id in note_positions:
-                        note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                        note_created_at = note.get_created_at()
+                        note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
                         fig.add_shape(
                             type='line',
                             x0=note_created,
@@ -912,7 +958,8 @@ def timeline(request, pk):
     # Sample creation vertical lines - connect to individual
     for sample in individual.samples.all():
         if sample.id in sample_positions:
-            sample_created = sample.created_at.date().isoformat() if sample.created_at else '2025-01-01'
+            sample_created_at = sample.get_created_at()
+            sample_created = sample_created_at.date().isoformat() if sample_created_at else '2025-01-01'
             fig.add_shape(
                 type='line',
                 x0=sample_created,
@@ -926,7 +973,8 @@ def timeline(request, pk):
     for sample in individual.samples.all():
         for test in sample.tests.all():
             if test.id in test_positions and sample.id in sample_positions:
-                test_created = test.created_at.date().isoformat() if test.created_at else '2025-01-01'
+                test_created_at = test.get_created_at()
+                test_created = test_created_at.date().isoformat() if test_created_at else '2025-01-01'
                 fig.add_shape(
                     type='line',
                     x0=test_created,
@@ -941,7 +989,8 @@ def timeline(request, pk):
         for test in sample.tests.all():
             for analysis in test.analyses.all():
                 if analysis.id in analysis_positions and test.id in test_positions:
-                    analysis_created = analysis.created_at.date().isoformat() if analysis.created_at else '2025-01-01'
+                    analysis_created_at = analysis.get_created_at()
+                    analysis_created = analysis_created_at.date().isoformat() if analysis_created_at else '2025-01-01'
                     fig.add_shape(
                         type='line',
                         x0=analysis_created,
@@ -954,7 +1003,8 @@ def timeline(request, pk):
     # Task creation vertical lines - connect to individual
     for task in individual.tasks.all():
         if task.id in task_positions:
-            task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+            task_created_at = task.get_created_at()
+            task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
             fig.add_shape(
                 type='line',
                 x0=task_created,
@@ -967,7 +1017,8 @@ def timeline(request, pk):
     # Note creation vertical lines - connect to individual
     for note in individual.notes.all():
         if note.id in note_positions:
-            note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+            note_created_at = note.get_created_at()
+            note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
             fig.add_shape(
                 type='line',
                 x0=note_created,
@@ -981,7 +1032,8 @@ def timeline(request, pk):
     for sample in individual.samples.all():
         for task in sample.tasks.all():
             if task.id in task_positions and sample.id in sample_positions:
-                task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                task_created_at = task.get_created_at()
+                task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
                 fig.add_shape(
                     type='line',
                     x0=task_created,
@@ -995,7 +1047,8 @@ def timeline(request, pk):
     for sample in individual.samples.all():
         for note in sample.notes.all():
             if note.id in note_positions and sample.id in sample_positions:
-                note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                note_created_at = note.get_created_at()
+                note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
                 fig.add_shape(
                     type='line',
                     x0=note_created,
@@ -1010,7 +1063,8 @@ def timeline(request, pk):
         for test in sample.tests.all():
             for task in test.tasks.all():
                 if task.id in task_positions and test.id in test_positions:
-                    task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                    task_created_at = task.get_created_at()
+                    task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
                     fig.add_shape(
                         type='line',
                         x0=task_created,
@@ -1025,7 +1079,8 @@ def timeline(request, pk):
         for test in sample.tests.all():
             for note in test.notes.all():
                 if note.id in note_positions and test.id in test_positions:
-                    note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                    note_created_at = note.get_created_at()
+                    note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
                     fig.add_shape(
                         type='line',
                         x0=note_created,
@@ -1041,7 +1096,8 @@ def timeline(request, pk):
             for analysis in test.analyses.all():
                 for task in analysis.tasks.all():
                     if task.id in task_positions and analysis.id in analysis_positions:
-                        task_created = task.created_at.date().isoformat() if task.created_at else '2025-01-01'
+                        task_created_at = task.get_created_at()
+                        task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
                         fig.add_shape(
                             type='line',
                             x0=task_created,
@@ -1057,7 +1113,8 @@ def timeline(request, pk):
             for analysis in test.analyses.all():
                 for note in analysis.notes.all():
                     if note.id in note_positions and analysis.id in analysis_positions:
-                        note_created = note.created_at.date().isoformat() if note.created_at else '2025-01-01'
+                        note_created_at = note.get_created_at()
+                        note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
                         fig.add_shape(
                             type='line',
                             x0=note_created,
