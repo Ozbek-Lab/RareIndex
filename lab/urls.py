@@ -94,6 +94,13 @@ urlpatterns = [
     path("note/count/", views.note_count, name="note_count"),
     path("note/create/", views.note_create, name="note_create"),
     path("note/<int:pk>/delete/", views.note_delete, name="note_delete"),
+    
+    # Generic CRUD routes
+    path("create/", views.generic_create, name="generic_create"),
+    path("edit/", views.generic_edit, name="generic_edit"),
+    path("family/create/", views.family_create_segway, name="family_create_segway"),
+    path("delete/", views.generic_delete, name="generic_delete"),
+    
     path("check-notifications/", views.check_notifications, name="check_notifications"),
     path("notifications/", views.notifications_page, name="notifications"),
     # # Project routes

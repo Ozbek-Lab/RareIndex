@@ -178,7 +178,7 @@
 
     <div class="text-sm text-gray-500 dark:text-gray-400">
       <i class="fa-solid fa-calendar mr-1"></i>
-      Created: {{ item.created_at|date:"M d, Y H:i"|default:"Unknown" }}
+      Created: {{ item.get_created_at|date:"M d, Y H:i"|default:"Unknown" }}
     </div>
 
     <div
@@ -296,9 +296,9 @@
       {{ item.description|default:'—' }}<br />
       <span class="font-semibold">Status:</span> {{ item.status.name }}<br />
       <span class="font-semibold">Created:</span>
-      {{ item.created_at|date:"M d, Y H:i" }}<br />
+      {{ item.get_created_at|date:"M d, Y H:i"|default:"Unknown" }}<br />
       <span class="font-semibold">Last Updated:</span>
-      {{ item.updated_at|date:"M d, Y H:i" }}
+      {{ item.get_updated_at|date:"M d, Y H:i"|default:"Unknown" }}
     </div>
     <div class="mt-4">
       <h3 class="font-semibold">Notes</h3>

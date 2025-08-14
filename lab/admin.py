@@ -17,31 +17,55 @@ class IndividualProjectsInline(admin.TabularInline):
 
 @admin.register(models.Note)
 class NoteAdmin(admin.ModelAdmin):
-    list_display = ["content_object", "user", "created_at", "updated_at"]
-    list_filter = ["created_at", "user", "content_type"]
+    list_display = ["content_object", "user", "get_created_at", "get_updated_at"]
+    list_filter = ["user", "content_type"]
     search_fields = ["content"]
-    date_hierarchy = "created_at"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
 
 @admin.register(models.TestType)
 class TestTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "created_by", "created_at"]
+    list_display = ["name", "created_by", "get_created_at"]
     search_fields = ["name", "description"]
-    list_filter = ["created_at", "created_by"]
+    list_filter = ["created_by"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
 
 
 @admin.register(models.SampleType)
 class SampleTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "created_by", "created_at"]
+    list_display = ["name", "created_by", "get_created_at"]
     search_fields = ["name", "description"]
-    list_filter = ["created_at", "created_by"]
+    list_filter = ["created_by"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
 
 
 @admin.register(models.Institution)
 class InstitutionAdmin(admin.ModelAdmin):
-    list_display = ["name", "created_by", "created_at"]
+    list_display = ["name", "created_by", "get_created_at"]
     search_fields = ["name"]
-    list_filter = ["created_at", "created_by"]
+    list_filter = ["created_by"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
 
 
 @admin.register(models.Individual)
@@ -54,12 +78,16 @@ class IndividualAdmin(admin.ModelAdmin):
         "mother",
         "father",
         "created_by",
-        "created_at",
+        "get_created_at",
         "get_hpo_terms",
     ]
-    list_filter = ["status", "created_at", "family", "mother", "father"]
+    list_filter = ["status", "family", "mother", "father"]
     search_fields = ["full_name", "tc_identity"]
-    date_hierarchy = "created_at"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
     autocomplete_fields = ["hpo_terms"]
     inlines = [IndividualProjectsInline]
 
@@ -80,7 +108,7 @@ class IndividualAdmin(admin.ModelAdmin):
 @admin.register(models.Sample)
 class SampleAdmin(admin.ModelAdmin):
     list_display = ["individual", "sample_type", "status", "receipt_date", "created_by"]
-    list_filter = ["status", "sample_type", "receipt_date", "created_at"]
+    list_filter = ["status", "sample_type", "receipt_date"]
     search_fields = [
         "individual__full_name",  # Only direct or forward fields!
     ]
@@ -125,25 +153,43 @@ class TestAdmin(admin.ModelAdmin):
 
 @admin.register(models.Status)
 class StatusAdmin(admin.ModelAdmin):
-    list_display = ["name", "content_type", "color", "created_by", "created_at"]
+    list_display = ["name", "content_type", "color", "created_by", "get_created_at"]
     search_fields = ["name", "description"]
-    list_filter = ["created_at", "content_type"]
+    list_filter = ["content_type"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
 
 
 @admin.register(models.Family)
 class FamilyAdmin(admin.ModelAdmin):
-    list_display = ["family_id", "created_by", "created_at", "updated_at"]
+    list_display = ["family_id", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["family_id", "description"]
-    date_hierarchy = "created_at"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
 
 
 @admin.register(models.AnalysisType)
 class AnalysisTypeAdmin(admin.ModelAdmin):
-    list_display = ("name", "version", "created_by", "created_at")
-    list_filter = ("created_at",)
+    list_display = ("name", "version", "created_by", "get_created_at")
     search_fields = ("name", "description", "version")
     filter_horizontal = ("parent_types",)
-    readonly_fields = ("created_at", "created_by")
+    readonly_fields = ("created_by",)
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
 
     def save_model(self, request, obj, form, change):
         if not change:  # Only set created_by on creation
@@ -178,18 +224,21 @@ class TaskAdmin(admin.ModelAdmin):
         "priority",
         "status",
         "due_date",
-        "created_at",
+        "get_created_at",
     ]
     list_filter = [
         "status",
         "priority",
-        "created_at",
         "due_date",
         "assigned_to",
         "created_by",
     ]
     search_fields = ["title", "description", "project__name"]
-    date_hierarchy = "created_at"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
     raw_id_fields = ["project", "assigned_to", "created_by"]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -209,12 +258,16 @@ class ProjectAdmin(admin.ModelAdmin):
         "priority",
         "status",
         "due_date",
-        "created_at",
+        "get_created_at",
         "get_completion_percentage",
     ]
-    list_filter = ["status", "priority", "created_at", "due_date", "created_by"]
+    list_filter = ["status", "priority", "due_date", "created_by"]
     search_fields = ["name", "description"]
-    date_hierarchy = "created_at"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
     raw_id_fields = ["created_by"]
     inlines = [ProjectIndividualsInline]
 
@@ -234,10 +287,14 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(models.IdentifierType)
 class IdentifierTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "description", "created_at", "created_by"]
+    list_display = ["name", "description", "get_created_at", "created_by"]
     list_filter = ["name", "description", "created_by"]
     search_fields = ["name", "description"]
-    date_hierarchy = "created_at"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
 
 
 @admin.register(models.CrossIdentifier)
@@ -248,9 +305,13 @@ class CrossIdentifierAdmin(admin.ModelAdmin):
         "id_value",
         "id_description",
         "institution",
-        "created_at",
+        "get_created_at",
         "created_by",
     ]
     list_filter = ["individual", "id_type", "id_value", "institution", "created_by"]
     search_fields = ["individual__id", "id_type__name"]
-    date_hierarchy = "created_at"
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"

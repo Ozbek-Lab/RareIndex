@@ -125,7 +125,7 @@
 
     <div class="text-sm text-gray-500 dark:text-gray-400">
       <i class="fa-solid fa-calendar mr-1"></i>
-      Created: {{ item.created_at|date:"M d, Y H:i"|default:"Unknown" }}
+      Created: {{ item.get_created_at|date:"M d, Y H:i"|default:"Unknown" }}
     </div>
 
     <div
@@ -517,7 +517,7 @@
                           Status changed to <span class="font-medium">{{ log.new_status.name }}</span>
                         </p>
                         <p class="text-xs text-gray-500 dark:text-gray-400">
-                          {{ log.created_at|date:"d M Y H:i" }}
+                          {{ log.get_created_at|date:"d M Y H:i"|default:"Unknown" }}
                         </p>
                         {% if log.notes %}
                           <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
