@@ -36,3 +36,5 @@ ENV/
 *.egg-info/
 dist/
 build/
+staticfiles/
+*.json
