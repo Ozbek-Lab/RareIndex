@@ -388,6 +388,37 @@ def note_delete(request, pk):
 
 
 @login_required
+def note_update(request, pk):
+    """Update an existing note"""
+    if request.method == "POST":
+        note = get_object_or_404(Note, id=pk)
+        
+        # Only allow the note creator or staff to edit
+        if request.user == note.user or request.user.is_staff:
+            note.content = request.POST.get("content")
+            note.save()
+            
+            # Get the object and content type for the response
+            obj = note.content_object
+            content_type_str = note.content_type.model
+            object_id = note.object_id
+            
+            response = render(
+                request,
+                "lab/note.html#list",
+                {
+                    "object": obj,
+                    "content_type": content_type_str,
+                    "user": request.user,
+                },
+            )
+            response["HX-Trigger"] = f"noteCountUpdate-{content_type_str}-{object_id}"
+            return response
+        
+        return HttpResponseForbidden()
+
+
+@login_required
 def note_count(request):
     if request.method == "GET":
         object_id = request.GET.get("object_id")
