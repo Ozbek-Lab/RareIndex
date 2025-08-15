@@ -93,6 +93,7 @@ urlpatterns = [
     path("notes/", views.note_list, name="notes"),
     path("note/count/", views.note_count, name="note_count"),
     path("note/create/", views.note_create, name="note_create"),
+    path("note/<int:pk>/update/", views.note_update, name="note_update"),
     path("note/<int:pk>/delete/", views.note_delete, name="note_delete"),
     
     # Generic CRUD routes
