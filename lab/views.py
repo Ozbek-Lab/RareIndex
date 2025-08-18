@@ -780,18 +780,30 @@ def generic_create(request):
         if form.is_valid():
             # Save the object with the user context for created_by field
             obj = form.save(user=request.user)
-            # Handle HPO terms if provided via combobox
-            if model_name == 'Individual':
-                try:
-                    hpo_json = request.POST.get('hpo_term_ids')
-                    if hpo_json:
-                        term_ids = json.loads(hpo_json)
-                        if isinstance(term_ids, list) and term_ids:
-                            from ontologies.models import Term
-                            terms = Term.objects.filter(pk__in=term_ids)
-                            obj.hpo_terms.set(terms)
-                except Exception:
-                    pass
+            # Generic: handle any ManyToMany fields posted as JSON lists via <field_name>_ids
+            try:
+                for m2m_field in obj._meta.many_to_many:
+                    field_name = m2m_field.name
+                    candidate_params = [f"{field_name}_ids"]
+                    if field_name.endswith('s'):
+                        candidate_params.append(f"{field_name[:-1]}_ids")
+                    json_val = None
+                    for pname in candidate_params:
+                        json_val = request.POST.get(pname)
+                        if json_val:
+                            break
+                    if not json_val:
+                        continue
+                    try:
+                        id_list = json.loads(json_val)
+                    except Exception:
+                        id_list = [v for v in (json_val or '').split(',') if v]
+                    if isinstance(id_list, list) and id_list:
+                        related_model = m2m_field.remote_field.model
+                        related_qs = related_model.objects.filter(pk__in=id_list)
+                        getattr(obj, field_name).set(related_qs)
+            except Exception:
+                pass
             
             # Default status: prefer model-specific, else any status
             if hasattr(obj, 'status') and not getattr(obj, 'status_id', None):
@@ -1419,17 +1431,29 @@ def family_create_segway(request):
                     # If parsing fails, skip creating notes for this individual
                     pass
 
-                # Attach HPO terms if provided by combobox for this individual
+                # Generic: attach any ManyToMany posted as JSON lists per-individual
                 try:
                     idx_prefix = f"individuals[{idx}]"
-                    hpo_key = f"{idx_prefix}[hpo_term_ids]"
-                    hpo_json = request.POST.get(hpo_key)
-                    if hpo_json:
-                        term_ids = json.loads(hpo_json)
-                        if isinstance(term_ids, list) and term_ids:
-                            from ontologies.models import Term
-                            terms = Term.objects.filter(pk__in=term_ids)
-                            individual.hpo_terms.set(terms)
+                    for m2m_field in individual._meta.many_to_many:
+                        field_name = m2m_field.name
+                        candidate_params = [f"{idx_prefix}[{field_name}_ids]"]
+                        if field_name.endswith('s'):
+                            candidate_params.append(f"{idx_prefix}[{field_name[:-1]}_ids]")
+                        json_val = None
+                        for pname in candidate_params:
+                            json_val = request.POST.get(pname)
+                            if json_val:
+                                break
+                        if not json_val:
+                            continue
+                        try:
+                            id_list = json.loads(json_val)
+                        except Exception:
+                            id_list = [v for v in (json_val or '').split(',') if v]
+                        if isinstance(id_list, list) and id_list:
+                            related_model = m2m_field.remote_field.model
+                            related_qs = related_model.objects.filter(pk__in=id_list)
+                            getattr(individual, field_name).set(related_qs)
                 except Exception:
                     pass
             
