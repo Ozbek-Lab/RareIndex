@@ -374,15 +374,18 @@
         <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h1>
         <div class="flex items-center">
           <!-- Add New button -->
-          <button
-            hx-get="{% url 'lab:generic_create' %}?model_name={{ model_name }}&app_label={{ app_label }}"
-            hx-target="#modal-root"
-            hx-swap="innerHTML"
-            class="mr-3 inline-flex items-center px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            <i class="fa-solid fa-plus mr-2"></i>
-            Add New {{ model_name }}
-          </button>
+          
+          {% if model_name != 'Individual' %}
+            <button
+              hx-get="{% url 'lab:generic_create' %}?model_name={{ model_name }}&app_label={{ app_label }}"
+              hx-target="#modal-root"
+              hx-swap="innerHTML"
+              class="mr-3 inline-flex items-center px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            >
+              <i class="fa-solid fa-plus mr-2"></i>
+              Add New {{ model_name }}
+            </button>
+          {% endif %}
           
           <!-- Family Creation Button (only show for Individual model) -->
           {% if model_name == 'Individual' %}

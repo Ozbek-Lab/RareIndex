@@ -46,6 +46,83 @@ from .sql_agent import query_natural_language, execute_safe_sql
 
 
 @login_required
+@require_POST
+def task_complete(request, pk):
+    """Mark a Task as completed and return the updated card/detail partial.
+
+    Uses the Task.complete(user) model method to set status to 'Completed'.
+    """
+    task = get_object_or_404(Task, pk=pk)
+    try:
+        was_changed = task.complete(request.user)
+    except Exception as e:
+        return HttpResponseBadRequest(str(e))
+
+    # Decide which partial to render based on provided context
+    # Prefer to update the card in lists; fall back to detail when needed
+    template_name = "lab/task.html#card"
+    if request.POST.get("view") == "detail":
+        template_name = "lab/task.html#detail"
+
+    response = render(
+        request,
+        template_name,
+        {
+            "item": task,
+            "model_name": "Task",
+            "app_label": "lab",
+        },
+    )
+    # Optionally trigger a front-end event to refresh filters/counts
+    response["HX-Trigger"] = json.dumps({
+        "taskStatusUpdated": {"pk": task.pk, "status": getattr(task.status, "name", None)},
+        "filters-updated": True,
+    })
+    return response
+
+
+@login_required
+@require_POST
+def task_reopen(request, pk):
+    """Reopen a Task by setting its status to 'Active' and return updated partial."""
+    task = get_object_or_404(Task, pk=pk)
+    # Find an 'Active' status (case-insensitive)
+    active_status = Status.objects.filter(name__iexact="active").first()
+    if not active_status:
+        return HttpResponseBadRequest("No 'Active' status found in Status model.")
+    # Update if different
+    if task.status_id != active_status.id:
+        task.status = active_status
+        # Update related object's status if supported
+        if hasattr(task.content_object, "update_status"):
+            task.content_object.update_status(
+                active_status,
+                request.user,
+                f"Status updated via task reopen: {task.title}",
+            )
+        task.save()
+
+    template_name = "lab/task.html#card"
+    if request.POST.get("view") == "detail":
+        template_name = "lab/task.html#detail"
+
+    response = render(
+        request,
+        template_name,
+        {
+            "item": task,
+            "model_name": "Task",
+            "app_label": "lab",
+        },
+    )
+    response["HX-Trigger"] = json.dumps({
+        "taskStatusUpdated": {"pk": task.pk, "status": getattr(task.status, "name", None)},
+        "filters-updated": True,
+    })
+    return response
+
+
+@login_required
 def index(request):
     context = {
         "institutions": Institution.objects.all(),
@@ -653,7 +730,17 @@ def generic_create(request):
     if not form_class:
         return HttpResponseBadRequest(f"No form available for {model_name}.")
     
-    form = form_class()
+    # Build initial data from query parameters when possible (e.g., preselect individual on Sample creation)
+    initial_data = {}
+    try:
+        candidate_fields = form_class().fields
+        for key, value in request.GET.items():
+            if key in candidate_fields:
+                initial_data[key] = value
+    except Exception:
+        initial_data = {}
+
+    form = form_class(initial=initial_data)
     
     # Filter status field to only show statuses for this model class
     if hasattr(form, 'fields') and 'status' in form.fields:
