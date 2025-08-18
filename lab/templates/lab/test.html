@@ -577,13 +577,15 @@
             <i class="fas fa-edit mr-1"></i> Edit Test
           </button>
         {% endif %}
-        {% if perms.lab.delete_test %}
-          <button
-            class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 flex items-center transition-colors"
-          >
-            <i class="fas fa-trash-alt mr-1"></i> Delete Test
-          </button>
-        {% endif %}
+        <!-- Disabled for now
+          {% if perms.lab.delete_test %}
+            <button
+              class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 flex items-center transition-colors"
+            >
+              <i class="fas fa-trash-alt mr-1"></i> Delete Test
+            </button>
+          {% endif %}
+        -->
       </div>
     </div>
   </div>
