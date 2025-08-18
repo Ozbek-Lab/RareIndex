@@ -294,9 +294,6 @@
 
 
 {% partialdef generic-combobox %}
-  {#
-    Props: app_label, model_name, icon_class, multiple (default true), value_field, label_field, scope
-  #}
   <div class="relative w-full" x-data="comboboxController('{{ app_label|default:"lab" }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}')" @click.outside="open=false">
     <div class="flex items-stretch">
       <div class="flex items-center justify-center w-10">
@@ -309,7 +306,7 @@
           placeholder="Search {{ model_name }}"
           x-model.debounce.250ms="query"
           @focus="open=true; htmx.trigger($refs.opts, 'combo-query-changed')"
-          @input="open=true; htmx.trigger($refs.opts, 'combo-query-changed')"
+          @input="open=true"
         />
         <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" @click="clearSelection()">
           <i class="fa-solid fa-xmark"></i>
@@ -333,7 +330,11 @@
           </template>
         </div>
 
+        {% if name %}
+        <input type="hidden" name="{{ name }}" :value="hiddenInputValue">
+        {% else %}
         <input type="hidden" :name="hiddenInputName" :value="hiddenInputValue">
+        {% endif %}
       </div>
     </div>
   </div>
@@ -1303,6 +1304,13 @@
         nextPage: null,
         loading: false,
         selected: [], // [{value, label}]
+        init() {
+          this.$watch('query', () => {
+            if (this.open) {
+              htmx.trigger(this.$refs.opts, 'combo-query-changed');
+            }
+          });
+        },
         get hiddenInputName() { return this.inputName || `${this.modelName.toLowerCase()}_ids`; },
         get hiddenInputValue() { return JSON.stringify(this.selected.map(o => o.value)); },
         isSelected(value) {

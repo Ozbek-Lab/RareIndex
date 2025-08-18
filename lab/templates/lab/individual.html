@@ -2043,6 +2043,16 @@
               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
             >
           </div>
+
+          <!-- HPO Terms (Combobox) -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              HPO Terms
+            </label>
+            {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='individuals[INDEX][hpo_term_ids]' %}
+              {% include "lab/index.html#generic-combobox" %}
+            {% endwith %}
+          </div>
         </div>
 
         <!-- Column 3 -->
@@ -2706,6 +2716,18 @@
       }
       
       container.appendChild(clone);
+      // Initialize Alpine and HTMX behaviors for newly added content
+      try {
+        const lastChild = container.lastElementChild;
+        if (window.Alpine && Alpine.initTree && lastChild) {
+          Alpine.initTree(lastChild);
+        }
+        if (window.htmx && lastChild) {
+          htmx.process(lastChild);
+        }
+      } catch (e) {
+        console.warn('Init error for new individual form:', e);
+      }
       individualIndex++;
     }
     
