@@ -481,13 +481,15 @@
             <i class="fas fa-edit mr-1"></i> Edit Analysis
           </button>
         {% endif %}
-        {% if perms.lab.delete_analysis %}
-          <button
-            class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 flex items-center transition-colors"
-          >
-            <i class="fas fa-trash-alt mr-1"></i> Delete Analysis
-          </button>
-        {% endif %}
+        <!-- Disabled for now
+          {% if perms.lab.delete_analysis %}
+            <button
+              class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 flex items-center transition-colors"
+            >
+              <i class="fas fa-trash-alt mr-1"></i> Delete Analysis
+            </button>
+          {% endif %}
+        -->
       </div>
     </div>
   </div>
