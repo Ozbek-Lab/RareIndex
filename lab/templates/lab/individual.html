@@ -82,7 +82,14 @@
     data-item-id="{{ item.id }}"
     x-data="{ showFullName: false }"
   >
-    <div class="flex justify-between items-start">
+    <div class="flex items-center gap-1 mb-2">
+      <button
+        class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
+        @click="openDetail({{ item.pk }}, 'Individual', 'lab')"
+        title="View details"
+      >
+        <i class="fa-solid fa-eye text-lg"></i>
+      </button>
       <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
         {{ item.individual_id }}
         <button
@@ -94,7 +101,7 @@
           <i class="fas fa-id-card fa-xs"></i>
         </button>
       </h2>
-      <div class="text-right">
+      <div class="ml-auto">
         {% with float="float-right" color=item.status.color text=item.status.name %}
           {% include 'lab/partials/badge.html' %}
         {% endwith %}
@@ -125,62 +132,39 @@
         </div>
       </div>
 
-      <div x-data="{ open: false }" class="relative">
-        <button
-          @click="open = ! open"
-          type="button"
-          class="inline-flex items-center gap-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-        >
-          <i class="fa-solid fa-comment"></i>
-          <span>Notes</span>
-          <i
-            class="fa-solid fa-chevron-down transition-transform"
-            :class="{ 'rotate-180': open }"
-          ></i>
-        </button>
-        <div
-          x-show="open"
-          x-transition:enter="transition ease-out duration-200"
-          x-transition:enter-start="opacity-0 transform scale-95"
-          x-transition:enter-end="opacity-100 transform scale-100"
-          x-transition:leave="transition ease-in duration-150"
-          x-transition:leave-start="opacity-100 transform scale-100"
-          x-transition:leave-end="opacity-0 transform scale-95"
-          class="absolute left-0 z-10 mt-2 w-full max-w-md"
-        >
-          <div
-            class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+      <div class="flex items-center gap-2">
+        <div x-data="{ open: false }" class="static">
+          <button
+            @click="open = ! open"
+            type="button"
+            class="inline-flex items-center gap-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
-            <h5 class="font-semibold text-gray-900 dark:text-gray-100 mb-2">
-              Notes Section
-            </h5>
-            <p class="text-gray-600 dark:text-gray-400">
-              Detailed notes and comments will appear here.
-            </p>
+            <i class="fa-solid fa-comment"></i>
+            <span>Notes</span>
+            <i
+              class="fa-solid fa-chevron-down transition-transform"
+              :class="{ 'rotate-180': open }"
+            ></i>
+          </button>
+          <div
+            x-show="open"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 transform scale-95"
+            x-transition:enter-end="opacity-100 transform scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 transform scale-100"
+            x-transition:leave-end="opacity-0 transform scale-95"
+            class="absolute left-0 right-0 z-10 mt-2 w-full max-w-none"
+          >
+            <div
+              class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+            >
+              {% with object=item content_type='individual' %}
+                {% include 'lab/note.html#list' %}
+              {% endwith %}
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-    <div class="text-sm text-gray-500 dark:text-gray-400">
-      <i class="fa-solid fa-calendar mr-1"></i>
-      Last updated: {{ item.get_updated_at|date:"M d, Y H:i"|default:"Unknown" }}
-    </div>
-
-    <div
-      class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700"
-    >
-      <div class="flex space-x-2">
-        <button
-          class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-          @click="openDetail({{ item.pk }}, 'Individual', 'lab')"
-        >
-          <i class="fa-solid fa-eye mr-1"></i>View Details
-        </button>
-        <button
-          class="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-        >
-          <i class="fa-solid fa-edit mr-1"></i>Edit
-        </button>
       </div>
     </div>
   </div>
@@ -538,8 +522,19 @@
           {% if item.samples.exists %}
             <!-- Use existing sample partials for consistent UI -->
             <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- View toggle buttons -->
-              <div class="flex justify-end">
+              <!-- Toolbar: Add Sample button (left) + view toggle (right) -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <button
+                    hx-get="{% url 'lab:generic_create' %}?model_name=Sample&app_label=lab&individual={{ item.id }}"
+                    hx-target="#modal-root"
+                    hx-swap="innerHTML"
+                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                  >
+                    <i class="fa-solid fa-vial"></i>
+                    <span>Add Sample to Individual</span>
+                  </button>
+                </div>
                 <div
                   class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
                 >

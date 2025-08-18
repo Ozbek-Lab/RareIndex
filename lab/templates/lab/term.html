@@ -25,8 +25,18 @@
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 m-4"
     data-item-id="{{ item.id }}"
   >
-    <div class="flex justify-between items-start mb-4">
-      <div class="text-right">
+    <div class="flex items-center gap-1 mb-2">
+      <button
+        class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
+        @click="openDetail({{ item.pk }}, 'Term', 'lab')"
+        title="View details"
+      >
+        <i class="fa-solid fa-eye text-lg"></i>
+      </button>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {{ item.term }}
+      </h2>
+      <div class="ml-auto">
         <i
           class="fa-solid fa-tag text-2xl text-indigo-600 dark:text-indigo-400"
         ></i>
@@ -34,9 +44,6 @@
     </div>
 
     <div class="mb-4">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-        {{ item.term }}
-      </h2>
       {% if item.label %}
         <div class="mb-3">
           <h3 class="text-xl text-gray-700 dark:text-gray-300 font-medium">
@@ -125,11 +132,6 @@
         Term ID: {{ item.id }}
       </div>
       <div class="flex space-x-2">
-        <button
-          class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-        >
-          <i class="fa-solid fa-eye mr-1"></i>View Details
-        </button>
         <button
           class="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
         >

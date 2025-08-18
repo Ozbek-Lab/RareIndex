@@ -42,11 +42,18 @@
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
     data-item-id="{{ item.id }}"
   >
-    <div class="flex justify-between items-start mb-4">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+    <div class="flex items-center gap-1 mb-2">
+      <button
+        class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
+        @click="openDetail({{ item.pk }}, 'Project', 'lab')"
+        title="View details"
+      >
+        <i class="fa-solid fa-eye text-lg"></i>
+      </button>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
         {{ item.name }}
       </h2>
-      <div class="text-right">
+      <div class="ml-auto">
         {% with float="float-right" color=item.status.color text=item.status.name %}
           {% include 'lab/partials/badge.html' %}
         {% endwith %}
@@ -140,11 +147,6 @@
       class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700"
     >
       <div class="flex space-x-2">
-        <button
-          class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-        >
-          <i class="fa-solid fa-eye mr-1"></i>View Details
-        </button>
         <button
           class="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
         >
