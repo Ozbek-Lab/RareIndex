@@ -100,7 +100,9 @@
 
     <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
       <div class="flex space-x-2">
-        <button class="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
+        <button class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                hx-get="{% url 'lab:generic_edit' %}?model_name=Institution&app_label=lab&pk={{ item.pk }}"
+                hx-target="#modal-root" hx-swap="innerHTML">
           <i class="fa-solid fa-edit mr-1"></i>Edit
         </button>
       </div>

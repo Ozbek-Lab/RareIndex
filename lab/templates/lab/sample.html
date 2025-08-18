@@ -667,6 +667,9 @@
       <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-end space-x-3">
         <button
           class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 flex items-center transition-colors"
+          hx-get="{% url 'lab:generic_edit' %}?model_name=Sample&app_label=lab&pk={{ item.pk }}"
+          hx-target="#modal-root"
+          hx-swap="innerHTML"
         >
           <i class="fas fa-edit mr-2"></i>
           Edit Sample
