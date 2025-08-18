@@ -1,4 +1,5 @@
 from django.apps import apps
+from django import forms as dj_forms
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
@@ -940,10 +941,91 @@ def generic_edit(request):
         if not form_class:
             return HttpResponseBadRequest(f"No form available for {model_name}.")
         
-        form = form_class(request.POST, instance=obj)
+        # Capture original M2M values to prevent unintended clearing when fields are omitted
+        original_m2m_map = {}
+        try:
+            for m2m_field in obj._meta.many_to_many:
+                try:
+                    original_m2m_map[m2m_field.name] = list(getattr(obj, m2m_field.name).values_list('pk', flat=True))
+                except Exception:
+                    original_m2m_map[m2m_field.name] = []
+        except Exception:
+            original_m2m_map = {}
+
+        # Build a complete data dict by merging provided fields with instance defaults
+        try:
+            baseline_form = form_class(instance=obj)
+            data = request.POST.copy()
+            for field_name, field in getattr(baseline_form, 'fields', {}).items():
+                if field_name in data:
+                    continue
+                # Skip M2M; handled separately
+                if isinstance(field, dj_forms.ModelMultipleChoiceField):
+                    continue
+                # Derive value from instance
+                value_to_use = None
+                try:
+                    if isinstance(field, dj_forms.ModelChoiceField):
+                        value_to_use = getattr(obj, f"{field_name}_id", None)
+                    else:
+                        value_to_use = getattr(obj, field_name, None)
+                except Exception:
+                    value_to_use = None
+                if value_to_use is None:
+                    # For unchecked booleans we explicitly send empty string to mean False
+                    if isinstance(field, dj_forms.BooleanField):
+                        data[field_name] = ''
+                    continue
+                # Normalize by field type
+                try:
+                    if isinstance(field, dj_forms.BooleanField):
+                        data[field_name] = 'on' if bool(value_to_use) else ''
+                    else:
+                        # Dates/DateTimes stringify nicely, as do PKs and simple types
+                        data[field_name] = str(value_to_use)
+                except Exception:
+                    pass
+        except Exception:
+            data = request.POST
+
+        form = form_class(data, instance=obj)
         if form.is_valid():
             # Save the object with updated_at handled by the form
             obj = form.save()
+
+            # Generic: handle any ManyToMany fields posted as JSON lists via <field_name>_ids
+            try:
+                for m2m_field in obj._meta.many_to_many:
+                    field_name = m2m_field.name
+                    candidate_params = [f"{field_name}_ids"]
+                    if field_name.endswith('s'):
+                        candidate_params.append(f"{field_name[:-1]}_ids")
+                    json_val = None
+                    for pname in candidate_params:
+                        json_val = request.POST.get(pname)
+                        if json_val:
+                            break
+                    if not json_val:
+                        # No payload provided for this M2M; restore original values to avoid clearing
+                        try:
+                            original_ids = original_m2m_map.get(field_name, None)
+                            if original_ids is not None:
+                                related_model = m2m_field.remote_field.model
+                                related_qs = related_model.objects.filter(pk__in=original_ids)
+                                getattr(obj, field_name).set(related_qs)
+                        except Exception:
+                            pass
+                        continue
+                    try:
+                        id_list = json.loads(json_val)
+                    except Exception:
+                        id_list = [v for v in (json_val or '').split(',') if v]
+                    if isinstance(id_list, list):
+                        related_model = m2m_field.remote_field.model
+                        related_qs = related_model.objects.filter(pk__in=id_list)
+                        getattr(obj, field_name).set(related_qs)
+            except Exception:
+                pass
             
             # Return success response for HTMX
             if request.htmx:
@@ -960,12 +1042,19 @@ def generic_edit(request):
         else:
             # Form validation failed
             if request.htmx:
-                return render(request, "lab/index.html#edit-form", {
+                context = {
                     "form": form,
                     "object": obj,
                     "model_name": model_name,
                     "app_label": app_label,
-                })
+                }
+                try:
+                    if model_name == "Individual":
+                        initial = [{"value": str(t.pk), "label": getattr(t, "label", str(t))} for t in getattr(obj, "hpo_terms", []).all()]
+                        context["hpo_initial_json"] = json.dumps(initial)
+                except Exception:
+                    context["hpo_initial_json"] = "[]"
+                return render(request, "lab/index.html#edit-form", context)
             else:
                 return render(request, "lab/index.html", {
                     "edit_form": form,
@@ -1017,12 +1106,21 @@ def generic_edit(request):
             form.fields['status'].queryset = Status.objects.all().order_by('name')
     
     if request.htmx:
-        return render(request, "lab/index.html#edit-form", {
+        context = {
             "form": form,
             "object": obj,
             "model_name": model_name,
             "app_label": app_label,
-        })
+        }
+        # Provide initial JSON for HPO combobox in Individual edit form
+        try:
+            if model_name == "Individual":
+                initial = [{"value": str(t.pk), "label": getattr(t, "label", str(t))} for t in getattr(obj, "hpo_terms", []).all()]
+                context["hpo_initial_json"] = json.dumps(initial)
+        except Exception:
+            context["hpo_initial_json"] = "[]"
+
+        return render(request, "lab/index.html#edit-form", context)
     else:
         return render(request, "lab/index.html", {
             "edit_form": form,

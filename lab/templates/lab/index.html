@@ -294,7 +294,7 @@
 
 
 {% partialdef generic-combobox %}
-  <div class="relative w-full" x-data="comboboxController('{{ app_label|default:"lab" }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}')" @click.outside="open=false">
+  <div class="relative w-full" x-data="comboboxController('{{ app_label|default:"lab" }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:'[]'|escapejs }}')" @click.outside="open=false">
     <div class="flex items-stretch">
       <div class="flex items-center justify-center w-10">
         <i class="fa-solid {{ icon_class|default:'fa-magnifying-glass' }} text-gray-400 dark:text-gray-300"></i>
@@ -331,9 +331,9 @@
         </div>
 
         {% if name %}
-        <input type="hidden" name="{{ name }}" :value="hiddenInputValue">
+        <input type="hidden" x-ref="hiddenInput" name="{{ name }}" :value="hiddenInputValue">
         {% else %}
-        <input type="hidden" :name="hiddenInputName" :value="hiddenInputValue">
+        <input type="hidden" x-ref="hiddenInput" :name="hiddenInputName" :value="hiddenInputValue">
         {% endif %}
       </div>
     </div>
@@ -1291,7 +1291,7 @@
       };
     }
 
-    function comboboxController(appLabel, modelName, multiple = true, valueField = 'pk', labelField = '', inputName = '') {
+    function comboboxController(appLabel, modelName, multiple = true, valueField = 'pk', labelField = '', inputName = '', initialJson = '[]') {
       return {
         appLabel,
         modelName,
@@ -1306,11 +1306,20 @@
         loading: false,
         selected: [], // [{value, label}]
         init() {
+          // Initialize from initialJson if provided (for edit forms)
+          try {
+            const initial = JSON.parse(initialJson || '[]');
+            if (Array.isArray(initial)) {
+              this.selected = initial.map(v => ({ value: String(v.value ?? v), label: String(v.label ?? v) }));
+            }
+          } catch (e) {}
           this.$watch('query', () => {
             if (this.open) {
               htmx.trigger(this.$refs.opts, 'combo-query-changed');
             }
           });
+          // Ensure defaultSelected on the hidden input reflects initial state for change detection
+          this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
         },
         get hiddenInputName() { return this.inputName || `${this.modelName.toLowerCase()}_ids`; },
         get hiddenInputValue() { return JSON.stringify(this.selected.map(o => o.value)); },
@@ -1626,7 +1635,25 @@
         </button>
       </div>
       <div class="max-h-[75vh] overflow-y-auto pr-1">
-        <form hx-post="{% url 'lab:generic_edit' %}" hx-target="#modal-root" hx-swap="innerHTML">
+        <form hx-post="{% url 'lab:generic_edit' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit="
+          const form = $event.target;
+          const elements = Array.from(form.elements || []);
+          elements.forEach(el => {
+            if (!el || !el.name || el.disabled) return;
+            if (['csrfmiddlewaretoken','model_name','app_label','pk'].includes(el.name)) return;
+            if (el.tagName === 'SELECT' && el.multiple) {
+              const initial = Array.from(el.options).filter(o => o.defaultSelected).map(o => String(o.value)).sort().join(',');
+              const current = Array.from(el.options).filter(o => o.selected).map(o => String(o.value)).sort().join(',');
+              if (initial === current) el.disabled = true;
+            } else if (el.type === 'checkbox' || el.type === 'radio') {
+              if (el.defaultChecked === el.checked) el.disabled = true;
+            } else {
+              const initial = el.defaultValue ?? '';
+              const current = el.value ?? '';
+              if (String(initial) === String(current)) el.disabled = true;
+            }
+          });
+        ">
           {% csrf_token %}
           <input type="hidden" name="model_name" value="{{ model_name }}">
           <input type="hidden" name="app_label" value="{{ app_label }}">
@@ -1641,7 +1668,13 @@
                       {{ field.label }}
                       {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
                     </label>
-                    {{ field }}
+                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
+                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
+                        {% partial generic-combobox %}
+                      {% endwith %}
+                    {% else %}
+                      {{ field }}
+                    {% endif %}
                     {% if field.help_text %}
                       <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
                     {% endif %}
@@ -1662,7 +1695,13 @@
                       {{ field.label }}
                       {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
                     </label>
-                    {{ field }}
+                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
+                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
+                        {% partial generic-combobox %}
+                      {% endwith %}
+                    {% else %}
+                      {{ field }}
+                    {% endif %}
                     {% if field.help_text %}
                       <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
                     {% endif %}
@@ -1678,8 +1717,8 @@
           </div>
           
           <div class="flex justify-end space-x-3 mt-6">
-            <button type="button" @click="document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
-            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Update {{ model_name }}</button>
+            <button type="button" @click="document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Cancel</button>
+            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Update {{ model_name }}</button>
           </div>
         </form>
       </div>
