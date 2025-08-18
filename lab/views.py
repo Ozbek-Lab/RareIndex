@@ -1300,6 +1300,20 @@ def family_create_segway(request):
                     traceback.print_exc()
                     # If parsing fails, skip creating notes for this individual
                     pass
+
+                # Attach HPO terms if provided by combobox for this individual
+                try:
+                    idx_prefix = f"individuals[{idx}]"
+                    hpo_key = f"{idx_prefix}[hpo_term_ids]"
+                    hpo_json = request.POST.get(hpo_key)
+                    if hpo_json:
+                        term_ids = json.loads(hpo_json)
+                        if isinstance(term_ids, list) and term_ids:
+                            from ontologies.models import Term
+                            terms = Term.objects.filter(pk__in=term_ids)
+                            individual.hpo_terms.set(terms)
+                except Exception:
+                    pass
             
             # Return success response
             if request.htmx:
