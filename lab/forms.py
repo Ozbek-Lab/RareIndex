@@ -116,6 +116,7 @@ class IndividualForm(BaseForm):
             "diagnosis_date",
             "institution",
             "status",
+            "hpo_terms",
         ]
         widgets = {
             "birth_date": forms.DateInput(attrs={"type": "date"}),
