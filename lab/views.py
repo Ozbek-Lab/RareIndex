@@ -14,6 +14,7 @@ from .models import Note, StatusLog, Status
 
 from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
+from django.template import TemplateDoesNotExist
 from django.template.response import TemplateResponse
 
 # Import models
@@ -90,6 +91,64 @@ def generic_search(request):
     card_partial = request.GET.get("card", "card")
     view_mode = request.GET.get("view_mode", "cards")
     icon_class = request.GET.get("icon_class", "fa-magnifying-glass")
+    # Combobox render mode (for Select2-like behavior)
+    render_mode = request.GET.get("render")
+    if render_mode == "combobox":
+        # Exclude already selected ids
+        exclude_ids_raw = request.GET.get("exclude_ids", "")
+        exclude_ids = []
+        if exclude_ids_raw:
+            try:
+                exclude_ids = json.loads(exclude_ids_raw)
+            except Exception:
+                try:
+                    exclude_ids = [int(x) for x in exclude_ids_raw.split(",") if x.strip()]
+                except Exception:
+                    exclude_ids = []
+
+        if exclude_ids:
+            try:
+                paged_items.object_list = paged_items.object_list.exclude(pk__in=exclude_ids)
+                # Recreate paginator for accurate counts if exclusion affected page
+                paginator = Paginator(paged_items.object_list, 12)
+                paged_items = paginator.get_page(page)
+            except Exception:
+                pass
+
+        value_field = request.GET.get("value_field", "pk")
+        label_field = request.GET.get("label_field")
+
+        # Build option dicts for template rendering
+        options = []
+        try:
+            for obj in paged_items.object_list:
+                try:
+                    value = getattr(obj, value_field) if value_field and value_field != "pk" else getattr(obj, "pk")
+                except Exception:
+                    value = getattr(obj, "pk")
+                try:
+                    label = getattr(obj, label_field) if label_field else str(obj)
+                except Exception:
+                    label = str(obj)
+                options.append({"value": value, "label": str(label)})
+        except Exception:
+            # Fallback: simple string labels
+            options = [{"value": getattr(obj, "pk"), "label": str(obj)} for obj in paged_items.object_list]
+
+        context = {
+            "items": paged_items,
+            "app_label": target_app_label,
+            "model_name": target_model_name,
+            "value_field": value_field,
+            "label_field": label_field,
+            "options": options,
+        }
+        # Try model-specific combobox-options partial first, fall back to generic
+        try:
+            return render(request, f"lab/{target_model_name.lower()}.html#combobox-options", context)
+        except TemplateDoesNotExist:
+            return render(request, "lab/index.html#combobox-options", context)
+
     response = render(
         request,
         "lab/index.html#generic-search-results",
@@ -136,6 +195,62 @@ def generic_search_page(request):
 
     card_partial = request.GET.get("card", "card")
     view_mode = request.GET.get("view_mode", "cards")
+    # Combobox render mode (for Select2-like behavior)
+    render_mode = request.GET.get("render")
+    if render_mode == "combobox":
+        # Exclude already selected ids
+        exclude_ids_raw = request.GET.get("exclude_ids", "")
+        exclude_ids = []
+        if exclude_ids_raw:
+            try:
+                exclude_ids = json.loads(exclude_ids_raw)
+            except Exception:
+                try:
+                    exclude_ids = [int(x) for x in exclude_ids_raw.split(",") if x.strip()]
+                except Exception:
+                    exclude_ids = []
+
+        if exclude_ids:
+            try:
+                paged_items.object_list = paged_items.object_list.exclude(pk__in=exclude_ids)
+                paginator = Paginator(paged_items.object_list, 12)
+                paged_items = paginator.get_page(page)
+            except Exception:
+                pass
+
+        value_field = request.GET.get("value_field", "pk")
+        label_field = request.GET.get("label_field")
+
+        # Build option dicts for template rendering
+        options = []
+        try:
+            for obj in paged_items.object_list:
+                try:
+                    value = getattr(obj, value_field) if value_field and value_field != "pk" else getattr(obj, "pk")
+                except Exception:
+                    value = getattr(obj, "pk")
+                try:
+                    label = getattr(obj, label_field) if label_field else str(obj)
+                except Exception:
+                    label = str(obj)
+                options.append({"value": value, "label": str(label)})
+        except Exception:
+            # Fallback: simple string labels
+            options = [{"value": getattr(obj, "pk"), "label": str(obj)} for obj in paged_items.object_list]
+
+        context = {
+            "items": paged_items,
+            "model_name": target_model_name,
+            "app_label": target_app_label,
+            "value_field": value_field,
+            "label_field": label_field,
+            "options": options,
+        }
+        try:
+            return render(request, f"lab/{target_model_name.lower()}.html#combobox-options", context)
+        except TemplateDoesNotExist:
+            return render(request, "lab/index.html#combobox-options", context)
+
     context = {
         "items": paged_items,
         "model_name": target_model_name,
@@ -557,6 +672,18 @@ def generic_create(request):
         if form.is_valid():
             # Save the object with the user context for created_by field
             obj = form.save(user=request.user)
+            # Handle HPO terms if provided via combobox
+            if model_name == 'Individual':
+                try:
+                    hpo_json = request.POST.get('hpo_term_ids')
+                    if hpo_json:
+                        term_ids = json.loads(hpo_json)
+                        if isinstance(term_ids, list) and term_ids:
+                            from ontologies.models import Term
+                            terms = Term.objects.filter(pk__in=term_ids)
+                            obj.hpo_terms.set(terms)
+                except Exception:
+                    pass
             
             # Default status: prefer model-specific, else any status
             if hasattr(obj, 'status') and not getattr(obj, 'status_id', None):
