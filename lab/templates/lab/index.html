@@ -294,73 +294,71 @@
 
 
 {% partialdef generic-search-results %}
-<div>
-  {% if items.number == 1 %}
-    <div
-      class=""
-      :class="{'text-green-500': {{ num_items }} > 0,
-                'text-red-500': {{ num_items }} == 0}"
-    >
-    <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
-    </div>
-
-    <div class="h-96 overflow-y-auto">
-  {% endif %}
-
-  {% with view_mode="cards" card='compact-card' %}
-    {% include "lab/partials/_infinite_scroll_items.html" %}
-  {% endwith %}
-  {% if items.number == 1 %}
-    </div>
-  {% endif %}
-  </div>
-
-  <div id="page-{{ model_name|lower }}-results" hx-swap-oob="innerHTML">
-  {% if items.number == 1 %}
-    <div
-      class=""
-      :class="{'text-green-500': {{ num_items }} > 0,
-                'text-red-500': {{ num_items }} == 0}"
-    >
+  <div>
+    {% if items.number == 1 %}
+      <div
+        class=""
+        :class="{'text-green-500': {{ num_items }} > 0,
+                  'text-red-500': {{ num_items }} == 0}"
+      >
       <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
-    </div>
+      </div>
 
-  {% endif %}
+      <div class="h-96 overflow-y-auto">
+    {% endif %}
 
-  <!-- Card View with animated transition -->
-  <div
-    x-show="viewMode === 'cards'"
-    x-transition:enter="transition-all duration-500 ease-out"
-    x-transition:enter-start="opacity-0 scale-95 translate-y-4"
-    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-    x-transition:leave="transition-all duration-300 ease-in"
-    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-    x-transition:leave-end="opacity-0 scale-95 translate-y-4"
-    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 gap-4 relative h-full overflow-y-auto"
-    style="will-change: opacity, transform;"
-  >
-    {% with view_mode="cards" card='card' %}
+    {% with view_mode="cards" card='compact-card' %}
       {% include "lab/partials/_infinite_scroll_items.html" %}
     {% endwith %}
-  </div>
+    {% if items.number == 1 %}
+      </div>
+    {% endif %}
+    </div>
 
-  <!-- Table View with animated transition -->
-  <div
-    x-show="viewMode === 'table'"
-    x-transition:enter="transition-all duration-500 ease-out"
-    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
-    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-    x-transition:leave="transition-all duration-300 ease-in"
-    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
-    class="relative h-full overflow-y-auto"
-    style="will-change: opacity, transform;"
-  >
-    {% include "lab/"|add:model_name|lower|add:'.html#table' %}
-  </div>
-  </div>
+    <div id="page-{{ model_name|lower }}-results" hx-swap-oob="innerHTML">
+    {% if items.number == 1 %}
+      <div
+        class=""
+        :class="{'text-green-500': {{ num_items }} > 0,
+                  'text-red-500': {{ num_items }} == 0}"
+      >
+        <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
+      </div>
 
+    {% endif %}
 
+    <!-- Card View with animated transition -->
+    <div
+      x-show="viewMode === 'cards'"
+      x-transition:enter="transition-all duration-500 ease-out"
+      x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+      x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+      x-transition:leave="transition-all duration-300 ease-in"
+      x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+      x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 gap-4 relative h-full overflow-y-auto"
+      style="will-change: opacity, transform;"
+    >
+      {% with view_mode="cards" card='card' %}
+        {% include "lab/partials/_infinite_scroll_items.html" %}
+      {% endwith %}
+    </div>
+
+    <!-- Table View with animated transition -->
+    <div
+      x-show="viewMode === 'table'"
+      x-transition:enter="transition-all duration-500 ease-out"
+      x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+      x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+      x-transition:leave="transition-all duration-300 ease-in"
+      x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+      x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+      class="relative h-full overflow-y-auto"
+      style="will-change: opacity, transform;"
+    >
+      {% include "lab/"|add:model_name|lower|add:'.html#table' %}
+    </div>
+  </div>
 {% endpartialdef %}
 
 {% partialdef search-section %}

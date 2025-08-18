@@ -102,15 +102,6 @@
         <span>Tasks</span>
       </a>
       <a
-        @click.prevent="navigateTo('term')"
-        href="?page=term"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
-        :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'term' }"
-      >
-        <i class="fas fa-stethoscope text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors dark:text-gray-300 dark:group-hover:text-indigo-400"></i>
-        <span>Terms</span>
-      </a>
-      <a
         @click.prevent="navigateTo('hpo-network-visualization')"
         href="?page=hpo-network-visualization"
         class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
@@ -119,26 +110,30 @@
         <i class="fas fa-network-wired text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors dark:text-gray-300 dark:group-hover:text-indigo-400"></i>
         <span>HPO Network Visualization</span>
       </a>
-      <a
-        @click.prevent="navigateTo('plots')"
-        href="?page=plots"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
-        :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'plots' }"
-      >
-        <i class="fas fa-chart-line text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors dark:text-gray-300 dark:group-hover:text-indigo-400"></i>
-        <span>Plots</span>
-      </a>
+      <!-- Disabled for now
+        <a
+          @click.prevent="navigateTo('plots')"
+          href="?page=plots"
+          class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
+          :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'plots' }"
+        >
+          <i class="fas fa-chart-line text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors dark:text-gray-300 dark:group-hover:text-indigo-400"></i>
+          <span>Plots</span>
+        </a>
+      -->
       
       <!-- Natural Language Search -->
-      <a
-        @click.prevent="navigateTo('nl-search-page')"
-        href="?page=nl-search-page"
-        class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
-        :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'nl-search-page' }"
-      >
-        <i class="fas fa-search-plus text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors dark:text-gray-300 dark:group-hover:text-indigo-400"></i>
-        <span>AI Search</span>
-      </a>
+      <!-- Disabled for now
+        <a
+          @click.prevent="navigateTo('nl-search-page')"
+          href="?page=nl-search-page"
+          class="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:hover:bg-gray-700 dark:hover:text-indigo-400 dark:text-gray-200"
+          :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-gray-700 dark:text-indigo-400': activeItem === 'nl-search-page' }"
+        >
+          <i class="fas fa-search-plus text-gray-400 group-hover:text-indigo-500 w-5 h-5 mr-3 transition-colors dark:text-gray-300 dark:group-hover:text-indigo-400"></i>
+          <span>AI Search</span>
+        </a>
+      -->
       
       <!-- Notifications Section -->
       <a
