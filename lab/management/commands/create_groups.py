@@ -20,3 +20,5 @@ class Command(BaseCommand):
             Group.objects.get_or_create(name='Pleb')
         if not Group.objects.filter(name='Gennext').exists():
             Group.objects.get_or_create(name='Gennext')
+
+        

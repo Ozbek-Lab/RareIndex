@@ -169,7 +169,7 @@ class SampleAdmin(admin.ModelAdmin):
 
 @admin.register(models.Test)
 class TestAdmin(admin.ModelAdmin):
-    list_display = ["sample", "test_type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
+    list_display = ["sample", "pk", "test_type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
     list_filter = ["status", "performed_date", "test_type"]
     search_fields = ["sample__individual__lab_id", "test_type__name"]
     date_hierarchy = "performed_date"
