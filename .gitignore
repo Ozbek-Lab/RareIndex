@@ -37,4 +37,7 @@ ENV/
 dist/
 build/
 staticfiles/
+
+# Data
 *.json
+*.xlsx
