@@ -22,7 +22,8 @@ from lab.models import (
     Note,
     IdentifierType,
     CrossIdentifier,
-    Project
+    Project,
+    Task
 )
 from ontologies.models import Term, Ontology
 import re
@@ -385,6 +386,31 @@ class Command(BaseCommand):
             'red',
             admin_user,
             ContentType.objects.get_for_model(Test)
+        )
+
+        # Task statuses
+        self._get_or_create_status(
+            'Ongoing',
+            'Task is ongoing',
+            'yellow',
+            admin_user,
+            ContentType.objects.get_for_model(Task)
+        )
+
+        self._get_or_create_status(
+            'Completed',
+            'Task is completed',
+            'green',
+            admin_user,
+            ContentType.objects.get_for_model(Task)
+        )
+
+        self._get_or_create_status(
+            'Overdue',
+            'Task is overdue',
+            'red',
+            admin_user,
+            ContentType.objects.get_for_model(Task)
         )
 
         # --- CREATE IdentifierType objects for cross IDs ---
