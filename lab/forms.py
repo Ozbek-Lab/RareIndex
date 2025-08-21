@@ -68,7 +68,7 @@ class BaseForm(forms.ModelForm):
 class ProjectForm(BaseForm):
     class Meta:
         model = Project
-        fields = ["name", "description", "due_date", "priority"]
+        fields = ["name", "description", "due_date", "priority", "status"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 3}),
