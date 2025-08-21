@@ -13,7 +13,7 @@ from django.utils import timezone
 
 class HistoryMixin:
     """Mixin to provide history-based timestamp methods for models with HistoricalRecords"""
-    
+
     def get_created_at(self):
         """Get creation time from history"""
         if hasattr(self, "history"):
@@ -136,6 +136,27 @@ class Project(HistoryMixin, models.Model):
             return 0
         completed = self.get_completed_task_count()
         return int((completed / total) * 100)
+
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+                # Local import to avoid potential circular imports at module load time
+                from .middleware import get_current_user
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
 
 
 class Note(HistoryMixin, models.Model):
