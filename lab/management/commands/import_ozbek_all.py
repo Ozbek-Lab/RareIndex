@@ -190,7 +190,7 @@ class Command(BaseCommand):
         except ValueError:
             return None
 
-    def _get_or_create_status(self, name, description, color, admin_user, content_type=None):
+    def _get_or_create_status(self, name, description, color, admin_user, content_type=None, icon=None):
         if not name:
             return None
         status, created = Status.objects.get_or_create(
@@ -200,8 +200,13 @@ class Command(BaseCommand):
                 'description': description or '',
                 'color': color or '#000000',
                 'created_by': admin_user,
+                'icon': icon,
             }
         )
+        # Backfill or update icon if needed
+        if icon and (created or not status.icon or status.icon != icon):
+            status.icon = icon
+            status.save()
         return status
 
     def _get_or_create_test_type(self, name, admin_user):
@@ -261,55 +266,65 @@ class Command(BaseCommand):
         
         # Individual statuses
         individual_statuses = {
-            'Registered': {'description': 'Initial status for new entries', 'color': 'gray'},
-            'Family': {'description': 'Is family member', 'color': 'yellow'},
-            'Solved Family': {'description': 'Family is solved', 'color': 'green'},
-            'Solved': {'description': 'Entry has been completed', 'color': 'green'}
+            'Registered': {'description': 'Initial status for new entries', 'color': 'gray', 'icon': 'fa-user-plus'},
+            'Family': {'description': 'Is family member', 'color': 'yellow', 'icon': 'fa-people-group'},
+            'Solved Family': {'description': 'Family is solved', 'color': 'green', 'icon': 'fa-people-group'},
+            'Solved': {'description': 'Entry has been completed', 'color': 'green', 'icon': 'fa-circle-check'}
         }
         for status_name, status_data in individual_statuses.items():
-            _ , created = Status.objects.get_or_create(
+            status, created = Status.objects.get_or_create(
                 name=status_name,
                 content_type=ContentType.objects.get(app_label='lab', model='individual'),
                 defaults={
                     'description': status_data['description'],
                     'color': status_data['color'],
                     'created_by': admin_user,
+                    'icon': status_data.get('icon'),
                 }
             )
+            # Backfill icon if missing or different
+            desired_icon = status_data.get('icon')
+            if desired_icon and (created or not status.icon or status.icon != desired_icon):
+                status.icon = desired_icon
+                status.save()
             if created:
                 self.stdout.write(self.style.SUCCESS(f'Created individual status: {status_name}'))
             else:
-                self.stdout.write(f'Individual status already exists: {status_name}')
+                self.stdout.write(f'Individual status ensured: {status_name}')
 
         # Sample statuses
         sample_statuses = {
             'placeholder': self._get_or_create_status(
-                'Not Available', 
-                'A placeholder sample for tests performed off-center', 
-                'gray', 
-                admin_user, 
-                ContentType.objects.get(app_label='lab', model='sample')
+                'Not Available',
+                'A placeholder sample for tests performed off-center',
+                'gray',
+                admin_user,
+                ContentType.objects.get(app_label='lab', model='sample'),
+                icon='fa-ban'
             ),
             'pending_blood_recovery': self._get_or_create_status(
-                'Pending Blood Recovery', 
-                'Awaiting blood draw', 
-                'red', 
-                admin_user, 
-                ContentType.objects.get(app_label='lab', model='sample')
+                'Pending Blood Recovery',
+                'Awaiting blood draw',
+                'red',
+                admin_user,
+                ContentType.objects.get(app_label='lab', model='sample'),
+                icon='fa-droplet'
             ),
             'pending_isolation': self._get_or_create_status(
-                'Pending Isolation', 
-                'Awaiting isolation of sample', 
-                'yellow', 
-                admin_user, 
-                ContentType.objects.get(app_label='lab', model='sample')
+                'Pending Isolation',
+                'Awaiting isolation of sample',
+                'yellow',
+                admin_user,
+                ContentType.objects.get(app_label='lab', model='sample'),
+                icon='fa-vials'
             ),
             'available': self._get_or_create_status(
-                'Available', 
-                'Available for tests', 
-                'green', 
-                admin_user, 
-                ContentType.objects.get(app_label='lab', model='sample')
+                'Available',
+                'Available for tests',
+                'green',
+                admin_user,
+                ContentType.objects.get(app_label='lab', model='sample'),
+                icon='fa-circle-check'
             ),
         }
 
@@ -319,7 +334,8 @@ class Command(BaseCommand):
             'Project is in progress',
             'green',
             admin_user,
-            ContentType.objects.get_for_model(Project)
+            ContentType.objects.get_for_model(Project),
+            icon='fa-diagram-project'
         )
         
         self._get_or_create_status(
@@ -327,7 +343,8 @@ class Command(BaseCommand):
             'Project is being set up',
             'yellow',
             admin_user,
-            ContentType.objects.get_for_model(Project)
+            ContentType.objects.get_for_model(Project),
+            icon='fa-gears'
         )
         
         self._get_or_create_status(
@@ -335,7 +352,8 @@ class Command(BaseCommand):
             'Project is completed',
             'gray',
             admin_user,
-            ContentType.objects.get_for_model(Project)
+            ContentType.objects.get_for_model(Project),
+            icon='fa-flag-checkered'
         )
 
         # Analysis statuses
@@ -344,7 +362,8 @@ class Command(BaseCommand):
             'Analysis completed',
             'green',
             admin_user,
-            ContentType.objects.get_for_model(Analysis)
+            ContentType.objects.get_for_model(Analysis),
+            icon='fa-circle-check'
         )
 
         self._get_or_create_status(
@@ -352,7 +371,8 @@ class Command(BaseCommand):
             'Analysis is in progress',
             'yellow',
             admin_user,
-            ContentType.objects.get_for_model(Analysis)
+            ContentType.objects.get_for_model(Analysis),
+            icon='fa-spinner'
         )
 
         self._get_or_create_status(
@@ -360,7 +380,8 @@ class Command(BaseCommand):
             'Analysis is pending data',
             'red',
             admin_user,
-            ContentType.objects.get_for_model(Analysis)
+            ContentType.objects.get_for_model(Analysis),
+            icon='fa-hourglass-half'
         )
 
         # Test statuses
@@ -369,7 +390,8 @@ class Command(BaseCommand):
             'Test completed',
             'green',
             admin_user,
-            ContentType.objects.get_for_model(Test)
+            ContentType.objects.get_for_model(Test),
+            icon='fa-circle-check'
         )
 
         self._get_or_create_status(
@@ -377,7 +399,8 @@ class Command(BaseCommand):
             'Test is in progress',
             'yellow',
             admin_user,
-            ContentType.objects.get_for_model(Test)
+            ContentType.objects.get_for_model(Test),
+            icon='fa-spinner'
         )
 
         self._get_or_create_status(
@@ -385,7 +408,8 @@ class Command(BaseCommand):
             'Test is pending',
             'red',
             admin_user,
-            ContentType.objects.get_for_model(Test)
+            ContentType.objects.get_for_model(Test),
+            icon='fa-clock'
         )
 
         # Task statuses
@@ -394,7 +418,8 @@ class Command(BaseCommand):
             'Task is ongoing',
             'yellow',
             admin_user,
-            ContentType.objects.get_for_model(Task)
+            ContentType.objects.get_for_model(Task),
+            icon='fa-list-check'
         )
 
         self._get_or_create_status(
@@ -402,7 +427,8 @@ class Command(BaseCommand):
             'Task is completed',
             'green',
             admin_user,
-            ContentType.objects.get_for_model(Task)
+            ContentType.objects.get_for_model(Task),
+            icon='fa-circle-check'
         )
 
         self._get_or_create_status(
@@ -410,7 +436,8 @@ class Command(BaseCommand):
             'Task is overdue',
             'red',
             admin_user,
-            ContentType.objects.get_for_model(Task)
+            ContentType.objects.get_for_model(Task),
+            icon='fa-triangle-exclamation'
         )
 
         # --- CREATE IdentifierType objects for cross IDs ---
