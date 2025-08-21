@@ -1,7 +1,6 @@
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from lab.models import Individual
-from lab.models import StatusLog
 from django.contrib.contenttypes.models import ContentType
 import json
 from django.shortcuts import render
@@ -520,25 +519,6 @@ def timeline(request, pk):
                             'object_id': f"Note {note.id}",
                             'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
                         })
-    
-
-    
-    # Get status log entries
-    for status_log in StatusLog.objects.filter(
-        content_type=ContentType.objects.get_for_model(Individual),
-        object_id=individual.id
-    ):
-        timeline_events.append({
-            'date': status_log.changed_at,
-            'type': 'individual',
-            'action': 'Status Changed',
-            'description': f"Status changed from {status_log.previous_status.name} to {status_log.new_status.name}",
-            'user': status_log.changed_by.username,
-            'object_name': 'Individual',
-            'object_id': individual.individual_id,
-            'details': f"Previous: {status_log.previous_status.name}, New: {status_log.new_status.name}, Notes: {status_log.notes}"
-        })
-    
     # Convert all dates to timezone-aware datetime.datetime objects and sort timeline events by date
     from datetime import datetime, time, date
     from django.utils import timezone

@@ -11,7 +11,7 @@ from django.utils import timezone
 import json
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
-from .models import Note, StatusLog, Status
+from .models import Note, Status
 
 from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
