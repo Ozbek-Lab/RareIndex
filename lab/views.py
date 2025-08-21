@@ -24,6 +24,7 @@ from .models import (
     Sample,
     Task,
     Note,
+    Project,
     Institution,
     IdentifierType,
     CrossIdentifier,
@@ -553,6 +554,75 @@ def get_status_buttons(request):
             "model_name": model_name,
         },
     )
+
+
+@login_required
+def project_add_individuals(request, pk=None):
+    """Add one or more Individuals to a Project via HTMX.
+
+    Expects POST with 'individual_ids' as JSON list string or comma-separated string.
+    Returns updated Individuals tab content fragment.
+    """
+    # Determine target project by URL pk or posted project_id
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST required")
+    project_id = pk or request.POST.get("project_id")
+    # Handle JSON array input from combobox hidden input
+    if isinstance(project_id, str) and project_id.startswith("[") and project_id.endswith("]"):
+        try:
+            import json as _json
+            arr = _json.loads(project_id)
+            if isinstance(arr, list) and arr:
+                project_id = arr[0]
+        except Exception:
+            pass
+    if not project_id:
+        return HttpResponseBadRequest("project_id not specified")
+    project = get_object_or_404(Project, pk=project_id)
+
+    ids_raw = request.POST.get("individual_ids", "")
+    individual_ids = []
+    if ids_raw:
+        try:
+            import json
+
+            parsed = json.loads(ids_raw)
+            if isinstance(parsed, list):
+                individual_ids = [int(x) for x in parsed if str(x).isdigit()]
+        except Exception:
+            # Fallback: comma-separated
+            individual_ids = [int(x) for x in ids_raw.split(",") if x.strip().isdigit()]
+
+    if not individual_ids:
+        # Support single individual via 'individual_id'
+        single_id = request.POST.get("individual_id")
+        if single_id and str(single_id).isdigit():
+            individual_ids = [int(single_id)]
+
+    if individual_ids:
+        qs = Individual.objects.filter(pk__in=individual_ids)
+        project.individuals.add(*qs)
+
+    # Decide which fragment to return
+    return_context = request.POST.get("return") or request.POST.get("return_context")
+    if return_context == "individual":
+        # Need an individual to refresh; prefer explicit individual_id
+        ind_id = request.POST.get("individual_id")
+        if not ind_id and individual_ids:
+            ind_id = individual_ids[0]
+        individual = get_object_or_404(Individual, pk=ind_id)
+        return render(
+            request,
+            "lab/individual.html#individual-projects-fragment",
+            {"item": individual},
+        )
+    else:
+        # Return only the Project's Individuals fragment
+        return render(
+            request,
+            "lab/project.html#project-individuals-fragment",
+            {"item": project},
+        )
 
 
 @login_required
