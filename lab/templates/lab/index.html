@@ -200,7 +200,7 @@
       placeholder="Search {{ model_name }}"
       x-model.debounce.300ms="filters.{{ model_name|lower }}"
       hx-get="{% url 'lab:generic_search' %}"
-      hx-trigger="input changed delay:200ms, {{ event_name|default:'filters-updated' }} from:window, load"
+      hx-trigger="input changed delay:200ms, {{ event_name|default:'filters-updated' }} from:window, created-{{ model_name }} from:window, load"
       hx-target="#index-{{ model_name|lower }}-results"
       :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', 1, null, null, '{{ icon_class }}')"
     />
@@ -237,7 +237,7 @@
         multiple
         x-model.debounce.150ms="filters.{{ field_name }}"
         hx-get="{% url 'lab:get_select_options' %}"
-        hx-trigger="load, onchange, {{ event_name|default:'filters-updated' }} from:window"
+        hx-trigger="load, onchange, created-{{ model_name }} from:window, {{ event_name|default:'filters-updated' }} from:window"
         hx-target="this"
         hx-swap="innerHTML"
         :hx-vals="getSelectHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', '{{ field_name }}', 1, null, null, '{{ icon_class }}')"
@@ -255,7 +255,7 @@
     <div
       class="flex flex-wrap gap-1"
       hx-get="{% url 'lab:get_status_buttons' %}"
-      hx-trigger="load, {{ event_name|default:'filters-updated' }} from:window"
+      hx-trigger="load, created-{{ model_name }} from:window, {{ event_name|default:'filters-updated' }} from:window"
       hx-target="this"
       hx-swap="innerHTML"
       :hx-vals="getStatusHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
