@@ -41,11 +41,11 @@ from .visualization.hpo_network_visualization import (
     plotly_hpo_network,
 )
 
+
 from .filters import apply_filters, FILTER_CONFIG, get_available_statuses
 
 # Import SQL agent for natural language search
-from .sql_agent import query_natural_language, execute_safe_sql
-
+from .sql_agent import query_natural_language
 
 @login_required
 @require_POST
@@ -1570,7 +1570,6 @@ def family_create_segway(request):
             else:
                 # Redirect to the family detail page
                 return redirect(f"/detail/?app_label=lab&model_name=Family&pk={family.pk}")
-                
         except Exception as e:
             print(f"Error in family_create_segway: {e}")
             import traceback
@@ -1595,3 +1594,6 @@ def family_create_segway(request):
         })
     else:
         return redirect('lab:index')
+
+def plots(request):
+    return render(request, "lab/visualization/plots.html")
