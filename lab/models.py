@@ -13,7 +13,7 @@ from django.utils import timezone
 
 class HistoryMixin:
     """Mixin to provide history-based timestamp methods for models with HistoricalRecords"""
-    
+
     def get_created_at(self):
         """Get creation time from history"""
         if hasattr(self, "history"):
@@ -220,29 +220,6 @@ class Status(HistoryMixin, models.Model):
 
     def __str__(self):
         return self.name
-
-
-class StatusLog(HistoryMixin, models.Model):
-    # Generic foreign key fields
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    content_object = GenericForeignKey("content_type", "object_id")
-
-    # Status change info
-    changed_by = models.ForeignKey(User, on_delete=models.PROTECT)
-    changed_at = models.DateTimeField(default=timezone.now)
-    previous_status = models.ForeignKey(
-        Status, on_delete=models.PROTECT, related_name="+"
-    )
-    new_status = models.ForeignKey(Status, on_delete=models.PROTECT, related_name="+")
-    notes = models.TextField(blank=True)
-    history = HistoricalRecords()
-
-    class Meta:
-        ordering = ["-changed_at"]
-        indexes = [
-            models.Index(fields=["content_type", "object_id"]),
-        ]
 
 
 class Individual(HistoryMixin, models.Model):
