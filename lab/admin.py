@@ -7,12 +7,14 @@ class ProjectIndividualsInline(admin.TabularInline):
     extra = 1
     verbose_name = "Project Individual"
     verbose_name_plural = "Project Individuals"
+    autocomplete_fields = ["individual"]
 
 class IndividualProjectsInline(admin.TabularInline):
     model = models.Project.individuals.through
     extra = 1
     verbose_name = "Individual Project"
     verbose_name_plural = "Individual Projects"
+    autocomplete_fields = ["project"]
 
 
 @admin.register(models.Note)
@@ -20,6 +22,7 @@ class NoteAdmin(admin.ModelAdmin):
     list_display = ["content_object", "user", "get_created_at", "get_updated_at"]
     list_filter = ["user", "content_type"]
     search_fields = ["content"]
+    autocomplete_fields = ["user"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -98,7 +101,13 @@ class IndividualAdmin(admin.ModelAdmin):
         "get_hpo_terms",
     ]
     list_filter = ["status", "family", "mother", "father"]
-    search_fields = ["full_name", "tc_identity"]
+    search_fields = [
+        "id",
+        "full_name",
+        "tc_identity",
+        "cross_ids__id_value",
+        "institution__name",
+    ]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -110,7 +119,7 @@ class IndividualAdmin(admin.ModelAdmin):
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    autocomplete_fields = ["hpo_terms"]
+    autocomplete_fields = ["hpo_terms", "mother", "father", "family"]
     inlines = [IndividualProjectsInline]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -135,6 +144,7 @@ class SampleAdmin(admin.ModelAdmin):
         "individual__full_name",  # Only direct or forward fields!
     ]
     date_hierarchy = "receipt_date"
+    autocomplete_fields = ["individual", "sample_type"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -173,6 +183,7 @@ class TestAdmin(admin.ModelAdmin):
     list_filter = ["status", "performed_date", "test_type"]
     search_fields = ["sample__individual__lab_id", "test_type__name"]
     date_hierarchy = "performed_date"
+    autocomplete_fields = ["sample", "test_type", "performed_by"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -255,6 +266,7 @@ class AnalysisAdmin(admin.ModelAdmin):
     list_filter = ["type", "status", "performed_date"]
     search_fields = ["test__sample__individual__lab_id", "type__name"]
     date_hierarchy = "performed_date"
+    autocomplete_fields = ["test", "type", "performed_by"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -308,7 +320,7 @@ class TaskAdmin(admin.ModelAdmin):
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    raw_id_fields = ["project", "assigned_to", "created_by"]
+    autocomplete_fields = ["project", "assigned_to", "created_by"]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "status":
@@ -344,8 +356,9 @@ class ProjectAdmin(admin.ModelAdmin):
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    raw_id_fields = ["created_by"]
+    autocomplete_fields = ["created_by"]
     inlines = [ProjectIndividualsInline]
+    exclude = ("individuals",)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "status":
@@ -402,3 +415,10 @@ class CrossIdentifierAdmin(admin.ModelAdmin):
         return obj.get_updated_at()
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
+
+    autocomplete_fields = [
+        "individual",
+        "id_type",
+        "institution",
+        "created_by",
+    ]
