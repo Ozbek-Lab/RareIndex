@@ -9,6 +9,7 @@ from encrypted_model_fields.fields import (
 )
 from simple_history.models import HistoricalRecords
 from django.utils import timezone
+from .middleware import get_current_user
 
 
 class HistoryMixin:
@@ -145,7 +146,6 @@ class Project(HistoryMixin, models.Model):
         if not getattr(self, "created_by_id", None):
             try:
                 # Local import to avoid potential circular imports at module load time
-                from .middleware import get_current_user
 
                 current_user = get_current_user()
             except Exception:
