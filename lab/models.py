@@ -164,7 +164,6 @@ class Project(HistoryMixin, models.Model):
         """
         if not getattr(self, "created_by_id", None):
             try:
-
                 current_user = get_current_user()
             except Exception:
                 current_user = None
