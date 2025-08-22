@@ -24,6 +24,7 @@ urlpatterns = [
     path("individual/<int:pk>/timeline/", views.individual_timeline, name="individual_timeline"),
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
     path("get-stats-counts/", plots.get_stats_counts, name="get_stats_counts"),
+    path("project/add-individuals/", views.project_add_individuals, name="project_add_individuals"),
     
     # Natural language search routes
     path("nl-search/", views.nl_search, name="nl_search"),

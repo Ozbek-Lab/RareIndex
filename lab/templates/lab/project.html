@@ -150,7 +150,8 @@
         <button
           class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
           hx-get="{% url 'lab:generic_edit' %}?model_name=Project&app_label=lab&pk={{ item.pk }}"
-          hx-target="#modal-root" hx-swap="innerHTML"
+          hx-target="#modal-root"
+          hx-swap="innerHTML"
         >
           <i class="fa-solid fa-edit mr-1"></i>Edit Project
         </button>
@@ -248,33 +249,338 @@
 
 {% partialdef detail %}
   <div
+    id="project-detail"
+    x-data="{ activeTab: 'notes' }"
     x-init="activeItem = 'detail-project-{{ item.pk }}'"
-    class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+    class="space-y-6"
   >
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-      Project: {{ item.name }}
-    </h2>
-    <div class="mb-2">
-      <span class="font-semibold">Description:</span>
-      {{ item.description|default:'—' }}<br />
-      <span class="font-semibold">Priority:</span> {{ item.priority }}<br />
-      <span class="font-semibold">Status:</span> {{ item.status.name }}<br />
-      <span class="font-semibold">Created:</span>
-              {{ item.get_created_at|date:"M d, Y H:i"|default:"Unknown" }}<br />
-      <span class="font-semibold">Last Updated:</span>
-              {{ item.get_updated_at|date:"M d, Y H:i"|default:"Unknown" }}
-    </div>
-    <div class="mt-4">
-      <h3 class="font-semibold">Notes</h3>
-      <ul>
-        {% for note in item.notes.all %}
-          <li class="text-sm text-gray-600 dark:text-gray-400">
-            {{ note.content|truncatewords:20 }}
-          </li>
-          {% empty %}
-          <li class="text-sm text-gray-400">No notes available.</li>
-        {% endfor %}
-      </ul>
+    <!-- Project card -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+      <!-- Header with project info -->
+      <div class="bg-gradient-to-r from-purple-600 to-indigo-700 px-6 py-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-2xl font-bold text-white">{{ item.name }}</h2>
+          <span
+            class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white"
+          >
+            {{ item.status.name }}
+          </span>
+        </div>
+        {% if item.description %}
+          <p class="text-purple-100 mt-1">{{ item.description }}</p>
+        {% endif %}
+      </div>
+
+      <!-- Project details -->
+      <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- First column -->
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Priority
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <i class="fa-solid fa-flag text-orange-500"></i>
+              {{ item.priority|default:"—" }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Second column -->
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Due Date
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100">
+              {{ item.due_date|date:"d M Y"|default:"—" }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Third column -->
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Created / Updated
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100">
+              {{ item.get_created_at|date:"d M Y H:i"|default:"—" }}
+              <span class="text-gray-500 dark:text-gray-400">·</span>
+              {{ item.get_updated_at|date:"d M Y H:i"|default:"—" }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs for related data -->
+      <div class="px-6 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex -mb-px">
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'notes' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'notes'"
+          >
+            Notes ({{ item.notes.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'individuals' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'individuals'"
+          >
+            Individuals ({{ item.individuals.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'tasks' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'tasks'"
+          >
+            Tasks ({{ item.tasks.count }})
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab content -->
+      <div class="p-6">
+        <!-- Overview -->
+
+        <!-- Individuals tab -->
+        <div x-show="activeTab === 'individuals'" x-cloak>
+          <div
+            x-data="{ viewMode: 'cards', selectedIds: [], get payload(){ return JSON.stringify(this.selectedIds); }, clear(){ this.selectedIds = []; } }"
+            class="space-y-4"
+          >
+            <!-- Toolbar: Add Individuals + view toggle -->
+            <div class="flex items-center justify-between">
+              <form
+                hx-post="{% url 'lab:project_add_individuals' %}"
+                hx-target="#project-individuals-fragment"
+                hx-swap="innerHTML"
+                class="flex items-center gap-2"
+              >
+                {% csrf_token %}
+                <input type="hidden" name="project_id" value="{{ item.id }}">
+                {% with app_label='lab' model_name='Individual' icon_class='fa-person' value_field='pk' multiple=True name='individual_ids' %}
+                  <div class="w-80">
+                    {% include "lab/index.html#generic-combobox" %}
+                  </div>
+                {% endwith %}
+                <button
+                  type="submit"
+                  class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                >
+                  <i class="fa-solid fa-user-plus"></i>
+                  <span>Add to Project</span>
+                </button>
+              </form>
+            </div>
+
+            <div id="project-individuals-fragment">
+              {% partial project-individuals-fragment %}
+            </div>
+          </div>
+        </div>
+
+        {% partialdef project-individuals-fragment %}
+          {% if item.individuals.exists %}
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <div class="flex justify-end">
+                <div
+                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+                >
+                  <div
+                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                    style="width: calc(50% - 2px);"
+                  ></div>
+
+                  <button
+                    @click="viewMode = 'cards'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i class="fa-solid fa-th-large mr-2"></i>
+                    <span
+                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                      >Card</span
+                    >
+                  </button>
+
+                  <button
+                    @click="viewMode = 'table'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i class="fa-solid fa-table mr-2"></i>
+                    <span
+                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                      >Table</span
+                    >
+                  </button>
+                </div>
+              </div>
+
+              <!-- Card View -->
+              <div
+                x-show="viewMode === 'cards'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+              >
+                {% for individual in item.individuals.all %}
+                  {% with item=individual %}
+                    {% include "lab/individual.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+
+              <!-- Table View -->
+              <div
+                x-show="viewMode === 'table'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+                class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+              >
+                {% with items=item.individuals.all view_mode='table' model_name='Individual' app_label='lab' card='card' %}
+                  {% include "lab/individual.html#table" %}
+                {% endwith %}
+              </div>
+            </div>
+          {% else %}
+            <div
+              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
+              No individuals linked to this project.
+            </div>
+          {% endif %}
+        {% endpartialdef %}
+
+        <!-- Tasks tab -->
+        <div x-show="activeTab === 'tasks'" x-cloak>
+          {% if item.tasks.exists %}
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <button
+                    hx-get="{% url 'lab:generic_create' %}?model_name=Task&app_label=lab&project={{ item.id }}"
+                    hx-target="#modal-root"
+                    hx-swap="innerHTML"
+                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                  >
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Add Task</span>
+                  </button>
+                </div>
+                <div
+                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+                >
+                  <div
+                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                    style="width: calc(50% - 2px);"
+                  ></div>
+
+                  <button
+                    @click="viewMode = 'cards'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i class="fa-solid fa-th-large mr-2"></i>
+                    <span
+                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                      >Card</span
+                    >
+                  </button>
+
+                  <button
+                    @click="viewMode = 'table'"
+                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  >
+                    <i class="fa-solid fa-table mr-2"></i>
+                    <span
+                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                      >Table</span
+                    >
+                  </button>
+                </div>
+              </div>
+
+              <!-- Card View -->
+              <div
+                x-show="viewMode === 'cards'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+              >
+                {% for task in item.tasks.all %}
+                  {% with item=task %}
+                    {% include "lab/task.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+
+              <!-- Table View -->
+              <div
+                x-show="viewMode === 'table'"
+                x-transition:enter="transition-all duration-500 ease-out"
+                x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-300 ease-in"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+                class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+              >
+                {% with items=item.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                  {% include "lab/task.html#table" %}
+                {% endwith %}
+              </div>
+            </div>
+          {% else %}
+            <div
+              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+            >
+              No tasks available for this project.
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Notes tab -->
+        <div x-show="activeTab === 'notes'" x-cloak>
+          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+            Notes
+          </h3>
+          {% with object=item content_type="project" %}
+            {% include "lab/note.html#list" %}
+          {% endwith %}
+        </div>
+      </div>
+
+      <!-- Footer with action buttons -->
+      <div
+        class="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-t flex justify-end space-x-3"
+      >
+        <button
+          class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 flex items-center"
+          hx-get="{% url 'lab:generic_edit' %}?model_name=Project&app_label=lab&pk={{ item.pk }}"
+          hx-target="#modal-root"
+          hx-swap="innerHTML"
+        >
+          <i class="fas fa-edit mr-1"></i> Edit Project
+        </button>
+      </div>
     </div>
   </div>
-{% endpartialdef detail %}
+{% endpartialdef %}
