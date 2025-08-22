@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render
+from lab.models import Individual
 
 def pie_chart_view(request, model_name, attribute_name):
     """
@@ -457,5 +458,186 @@ def plots_page(request):
     else:
         return render(request, 'lab/plots.html', context)
 
-def map_chart_view(request):
-    return render(request, 'lab/map_chart.html')
+def map_view(request):
+    """
+    Generate a scatter map visualization showing institutions of filtered individuals.
+    Uses plotly.express scatter_mapbox to plot latitude and longitude values.
+    """
+    from django.db.models import Count, Q
+    import plotly.express as px
+    import json
+    
+    try:
+        # Start with base queryset for individuals
+        individuals_queryset = Individual.objects.all()
+        
+        # Apply global filters
+        active_filters = request.session.get('active_filters', {})
+        if active_filters:
+            filter_conditions = Q()
+            
+            for filter_key, filter_values in active_filters.items():
+                if filter_values:  # Only apply non-empty filters
+                    # Handle different filter types
+                    if isinstance(filter_values, list):
+                        if filter_values:  # Non-empty list
+                            filter_conditions &= Q(**{filter_key: filter_values[0]})  # Take first value for now
+                    else:
+                        filter_conditions &= Q(**{filter_key: filter_values})
+            
+            if filter_conditions:
+                individuals_queryset = individuals_queryset.filter(filter_conditions)
+        
+        # Get institutions with coordinates from filtered individuals
+        institutions_data = individuals_queryset.values(
+            'institution__name',
+            'institution__latitude',
+            'institution__longitude'
+        ).annotate(
+            cnt=Count('id')
+        ).filter(
+            institution__latitude__isnull=False,
+            institution__longitude__isnull=False,
+            institution__latitude__gt=0,  # Filter out invalid coordinates
+            institution__longitude__gt=0
+        ).order_by('-cnt')
+        
+        if not institutions_data:
+            if request.htmx or request.headers.get('Accept') == 'application/json':
+                return JsonResponse({
+                    'error': 'No institutions with valid coordinates found for the filtered individuals'
+                }, status=404)
+            else:
+                # For regular page requests, render the template with empty data
+                return render(request, 'lab/map.html', {
+                    'error_message': 'No institutions with valid coordinates found for the filtered individuals'
+                })
+        
+        # Prepare data for scatter map
+        df_data = []
+        for item in institutions_data:
+            if item['institution__name']:  # Ensure institution name exists
+                df_data.append({
+                    'name': item['institution__name'],
+                    'lat': item['institution__latitude'],
+                    'longitude': item['institution__longitude'],
+                    'cnt': item['cnt']
+                })
+        
+        if not df_data:
+            if request.htmx or request.headers.get('Accept') == 'application/json':
+                return JsonResponse({
+                    'error': 'No valid institution data found for mapping'
+                }, status=404)
+            else:
+                # For regular page requests, render the template with empty data
+                return render(request, 'lab/map.html', {
+                    'error_message': 'No valid institution data found for mapping'
+                })
+        
+        # Create DataFrame-like structure for plotly
+        import pandas as pd
+        df = pd.DataFrame(df_data)
+        
+        # Create scatter map
+        fig = px.scatter_map(
+            df, 
+            lat="lat", 
+            lon="longitude", 
+            size="cnt",
+            hover_name="name",
+            hover_data=["cnt"],
+            zoom=3,
+            title="Institution Distribution by Individual Count"
+        )
+        
+        # Enable clustering for better visualization
+        fig.update_traces(cluster=dict(enabled=True))
+        
+        # Update layout for better appearance
+        fig.update_layout(
+            height=600,
+            margin={"r":0,"t":30,"l":0,"b":0},
+            title_x=0.5
+        )
+        
+        # Prepare response data - ensure all data is JSON serializable
+        try:
+            # Convert Plotly figure to dict and ensure it's JSON serializable
+            fig_dict = fig.to_dict()
+            
+            # Convert any numpy types to Python native types
+            def convert_numpy_types(obj):
+                if hasattr(obj, 'item'):  # numpy scalar
+                    return obj.item()
+                elif isinstance(obj, dict):
+                    return {k: convert_numpy_types(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_numpy_types(item) for item in obj]
+                else:
+                    return obj
+            
+            fig_dict = convert_numpy_types(fig_dict)
+            
+            chart_data = {
+                'chart_json': json.dumps(fig_dict),
+                'institution_count': len(df_data),
+                'total_individuals': sum(item['cnt'] for item in df_data)
+            }
+        except Exception as json_error:
+            # Fallback: create a simpler chart structure
+            chart_data = {
+                'chart_json': json.dumps({
+                    'data': [{
+                        'type': 'scattergeo',
+                        'lat': [float(item['lat']) for item in df_data],
+                        'lon': [float(item['longitude']) for item in df_data],
+                        'mode': 'markers',
+                        'marker': {
+                            'size': [int(item['cnt']) for item in df_data],
+                            'color': [int(item['cnt']) for item in df_data],
+                            'colorscale': 'Viridis'
+                        },
+                        'text': [str(item['name']) for item in df_data],
+                        'hoverinfo': 'text+marker'
+                    }],
+                    'layout': {
+                        'geo': {
+                            'scope': 'world',
+                            'projection_type': 'equirectangular',
+                            'showland': True,
+                            'landcolor': 'rgb(243, 243, 243)',
+                            'showocean': True,
+                            'oceancolor': 'rgb(204, 229, 255)',
+                            'showcountries': True,
+                            'countrycolor': 'rgb(255, 255, 255)',
+                            'showcoastlines': True,
+                            'coastlinecolor': 'rgb(80, 80, 80)',
+                            'center': {'lat': 39.0, 'lon': 35.0},
+                            'lonaxis': {'range': [25, 45]},
+                            'lataxis': {'range': [35, 43]}
+                        },
+                        'height': 600,
+                        'margin': {"r": 0, "t": 30, "l": 0, "b": 0},
+                        'title': 'Institution Distribution by Individual Count'
+                    }
+                }),
+                'institution_count': len(df_data),
+                'total_individuals': sum(item['cnt'] for item in df_data)
+            }
+        
+        # Return JSON for API calls, render template for page requests
+        if request.htmx or request.headers.get('Accept') == 'application/json':
+            return JsonResponse(chart_data)
+        else:
+            return render(request, 'lab/map.html', chart_data)
+        
+    except Exception as e:
+        if request.htmx or request.headers.get('Accept') == 'application/json':
+            return JsonResponse({
+                'error': f'Error generating map: {str(e)}'
+            }, status=500)
+        else:
+            return render(request, 'lab/map.html', {
+                'error_message': f'Error generating map: {str(e)}'
+            })
