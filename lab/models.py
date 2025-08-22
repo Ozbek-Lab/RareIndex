@@ -97,6 +97,25 @@ class Task(HistoryMixin, models.Model):
         self.save()
         return True
 
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
+
 
 class Project(HistoryMixin, models.Model):
     name = models.CharField(max_length=255)
@@ -145,8 +164,6 @@ class Project(HistoryMixin, models.Model):
         """
         if not getattr(self, "created_by_id", None):
             try:
-                # Local import to avoid potential circular imports at module load time
-
                 current_user = get_current_user()
             except Exception:
                 current_user = None
@@ -208,6 +225,25 @@ class Institution(HistoryMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
 
 
 class Family(HistoryMixin, models.Model):
@@ -380,6 +416,25 @@ class Sample(HistoryMixin, models.Model):
     def __str__(self):
         return f"{self.individual.lab_id} - {self.sample_type} - {self.receipt_date}"
 
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
+
 
 class Test(HistoryMixin, models.Model):
     """Through model for tracking tests performed on samples"""
@@ -415,6 +470,25 @@ class Test(HistoryMixin, models.Model):
 
     class Meta:
         ordering = ["-id"]
+
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
 
 
 class AnalysisType(HistoryMixin, models.Model):
@@ -471,6 +545,25 @@ class Analysis(HistoryMixin, models.Model):
 
     def __str__(self):
         return f"{self.test} - {self.type} - {self.performed_date}"
+
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
 
 
 class IdentifierType(HistoryMixin, models.Model):
