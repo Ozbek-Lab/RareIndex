@@ -200,10 +200,13 @@ class SampleType(HistoryMixin, models.Model):
 
 
 class Institution(HistoryMixin, models.Model):
+    staff = models.ManyToManyField(User, blank=True, related_name="institutions_as_staff")
+    latitude = models.FloatField(null=True, blank=True, default=0.0)
+    longitude = models.FloatField(null=True, blank=True, default=0.0)
     name = models.CharField(max_length=255)
     contact = models.TextField(blank=True)
     notes = GenericRelation("Note")
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="institutions_created")
     history = HistoricalRecords()
 
     def __str__(self):
@@ -288,7 +291,8 @@ class Individual(HistoryMixin, models.Model):
     history = HistoricalRecords()
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
-    institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
+    institution = models.ManyToManyField(Institution)
+    physicians = models.ManyToManyField(User, blank=True, related_name="patients")
     tasks = GenericRelation("Task")
 
     class Meta:
@@ -492,8 +496,8 @@ class CrossIdentifier(HistoryMixin, models.Model):
     id_type = models.ForeignKey(IdentifierType, on_delete=models.PROTECT)
     id_value = models.CharField(max_length=100)
     id_description = models.TextField(blank=True)
-    institution = models.ForeignKey(
-        Institution, on_delete=models.PROTECT, blank=True, null=True
+    institution = models.ManyToManyField(
+        Institution, blank=True
     )
     link = models.URLField(blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
