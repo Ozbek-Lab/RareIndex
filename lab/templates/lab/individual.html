@@ -1189,89 +1189,99 @@
 
         <!-- Projects tab -->
         <div x-show="activeTab === 'projects'" x-cloak>
-          {% if item.projects.all %}
-            <!-- Use existing project partials for consistent UI -->
-            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- View toggle buttons -->
-              <div class="flex justify-end">
-                <div
-                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
-                >
-                  <div
-                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
-                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
-                    style="width: calc(50% - 2px);"
-                  ></div>
-
-                  <button
-                    @click="viewMode = 'cards'"
-                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
-                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
-                  >
-                    <i
-                      class="fa-solid fa-th-large mr-2 transition-transform duration-300"
-                      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
-                    ></i>
-                    <span
-                      class="transition-all duration-300"
-                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
-                      >Card</span
-                    >
-                  </button>
-
-                  <button
-                    @click="viewMode = 'table'"
-                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
-                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
-                  >
-                    <i
-                      class="fa-solid fa-table mr-2 transition-transform duration-300"
-                      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
-                    ></i>
-                    <span
-                      class="transition-all duration-300"
-                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
-                      >Table</span
-                    >
-                  </button>
-                </div>
-              </div>
-
-              <!-- Card View with animated transition -->
-              <div
-                x-show="viewMode === 'cards'"
-                x-transition:enter="transition-all duration-500 ease-out"
-                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
-                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                x-transition:leave="transition-all duration-300 ease-in"
-                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
-                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                style="will-change: opacity, transform;"
+          <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+            <!-- Toolbar: Add to Project + view toggle -->
+            <div class="flex items-center justify-between">
+              <form
+                hx-post="{% url 'lab:project_add_individuals' %}"
+                hx-target="#individual-projects-fragment"
+                hx-swap="innerHTML"
+                class="flex items-center gap-2"
               >
-                {% for project in item.projects.all %}
-                  {% with item=project %}
-                    {% include "lab/project.html#card" %}
-                  {% endwith %}
-                {% endfor %}
-              </div>
-
-                                <!-- Table View with animated transition -->
-                  <div
-                    x-show="viewMode === 'table'"
-                    x-transition:enter="transition-all duration-500 ease-out"
-                    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
-                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                    x-transition:leave="transition-all duration-300 ease-in"
-                    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
-                    class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
-                    style="will-change: opacity, transform;"
-                  >
-                    {% with items=item.projects.all view_mode='table' model_name='Project' app_label='lab' card='card' %}
-                      {% include "lab/project.html#table" %}
-                    {% endwith %}
+                {% csrf_token %}
+                {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' value_field='pk' multiple=False name='project_id' %}
+                  <div class="w-80">
+                    {% include "lab/index.html#generic-combobox" %}
                   </div>
+                {% endwith %}
+                <input type="hidden" name="individual_id" value="{{ item.id }}">
+                <input type="hidden" name="return" value="individual">
+                <button type="submit"
+                  class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                >
+                  <i class="fa-solid fa-plus"></i>
+                  <span>Add to Project</span>
+                </button>
+              </form>
+              <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center">
+                <div
+                  class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                  :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                  style="width: calc(50% - 2px);"
+                ></div>
+
+                <button
+                  @click="viewMode = 'cards'"
+                  class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                  :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                >
+                  <i class="fa-solid fa-th-large mr-2 transition-transform duration-300" :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"></i>
+                  <span class="transition-all duration-300" :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'">Card</span>
+                </button>
+
+                <button
+                  @click="viewMode = 'table'"
+                  class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                  :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                >
+                  <i class="fa-solid fa-table mr-2 transition-transform duration-300" :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"></i>
+                  <span class="transition-all duration-300" :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'">Table</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="individual-projects-fragment">
+              {% partial individual-projects-fragment %}
+            </div>
+          </div>
+        </div>
+
+        {% partialdef individual-projects-fragment %}
+          {% if item.projects.all %}
+            <!-- Card View with animated transition -->
+            <div
+              x-show="viewMode === 'cards'"
+              x-transition:enter="transition-all duration-500 ease-out"
+              x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+              x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+              x-transition:leave="transition-all duration-300 ease-in"
+              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+              x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+              style="will-change: opacity, transform;"
+            >
+              {% for project in item.projects.all %}
+                {% with item=project %}
+                  {% include "lab/project.html#card" %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+
+            <!-- Table View with animated transition -->
+            <div
+              x-show="viewMode === 'table'"
+              x-transition:enter="transition-all duration-500 ease-out"
+              x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+              x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+              x-transition:leave="transition-all duration-300 ease-in"
+              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+              x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+              class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+              style="will-change: opacity, transform;"
+            >
+              {% with items=item.projects.all view_mode='table' model_name='Project' app_label='lab' card='card' %}
+                {% include "lab/project.html#table" %}
+              {% endwith %}
             </div>
           {% else %}
             <div
@@ -1288,7 +1298,7 @@
               </p>
             </div>
           {% endif %}
-        </div>
+        {% endpartialdef %}
       </div>
 
       <!-- Timeline tab -->
@@ -1482,10 +1492,10 @@
   {% if plot_json %}
     {# prettier-ignore-start #}
     <script>
-      var plotData = {{ plot_json|safe }};
+      var plotData = JSON.parse('{{ plot_json|escapejs|default:"null" }}');
       var plotlyDiv = document.getElementById('timeline-plot');
-      if (plotlyDiv) { 
-        Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout, {responsive: true}); 
+      if (plotlyDiv && plotData) {
+        Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout, {responsive: true});
       }
     </script>
     {# prettier-ignore-end #}
