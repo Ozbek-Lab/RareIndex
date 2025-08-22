@@ -244,6 +244,10 @@ class Command(BaseCommand):
         )
         return sample
 
+    def _get_initials(self, full_name: str) -> str:
+        parts = [p for p in (full_name or '').split() if p]
+        return ''.join(part[0].upper() for part in parts)
+
     def handle(self, *args, **options):
 
         call_command('create_ozbek_users') # Create groups and Ozbek users
@@ -267,8 +271,6 @@ class Command(BaseCommand):
         # Individual statuses
         individual_statuses = {
             'Registered': {'description': 'Initial status for new entries', 'color': 'gray', 'icon': 'fa-user-plus'},
-            'Family': {'description': 'Is family member', 'color': 'yellow', 'icon': 'fa-people-group'},
-            'Solved Family': {'description': 'Family is solved', 'color': 'green', 'icon': 'fa-people-group'},
             'Solved': {'description': 'Entry has been completed', 'color': 'green', 'icon': 'fa-circle-check'}
         }
         for status_name, status_data in individual_statuses.items():
@@ -479,6 +481,36 @@ class Command(BaseCommand):
 
         # --- XLSX Reading ---
         wb = openpyxl.load_workbook(file_path, data_only=True)
+        # --- INSTITUTION MAP SHEET (Coordinates) ---
+        coords_map = {}
+        try:
+            ws_map = wb['Gönderen Kurum Harita']
+            headers_map = [cell.value for cell in next(ws_map.iter_rows(min_row=1, max_row=1))]
+            headers_map = [h for h in headers_map if h is not None]
+            name_key = 'Kurum'
+            coord_key = 'Harita'
+            for row in ws_map.iter_rows(min_row=2, values_only=True):
+                if all(cell is None for cell in row):
+                    continue
+                row = row[:len(headers_map)]
+                row_dict = dict(zip(headers_map, row))
+                raw_name = row_dict.get(name_key)
+                coord_val = row_dict.get(coord_key)
+                if not raw_name or not coord_val:
+                    continue
+                # Normalize and support multiple comma-separated names similar to source sheet
+                for name in [n.strip() for n in str(raw_name).split(',') if n and str(n).strip()]:
+                    try:
+                        lat_str, lon_str = [p.strip() for p in str(coord_val).split(',')[:2]]
+                        lat_val = float(lat_str)
+                        lon_val = float(lon_str)
+                        coords_map[name] = (lat_val, lon_val)
+                    except Exception:
+                        continue
+            self._institution_coords = coords_map
+        except KeyError:
+            # Sheet not present; proceed without coordinates
+            self._institution_coords = {}
         # --- OZBEK LAB SHEET ---
         ws_lab = wb[ozbek_lab_sheet]
         headers_lab = [cell.value for cell in next(ws_lab.iter_rows(min_row=1, max_row=1))]
@@ -504,13 +536,15 @@ class Command(BaseCommand):
                 family_id = self._get_family_id(lab_id)
                 if family_id:
                     unique_family_ids.add(family_id)
-            institution_name = row_dict.get('Gönderen Kurum/Birim')
+            institution_name_raw = row_dict.get('Gönderen Kurum/Birim')
             contact_info = row_dict.get('Klinisyen & İletişim Bilgileri')
-            if institution_name:
-                if institution_name not in institution_details:
-                    institution_details[institution_name] = set()
-                if contact_info:
-                    institution_details[institution_name].add(contact_info)
+            if institution_name_raw:
+                institution_names = [n.strip() for n in str(institution_name_raw).split(',') if n and str(n).strip()]
+                for institution_name in institution_names:
+                    if institution_name not in institution_details:
+                        institution_details[institution_name] = set()
+                    if contact_info:
+                        institution_details[institution_name].add(contact_info)
         # Create Families
         families = {}
         for family_id in unique_family_ids:
@@ -519,20 +553,29 @@ class Command(BaseCommand):
                 defaults={'created_by': admin_user}
             )
             families[family_id] = family
-        # Create Institutions with contact information
+        # Create Institutions with contact information (and coordinates if available)
         institutions = {}
         for name, contacts in institution_details.items():
             institution, _ = Institution.objects.get_or_create(
                 name=name,
                 defaults={
                     'contact': '\n'.join(contacts) if contacts else '',
-                    'created_by': admin_user
+                    'created_by': admin_user,
+                    'latitude': self._institution_coords.get(name, (None, None))[0] if self._institution_coords.get(name) else 0.0,
+                    'longitude': self._institution_coords.get(name, (None, None))[1] if self._institution_coords.get(name) else 0.0,
                 }
             )
             if not _ and contacts:
                 existing_contacts = set(institution.contact.split('\n')) if institution.contact else set()
                 all_contacts = existing_contacts.union(contacts)
                 institution.contact = '\n'.join(all_contacts)
+                # Backfill coordinates if available and not set (or set to defaults)
+                if name in self._institution_coords:
+                    lat_val, lon_val = self._institution_coords[name]
+                    if (institution.latitude in (None, 0.0)) and lat_val is not None:
+                        institution.latitude = lat_val
+                    if (institution.longitude in (None, 0.0)) and lon_val is not None:
+                        institution.longitude = lon_val
                 institution.save()
             institutions[name] = institution
         # Second pass: Create Individuals and CrossIdentifiers
@@ -552,8 +595,13 @@ class Command(BaseCommand):
                 if not family_id or family_id not in families:
                     self.stdout.write(f'Skipping row - invalid family_id: {family_id} for lab_id: {lab_id}')
                     continue
-                institution_name = row_dict.get('Gönderen Kurum/Birim')
-                institution = institutions.get(institution_name, unknown_institution)
+                institution_name_raw = row_dict.get('Gönderen Kurum/Birim')
+                institution_list = []
+                if institution_name_raw:
+                    for inst_name in [n.strip() for n in str(institution_name_raw).split(',') if n and str(n).strip()]:
+                        institution_list.append(institutions.get(inst_name, unknown_institution))
+                if not institution_list:
+                    institution_list = [unknown_institution]
                 is_index = False
                 if re.search(r'\.1(\.|$)', lab_id):
                     is_index = True
@@ -579,7 +627,6 @@ class Command(BaseCommand):
                         family=families[family_id],
                         birth_date=self._parse_date(row_dict.get('Doğum Tarihi')),
                         icd11_code='',
-                        institution=institution,
                         status=Status.objects.get(name='Registered', content_type=ContentType.objects.get(app_label='lab', model='individual')),
                         created_by=admin_user,
                         diagnosis='',
@@ -588,13 +635,15 @@ class Command(BaseCommand):
                         is_index=is_index,
                         tc_identity=tc_identity_val
                     )
-                    self.stdout.write(self.style.SUCCESS(f'Created individual: {full_name}'))
+                    if institution_list:
+                        individual.institution.set(institution_list)
+                    self.stdout.write(self.style.SUCCESS(f"Created individual: {self._get_initials(full_name)}"))
                     imported_project.individuals.add(individual)
                 else:
                     if individual.is_index != is_index:
                         individual.is_index = is_index
                         individual.save()
-                    self.stdout.write(f'Individual already exists: {full_name}')
+                    self.stdout.write(f'Individual already exists: {self._get_initials(full_name)}')
                 # CrossIdentifiers
                 rareboost_id = row_dict.get('Özbek Lab. ID')
                 if rareboost_id:
@@ -658,11 +707,19 @@ class Command(BaseCommand):
                 leftover_rows.append(row_dict)
                 self.stdout.write(self.style.WARNING(f'Error finding individual for {lab_id}: {str(e)}'))
                 continue
-            institution = self._get_or_create_institution(
-                row_dict.get('Gönderen Kurum/Birim'),
-                row_dict.get('Klinisyen & İletişim Bilgileri'),
-                admin_user
-            )
+            institution_name_raw = row_dict.get('Gönderen Kurum/Birim')
+            institution_objs = []
+            if institution_name_raw:
+                for name in [n.strip() for n in str(institution_name_raw).split(',') if n and str(n).strip()]:
+                    inst_obj = self._get_or_create_institution(
+                        name,
+                        row_dict.get('Klinisyen & İletişim Bilgileri'),
+                        admin_user
+                    )
+                    if inst_obj:
+                        institution_objs.append(inst_obj)
+            if not institution_objs:
+                institution_objs = [unknown_institution]
             is_index = False
             if re.search(r'\.1(\.|$)', lab_id):
                 is_index = True
@@ -681,7 +738,8 @@ class Command(BaseCommand):
             individual.tc_identity = tc_identity_val
             individual.birth_date = self._parse_date(row_dict.get('Doğum Tarihi')) or individual.birth_date
             individual.icd11_code = row_dict.get('ICD11', individual.icd11_code)
-            individual.institution = institution if institution else individual.institution
+            if institution_objs:
+                individual.institution.set(institution_objs)
             individual.status = Status.objects.get(name='Registered', content_type=ContentType.objects.get(app_label='lab', model='individual'))
             individual.is_index = is_index
             individual.save()
@@ -689,8 +747,8 @@ class Command(BaseCommand):
             hpo_terms = self._get_hpo_terms(row_dict.get('HPO kodları'))
             if hpo_terms:
                 individual.hpo_terms.add(*hpo_terms)
-                self.stdout.write(self.style.SUCCESS(f'Added {len(hpo_terms)} HPO terms to {individual.full_name}'))
-            self.stdout.write(self.style.SUCCESS(f'Updated individual: {individual.full_name}'))
+                self.stdout.write(self.style.SUCCESS(f'Added {len(hpo_terms)} HPO terms to {self._get_initials(individual.full_name)}'))
+            self.stdout.write(self.style.SUCCESS(f"Updated individual: {self._get_initials(individual.full_name)}"))
             sample_types = [s.strip() for s in (row_dict.get('Örnek Tipi') or '').split(',')]
             for sample_type_name in sample_types:
                 if not sample_type_name:
@@ -793,7 +851,7 @@ class Command(BaseCommand):
             test_types[veri_kaynagi] = test_type
             sample = individual.samples.first()
             if not sample:
-                self.stdout.write(self.style.WARNING(f'AAAAAANo sample found for individual: {individual.full_name}'))
+                self.stdout.write(self.style.WARNING(f'No sample found for individual: {self._get_initials(individual.full_name)}'))
                 sample = self._get_or_create_placeholder_sample(individual, admin_user)
             test = Test.objects.create(
                 test_type=test_type,
