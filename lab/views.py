@@ -891,7 +891,7 @@ def generic_create(request):
 
             # Return success response for HTMX
             if request.htmx:
-                return render(
+                response = render(
                     request,
                     "lab/index.html#create-success",
                     {
@@ -900,6 +900,25 @@ def generic_create(request):
                         "app_label": app_label,
                     },
                 )
+                # Emit object-specific and generic refresh events for listeners
+                try:
+                    response["HX-Trigger"] = json.dumps(
+                        {
+                            f"created-{model_name}": {
+                                "pk": obj.pk,
+                                "label": str(obj),
+                                "app_label": app_label,
+                                "model_name": model_name,
+                            },
+                            f"created-{model_name}-{obj.pk}": True,
+                            # Also trigger global filters refresh so dependent UI updates
+                            "filters-updated": True,
+                        }
+                    )
+                except Exception:
+                    # Fallback to a simple model-level trigger
+                    response["HX-Trigger"] = f"created-{model_name}"
+                return response
             else:
                 return redirect(
                     "lab:generic_detail",
@@ -1753,7 +1772,7 @@ def family_create_segway(request):
 
             # Return success response
             if request.htmx:
-                return render(
+                response = render(
                     request,
                     "lab/individual.html#family-create-success",
                     {
@@ -1763,6 +1782,32 @@ def family_create_segway(request):
                         "family_was_created": family_was_created,
                     },
                 )
+                # Emit events so UI components listening for created Individuals refresh
+                try:
+                    created_pks = [ind.id for _, ind in created_individuals]
+                    trigger_payload = {
+                        "created-Individual": {
+                            "pks": created_pks,
+                            "count": len(created_pks),
+                            "family_pk": getattr(family, "pk", None),
+                        },
+                        # Alias form requested
+                        "create-individual": {
+                            "pks": created_pks,
+                            "count": len(created_pks),
+                            "family_pk": getattr(family, "pk", None),
+                        },
+                        # Also refresh global filters-dependent UI
+                        "filters-updated": True,
+                    }
+                    # Add object-specific events per individual
+                    for pk in created_pks:
+                        trigger_payload[f"created-Individual-{pk}"] = True
+                        trigger_payload[f"create-individual-{pk}"] = True
+                    response["HX-Trigger"] = json.dumps(trigger_payload)
+                except Exception:
+                    response["HX-Trigger"] = "created-Individual"
+                return response
             else:
                 # Redirect to the family detail page
                 return redirect(
