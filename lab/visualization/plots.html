@@ -32,6 +32,10 @@
 </div>
 {% endpartialdef %}
 
+
+{% partialdef map-chart %}
+{% endpartialdef %}
+
 {% partialdef sankey-diagram %}
   <div class="space-y-6">
     <!-- Header -->
@@ -161,5 +165,6 @@
 
 {% block content %}
   {% partial plots %}
+  {% partial map-chart %}
   {% partial sankey-diagram %}
 {% endblock content %}

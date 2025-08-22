@@ -456,3 +456,6 @@ def plots_page(request):
         return render(request, 'lab/plots.html#plots-content', context)
     else:
         return render(request, 'lab/plots.html', context)
+
+def map_chart_view(request):
+    return render(request, 'lab/map_chart.html')
