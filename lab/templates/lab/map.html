@@ -9,7 +9,7 @@
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <style>
     .map-container {
-        height: 600px;
+        height: 800px;
         width: 100%;
         border-radius: 8px;
         overflow: hidden;
@@ -20,7 +20,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 600px;
+        height: 800px;
         background: #f8fafc;
         border-radius: 8px;
     }
@@ -29,7 +29,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 600px;
+        height: 800px;
         background: #fef2f2;
         border: 1px solid #fecaca;
         border-radius: 8px;
@@ -108,7 +108,15 @@
     <div class="flex gap-4 mb-4 flex-wrap" id="map-stats">
         <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
             <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="institution-count">-</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Cities</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Institutions</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="family-count">-</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Families</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="proband-count">-</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Probands</div>
         </div>
         <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
             <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="total-individuals">-</div>
@@ -139,8 +147,8 @@
                 Institution Distribution
             </h2>
             <p class="text-sm text-gray-600 dark:text-gray-400">
-                This map shows cities where your filtered individuals are located, with institutions clustered by city. 
-                The size of each marker represents the total number of individuals in that city.
+                This map shows institutions where your filtered individuals are located. 
+                Plotly automatically clusters nearby institutions for better visualization.
             </p>
             <div class="mt-2 text-sm text-gray-500 dark:text-gray-400" id="filter-status">
                 <i class="fas fa-filter mr-1"></i>
@@ -265,7 +273,15 @@
                 statsContainer.classList.remove('hidden');
                 
                 // Update statistics
-                document.getElementById('institution-count').textContent = data.institution_count;
+                if (data.institution_count !== undefined) {
+                    document.getElementById('institution-count').textContent = data.institution_count;
+                }
+                if (data.family_count !== undefined) {
+                    document.getElementById('family-count').textContent = data.family_count;
+                }
+                if (data.proband_count !== undefined) {
+                    document.getElementById('proband-count').textContent = data.proband_count;
+                }
                 document.getElementById('total-individuals').textContent = data.total_individuals;
                 
                 // Update filter status display
@@ -289,7 +305,8 @@
                 Plotly.newPlot('map-container', chartData.data, chartData.layout, {
                     responsive: true,
                     displayModeBar: true,
-                    modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+                    scrollZoom: true,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d']
                 });
             })
             .catch(error => {
