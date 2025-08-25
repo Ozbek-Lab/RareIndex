@@ -516,23 +516,20 @@ def map_view(request):
             if filter_conditions:
                 individuals_queryset = individuals_queryset.filter(filter_conditions)
         
-        # Get institutions with coordinates from filtered individuals, grouped by city
-        institutions_data = individuals_queryset.values(
-            'institution__city',
+        # Get each individual with their institution coordinates
+        individuals_data = individuals_queryset.values(
+            'id',
             'institution__name',
             'institution__latitude',
             'institution__longitude'
-        ).annotate(
-            cnt=Count('id')
         ).filter(
             institution__latitude__isnull=False,
             institution__longitude__isnull=False,
             institution__latitude__gt=0,  # Filter out invalid coordinates
-            institution__longitude__gt=0,
-            institution__city__isnull=False  # Ensure city exists
-        ).order_by('-cnt')
+            institution__longitude__gt=0
+        )
         
-        if not institutions_data:
+        if not individuals_data:
             if request.htmx or request.headers.get('Accept') == 'application/json':
                 return JsonResponse({
                     'error': 'No institutions with valid coordinates found for the filtered individuals',
@@ -545,27 +542,15 @@ def map_view(request):
                     'individual_types': individual_types
                 })
         
-        # Prepare data for scatter map - aggregate by city
-        city_data = {}
-        for item in institutions_data:
-            city = item['institution__city']
-            if city:  # Ensure city exists
-                if city not in city_data:
-                    city_data[city] = {
-                        'name': city,
-                        'lat': item['institution__latitude'],
-                        'long': item['institution__longitude'],
-                        'cnt': 0,
-                        'institutions': []
-                    }
-                city_data[city]['cnt'] += item['cnt']
-                city_data[city]['institutions'].append({
-                    'name': item.get('institution__name', 'Unknown'),
-                    'count': item['cnt']
-                })
-        
-        # Convert to list format for plotting
-        df_data = list(city_data.values())
+        # Prepare data for scatter map - each individual as a separate point
+        df_data = []
+        for item in individuals_data:
+            df_data.append({
+                'name': item['institution__name'],
+                'lat': item['institution__latitude'],
+                'long': item['institution__longitude'],
+                'cnt': 1  # Each point represents 1 individual
+            })
         
         if not df_data:
             if request.htmx or request.headers.get('Accept') == 'application/json':
@@ -584,68 +569,92 @@ def map_view(request):
         import pandas as pd
         df = pd.DataFrame(df_data)
         
-        # Add custom hover data for institutions within each city
-        df['institution_details'] = df['institutions'].apply(
-            lambda x: '<br>'.join([f"• {inst['name']}: {inst['count']}" for inst in x])
-        )
+        # Add custom hover data for individuals
+        df['individual_details'] = df['name']
         
-        # Create scatter map
+        # Create tile-based scatter map (Mapbox)
         fig = px.scatter_map(
-            df, 
-            lat="lat", 
+            df,
+            lat="lat",
             lon="long",
             hover_name="name",
-            hover_data=["cnt", "institution_details"],
-            zoom=3,
+            hover_data=["cnt", "individual_details"],
+            custom_data=["cnt", "individual_details"],
+            zoom=5,
             title="City Distribution by Individual Count"
         )
         
-        # Enable clustering and style markers (solid color, label count inside)
+        # Enable built-in clustering and basic styling (no custom sizing or labels)
         fig.update_traces(
             cluster=dict(enabled=True),
             marker=dict(
-                color="#6366F1",  # solid indigo color
+                color="#6366F1",
                 opacity=0.9,
-                showscale=False
+                showscale=False,
+                size=20,
             ),
-            text=df["cnt"].tolist(),
-            mode="markers+text",
-            textposition="middle center",
-            textfont=dict(color="white", size=10),
-            hovertemplate="<b>%{hover_name}</b><br>" +
-                         "Total Individuals: %{customdata}<br>" +
-                         "<br><b>Institutions:</b><br>%{customdata[1]}<br>" +
+            hovertemplate="<b>%{customdata[1]}</b><br>" +
                          "<extra></extra>"
         )
         
         # Update layout for better appearance
         fig.update_layout(
-            height=600,
+            height=800,
             margin={"r":0,"t":30,"l":0,"b":0},
-            title_x=0.5
+            title_x=0.5,
+            # Use a label-rich, no-token basemap
+            mapbox_style="carto-positron",
+            mapbox=dict(
+                center=dict(lat=39.0, lon=35.0),  # Center on Turkey
+                zoom=4
+            ),
+            paper_bgcolor='rgba(0,0,0,0)',  # Transparent background
+            plot_bgcolor='rgba(0,0,0,0)'    # Transparent plot area
         )
         
         # Prepare response data - ensure all data is JSON serializable
         try:
             # Convert Plotly figure to dict and ensure it's JSON serializable
             fig_dict = fig.to_dict()
-            
-            # Convert any numpy types to Python native types
+            # Convert any numpy types to Python native/JSON-serializable types
             def convert_numpy_types(obj):
-                if hasattr(obj, 'item'):  # numpy scalar
-                    return obj.item()
-                elif isinstance(obj, dict):
+                try:
+                    import numpy as np
+                except Exception:
+                    np = None
+                
+                if np is not None:
+                    # numpy scalars
+                    if isinstance(obj, (np.integer, np.floating, np.bool_)):
+                        return obj.item()
+                    # numpy arrays
+                    if isinstance(obj, np.ndarray):
+                        return obj.tolist()
+                
+                if isinstance(obj, dict):
                     return {k: convert_numpy_types(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
+                elif isinstance(obj, (list, tuple)):
                     return [convert_numpy_types(item) for item in obj]
                 else:
                     return obj
             
             fig_dict = convert_numpy_types(fig_dict)
+            # print(fig_dict)
             
+            # Aggregate counts for header stats
+            institutions_count = individuals_queryset.filter(
+                institution__isnull=False
+            ).values('institution').distinct().count()
+            families_count = individuals_queryset.filter(
+                family__isnull=False
+            ).values('family').distinct().count()
+            probands_count = individuals_queryset.filter(is_index=True).count()
+
             chart_data = {
                 'chart_json': json.dumps(fig_dict),
-                'institution_count': len(df_data),
+                'institution_count': institutions_count,
+                'family_count': families_count,
+                'proband_count': probands_count,
                 'total_individuals': individuals_queryset.count(),
                 'individual_types': individual_types,
                 'applied_filters': {
@@ -655,7 +664,17 @@ def map_view(request):
                 }
             }
         except Exception as json_error:
+            print("EXCEPTION: ", json_error)
             # Fallback: create a simpler chart structure
+            # Aggregate counts for header stats (fallback path)
+            institutions_count = individuals_queryset.filter(
+                institution__isnull=False
+            ).values('institution').distinct().count()
+            families_count = individuals_queryset.filter(
+                family__isnull=False
+            ).values('family').distinct().count()
+            probands_count = individuals_queryset.filter(is_index=True).count()
+
             chart_data = {
                 'chart_json': json.dumps({
                     'data': [{
@@ -672,32 +691,37 @@ def map_view(request):
                         'textfont': {'color': 'white', 'size': 10},
                         'textposition': 'middle center',
                         'hoverinfo': 'text+marker',
-                        'hovertext': [f"<b>{item['name']}</b><br>Total: {item['cnt']}<br><br><b>Institutions:</b><br>" + 
-                                    '<br>'.join([f"• {inst['name']}: {inst['count']}" for inst in item['institutions']]) 
-                                    for item in df_data]
+                        'hovertext': [f"<b>{item['name']}</b><br>Individual" for item in df_data]
                     }],
                     'layout': {
                         'geo': {
                             'scope': 'world',
                             'projection_type': 'equirectangular',
                             'showland': True,
-                            'landcolor': 'rgb(243, 243, 243)',
+                            'landcolor': 'rgb(248, 248, 248)',
                             'showocean': True,
-                            'oceancolor': 'rgb(204, 229, 255)',
+                            'oceancolor': 'rgb(230, 240, 250)',
                             'showcountries': True,
-                            'countrycolor': 'rgb(255, 255, 255)',
+                            'countrycolor': 'rgb(220, 220, 220)',
                             'showcoastlines': True,
-                            'coastlinecolor': 'rgb(80, 80, 80)',
+                            'coastlinecolor': 'rgb(100, 100, 100)',
+                            'showlakes': True,
+                            'lakecolor': 'rgb(200, 220, 240)',
+                            'showrivers': True,
+                            'rivercolor': 'rgb(180, 200, 220)',
                             'center': {'lat': 39.0, 'lon': 35.0},
                             'lonaxis': {'range': [25, 45]},
-                            'lataxis': {'range': [35, 43]}
+                            'lataxis': {'range': [35, 43]},
+                            'bgcolor': 'rgb(245, 245, 245)'
                         },
                         'height': 600,
                         'margin': {"r": 0, "t": 30, "l": 0, "b": 0},
                         'title': 'City Distribution by Individual Count'
                     }
                 }),
-                'institution_count': len(df_data),
+                'institution_count': institutions_count,
+                'family_count': families_count,
+                'proband_count': probands_count,
                 'total_individuals': individuals_queryset.count(),
                 'individual_types': individual_types,
                 'applied_filters': {
