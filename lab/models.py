@@ -218,9 +218,13 @@ class SampleType(HistoryMixin, models.Model):
 
 class Institution(HistoryMixin, models.Model):
     staff = models.ManyToManyField(User, blank=True, related_name="institutions_as_staff")
-    latitude = models.FloatField(null=True, blank=True, default=0.0)
-    longitude = models.FloatField(null=True, blank=True, default=0.0)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    city = models.CharField(max_length=255, null=True, blank=True)
     name = models.CharField(max_length=255)
+    center_name = models.CharField(max_length=255, null=True, blank=True)
+    speciality = models.CharField(max_length=255, null=True, blank=True)
+    official_name = models.CharField(max_length=255, null=True, blank=True)
     contact = models.TextField(blank=True)
     notes = GenericRelation("Note")
     created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="institutions_created")
