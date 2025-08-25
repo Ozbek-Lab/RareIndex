@@ -471,6 +471,34 @@ def map_view(request):
         # Start with base queryset for individuals
         individuals_queryset = Individual.objects.all()
         
+        # Get individual type filter from POST request
+        individual_types = ['all']  # Default to all
+        if request.method == 'POST':
+            try:
+                individual_types_data = request.POST.get('individual_types', '["all"]')
+                individual_types = json.loads(individual_types_data)
+                if not individual_types or 'all' in individual_types:
+                    individual_types = ['all']
+            except (json.JSONDecodeError, TypeError):
+                individual_types = ['all']
+        
+        # Apply individual type filtering
+        if individual_types != ['all']:
+            if 'families' in individual_types:
+                # Only one individual per family - get the first one from each family
+                from django.db.models import Min
+                # Get the minimum ID from each family to ensure one per family
+                family_ids = individuals_queryset.filter(
+                    family__isnull=False
+                ).values('family').annotate(
+                    first_individual_id=Min('id')
+                ).values_list('first_individual_id', flat=True)
+                
+                individuals_queryset = individuals_queryset.filter(id__in=family_ids)
+            elif 'probands' in individual_types:
+                # Only probands selected
+                individuals_queryset = individuals_queryset.filter(is_index=True)
+        
         # Apply global filters
         active_filters = request.session.get('active_filters', {})
         if active_filters:
@@ -488,8 +516,9 @@ def map_view(request):
             if filter_conditions:
                 individuals_queryset = individuals_queryset.filter(filter_conditions)
         
-        # Get institutions with coordinates from filtered individuals
+        # Get institutions with coordinates from filtered individuals, grouped by city
         institutions_data = individuals_queryset.values(
+            'institution__city',
             'institution__name',
             'institution__latitude',
             'institution__longitude'
@@ -499,60 +528,95 @@ def map_view(request):
             institution__latitude__isnull=False,
             institution__longitude__isnull=False,
             institution__latitude__gt=0,  # Filter out invalid coordinates
-            institution__longitude__gt=0
+            institution__longitude__gt=0,
+            institution__city__isnull=False  # Ensure city exists
         ).order_by('-cnt')
         
         if not institutions_data:
             if request.htmx or request.headers.get('Accept') == 'application/json':
                 return JsonResponse({
-                    'error': 'No institutions with valid coordinates found for the filtered individuals'
+                    'error': 'No institutions with valid coordinates found for the filtered individuals',
+                    'individual_types': individual_types
                 }, status=404)
             else:
                 # For regular page requests, render the template with empty data
                 return render(request, 'lab/map.html', {
-                    'error_message': 'No institutions with valid coordinates found for the filtered individuals'
+                    'error_message': 'No institutions with valid coordinates found for the filtered individuals',
+                    'individual_types': individual_types
                 })
         
-        # Prepare data for scatter map
-        df_data = []
+        # Prepare data for scatter map - aggregate by city
+        city_data = {}
         for item in institutions_data:
-            if item['institution__name']:  # Ensure institution name exists
-                df_data.append({
-                    'name': item['institution__name'],
-                    'lat': item['institution__latitude'],
-                    'longitude': item['institution__longitude'],
-                    'cnt': item['cnt']
+            city = item['institution__city']
+            if city:  # Ensure city exists
+                if city not in city_data:
+                    city_data[city] = {
+                        'name': city,
+                        'lat': item['institution__latitude'],
+                        'long': item['institution__longitude'],
+                        'cnt': 0,
+                        'institutions': []
+                    }
+                city_data[city]['cnt'] += item['cnt']
+                city_data[city]['institutions'].append({
+                    'name': item.get('institution__name', 'Unknown'),
+                    'count': item['cnt']
                 })
+        
+        # Convert to list format for plotting
+        df_data = list(city_data.values())
         
         if not df_data:
             if request.htmx or request.headers.get('Accept') == 'application/json':
                 return JsonResponse({
-                    'error': 'No valid institution data found for mapping'
+                    'error': 'No valid institution data found for mapping',
+                    'individual_types': individual_types
                 }, status=404)
             else:
                 # For regular page requests, render the template with empty data
                 return render(request, 'lab/map.html', {
-                    'error_message': 'No valid institution data found for mapping'
+                    'error_message': 'No valid institution data found for mapping',
+                    'individual_types': individual_types
                 })
         
         # Create DataFrame-like structure for plotly
         import pandas as pd
         df = pd.DataFrame(df_data)
         
+        # Add custom hover data for institutions within each city
+        df['institution_details'] = df['institutions'].apply(
+            lambda x: '<br>'.join([f"• {inst['name']}: {inst['count']}" for inst in x])
+        )
+        
         # Create scatter map
         fig = px.scatter_map(
             df, 
             lat="lat", 
-            lon="longitude", 
-            size="cnt",
+            lon="long",
             hover_name="name",
-            hover_data=["cnt"],
+            hover_data=["cnt", "institution_details"],
             zoom=3,
-            title="Institution Distribution by Individual Count"
+            title="City Distribution by Individual Count"
         )
         
-        # Enable clustering for better visualization
-        fig.update_traces(cluster=dict(enabled=True))
+        # Enable clustering and style markers (solid color, label count inside)
+        fig.update_traces(
+            cluster=dict(enabled=True),
+            marker=dict(
+                color="#6366F1",  # solid indigo color
+                opacity=0.9,
+                showscale=False
+            ),
+            text=df["cnt"].tolist(),
+            mode="markers+text",
+            textposition="middle center",
+            textfont=dict(color="white", size=10),
+            hovertemplate="<b>%{hover_name}</b><br>" +
+                         "Total Individuals: %{customdata}<br>" +
+                         "<br><b>Institutions:</b><br>%{customdata[1]}<br>" +
+                         "<extra></extra>"
+        )
         
         # Update layout for better appearance
         fig.update_layout(
@@ -582,7 +646,13 @@ def map_view(request):
             chart_data = {
                 'chart_json': json.dumps(fig_dict),
                 'institution_count': len(df_data),
-                'total_individuals': sum(item['cnt'] for item in df_data)
+                'total_individuals': individuals_queryset.count(),
+                'individual_types': individual_types,
+                'applied_filters': {
+                    'families_only': 'families' in individual_types,
+                    'probands_only': 'probands' in individual_types,
+                    'all_types': individual_types == ['all']
+                }
             }
         except Exception as json_error:
             # Fallback: create a simpler chart structure
@@ -591,15 +661,20 @@ def map_view(request):
                     'data': [{
                         'type': 'scattergeo',
                         'lat': [float(item['lat']) for item in df_data],
-                        'lon': [float(item['longitude']) for item in df_data],
-                        'mode': 'markers',
+                        'lon': [float(item['long']) for item in df_data],
+                        'mode': 'markers+text',
                         'marker': {
-                            'size': [int(item['cnt']) for item in df_data],
-                            'color': [int(item['cnt']) for item in df_data],
-                            'colorscale': 'Viridis'
+                            'size': [20+int(item['cnt'])**0.7 for item in df_data],
+                            'color': '#6366F1',
+                            'opacity': 0.9
                         },
-                        'text': [str(item['name']) for item in df_data],
-                        'hoverinfo': 'text+marker'
+                        'text': [int(item['cnt']) for item in df_data],
+                        'textfont': {'color': 'white', 'size': 10},
+                        'textposition': 'middle center',
+                        'hoverinfo': 'text+marker',
+                        'hovertext': [f"<b>{item['name']}</b><br>Total: {item['cnt']}<br><br><b>Institutions:</b><br>" + 
+                                    '<br>'.join([f"• {inst['name']}: {inst['count']}" for inst in item['institutions']]) 
+                                    for item in df_data]
                     }],
                     'layout': {
                         'geo': {
@@ -619,11 +694,17 @@ def map_view(request):
                         },
                         'height': 600,
                         'margin': {"r": 0, "t": 30, "l": 0, "b": 0},
-                        'title': 'Institution Distribution by Individual Count'
+                        'title': 'City Distribution by Individual Count'
                     }
                 }),
                 'institution_count': len(df_data),
-                'total_individuals': sum(item['cnt'] for item in df_data)
+                'total_individuals': individuals_queryset.count(),
+                'individual_types': individual_types,
+                'applied_filters': {
+                    'families_only': 'families' in individual_types,
+                    'probands_only': 'probands' in individual_types,
+                    'all_types': individual_types == ['all']
+                }
             }
         
         # Return JSON for API calls, render template for page requests
@@ -635,9 +716,11 @@ def map_view(request):
     except Exception as e:
         if request.htmx or request.headers.get('Accept') == 'application/json':
             return JsonResponse({
-                'error': f'Error generating map: {str(e)}'
+                'error': f'Error generating map: {str(e)}',
+                'individual_types': individual_types
             }, status=500)
         else:
             return render(request, 'lab/map.html', {
-                'error_message': f'Error generating map: {str(e)}'
+                'error_message': f'Error generating map: {str(e)}',
+                'individual_types': individual_types
             })

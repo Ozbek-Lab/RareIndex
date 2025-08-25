@@ -481,22 +481,45 @@ class Command(BaseCommand):
 
         # --- XLSX Reading ---
         wb = openpyxl.load_workbook(file_path, data_only=True)
+        print("[Map Import] Opened workbook:", file_path)
+        try:
+            print("[Map Import] Sheetnames:", wb.sheetnames)
+        except Exception as _e_sn:
+            print("[Map Import] Could not list sheetnames:", _e_sn)
         # --- INSTITUTION MAP SHEET (Coordinates) ---
         coords_map = {}
         try:
             ws_map = wb['Gönderen Kurum Harita']
+            print("[Map Import] Reading sheet 'Gönderen Kurum Harita'")
             headers_map = [cell.value for cell in next(ws_map.iter_rows(min_row=1, max_row=1))]
             headers_map = [h for h in headers_map if h is not None]
+            print("[Map Import] Headers:", headers_map)
             name_key = 'Kurum'
             coord_key = 'Harita'
+            city_key = 'Şehir'
+            official_name_key = 'Resmi Ad'
+            total_rows = 0
+            empty_rows = 0
+            parsed_rows = 0
+            skipped_no_name_or_coord = 0
+            parse_errors = 0
             for row in ws_map.iter_rows(min_row=2, values_only=True):
+                total_rows += 1
                 if all(cell is None for cell in row):
+                    empty_rows += 1
                     continue
                 row = row[:len(headers_map)]
                 row_dict = dict(zip(headers_map, row))
                 raw_name = row_dict.get(name_key)
                 coord_val = row_dict.get(coord_key)
+                city_val = row_dict.get(city_key)
+                official_name_val = row_dict.get(official_name_key)
+                print("[Map Import][Row", total_rows, "] Raw:", {
+                    name_key: raw_name, coord_key: coord_val, city_key: city_val, official_name_key: official_name_val
+                })
                 if not raw_name or not coord_val:
+                    skipped_no_name_or_coord += 1
+                    print("[Map Import] -> Skipping row due to missing name or coords")
                     continue
                 # Normalize and support multiple comma-separated names similar to source sheet
                 for name in [n.strip() for n in str(raw_name).split(',') if n and str(n).strip()]:
@@ -504,13 +527,40 @@ class Command(BaseCommand):
                         lat_str, lon_str = [p.strip() for p in str(coord_val).split(',')[:2]]
                         lat_val = float(lat_str)
                         lon_val = float(lon_str)
-                        coords_map[name] = (lat_val, lon_val)
+                        if name not in coords_map:
+                            coords_map[name] = {}
+                        coords_map[name]['coords'] = (lat_val, lon_val)
+                        print(f"[Map Import] -> Parsed: name='{name}', lat={lat_val}, lon={lon_val}")
+                        parsed_rows += 1
                     except Exception:
+                        parse_errors += 1
+                        print("[Map Import] -> Parse error for:", coord_val, "(name=", name, ")")
                         continue
-            self._institution_coords = coords_map
+                    if city_val:
+                        coords_map[name]['city'] = city_val.strip()
+                        print(f"[Map Import] -> City set for '{name}':", coords_map[name]['city'])
+                    if official_name_val:
+                        coords_map[name]['official_name'] = official_name_val.strip()
+                        print(f"[Map Import] -> Official name set for '{name}':", coords_map[name]['official_name'])
+            self._institution_info = coords_map
+            # Summary
+            print("[Map Import] Summary:")
+            print("  Total rows seen:", total_rows)
+            print("  Empty rows:", empty_rows)
+            print("  Skipped (missing name/coords):", skipped_no_name_or_coord)
+            print("  Parsed rows:", parsed_rows)
+            print("  Parse errors:", parse_errors)
+            print("  Unique institutions with coords:", len(coords_map))
+            # Preview a few entries
+            try:
+                preview = dict(list(coords_map.items())[:5])
+                print("[Map Import] Preview (first 5):", preview)
+            except Exception as _e_prev:
+                print("[Map Import] Could not print preview:", _e_prev)
         except KeyError:
             # Sheet not present; proceed without coordinates
-            self._institution_coords = {}
+            self._institution_info = {}
+            print("[Map Import] ERROR: coordinates sheet 'Gönderen Kurum Harita' not found; proceeding without coordinates")
         # --- OZBEK LAB SHEET ---
         ws_lab = wb[ozbek_lab_sheet]
         headers_lab = [cell.value for cell in next(ws_lab.iter_rows(min_row=1, max_row=1))]
@@ -561,8 +611,10 @@ class Command(BaseCommand):
                 defaults={
                     'contact': '\n'.join(contacts) if contacts else '',
                     'created_by': admin_user,
-                    'latitude': self._institution_coords.get(name, (None, None))[0] if self._institution_coords.get(name) else 0.0,
-                    'longitude': self._institution_coords.get(name, (None, None))[1] if self._institution_coords.get(name) else 0.0,
+                    'latitude': self._institution_info.get(name, {}).get('coords', (None, None))[0] if self._institution_info.get(name) else 0.0,
+                    'longitude': self._institution_info.get(name, {}).get('coords', (None, None))[1] if self._institution_info.get(name) else 0.0,
+                    'city': self._institution_info.get(name, {}).get('city', ''),
+                    'official_name': self._institution_info.get(name, {}).get('official_name', ''),
                 }
             )
             if not _ and contacts:

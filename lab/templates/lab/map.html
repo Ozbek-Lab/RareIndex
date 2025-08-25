@@ -4,13 +4,7 @@
 
 {% block title %}Map - RareIndex{% endblock %}
 
-
-
-{% block main %}
-{% partial map-content %}
-{% endblock %}
-
-{% partialdef map-content inline %}
+{% block extra_head %}
 <!-- Plotly.js for map visualization -->
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <style>
@@ -69,27 +63,72 @@
         color: #6b7280;
         margin-top: 0.25rem;
     }
+    
+    .filter-controls {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e5e7eb;
+        margin-bottom: 1rem;
+    }
+    
+    .dark .filter-controls {
+        background: #1f2937;
+        border-color: #374151;
+    }
+    
+    .filter-label {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    
+    .dark .filter-label {
+        color: #d1d5db;
+    }
+    
+    .select-container {
+        min-width: 200px;
+    }
 </style>
+{% endblock %}
+
+
+
+{% block main %}
+{% partial map-content %}
+{% endblock %}
+
+{% partialdef map-content inline %}
 <div class="p-6">
-    <div class="mb-6">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            <i class="fas fa-map-marker-alt text-indigo-500 mr-3"></i>
-            Institution Map
-        </h1>
-        <p class="text-gray-600 dark:text-gray-400">
-            Visualize the geographical distribution of institutions based on your current filters.
-        </p>
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+    <!-- Map Statistics -->
+    <div class="flex gap-4 mb-4 flex-wrap" id="map-stats">
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="institution-count">-</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Cities</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="total-individuals">-</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Total Individuals</div>
+        </div>
     </div>
 
-    <!-- Map Statistics -->
-    <div class="map-stats" id="map-stats">
-        <div class="stat-card">
-            <div class="stat-value" id="institution-count">-</div>
-            <div class="stat-label">Institutions</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" id="total-individuals">-</div>
-            <div class="stat-label">Total Individuals</div>
+    <!-- Filter Controls -->
+    <div class="filter-controls">
+        <label class="filter-label">Individual Type Filter:</label>
+        <div class="select-container" x-data="individualTypeSelect()">
+            <select 
+                x-model="selectedValue" 
+                @change="updateSelection()"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+            >
+                <option value="all">All Individuals</option>
+                <option value="families">One Individual Per Family</option>
+                <option value="probands">Probands Only</option>
+            </select>
         </div>
     </div>
 
@@ -100,9 +139,13 @@
                 Institution Distribution
             </h2>
             <p class="text-sm text-gray-600 dark:text-gray-400">
-                This map shows institutions where your filtered individuals are located. 
-                The size of each marker represents the number of individuals at that institution.
+                This map shows cities where your filtered individuals are located, with institutions clustered by city. 
+                The size of each marker represents the total number of individuals in that city.
             </p>
+            <div class="mt-2 text-sm text-gray-500 dark:text-gray-400" id="filter-status">
+                <i class="fas fa-filter mr-1"></i>
+                <span id="filter-text">Showing all individuals</span>
+            </div>
         </div>
         
         {% if error_message %}
@@ -149,6 +192,20 @@
 </div>
 
 <script>
+    // Alpine.js component for individual type select
+    function individualTypeSelect() {
+        return {
+            selectedValue: 'all',
+            
+            updateSelection() {
+                // Reload map with new selection
+                this.$nextTick(() => {
+                    loadMap();
+                });
+            }
+        }
+    }
+    
     // Load map data when page loads
     document.addEventListener('DOMContentLoaded', function() {
         loadMap();
@@ -161,17 +218,34 @@
         const mapContainer = document.getElementById('map-container');
         const statsContainer = document.getElementById('map-stats');
         
+        // Get the current selection from Alpine.js
+        const selectContainer = document.querySelector('[x-data="individualTypeSelect()"]');
+        let selectedType = 'all';
+        if (selectContainer && selectContainer._x_dataStack) {
+            const alpineData = selectContainer._x_dataStack[0];
+            if (alpineData && alpineData.selectedValue) {
+                selectedType = alpineData.selectedValue;
+            }
+        }
+        
         // Show loading state
         loadingEl.classList.remove('hidden');
         errorEl.classList.add('hidden');
         mapContainer.classList.add('hidden');
         statsContainer.classList.add('hidden');
         
-        // Fetch map data
+        // Prepare request data
+        const requestData = new FormData();
+        requestData.append('individual_types', JSON.stringify([selectedType]));
+        
+        // Fetch map data with POST request to include the selection
         fetch('{% url "lab:map" %}', {
+            method: 'POST',
+            body: requestData,
             headers: {
                 'Accept': 'application/json',
-                'HX-Request': 'true'
+                'HX-Request': 'true',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
             }
         })
             .then(response => {
@@ -193,6 +267,22 @@
                 // Update statistics
                 document.getElementById('institution-count').textContent = data.institution_count;
                 document.getElementById('total-individuals').textContent = data.total_individuals;
+                
+                // Update filter status display
+                if (data.individual_types) {
+                    const filterText = document.getElementById('filter-text');
+                    if (filterText) {
+                        if (data.applied_filters.all_types) {
+                            filterText.textContent = 'Showing all individuals';
+                        } else if (data.applied_filters.families_only) {
+                            filterText.textContent = 'Showing one individual per family';
+                        } else if (data.applied_filters.probands_only) {
+                            filterText.textContent = 'Showing probands only';
+                        } else {
+                            filterText.textContent = 'Showing filtered individuals';
+                        }
+                    }
+                }
                 
                 // Render the map
                 const chartData = JSON.parse(data.chart_json);
