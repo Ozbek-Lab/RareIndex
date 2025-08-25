@@ -39,7 +39,11 @@
       <i
         class="fa-solid fa-building-columns mr-1 text-gray-900 dark:text-gray-100"
       ></i>
-      {{ item.institution }}
+      {% with institutions=item.institution.all %}
+      {% if institutions %}
+        {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+      {% endwith %}
     </span>
 
     <div
@@ -127,7 +131,11 @@
             class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"
           ></i>
           <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
-            {{ item.institution }}
+            {% with institutions=item.institution.all %}
+            {% if institutions %}
+              {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% else %}-{% endif %}
+            {% endwith %}
           </span>
         </div>
       </div>
@@ -197,7 +205,11 @@
     {% endif %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {{ item.institution.name|default:"-" }}
+    {% with institutions=item.institution.all %}
+    {% if institutions %}
+      {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    {% else %}-{% endif %}
+    {% endwith %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     {{ item.icd11_code|default:"-" }}
