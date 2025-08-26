@@ -173,6 +173,50 @@ class Command(BaseCommand):
 
 
 
+    def _parse_and_add_notes(self, note_text, target_obj, admin_user):
+        """Parse newline-separated notes and add as separate Note objects.
+
+        - Each non-empty line becomes a separate Note with full line as content
+        - If a line begins with a date in format DD.MM.YYYY, set the earliest
+          history record's history_date for that note to this date (midnight)
+        """
+        if not note_text:
+            return
+        # Ensure we have a content type for the target object
+        try:
+            ct = ContentType.objects.get_for_model(target_obj)
+        except Exception:
+            return
+
+        lines = str(note_text).splitlines()
+        for raw_line in lines:
+            line = (raw_line or '').strip()
+            if not line:
+                continue
+            # Create the note with the full line content
+            try:
+                note = Note.objects.create(
+                    content=line,
+                    user=admin_user,
+                    content_type=ct,
+                    object_id=getattr(target_obj, 'pk', None) or getattr(target_obj, 'id', None),
+                )
+            except Exception:
+                continue
+
+            # If line starts with a date, set the note's earliest history_date
+            m = re.match(r'^(\d{2}\.\d{2}\.\d{4})', line)
+            if m:
+                try:
+                    dt = datetime.strptime(m.group(1), '%d.%m.%Y')
+                    first_hist = note.history.earliest()
+                    if first_hist:
+                        first_hist.history_date = dt
+                        first_hist.save()
+                except Exception:
+                    # If anything goes wrong, skip adjusting history date
+                    pass
+
     def analysis_add_arguments(self, parser):
         parser.add_argument('file_path', type=str, help='Path to the TSV file')
         parser.add_argument(
@@ -696,6 +740,15 @@ class Command(BaseCommand):
                         individual.is_index = is_index
                         individual.save()
                     self.stdout.write(f'Individual already exists: {self._get_initials(full_name)}')
+                # Add individual-level notes (Kurum Notları)
+                kurum_notes = row_dict.get('Kurum Notları')
+                if kurum_notes:
+                    self._parse_and_add_notes(kurum_notes, individual, admin_user)
+                # Add individual-level follow-up notes (Takip Notları)
+                takip_notes = row_dict.get('Takip Notları')
+                if takip_notes:
+                    self._parse_and_add_notes(takip_notes, individual, admin_user)
+                    print(f'Added takip notes {takip_notes} to {individual}')
                 # CrossIdentifiers
                 rareboost_id = row_dict.get('Özbek Lab. ID')
                 if rareboost_id:
@@ -802,6 +855,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'Added {len(hpo_terms)} HPO terms to {self._get_initials(individual.full_name)}'))
             self.stdout.write(self.style.SUCCESS(f"Updated individual: {self._get_initials(individual.full_name)}"))
             sample_types = [s.strip() for s in (row_dict.get('Örnek Tipi') or '').split(',')]
+            samples_touched = []
             for sample_type_name in sample_types:
                 if not sample_type_name:
                     continue
@@ -831,6 +885,7 @@ class Command(BaseCommand):
                         existing_sample.status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample'))
                     existing_sample.save()
                     self.stdout.write(self.style.SUCCESS(f'Updated existing sample: {existing_sample}'))
+                    samples_touched.append(existing_sample)
                 else:
                     initial_status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample')) if self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl')) else Status.objects.get(name='Pending Blood Recovery', content_type=ContentType.objects.get(app_label='lab', model='sample'))
                     sample = Sample.objects.create(
@@ -842,6 +897,13 @@ class Command(BaseCommand):
                         created_by=admin_user,
                     )
                     self.stdout.write(self.style.SUCCESS(f'Created new sample: {sample}'))
+                    samples_touched.append(sample)
+            # After touching samples for this row, add sample-level notes to all
+            sample_notes = row_dict.get('Örnek Notları')
+            if sample_notes and samples_touched:
+                for s in samples_touched:
+                    self._parse_and_add_notes(sample_notes, s, admin_user)
+                    print(f'Added sample notes {sample_notes} to {s}')
         self.stdout.write(self.style.WARNING(f'Leftover Rows: {len(leftover_rows)}'))
         if leftover_rows:
             with open(leftovers_path, 'w', encoding='utf-8', newline='') as f:
@@ -866,6 +928,9 @@ class Command(BaseCommand):
         test_types = {}
         leftover_rows = []
         leftovers_path = os.path.join(os.path.dirname(file_path), 'import_analiz_takip_leftovers.tsv')
+
+        # Track tests touched per individual (by lab_id) in this section to apply notes
+        tests_touched_by_lab_id = {}
 
         for row in ws_analiz.iter_rows(min_row=2, values_only=True):
             # Skip rows where all values are None (empty rows at the end)
@@ -912,6 +977,8 @@ class Command(BaseCommand):
                 sample=sample,
                 created_by=admin_user
             )
+            # Track touched/created test for this individual's lab id
+            tests_touched_by_lab_id.setdefault(lab_id, []).append(test)
             data_upload_date = self._parse_date(row_dict.get('Data yüklenme tarihi/emre'))
             if data_upload_date:
                 analysis = Analysis.objects.create(
@@ -922,6 +989,11 @@ class Command(BaseCommand):
                     test=test,
                     created_by=admin_user
                 )
+            # Add Test Notları for all tests touched for this individual
+            test_notes = row_dict.get('Test Notları')
+            if test_notes and tests_touched_by_lab_id.get(lab_id):
+                for t in tests_touched_by_lab_id.get(lab_id, []):
+                    self._parse_and_add_notes(test_notes, t, admin_user)
         if leftover_rows:
             with open(leftovers_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=headers_analiz, delimiter='\t')
