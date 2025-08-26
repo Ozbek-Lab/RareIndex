@@ -589,8 +589,9 @@
               Analysis Notes
             </h4>
             {% if item.samples.exists %}
+              {% load lab_filters %}
               {% for sample in item.samples.all %}
-                {% if sample.tests.exists %}
+                {% if sample|has_analyses %}
                   <div class="mb-4">
                     <div class="text-sm text-gray-700 dark:text-gray-300 mb-1 font-medium">
                       {{ sample }}
