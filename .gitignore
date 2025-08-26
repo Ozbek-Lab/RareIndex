@@ -41,6 +41,8 @@ staticfiles/
 # Data
 *.json
 *.xlsx
+*.tsv
+*.csv
 
 # User-specific files
 create_ozbek_users.py
