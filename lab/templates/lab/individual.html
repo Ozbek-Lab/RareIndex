@@ -126,17 +126,21 @@
 
     <div class="flex justify-between">
       <div class="mb-2 p-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-        <div class="flex items-center">
-          <i
-            class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"
-          ></i>
-          <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
-            {% with institutions=item.institution.all %}
-            {% if institutions %}
-              {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            {% else %}-{% endif %}
-            {% endwith %}
-          </span>
+        <div class="flex flex-col space-y-1">
+          {% with institutions=item.institution.all %}
+          {% if institutions %}
+            {% for inst in institutions %}
+              <div class="flex items-center">
+                <i
+                  class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"
+                ></i>
+                <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
+                  {{ inst.name }}
+                </span>
+              </div>
+            {% endfor %}
+          {% else %}-{% endif %}
+          {% endwith %}
         </div>
       </div>
 
