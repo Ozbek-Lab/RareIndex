@@ -1918,3 +1918,8 @@ def family_create_segway(request):
 
 def plots(request):
     return render(request, "lab/visualization/plots.html")
+
+
+def map_page(request):
+    """Render the map page template."""
+    return render(request, "lab/map.html")

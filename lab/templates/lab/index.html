@@ -942,6 +942,9 @@
             {% partial plots-section %}
           {% endwith %}
         </div>
+        <div x-show="activeItem === 'map'" id="map-content">
+          {% include "lab/map.html#map-content" %}
+        </div>
         <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
           <!-- Natural language search content will be loaded here via HTMX -->
         </div>
@@ -1067,6 +1070,14 @@
             htmx.ajax('GET', '{% url "lab:plots" %}', '#plots-content').then(() => {
             // Content loaded successfully
             });
+            return;
+          }
+          
+          // Handle map navigation
+          if (pageName === 'map') {
+            this.activeItem = 'map';
+            this.detailHtml = null;
+            this.updateURL();
             return;
           }
           
@@ -1849,6 +1860,8 @@
     </div>
   </div>
 {% endpartialdef %}
+
+
 
 {% if initial_detail_html %}
 <script>
