@@ -138,3 +138,13 @@ def plotly_safe(value):
     json_str = re.sub(r'\bFalse\b', 'false', json_str)
     
     return json_str
+
+
+@register.filter
+def has_analyses(sample):
+    """Return True if any test on the sample has at least one analysis."""
+    try:
+        # Efficient existence check through reverse relation
+        return sample.tests.filter(analyses__isnull=False).exists()
+    except Exception:
+        return False
