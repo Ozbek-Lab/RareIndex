@@ -215,6 +215,28 @@
     {% else %}-{% endif %}
     {% endwith %}
   </td>
+  {% load lab_filters %}
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with samples=item.samples.all %}
+      {% if samples %}
+        {% for sample in samples %}{{ sample.sample_type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with tests=item|get_all_tests %}
+      {% if tests %}
+        {% for test in tests %}{{ test.test_type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with analyses=item|get_all_analyses %}
+      {% if analyses %}
+        {% for analysis in analyses %}{{ analysis.type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
+  </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     {{ item.icd11_code|default:"-" }}
   </td>
@@ -251,7 +273,17 @@
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            ICD-11 Code
+            Samples
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Tests
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Analyses
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
