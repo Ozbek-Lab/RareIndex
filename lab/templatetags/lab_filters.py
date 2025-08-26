@@ -26,11 +26,28 @@ def count_by_type(samples, type_name):
 @register.filter
 def get_all_tests(individual):
     """Get all unique tests associated with an individual's samples"""
-    unique_tests = set()
+    unique_tests = []
+    seen_ids = set()
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            unique_tests.add(test)
+            if test.id not in seen_ids:
+                unique_tests.append(test)
+                seen_ids.add(test.id)
     return unique_tests
+
+
+@register.filter
+def get_all_analyses(individual):
+    """Get all unique analyses associated with an individual's tests"""
+    unique_analyses = []
+    seen_ids = set()
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                if analysis.id not in seen_ids:
+                    unique_analyses.append(analysis)
+                    seen_ids.add(analysis.id)
+    return unique_analyses
 
 
 @register.filter
