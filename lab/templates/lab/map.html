@@ -1,0 +1,330 @@
+{% extends "lab/base.html" %}
+{% load static %}
+{% load partials %}
+
+{% block title %}Map - RareIndex{% endblock %}
+
+{% block extra_head %}
+<!-- Plotly.js for map visualization -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+    .map-container {
+        height: 800px;
+        width: 100%;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .map-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 800px;
+        background: #f8fafc;
+        border-radius: 8px;
+    }
+    
+    .map-error {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 800px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        color: #dc2626;
+    }
+    
+    .map-stats {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .stat-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e5e7eb;
+        min-width: 150px;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #1f2937;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+    }
+    
+    .filter-controls {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e5e7eb;
+        margin-bottom: 1rem;
+    }
+    
+    .dark .filter-controls {
+        background: #1f2937;
+        border-color: #374151;
+    }
+    
+    .filter-label {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    
+    .dark .filter-label {
+        color: #d1d5db;
+    }
+    
+    .select-container {
+        min-width: 200px;
+    }
+</style>
+{% endblock %}
+
+
+
+{% block main %}
+{% partial map-content %}
+{% endblock %}
+
+{% partialdef map-content inline %}
+<div class="p-6">
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+    <!-- Map Statistics -->
+    <div class="flex gap-4 mb-4 flex-wrap" id="map-stats">
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="institution-count">-</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Institutions</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="family-count">-</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Families</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="proband-count">-</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Probands</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="total-individuals">-</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Total Individuals</div>
+        </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="filter-controls">
+        <label class="filter-label">Individual Type Filter:</label>
+        <div class="select-container" x-data="individualTypeSelect()">
+            <select 
+                x-model="selectedValue" 
+                @change="updateSelection()"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+            >
+                <option value="all">All Individuals</option>
+                <option value="families">One Individual Per Family</option>
+                <option value="probands">Probands Only</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Map Container -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div class="mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                Institution Distribution
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                This map shows institutions where your filtered individuals are located. 
+                Plotly automatically clusters nearby institutions for better visualization.
+            </p>
+            <div class="mt-2 text-sm text-gray-500 dark:text-gray-400" id="filter-status">
+                <i class="fas fa-filter mr-1"></i>
+                <span id="filter-text">Showing all individuals</span>
+            </div>
+        </div>
+        
+        {% if error_message %}
+        <!-- Error State -->
+        <div class="map-error">
+            <div class="text-center">
+                <i class="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
+                <p>{{ error_message }}</p>
+                <button 
+                    class="mt-3 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                    onclick="loadMap()"
+                >
+                    <i class="fas fa-redo mr-2"></i>Retry
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <!-- Map Loading State -->
+        <div class="map-loading" id="map-loading">
+            <div class="text-center">
+                <i class="fas fa-spinner fa-spin text-3xl text-indigo-500 mb-3"></i>
+                <p class="text-gray-600 dark:text-gray-400">Loading map data...</p>
+            </div>
+        </div>
+        
+        <!-- Map Error State -->
+        <div class="map-error hidden" id="map-error">
+            <div class="text-center">
+                <i class="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
+                <p id="error-message">Error loading map data</p>
+                <button 
+                    class="mt-3 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                    onclick="loadMap()"
+                >
+                    <i class="fas fa-redo mr-2"></i>Retry
+                </button>
+            </div>
+        </div>
+        
+        <!-- Map Visualization -->
+        <div class="map-container hidden" id="map-container"></div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // Alpine.js component for individual type select
+    function individualTypeSelect() {
+        return {
+            selectedValue: 'all',
+            
+            updateSelection() {
+                // Reload map with new selection
+                this.$nextTick(() => {
+                    loadMap();
+                });
+            }
+        }
+    }
+    
+    // Load map data when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        loadMap();
+    });
+    
+    // Function to load map data
+    function loadMap() {
+        const loadingEl = document.getElementById('map-loading');
+        const errorEl = document.getElementById('map-error');
+        const mapContainer = document.getElementById('map-container');
+        const statsContainer = document.getElementById('map-stats');
+        
+        // Get the current selection from Alpine.js
+        const selectContainer = document.querySelector('[x-data="individualTypeSelect()"]');
+        let selectedType = 'all';
+        if (selectContainer && selectContainer._x_dataStack) {
+            const alpineData = selectContainer._x_dataStack[0];
+            if (alpineData && alpineData.selectedValue) {
+                selectedType = alpineData.selectedValue;
+            }
+        }
+        
+        // Show loading state
+        loadingEl.classList.remove('hidden');
+        errorEl.classList.add('hidden');
+        mapContainer.classList.add('hidden');
+        statsContainer.classList.add('hidden');
+        
+        // Prepare request data
+        const requestData = new FormData();
+        requestData.append('individual_types', JSON.stringify([selectedType]));
+        
+        // Fetch map data with POST request to include the selection
+        fetch('{% url "lab:map" %}', {
+            method: 'POST',
+            body: requestData,
+            headers: {
+                'Accept': 'application/json',
+                'HX-Request': 'true',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+            }
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load map data');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Hide loading, show map
+                loadingEl.classList.add('hidden');
+                mapContainer.classList.remove('hidden');
+                statsContainer.classList.remove('hidden');
+                
+                // Update statistics
+                if (data.institution_count !== undefined) {
+                    document.getElementById('institution-count').textContent = data.institution_count;
+                }
+                if (data.family_count !== undefined) {
+                    document.getElementById('family-count').textContent = data.family_count;
+                }
+                if (data.proband_count !== undefined) {
+                    document.getElementById('proband-count').textContent = data.proband_count;
+                }
+                document.getElementById('total-individuals').textContent = data.total_individuals;
+                
+                // Update filter status display
+                if (data.individual_types) {
+                    const filterText = document.getElementById('filter-text');
+                    if (filterText) {
+                        if (data.applied_filters.all_types) {
+                            filterText.textContent = 'Showing all individuals';
+                        } else if (data.applied_filters.families_only) {
+                            filterText.textContent = 'Showing one individual per family';
+                        } else if (data.applied_filters.probands_only) {
+                            filterText.textContent = 'Showing probands only';
+                        } else {
+                            filterText.textContent = 'Showing filtered individuals';
+                        }
+                    }
+                }
+                
+                // Render the map
+                const chartData = JSON.parse(data.chart_json);
+                Plotly.newPlot('map-container', chartData.data, chartData.layout, {
+                    responsive: true,
+                    displayModeBar: true,
+                    scrollZoom: true,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d']
+                });
+            })
+            .catch(error => {
+                console.error('Error loading map:', error);
+                
+                // Hide loading, show error
+                loadingEl.classList.add('hidden');
+                errorEl.classList.remove('hidden');
+                document.getElementById('error-message').textContent = error.message || 'Failed to load map data';
+            });
+    }
+    
+    // Listen for filter updates to refresh map
+    document.addEventListener('htmx:afterRequest', function(event) {
+        if (event.detail.xhr.getResponseHeader('HX-Trigger') && 
+            event.detail.xhr.getResponseHeader('HX-Trigger').includes('filters-updated')) {
+            loadMap();
+        }
+    });
+</script>
+{% endpartialdef %}

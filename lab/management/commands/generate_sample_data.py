@@ -317,9 +317,11 @@ class Command(BaseCommand):
             father=father,
             created_by=user,
             status=status,
-            institution=institution,
             is_index=is_index
         )
+        # Set ManyToMany relations after creation
+        if institution is not None:
+            individual.institution.set([institution])
         # Add random HPO terms (5-20 terms per individual)
         num_terms = random.randint(5, 20)
         selected_terms = random.sample(hpo_terms, min(num_terms, len(hpo_terms)))
