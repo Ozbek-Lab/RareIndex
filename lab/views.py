@@ -645,8 +645,8 @@ def note_create(request):
             object_id=object_id,
         )
 
-        # Return the updated list
-        return TemplateResponse(
+        # Return the updated list and trigger a note count update event
+        response = TemplateResponse(
             request,
             "lab/note.html#list",
             {
@@ -655,6 +655,11 @@ def note_create(request):
                 "user": request.user,
             },
         )
+        try:
+            response["HX-Trigger"] = f"noteCountUpdate-{content_type_str}-{object_id}"
+        except Exception:
+            pass
+        return response
 
     # For GET requests, return the form
     content_type_str = request.GET.get("content_type")
