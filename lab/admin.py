@@ -19,10 +19,10 @@ class IndividualProjectsInline(admin.TabularInline):
 
 @admin.register(models.Note)
 class NoteAdmin(admin.ModelAdmin):
-    list_display = ["content_object", "user", "get_created_at", "get_updated_at"]
-    list_filter = ["user", "content_type"]
+    list_display = ["content_object", "user", "private_owner", "get_created_at", "get_updated_at"]
+    list_filter = ["user", "private_owner", "content_type"]
     search_fields = ["content"]
-    autocomplete_fields = ["user"]
+    autocomplete_fields = ["user", "private_owner"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
