@@ -1,4 +1,5 @@
 from django import template
+from django.db.models import Q
 
 register = template.Library()
 
@@ -141,6 +142,39 @@ def js_bool(value):
     return value
 
 
+@register.filter
+def visible_to(notes_manager, user):
+    """Filter notes to those visible to the given user (public or owned)."""
+    if notes_manager is None:
+        return []
+    if hasattr(notes_manager, 'all'):
+        qs = notes_manager.all()
+        try:
+            return qs.filter(Q(private_owner__isnull=True) | Q(private_owner=user))
+        except Exception:
+            pass
+    result = []
+    for n in notes_manager:
+        try:
+            if getattr(n, 'private_owner_id', None) is None or (user and getattr(n, 'private_owner_id', None) == getattr(user, 'id', None)):
+                result.append(n)
+        except Exception:
+            continue
+    return result
+
+
+@register.filter
+def visible_count(notes_manager, user):
+    """Count of notes visible to the given user."""
+    if notes_manager is None:
+        return 0
+    if hasattr(notes_manager, 'all'):
+        qs = notes_manager.all()
+        try:
+            return qs.filter(Q(private_owner__isnull=True) | Q(private_owner=user)).count()
+        except Exception:
+            pass
+    return len(visible_to(notes_manager, user))
 @register.filter
 def plotly_safe(value):
     """Convert Plotly figure data to JavaScript-safe format"""
