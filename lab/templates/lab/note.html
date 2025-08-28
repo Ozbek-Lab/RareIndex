@@ -1,13 +1,16 @@
 {% load partials %}
+{% load lab_filters %}
 
 {% partialdef list %}
   <div class="notes-list space-y-1.5" 
        @submit-note-edit.window="
          $el.querySelector(`[data-note-id='${$event.detail.noteId}']`).dispatchEvent(new CustomEvent('submit-note-edit', { detail: $event.detail }));
-       ">
+       "
+       hx-on:htmx:afterSwap="document.body.dispatchEvent(new CustomEvent('noteCountUpdate-{{ content_type }}-{{ object.id }}'))"
+       >
     {% if object.notes.all %}
-      {% for note in object.notes.all %}
-        <article class="bg-white dark:bg-gray-800 shadow-sm text-xs leading-snug border border-gray-200 dark:border-gray-700 rounded" 
+      {% for note in object.notes|visible_to:user %}
+        <article class="bg-white dark:bg-gray-800 shadow-sm text-xs leading-snug border border-gray-200 dark:border-gray-700 rounded {% if note.private_owner %}bg-gray-50 dark:bg-gray-700{% endif %}" 
                  x-data="{ editing: false, content: '{{ note.content|escapejs }}' }"
                  data-note-id="{{ note.id }}"
                  @submit-note-edit="
@@ -68,7 +71,14 @@
               </div>
             {% endif %}
           </div>
-          <div x-show="!editing" class="px-2 py-1 text-gray-700 dark:text-gray-300">{{ note.content }}</div>
+          <div x-show="!editing" class="px-2 py-1 text-gray-700 dark:text-gray-300">
+            {% if note.private_owner %}
+              <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 mr-1">
+                <i class="fa-solid fa-lock text-[10px]"></i> Private
+              </span>
+            {% endif %}
+            {{ note.content }}
+          </div>
           <div x-show="editing" class="px-2 py-1">
             <textarea
               x-ref="editTextarea"
@@ -110,6 +120,10 @@
             placeholder="Add a note..."
             required
           ></textarea>
+          <label class="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+            <input type="checkbox" name="private" class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
+            Private
+          </label>
           <button
             type="submit"
             @click="$event.stopPropagation()"
@@ -132,12 +146,13 @@
   hx-swap="outerHTML"
   hx-vals='{"object_id": "{{ object.id }}", "content_type": "{{ content_type }}"}'
 >
-  {% with note_count=object.notes.count %}
+  {% with note_count=object.notes|visible_count:user %}
     {% if note_count == 0 %}
       <div class="text-gray-400 dark:text-gray-500">
         <i class="fa-solid fa-note-sticky"></i>
       </div>
       <span class="text-gray-500 dark:text-gray-400">No notes</span>
+      <span data-note-count class="hidden">0</span>
     {% else %}
       <div class="text-blue-500 dark:text-blue-400">
         <i class="fa-solid fa-note-sticky"></i>
@@ -145,6 +160,7 @@
       <span class="font-medium text-gray-700 dark:text-gray-300"
         >{{ note_count }} Note{% if note_count != 1 %}s{% endif %}</span
       >
+      <span data-note-count class="hidden">{{ note_count }}</span>
     {% endif %}
   {% endwith %}
 </div>
