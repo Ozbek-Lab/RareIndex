@@ -1,4 +1,5 @@
 from django import template
+from django.db.models import Q
 
 register = template.Library()
 
@@ -26,11 +27,28 @@ def count_by_type(samples, type_name):
 @register.filter
 def get_all_tests(individual):
     """Get all unique tests associated with an individual's samples"""
-    unique_tests = set()
+    unique_tests = []
+    seen_ids = set()
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            unique_tests.add(test)
+            if test.id not in seen_ids:
+                unique_tests.append(test)
+                seen_ids.add(test.id)
     return unique_tests
+
+
+@register.filter
+def get_all_analyses(individual):
+    """Get all unique analyses associated with an individual's tests"""
+    unique_analyses = []
+    seen_ids = set()
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for analysis in test.analyses.all():
+                if analysis.id not in seen_ids:
+                    unique_analyses.append(analysis)
+                    seen_ids.add(analysis.id)
+    return unique_analyses
 
 
 @register.filter
@@ -125,6 +143,39 @@ def js_bool(value):
 
 
 @register.filter
+def visible_to(notes_manager, user):
+    """Filter notes to those visible to the given user (public or owned)."""
+    if notes_manager is None:
+        return []
+    if hasattr(notes_manager, 'all'):
+        qs = notes_manager.all()
+        try:
+            return qs.filter(Q(private_owner__isnull=True) | Q(private_owner=user))
+        except Exception:
+            pass
+    result = []
+    for n in notes_manager:
+        try:
+            if getattr(n, 'private_owner_id', None) is None or (user and getattr(n, 'private_owner_id', None) == getattr(user, 'id', None)):
+                result.append(n)
+        except Exception:
+            continue
+    return result
+
+
+@register.filter
+def visible_count(notes_manager, user):
+    """Count of notes visible to the given user."""
+    if notes_manager is None:
+        return 0
+    if hasattr(notes_manager, 'all'):
+        qs = notes_manager.all()
+        try:
+            return qs.filter(Q(private_owner__isnull=True) | Q(private_owner=user)).count()
+        except Exception:
+            pass
+    return len(visible_to(notes_manager, user))
+@register.filter
 def plotly_safe(value):
     """Convert Plotly figure data to JavaScript-safe format"""
     import json
@@ -138,3 +189,13 @@ def plotly_safe(value):
     json_str = re.sub(r'\bFalse\b', 'false', json_str)
     
     return json_str
+
+
+@register.filter
+def has_analyses(sample):
+    """Return True if any test on the sample has at least one analysis."""
+    try:
+        # Efficient existence check through reverse relation
+        return sample.tests.filter(analyses__isnull=False).exists()
+    except Exception:
+        return False

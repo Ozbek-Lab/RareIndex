@@ -21,54 +21,64 @@ from django.contrib.contenttypes.models import ContentType
 
 class BaseForm(forms.ModelForm):
     """Base form class with consistent styling for all form fields"""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Apply consistent styling to all fields
         for field_name, field in self.fields.items():
             if isinstance(field.widget, forms.TextInput):
-                field.widget.attrs.update({
-                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200'
-                })
+                field.widget.attrs.update(
+                    {
+                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+                    }
+                )
             elif isinstance(field.widget, forms.Textarea):
-                field.widget.attrs.update({
-                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical min-h-[80px]'
-                })
+                field.widget.attrs.update(
+                    {
+                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical min-h-[80px]"
+                    }
+                )
             elif isinstance(field.widget, forms.Select):
-                field.widget.attrs.update({
-                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10'
-                })
+                field.widget.attrs.update(
+                    {
+                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+                    }
+                )
             elif isinstance(field.widget, forms.DateInput):
-                field.widget.attrs.update({
-                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200'
-                })
+                field.widget.attrs.update(
+                    {
+                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+                    }
+                )
             elif isinstance(field.widget, forms.NumberInput):
-                field.widget.attrs.update({
-                    'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200'
-                })
-    
+                field.widget.attrs.update(
+                    {
+                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+                    }
+                )
+
     def save(self, commit=True, **kwargs):
         """Override save to handle created_by field automatically"""
         obj = super().save(commit=False)
-        
+
         # Set created_by if the model has this field and it's not already set
-        if hasattr(obj, 'created_by') and not getattr(obj, 'created_by_id', None):
+        if hasattr(obj, "created_by") and not getattr(obj, "created_by_id", None):
             # Get the user from kwargs or try to get it from the request
-            user = kwargs.get('user')
+            user = kwargs.get("user")
             if user:
                 obj.created_by = user
-        
+
         if commit:
             obj.save()
             self.save_m2m()
-        
+
         return obj
 
 
 class ProjectForm(BaseForm):
     class Meta:
         model = Project
-        fields = ["name", "description", "due_date", "priority"]
+        fields = ["name", "description", "due_date", "priority", "status"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 3}),
@@ -123,13 +133,15 @@ class IndividualForm(BaseForm):
             "council_date": forms.DateInput(attrs={"type": "date"}),
             "diagnosis_date": forms.DateInput(attrs={"type": "date"}),
             "hpo_terms": forms.SelectMultiple(attrs={"class": "form-select"}),
-            "tc_identity": forms.NumberInput(attrs={
-                "type": "number",
-                "min": "10000000000",
-                "max": "99999999999",
-                "step": "1",
-                "placeholder": "Enter TC identity (11 digits)"
-            }),
+            "tc_identity": forms.NumberInput(
+                attrs={
+                    "type": "number",
+                    "min": "10000000000",
+                    "max": "99999999999",
+                    "step": "1",
+                    "placeholder": "Enter TC identity (11 digits)",
+                }
+            ),
         }
 
 
@@ -198,6 +210,7 @@ class TestForm(BaseForm):
             "test_type",
             "performed_date",
             "performed_by",
+            "status",
             "service_send_date",
             "data_receipt_date",
             "sample",
@@ -263,23 +276,34 @@ class FamilyForm(BaseForm):
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Create choices for existing families plus option for new family
         from .models import Family
-        existing_families = Family.objects.all().order_by('family_id')
-        choices = [('', '-- Select existing family or type new ID --')]
-        choices.extend([(family.family_id, f"{family.family_id} ({family.individuals.count()} members)") for family in existing_families])
-        
+
+        existing_families = Family.objects.all().order_by("family_id")
+        choices = [("", "-- Select existing family or type new ID --")]
+        choices.extend(
+            [
+                (
+                    family.family_id,
+                    f"{family.family_id} ({family.individuals.count()} members)",
+                )
+                for family in existing_families
+            ]
+        )
+
         # Replace the family_id field with a choice field
-        self.fields['family_id'] = forms.ChoiceField(
+        self.fields["family_id"] = forms.ChoiceField(
             choices=choices,
             required=True,
-            widget=forms.Select(attrs={
-                'class': 'w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10',
-                'data-family-select': 'true'
-            })
+            widget=forms.Select(
+                attrs={
+                    "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10",
+                    "data-family-select": "true",
+                }
+            ),
         )
 
 
@@ -294,32 +318,34 @@ class StatusForm(BaseForm):
         ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
-            "color": forms.Select(choices=[
-                ("gray", "Gray"),
-                ("red", "Red"),
-                ("yellow", "Yellow"),
-                ("green", "Green"),
-                ("blue", "Blue"),
-                ("indigo", "Indigo"),
-                ("purple", "Purple"),
-                ("pink", "Pink"),
-            ]),
+            "color": forms.Select(
+                choices=[
+                    ("gray", "Gray"),
+                    ("red", "Red"),
+                    ("yellow", "Yellow"),
+                    ("green", "Green"),
+                    ("blue", "Blue"),
+                    ("indigo", "Indigo"),
+                    ("purple", "Purple"),
+                    ("pink", "Pink"),
+                ]
+            ),
         }
 
 
 # Forms mapping for generic views
 FORMS_MAPPING = {
-    'Individual': IndividualForm,
-    'Sample': SampleForm,
-    'Test': TestForm,
-    'Analysis': AnalysisForm,
-    'Note': NoteForm,
-    'Task': TaskForm,
-    'Project': ProjectForm,
-    'TestType': TestTypeForm,
-    'SampleType': SampleTypeForm,
-    'AnalysisType': AnalysisTypeForm,
-    'Institution': InstitutionForm,
-    'Family': FamilyForm,
-    'Status': StatusForm,
+    "Individual": IndividualForm,
+    "Sample": SampleForm,
+    "Test": TestForm,
+    "Analysis": AnalysisForm,
+    "Note": NoteForm,
+    "Task": TaskForm,
+    "Project": ProjectForm,
+    "TestType": TestTypeForm,
+    "SampleType": SampleTypeForm,
+    "AnalysisType": AnalysisTypeForm,
+    "Institution": InstitutionForm,
+    "Family": FamilyForm,
+    "Status": StatusForm,
 }
