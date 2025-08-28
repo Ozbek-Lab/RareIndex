@@ -1,3 +1,4 @@
+{% load lab_filters %}
 {% partialdef compact-card %}
   <div
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-1 mb-2"
@@ -126,13 +127,18 @@
         </h4>
         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
           <ul class="space-y-2">
-            {% for note in item.notes.all %}
+            {% for note in item.notes|visible_to:user %}
               <li
                 class="text-sm text-gray-600 dark:text-gray-400 flex items-start"
               >
                 <i
                   class="fa-solid fa-circle text-xs mt-1 mr-2 text-gray-400"
                 ></i>
+                {% if note.private_owner %}
+                  <span class="inline-flex items-center gap-1 text-[10px] px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 mr-1">
+                    <i class="fa-solid fa-lock text-[10px]"></i> Private
+                  </span>
+                {% endif %}
                 {{ note.content|truncatewords:20 }}
               </li>
             {% endfor %}
@@ -324,9 +330,10 @@
             :class="activeTab === 'notes' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click="activeTab = 'notes'"
           >
-            {% with object=item content_type='project' %}
-              {% include 'lab/note.html#summary' %}
-            {% endwith %}
+          Notes ({{ item.notes|visible_count:user }})
+          {% with object=item content_type='project' %}
+            {% include 'lab/note.html#summary' %}
+          {% endwith %}
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
@@ -567,7 +574,7 @@
           <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
             Notes
           </h3>
-          {% with object=item content_type="project" %}
+          {% with object=item content_type="project" user=user %}
             {% include "lab/note.html#list" %}
           {% endwith %}
         </div>

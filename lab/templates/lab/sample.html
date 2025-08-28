@@ -1,4 +1,5 @@
 {% extends "lab/base.html" %}
+{% load lab_filters %}
 
 {% block content %}
   {% partial detail %}
@@ -125,7 +126,7 @@
           <div
             class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
           >
-            {% with object=item content_type='sample' %}
+            {% with object=item content_type='sample' user=user %}
               {% include 'lab/note.html#list' %}
             {% endwith %}
           </div>
@@ -274,6 +275,7 @@
             :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click="activeTab = 'notes'"
           >
+            Notes ({{ item.notes.count }})
             {% with object=item content_type='sample' %}
               {% include 'lab/note.html#summary' %}
             {% endwith %}
@@ -313,7 +315,7 @@
       <div class="px-6 py-4">
         <!-- Notes tab -->
         <div x-show="activeTab === 'notes'" x-cloak>
-          {% with object=item content_type="sample" %}
+          {% with object=item content_type="sample" user=user %}
             {% include "lab/note.html#list" %}
           {% endwith %}
         </div>
