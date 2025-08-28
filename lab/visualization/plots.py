@@ -588,7 +588,7 @@ def map_view(request):
         fig.update_traces(
             cluster=dict(enabled=True),
             marker=dict(
-                color="#6366F1",
+                color="#A3A6FF",
                 opacity=0.9,
                 showscale=False,
                 size=20,
