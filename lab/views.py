@@ -402,6 +402,7 @@ def generic_detail(request):
         "item": obj,
         "model_name": target_model_name,
         "app_label": target_app_label,
+        "user": request.user,
     }
 
     if target_model_name == "Individual":
@@ -638,9 +639,11 @@ def note_create(request):
         obj = model.objects.get(id=object_id)
 
         # Create the note
+        is_private = request.POST.get("private") in ["1", "true", "on", "True"]
         Note.objects.create(
             content=request.POST.get("content"),
             user=request.user,
+            private_owner=request.user if is_private else None,
             content_type=content_type,
             object_id=object_id,
         )
@@ -757,6 +760,7 @@ def note_count(request):
             context={
                 "object": obj,
                 "content_type": content_type_str,
+                "user": request.user,
             },
         )
 

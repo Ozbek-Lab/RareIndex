@@ -179,6 +179,14 @@ class Project(HistoryMixin, models.Model):
 class Note(HistoryMixin, models.Model):
     content = models.TextField()
     user = models.ForeignKey(User, on_delete=models.PROTECT)
+    private_owner = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="private_notes",
+        help_text="If set, note is visible only to this user",
+    )
 
     # Generic foreign key fields
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
