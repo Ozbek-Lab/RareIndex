@@ -9,6 +9,7 @@ from encrypted_model_fields.fields import (
 )
 from simple_history.models import HistoricalRecords
 from django.utils import timezone
+from .middleware import get_current_user
 
 
 class HistoryMixin:
@@ -96,6 +97,25 @@ class Task(HistoryMixin, models.Model):
         self.save()
         return True
 
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
+
 
 class Project(HistoryMixin, models.Model):
     name = models.CharField(max_length=255)
@@ -137,10 +157,36 @@ class Project(HistoryMixin, models.Model):
         completed = self.get_completed_task_count()
         return int((completed / total) * 100)
 
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
+
 
 class Note(HistoryMixin, models.Model):
     content = models.TextField()
     user = models.ForeignKey(User, on_delete=models.PROTECT)
+    private_owner = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="private_notes",
+        help_text="If set, note is visible only to this user",
+    )
 
     # Generic foreign key fields
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
@@ -179,14 +225,40 @@ class SampleType(HistoryMixin, models.Model):
 
 
 class Institution(HistoryMixin, models.Model):
+    staff = models.ManyToManyField(User, blank=True, related_name="institutions_as_staff")
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    city = models.CharField(max_length=255, null=True, blank=True)
     name = models.CharField(max_length=255)
+    center_name = models.CharField(max_length=255, null=True, blank=True)
+    speciality = models.CharField(max_length=255, null=True, blank=True)
+    official_name = models.CharField(max_length=255, null=True, blank=True)
     contact = models.TextField(blank=True)
     notes = GenericRelation("Note")
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="institutions_created")
     history = HistoricalRecords()
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
 
 
 class Family(HistoryMixin, models.Model):
@@ -267,7 +339,8 @@ class Individual(HistoryMixin, models.Model):
     history = HistoricalRecords()
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
-    institution = models.ForeignKey(Institution, on_delete=models.PROTECT)
+    institution = models.ManyToManyField(Institution)
+    physicians = models.ManyToManyField(User, blank=True, related_name="patients")
     tasks = GenericRelation("Task")
 
     class Meta:
@@ -359,6 +432,25 @@ class Sample(HistoryMixin, models.Model):
     def __str__(self):
         return f"{self.individual.lab_id} - {self.sample_type} - {self.receipt_date}"
 
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
+
 
 class Test(HistoryMixin, models.Model):
     """Through model for tracking tests performed on samples"""
@@ -394,6 +486,25 @@ class Test(HistoryMixin, models.Model):
 
     class Meta:
         ordering = ["-id"]
+
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
 
 
 class AnalysisType(HistoryMixin, models.Model):
@@ -451,6 +562,25 @@ class Analysis(HistoryMixin, models.Model):
     def __str__(self):
         return f"{self.test} - {self.type} - {self.performed_date}"
 
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
+
 
 class IdentifierType(HistoryMixin, models.Model):
     name = models.CharField(max_length=100)
@@ -471,8 +601,8 @@ class CrossIdentifier(HistoryMixin, models.Model):
     id_type = models.ForeignKey(IdentifierType, on_delete=models.PROTECT)
     id_value = models.CharField(max_length=100)
     id_description = models.TextField(blank=True)
-    institution = models.ForeignKey(
-        Institution, on_delete=models.PROTECT, blank=True, null=True
+    institution = models.ManyToManyField(
+        Institution, blank=True
     )
     link = models.URLField(blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)

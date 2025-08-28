@@ -19,10 +19,10 @@ class IndividualProjectsInline(admin.TabularInline):
 
 @admin.register(models.Note)
 class NoteAdmin(admin.ModelAdmin):
-    list_display = ["content_object", "user", "get_created_at", "get_updated_at"]
-    list_filter = ["user", "content_type"]
+    list_display = ["content_object", "user", "private_owner", "get_created_at", "get_updated_at"]
+    list_filter = ["user", "private_owner", "content_type"]
     search_fields = ["content"]
-    autocomplete_fields = ["user"]
+    autocomplete_fields = ["user", "private_owner"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -95,6 +95,7 @@ class IndividualAdmin(admin.ModelAdmin):
         "family",
         "mother",
         "father",
+        "get_institutions",
         "created_by",
         "get_created_at",
         "get_updated_at",
@@ -119,7 +120,7 @@ class IndividualAdmin(admin.ModelAdmin):
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    autocomplete_fields = ["hpo_terms", "mother", "father", "family"]
+    autocomplete_fields = ["hpo_terms", "mother", "father", "family", "institution"]
     inlines = [IndividualProjectsInline]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -134,6 +135,11 @@ class IndividualAdmin(admin.ModelAdmin):
         return ", ".join([term.label for term in obj.hpo_terms.all()])
 
     get_hpo_terms.short_description = "HPO Terms"
+
+    def get_institutions(self, obj):
+        return ", ".join(obj.institution.values_list("name", flat=True))
+
+    get_institutions.short_description = "Institutions"
 
 
 @admin.register(models.Sample)
@@ -398,7 +404,7 @@ class CrossIdentifierAdmin(admin.ModelAdmin):
         "id_type",
         "id_value",
         "id_description",
-        "institution",
+        "get_institutions",
         "get_created_at",
         "get_updated_at",
         "created_by",
@@ -422,3 +428,8 @@ class CrossIdentifierAdmin(admin.ModelAdmin):
         "institution",
         "created_by",
     ]
+
+    def get_institutions(self, obj):
+        return ", ".join(obj.institution.values_list("name", flat=True))
+
+    get_institutions.short_description = "Institutions"
