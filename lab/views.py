@@ -41,7 +41,7 @@ from .visualization.hpo_network_visualization import (
 )
 
 
-from .filters import apply_filters, FILTER_CONFIG, get_available_statuses
+from .filters import apply_filters, FILTER_CONFIG, get_available_statuses, get_available_types
 
 # Import SQL agent for natural language search
 from .sql_agent import query_natural_language
@@ -552,6 +552,28 @@ def get_status_buttons(request):
         {
             "statuses": statuses,
             "selected_statuses": selected_statuses,
+            "model_name": model_name,
+        },
+    )
+
+
+@login_required
+def get_type_buttons(request):
+    """Get type buttons for a specific model"""
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+
+    if not model_name:
+        return HttpResponseBadRequest("Model not specified.")
+
+    # Get available types for this model
+    types = get_available_types(model_name, app_label)
+
+    return render(
+        request,
+        "lab/index.html#type-buttons",
+        {
+            "types": types,
             "model_name": model_name,
         },
     )
