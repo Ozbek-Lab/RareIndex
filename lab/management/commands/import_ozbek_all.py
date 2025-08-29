@@ -209,6 +209,9 @@ class Command(BaseCommand):
             if m:
                 try:
                     dt = datetime.strptime(m.group(1), '%d.%m.%Y')
+                    # Ensure timezone-aware datetime to avoid warnings with USE_TZ
+                    if timezone.is_naive(dt):
+                        dt = timezone.make_aware(dt, timezone.get_current_timezone())
                     first_hist = note.history.earliest()
                     if first_hist:
                         first_hist.history_date = dt
@@ -525,19 +528,12 @@ class Command(BaseCommand):
 
         # --- XLSX Reading ---
         wb = openpyxl.load_workbook(file_path, data_only=True)
-        print("[Map Import] Opened workbook:", file_path)
-        try:
-            print("[Map Import] Sheetnames:", wb.sheetnames)
-        except Exception as _e_sn:
-            print("[Map Import] Could not list sheetnames:", _e_sn)
         # --- INSTITUTION MAP SHEET (Coordinates) ---
         coords_map = {}
         try:
             ws_map = wb['Gönderen Kurum Harita']
-            print("[Map Import] Reading sheet 'Gönderen Kurum Harita'")
             headers_map = [cell.value for cell in next(ws_map.iter_rows(min_row=1, max_row=1))]
             headers_map = [h for h in headers_map if h is not None]
-            print("[Map Import] Headers:", headers_map)
             name_key = 'Kurum'
             coord_key = 'Harita'
             city_key = 'Şehir'
@@ -558,12 +554,8 @@ class Command(BaseCommand):
                 coord_val = row_dict.get(coord_key)
                 city_val = row_dict.get(city_key)
                 official_name_val = row_dict.get(official_name_key)
-                print("[Map Import][Row", total_rows, "] Raw:", {
-                    name_key: raw_name, coord_key: coord_val, city_key: city_val, official_name_key: official_name_val
-                })
                 if not raw_name or not coord_val:
                     skipped_no_name_or_coord += 1
-                    print("[Map Import] -> Skipping row due to missing name or coords")
                     continue
                 # Normalize and support multiple comma-separated names similar to source sheet
                 for name in [n.strip() for n in str(raw_name).split(',') if n and str(n).strip()]:
@@ -574,33 +566,15 @@ class Command(BaseCommand):
                         if name not in coords_map:
                             coords_map[name] = {}
                         coords_map[name]['coords'] = (lat_val, lon_val)
-                        print(f"[Map Import] -> Parsed: name='{name}', lat={lat_val}, lon={lon_val}")
                         parsed_rows += 1
                     except Exception:
                         parse_errors += 1
-                        print("[Map Import] -> Parse error for:", coord_val, "(name=", name, ")")
                         continue
                     if city_val:
                         coords_map[name]['city'] = city_val.strip()
-                        print(f"[Map Import] -> City set for '{name}':", coords_map[name]['city'])
                     if official_name_val:
                         coords_map[name]['official_name'] = official_name_val.strip()
-                        print(f"[Map Import] -> Official name set for '{name}':", coords_map[name]['official_name'])
             self._institution_info = coords_map
-            # Summary
-            print("[Map Import] Summary:")
-            print("  Total rows seen:", total_rows)
-            print("  Empty rows:", empty_rows)
-            print("  Skipped (missing name/coords):", skipped_no_name_or_coord)
-            print("  Parsed rows:", parsed_rows)
-            print("  Parse errors:", parse_errors)
-            print("  Unique institutions with coords:", len(coords_map))
-            # Preview a few entries
-            try:
-                preview = dict(list(coords_map.items())[:5])
-                print("[Map Import] Preview (first 5):", preview)
-            except Exception as _e_prev:
-                print("[Map Import] Could not print preview:", _e_prev)
         except KeyError:
             # Sheet not present; proceed without coordinates
             self._institution_info = {}
@@ -610,7 +584,6 @@ class Command(BaseCommand):
         headers_lab = [cell.value for cell in next(ws_lab.iter_rows(min_row=1, max_row=1))]
         # Filter out None column names (empty columns at the end)
         headers_lab = [h for h in headers_lab if h is not None]
-        self.stdout.write(f'OZBEK LAB sheet headers: {headers_lab}')
         
         # First pass: Collect unique values
         unique_family_ids = set()
@@ -748,7 +721,6 @@ class Command(BaseCommand):
                 takip_notes = row_dict.get('Takip Notları')
                 if takip_notes:
                     self._parse_and_add_notes(takip_notes, individual, admin_user)
-                    print(f'Added takip notes {takip_notes} to {individual}')
                 # CrossIdentifiers
                 rareboost_id = row_dict.get('Özbek Lab. ID')
                 if rareboost_id:
@@ -903,7 +875,6 @@ class Command(BaseCommand):
             if sample_notes and samples_touched:
                 for s in samples_touched:
                     self._parse_and_add_notes(sample_notes, s, admin_user)
-                    print(f'Added sample notes {sample_notes} to {s}')
         self.stdout.write(self.style.WARNING(f'Leftover Rows: {len(leftover_rows)}'))
         if leftover_rows:
             with open(leftovers_path, 'w', encoding='utf-8', newline='') as f:
@@ -960,35 +931,46 @@ class Command(BaseCommand):
                 self.stdout.write(f'Skipping row with missing VERİ KAYNAĞI for lab_id: {lab_id}. Available fields: {list(row_dict.keys())}')
                 leftover_rows.append(row_dict)
                 continue
-            test_type = self._get_or_create_test_type(veri_kaynagi, admin_user)
-            if not test_type:
+            # Support multiple comma-separated test types in VERİ KAYNAĞI
+            test_type_names = [p.strip() for p in str(veri_kaynagi).split(',') if p and str(p).strip()]
+            if not test_type_names:
                 leftover_rows.append(row_dict)
-                self.stdout.write(self.style.WARNING(f'Skipping row with invalid test type for lab_id: {lab_id}'))
+                self.stdout.write(self.style.WARNING(f'Skipping row with invalid/empty test type(s) for lab_id: {lab_id}'))
                 continue
-            test_types[veri_kaynagi] = test_type
             sample = individual.samples.first()
             if not sample:
                 self.stdout.write(self.style.WARNING(f'No sample found for individual: {self._get_initials(individual.full_name)}'))
                 sample = self._get_or_create_placeholder_sample(individual, admin_user)
-            test = Test.objects.create(
-                test_type=test_type,
-                status=Status.objects.get(name='Completed', content_type=ContentType.objects.get(app_label='lab', model='test')),
-                data_receipt_date=self._parse_date(row_dict.get('Data Geliş Tarihi')),
-                sample=sample,
-                created_by=admin_user
-            )
-            # Track touched/created test for this individual's lab id
-            tests_touched_by_lab_id.setdefault(lab_id, []).append(test)
-            data_upload_date = self._parse_date(row_dict.get('Data yüklenme tarihi/emre'))
-            if data_upload_date:
-                analysis = Analysis.objects.create(
-                    type=gennext_type,
-                    status=Status.objects.get(name='In Progress', content_type=ContentType.objects.get(app_label='lab', model='analysis')),
-                    performed_date=data_upload_date,
-                    performed_by=admin_user,
-                    test=test,
+            created_tests_for_row = []
+            for tt_name in test_type_names:
+                test_type = self._get_or_create_test_type(tt_name, admin_user)
+                if not test_type:
+                    # Shouldn't happen due to guard, but keep parity with previous logic
+                    self.stdout.write(self.style.WARNING(f'Skipping invalid test type "{tt_name}" for lab_id: {lab_id}'))
+                    continue
+                test_types[tt_name] = test_type
+                test = Test.objects.create(
+                    test_type=test_type,
+                    status=Status.objects.get(name='Completed', content_type=ContentType.objects.get(app_label='lab', model='test')),
+                    data_receipt_date=self._parse_date(row_dict.get('Data Geliş Tarihi')),
+                    sample=sample,
                     created_by=admin_user
                 )
+                created_tests_for_row.append(test)
+                # Track touched/created test for this individual's lab id
+                tests_touched_by_lab_id.setdefault(lab_id, []).append(test)
+            # Create Analysis records for each created test, if upload date provided
+            data_upload_date = self._parse_date(row_dict.get('Data yüklenme tarihi/emre'))
+            if data_upload_date and created_tests_for_row:
+                for t in created_tests_for_row:
+                    Analysis.objects.create(
+                        type=gennext_type,
+                        status=Status.objects.get(name='In Progress', content_type=ContentType.objects.get(app_label='lab', model='analysis')),
+                        performed_date=data_upload_date,
+                        performed_by=admin_user,
+                        test=t,
+                        created_by=admin_user
+                    )
             # Add Test Notları for all tests touched for this individual
             test_notes = row_dict.get('Test Notları')
             if test_notes and tests_touched_by_lab_id.get(lab_id):
