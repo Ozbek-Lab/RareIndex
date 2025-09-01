@@ -71,7 +71,7 @@ class SampleTypeAdmin(admin.ModelAdmin):
 
 @admin.register(models.Institution)
 class InstitutionAdmin(admin.ModelAdmin):
-    list_display = ["name", "created_by", "get_created_at", "get_updated_at"]
+    list_display = ["name", "latitude", "longitude", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name"]
     list_filter = ["created_by"]
 
