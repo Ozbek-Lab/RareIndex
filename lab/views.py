@@ -1,20 +1,18 @@
 from django.apps import apps
 from django import forms as dj_forms
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
-from django.db.models import Q
+from django.db.models import Q, Count, Min
 from django.contrib.contenttypes.models import ContentType
-import json
 from django.views.decorators.http import require_POST
-from django.shortcuts import get_object_or_404
-from .models import Note, Status
-
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
 from django.template import TemplateDoesNotExist
 from django.template.response import TemplateResponse
+import json
 
 # Import models
 from .models import (
@@ -29,21 +27,23 @@ from .models import (
     IdentifierType,
     CrossIdentifier,
     Family,
+    Status,
 )
 
 # Import forms
-from .forms import NoteForm
+from .forms import NoteForm, FORMS_MAPPING
 
-# Import HPO visualization functions
+# Import visualization functions
 from .visualization.hpo_network_visualization import (
     process_hpo_data,
     plotly_hpo_network,
 )
+from .visualization.plots import plots_page as plots_view
+from .visualization.maps import generate_map_data
+from .visualization.timeline import timeline
 
-
+# Import other modules
 from .filters import apply_filters, FILTER_CONFIG, get_available_statuses
-
-# Import SQL agent for natural language search
 from .sql_agent import query_natural_language
 
 
@@ -833,7 +833,7 @@ def notifications_page(request):
 
 @login_required
 def individual_timeline(request, pk):
-    from lab.visualization.timeline import timeline
+
 
     return timeline(request, pk)
 
@@ -841,7 +841,7 @@ def individual_timeline(request, pk):
 @login_required
 def plots_page(request):
     """View for the plots page showing various data visualizations."""
-    from .visualization.plots import plots_page as plots_view
+
 
     return plots_view(request)
 
@@ -913,8 +913,6 @@ def generic_create(request):
             return HttpResponseBadRequest(f"Model {model_name} not found.")
 
         # Get the appropriate form
-        from .forms import FORMS_MAPPING
-
         form_class = FORMS_MAPPING.get(model_name)
         if not form_class:
             return HttpResponseBadRequest(f"No form available for {model_name}.")
@@ -1042,8 +1040,6 @@ def generic_create(request):
         return HttpResponseBadRequest(f"Model {model_name} not found.")
 
     # Get the appropriate form
-    from .forms import FORMS_MAPPING
-
     form_class = FORMS_MAPPING.get(model_name)
     if not form_class:
         return HttpResponseBadRequest(f"No form available for {model_name}.")
@@ -1124,8 +1120,6 @@ def generic_edit(request):
         obj = get_object_or_404(model_class, pk=pk)
 
         # Get the appropriate form
-        from .forms import FORMS_MAPPING
-
         form_class = FORMS_MAPPING.get(model_name)
         if not form_class:
             return HttpResponseBadRequest(f"No form available for {model_name}.")
@@ -1287,8 +1281,6 @@ def generic_edit(request):
     obj = get_object_or_404(model_class, pk=pk)
 
     # Get the appropriate form
-    from .forms import FORMS_MAPPING
-
     form_class = FORMS_MAPPING.get(model_name)
     if not form_class:
         return HttpResponseBadRequest(f"No form available for {model_name}.")
@@ -1932,3 +1924,224 @@ def plots(request):
 def map_page(request):
     """Render the map page template."""
     return render(request, "lab/map.html")
+
+
+@login_required
+@csrf_exempt
+def map_view(request):
+    """
+    Generate a scatter map visualization showing institutions of filtered individuals.
+    """
+    
+    # Start with base queryset for individuals
+    individuals_queryset = Individual.objects.all()
+    
+    # Get individual type filter from POST or GET request
+    individual_types = ['all']  # Default to all
+    if request.method == 'POST':
+        individual_types = request.POST.getlist('individual_types')
+        if not individual_types or 'all' in individual_types:
+            individual_types = ['all']
+    
+    # Apply individual type filtering
+    if individual_types != ['all']:
+        if 'families' in individual_types:
+            # Only one individual per family - get the first one from each family
+            family_ids = individuals_queryset.filter(
+                family__isnull=False
+            ).values('family').annotate(
+                first_individual_id=Min('id')
+            ).values_list('first_individual_id', flat=True)
+            
+            individuals_queryset = individuals_queryset.filter(id__in=family_ids)
+        elif 'probands' in individual_types:
+            # Only probands selected
+            individuals_queryset = individuals_queryset.filter(is_index=True)
+    
+    # Apply global filters
+    active_filters = request.session.get('active_filters', {})
+    if active_filters:
+        filter_conditions = Q()
+        
+        for filter_key, filter_values in active_filters.items():
+            if filter_values:  # Only apply non-empty filters
+                # Handle different filter types
+                if isinstance(filter_values, list):
+                    if filter_values:  # Non-empty list
+                        filter_conditions &= Q(**{filter_key: filter_values[0]})  # Take first value for now
+                else:
+                    filter_conditions &= Q(**{filter_key: filter_values})
+        
+        if filter_conditions:
+            individuals_queryset = individuals_queryset.filter(filter_conditions)
+    
+    # Generate map data using the visualization module
+    chart_data = generate_map_data(individuals_queryset, individual_types)
+    
+    # Handle errors
+    if 'error' in chart_data:
+        if request.htmx:
+            return render(request, 'lab/map.html#map-partial', {
+                'error_message': chart_data['error'],
+                'individual_types': individual_types
+            }, status=404)
+        else:
+            return render(request, 'lab/map.html', {
+                'error_message': chart_data['error'],
+                'individual_types': individual_types
+            })
+    
+    # Return HTML for HTMX requests, render template for page requests
+    if request.htmx:
+        return render(request, 'lab/map.html#map-partial', chart_data)
+    else:
+        return render(request, 'lab/map.html', chart_data)
+
+
+
+
+
+def pie_chart_view(request, model_name, attribute_name):
+    """
+    Generate a pie chart for any model and attribute combination.
+    
+    Args:
+        model_name: The name of the Django model (e.g., 'Individual', 'Sample')
+        attribute_name: The name of the attribute to group by (e.g., 'status__name', 'type__name')
+    """
+    import plotly.graph_objects as go
+    
+    try:
+        # Get the model class
+        model_class = apps.get_model('lab', model_name)
+        
+        # Validate that the attribute exists
+        if not hasattr(model_class, attribute_name.split('__')[0]):
+            return JsonResponse({
+                'error': f'Attribute "{attribute_name}" does not exist on model "{model_name}"'
+            }, status=400)
+        
+        # Start with base queryset
+        queryset = model_class.objects.all()
+        
+        # Apply global filters
+        active_filters = request.session.get('active_filters', {})
+        if active_filters:
+            filter_conditions = Q()
+            
+            for filter_key, filter_values in active_filters.items():
+                if filter_values:  # Only apply non-empty filters
+                    # Handle different filter types
+                    if isinstance(filter_values, list):
+                        if filter_values:  # Non-empty list
+                            filter_conditions &= Q(**{filter_key: filter_values[0]})  # Take first value for now
+                    else:
+                        filter_conditions &= Q(**{filter_key: filter_values})
+            
+            if filter_conditions:
+                queryset = queryset.filter(filter_conditions)
+        
+        # Get the data with filters applied
+        queryset = queryset.values(attribute_name).annotate(count=Count('id')).order_by('-count')
+        
+        if not queryset:
+            return JsonResponse({
+                'error': f'No data found for {model_name}.{attribute_name}'
+            }, status=404)
+        
+        # Prepare data for pie chart
+        labels = []
+        values = []
+        
+        for item in queryset:
+            # Handle None values
+            label = item[attribute_name] if item[attribute_name] is not None else 'Unknown'
+            labels.append(str(label))
+            values.append(item['count'])
+        
+        # Create pie chart
+        fig = go.Figure(data=[
+            go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.3,  # Creates a donut chart
+                textinfo='value',
+                textposition='outside',
+                marker=dict(colors=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'])
+            )
+        ])
+        
+        fig.update_layout(
+            title=f'{model_name} Distribution by {attribute_name.replace("__", " ").title()}',
+            height=400,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+        
+        # Calculate percentages
+        total = sum(values)
+        data_with_percentages = []
+        for label, value in zip(labels, values):
+            percentage = (value / total * 100) if total > 0 else 0
+            data_with_percentages.append((label, value, percentage))
+        
+        # Prepare response data
+        chart_data = {
+            'chart_json': json.dumps(fig.to_dict()),
+            'model_name': model_name,
+            'attribute_name': attribute_name,
+            'total_count': total,
+            'unique_values': len(values),
+            'data': data_with_percentages
+        }
+        
+        if request.htmx:
+            return render(request, 'lab/pie_chart_partial.html', chart_data)
+        else:
+            return render(request, 'lab/pie_chart.html', chart_data)
+            
+    except LookupError:
+        return JsonResponse({
+            'error': f'Model "{model_name}" not found in app "lab"'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Error generating pie chart: {str(e)}'
+        }, status=500)
+
+
+@login_required
+def get_stats_counts(request):
+
+    active_filters = request.session.get('active_filters', {})
+    filter_conditions = Q()
+    if active_filters:
+        for filter_key, filter_values in active_filters.items():
+            if filter_values:
+                if isinstance(filter_values, list):
+                    if filter_values:
+                        filter_conditions &= Q(**{filter_key: filter_values[0]})
+                else:
+                    filter_conditions &= Q(**{filter_key: filter_values})
+    individuals_queryset = Individual.objects.all()
+    samples_queryset = Sample.objects.all()
+    tests_queryset = Test.objects.all()
+    analyses_queryset = Analysis.objects.all()
+    if filter_conditions:
+        individuals_queryset = individuals_queryset.filter(filter_conditions)
+        samples_queryset = samples_queryset.filter(filter_conditions)
+        tests_queryset = tests_queryset.filter(filter_conditions)
+        analyses_queryset = analyses_queryset.filter(filter_conditions)
+    data = {
+        'individuals': individuals_queryset.count(),
+        'samples': samples_queryset.count(),
+        'tests': tests_queryset.count(),
+        'analyses': analyses_queryset.count(),
+    }
+    return JsonResponse(data)
