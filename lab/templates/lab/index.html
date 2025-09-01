@@ -51,912 +51,116 @@
   }
 </style>
 
-
-{% partialdef drawer %}
-  <!-- Alpine.js Right-side Drawer -->
-  <div x-show="open" x-cloak>
-    <!-- Overlay -->
-    <div x-show="open" @click="open=false" class="fixed inset-0 bg-black bg-opacity-30 z-40 transition-opacity duration-200" x-transition.opacity></div>
-
-    <!-- Drawer -->
-    <aside
-      x-show="open"
-      x-transition:enter="transition transform duration-300"
-      x-transition:enter-start="translate-x-full"
-      x-transition:enter-end="translate-x-0"
-      x-transition:leave="transition transform duration-200"
-      x-transition:leave-start="translate-x-0"
-      x-transition:leave-end="translate-x-full"
-      class="fixed top-0 right-0 h-full w-80 bg-white dark:bg-gray-800 shadow-lg z-50 flex flex-col"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="filter-drawer-label"
-    >
-      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <h5 id="filter-drawer-label" class="text-base font-semibold text-gray-700 dark:text-gray-200">Filters</h5>
-        <button @click="open=false" type="button" class="text-gray-400 hover:text-gray-700 dark:hover:text-white focus:outline-none">
-          <i class="fa-solid fa-circle-xmark"></i>
-        </button>
-      </div>
-      <div class="p-4 flex-1 overflow-y-auto space-y-6">
-        <!-- Individuals -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Individual' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </h6>
-        </div>
-        <!-- Samples -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Sample' field_name='sample_type' label='Sample Type' icon_class='fa-vial' %}
-            {% partial generic-select %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Sample' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </div>
-        <!-- Tests -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Test' field_name='test_type' label='Test Type' icon_class='fa-flask-vial' %}
-            {% partial generic-select %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Test' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </div>
-        <!-- Analyses -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Analysis' field_name='analysis_type' label='Analysis Type' icon_class='fa-laptop' %}
-            {% partial generic-select %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Analysis' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </div>
-        <!-- Institutions -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' %}
-            {% partial generic-search %}
-          {% endwith %}
-        </div>
-        <!-- Projects -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Project' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </div>
-        <!-- Tasks -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Task' icon_class='fa-list-check' %}
-            {% partial generic-search %}
-          {% endwith %}
-        </div>
-        <!-- HPO Terms -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' %}
-            {% partial generic-search %}
-          {% endwith %}
-        </div>
-      </div>
-    </aside>
-  </div>
-{% endpartialdef drawer %}
-
-{% partialdef indicator %}
-  <div x-show="isLoading" x-transition>
-    {% if text %}
-      <div class="text-center text-gray-500 p-8">{{ text }}</div>
-    {% endif %}
-    {% if model_name %}
-      <div class="text-center text-gray-500 p-8">
-        Updating {{ model_name|lower }} results...
-      </div>
-    {% endif %}
-    <div class="flex justify-center py-4">
-      <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef generic-search %}
-  <div class="relative w-full mb-2">
-    <i
-      class="fa-solid {{ icon_class }} absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-300"
-    ></i>
-    <input
-      class="form-control w-full pl-10 rounded-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 border border-gray-300 dark:border-gray-700"
-      type="search"
-      name="search"
-      placeholder="Search {{ model_name }}"
-      x-model.debounce.300ms="filters.{{ model_name|lower }}"
-      hx-get="{% url 'lab:generic_search' %}"
-      hx-trigger="input changed delay:200ms, {{ event_name|default:'filters-updated' }} from:window, created-{{ model_name }} from:window, load"
-      hx-target="#index-{{ model_name|lower }}-results"
-      :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', 1, null, null, '{{ icon_class }}')"
-    />
-  </div>
-{% endpartialdef %}
-
-{% partialdef generic-select %}
-<div class="relative w-full mb-2" >
-  <div class="flex items-stretch">
-    <!-- Left side: Icon and Buttons -->
-    <div class="flex flex-col" style="width: 2.5rem;">
-      <!-- Top 33%: Icon -->
-      <div class="flex items-center justify-center" style="height: 50%;">
-        <i
-          class="fa-solid {{ icon_class }} text-gray-400 dark:text-gray-300"
-        ></i>
-      </div>
-      <!-- Bottom 33%: Clear Button -->
-      <div class="flex items-center justify-center" style="height: 50%;">
-        <button
-          type="button"
-          class="bg-gray-500 hover:bg-gray-600 text-white p-1 rounded transition-colors duration-200 w-6 h-6 flex items-center justify-center"
-          @click="filters.{{ field_name }} = ''; $dispatch('filters-updated')"
-        >
-          <i class="fa-solid fa-ban text-xs"></i>
-        </button>
-      </div>
-    </div>
-    <!-- Right side: Select -->
-    <div class="flex-1 relative">
-      <select
-        class="form-control w-full rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400"
-        name="{{ field_name }}"
-        multiple
-        x-model.debounce.150ms="filters.{{ field_name }}"
-        hx-get="{% url 'lab:get_select_options' %}"
-        hx-trigger="load, onchange, created-{{ model_name }} from:window, {{ event_name|default:'filters-updated' }} from:window"
-        hx-target="this"
-        hx-swap="innerHTML"
-        :hx-vals="getSelectHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', '{{ field_name }}', 1, null, null, '{{ icon_class }}')"
-      >
-        <option>Loading...</option>
-      </select>
-    </div>
-  </div>
-</div>
-{% endpartialdef generic-select %}
-
-{% partialdef generic-status-filter %}
-<div class="relative w-full mb-2">
-  <div class="flex-1">
-    <div
-      class="flex flex-wrap gap-1"
-      hx-get="{% url 'lab:get_status_buttons' %}"
-      hx-trigger="load, created-{{ model_name }} from:window, {{ event_name|default:'filters-updated' }} from:window"
-      hx-target="this"
-      hx-swap="innerHTML"
-      :hx-vals="getStatusHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
-    >
-      <div class="text-gray-500 text-sm">Loading statuses...</div>
-    </div>
-  </div>
-</div>
-<hr>
-{% endpartialdef %}
-
-{% partialdef select-options %}
-  {% for option in options %}
-    <option value="{{ option }}" {% if option in selected_value %}selected{% endif %}>{{ option }}</option>
-  {% endfor %}
-{% endpartialdef select-options %}
-
-{% partialdef status-buttons %}
-  {% for status in statuses %}
-    <button
-      type="button"
-      class="px-2 py-1 text-xs rounded-full transition-all duration-200 border"
-      :class="{
-        'bg-{{ status.color }}-500 text-white border-{{ status.color }}-500': filters.{{ model_name|lower }}_status && filters.{{ model_name|lower }}_status.includes('{{ status.pk }}'),
-        'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700': !filters.{{ model_name|lower }}_status || !filters.{{ model_name|lower }}_status.includes('{{ status.pk }}')
-      }"
-      @click="toggleStatus('{{ status.pk }}', '{{ model_name|lower }}')"
-      title="{{ status.description|default:status.name }}"
-    >
-      {% if status.icon %}
-        <i class="fa-solid {{ status.icon }} mr-1"></i>
-      {% endif %}
-    </button>
-  {% endfor %}
-{% endpartialdef status-buttons %}
-
-
-{% partialdef generic-combobox %}
-  <div class="relative w-full" x-data="comboboxController('{{ app_label|default:"lab" }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:'[]'|escapejs }}')" @click.outside="open=false">
-    <div class="flex items-stretch">
-      <div class="flex items-center justify-center w-10">
-        <i class="fa-solid {{ icon_class|default:'fa-magnifying-glass' }} text-gray-400 dark:text-gray-300"></i>
-      </div>
-      <div class="flex-1 relative">
-        <input
-          type="search"
-          class="form-control w-full rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400 pr-8"
-          placeholder="Search {{ model_name }}"
-          x-model.debounce.250ms="query"
-          @focus="open=true; htmx.trigger($refs.opts, 'combo-query-changed')"
-          @input="open=true"
-        />
-        <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" @click="clearSelection()">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-
-        <div x-ref="opts" class="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto" x-show="open" x-cloak
-             hx-get="{% url 'lab:generic_search' %}"
-             hx-trigger="load, combo-query-changed"
-             hx-target="this" hx-swap="innerHTML"
-             :hx-vals="getHxVals(1)">
-        </div>
-
-        <div class="mt-2 flex flex-wrap gap-2" x-show="multiple && selected.length">
-          <template x-for="opt in selected" :key="opt.value">
-            <span class="inline-flex items-center px-2 py-1 rounded-full text-sm bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
-              <span x-text="opt.label"></span>
-              <button type="button" class="ml-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-300" @click="remove(opt.value)">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
-            </span>
-          </template>
-        </div>
-
-        {% if name %}
-        <input type="hidden" x-ref="hiddenInput" name="{{ name }}" :value="hiddenInputValue">
-        {% else %}
-        <input type="hidden" x-ref="hiddenInput" :name="hiddenInputName" :value="hiddenInputValue">
-        {% endif %}
-      </div>
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef combobox-options %}
-  {% for opt in options %}
-    <div class="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between"
-         @click="toggleOption('{{ opt.value }}','{{ opt.label|escapejs }}')">
-      <span class="truncate">{{ opt.label }}</span>
-      <i class="fa-solid fa-check text-green-500" x-show="isSelected('{{ opt.value }}')"></i>
-    </div>
-  {% endfor %}
-  {% if items.has_next %}
-    <div hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once" hx-swap="afterend" hx-target="this" :hx-vals="getHxVals({{ items.next_page_number }})"></div>
-  {% endif %}
-{% endpartialdef %}
-
-{% partialdef generic-search-results %}
-  <div>
-    {% if items.number == 1 %}
-      <div
-        class=""
-        :class="{'text-green-500': {{ num_items }} > 0,
-                  'text-red-500': {{ num_items }} == 0}"
-      >
-      <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
-      </div>
-
-      <div class="h-96 overflow-y-auto">
-    {% endif %}
-
-    {% with view_mode="cards" card='compact-card' %}
-      {% include "lab/partials/_infinite_scroll_items.html" %}
-    {% endwith %}
-    {% if items.number == 1 %}
-      </div>
-    {% endif %}
-    </div>
-
-    <div id="page-{{ model_name|lower }}-results" hx-swap-oob="innerHTML">
-    {% if items.number == 1 %}
-      <div
-        class=""
-        :class="{'text-green-500': {{ num_items }} > 0,
-                  'text-red-500': {{ num_items }} == 0}"
-      >
-        <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
-      </div>
-
-    {% endif %}
-
-    <!-- Card View with animated transition -->
-    <div
-      x-show="viewMode === 'cards'"
-      x-transition:enter="transition-all duration-500 ease-out"
-      x-transition:enter-start="opacity-0 scale-95 translate-y-4"
-      x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-      x-transition:leave="transition-all duration-300 ease-in"
-      x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-      x-transition:leave-end="opacity-0 scale-95 translate-y-4"
-      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 gap-4 relative h-full overflow-y-auto"
-      style="will-change: opacity, transform;"
-    >
-      {% with view_mode="cards" card='card' %}
-        {% include "lab/partials/_infinite_scroll_items.html" %}
-      {% endwith %}
-    </div>
-
-    <!-- Table View with animated transition -->
-    <div
-      x-show="viewMode === 'table'"
-      x-transition:enter="transition-all duration-500 ease-out"
-      x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
-      x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-      x-transition:leave="transition-all duration-300 ease-in"
-      x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-      x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
-      class="relative h-full overflow-y-auto"
-      style="will-change: opacity, transform;"
-    >
-      {% include "lab/"|add:model_name|lower|add:'.html#table' %}
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef search-section %}
-  <div id="{{ model_name|lower }}-section-wrapper"
-    x-data="{ isLoading: false }"
-    @htmx:before-request="isLoading = true"
-    @htmx:after-request="isLoading = false"
-  >
-    {% if view == "page" %}
-      <div class="flex justify-between items-center mb-4">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h1>
-        <div class="flex items-center">
-          <!-- Add New button -->
-          
-          {% if model_name != 'Individual' %}
-            <button
-              hx-get="{% url 'lab:generic_create' %}?model_name={{ model_name }}&app_label={{ app_label }}"
-              hx-target="#modal-root"
-              hx-swap="innerHTML"
-              class="mr-3 inline-flex items-center px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            >
-              <i class="fa-solid fa-plus mr-2"></i>
-              Add New {{ model_name }}
-            </button>
-          {% endif %}
-          
-          <!-- Family Creation Button (only show for Individual model) -->
-          {% if model_name == 'Individual' %}
-          <button
-            hx-get="{% url 'lab:family_create_segway' %}"
-            hx-target="#modal-root"
-            hx-swap="innerHTML"
-            class="mr-3 inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            title="Create Family with Multiple Individuals"
-          >
-            <i class="fas fa-users mr-2"></i>
-            Create Family
-          </button>
-          {% endif %}
-          <!-- Slick joined toggle buttons with animations -->
-          <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center">
-            <!-- Animated background slider -->
-            <div 
-              class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
-              :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
-              style="width: calc(50% - 2px);"
-            ></div>
-            
-            <!-- Card button -->
-            <button
-              @click="viewMode = 'cards'"
-              class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
-              :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
-            >
-              <i class="fa-solid fa-th-large mr-2 transition-transform duration-300" :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"></i>
-              <span class="transition-all duration-300" :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'">Card</span>
-            </button>
-            
-            <!-- Table button -->
-            <button
-              @click="viewMode = 'table'"
-              class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
-              :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
-            >
-              <i class="fa-solid fa-table mr-2 transition-transform duration-300" :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"></i>
-              <span class="transition-all duration-300" :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'">Table</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    {% endif %}
-
-    {# Search and select fields moved to drawer #}
-
-    {# The container for results and the loading overlay #}
-    <div class="relative min-h-[24rem]">
-
-      {# Results will be loaded into this div #}
-      <div id="{{ view }}-{{ model_name|lower }}-results" class="transition" :class="{ 'opacity-50 blur-sm': isLoading }">
-        {% partial generic-search-results %}
-      </div>
-
-      {# The loading overlay with spinner #}
-      <div
-        x-show="isLoading"
-        x-transition
-        class="absolute inset-0 bg-gray-400/20 flex items-center justify-center rounded-md z-10"
-        style="display: none;"
-      >
-        {% partial indicator %}
-      </div>
-
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef individual-section %}
-  {% with title='Individuals' icon_class='fa-person' model_name='Individual' app_label='lab' view=view %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
-
-{% partialdef sample-section %}
-  {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' select='true' field_name='sample_type' view=view %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
-
-
-{% partialdef test-section %}
-  {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' select='true' field_name='test_type' view=view %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
-
-{% partialdef analysis-section %}
-  {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type' view=view %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
-
-{% partialdef institution-section %}
-  {% with title='Institutions' icon_class='fa-building-columns' model_name='Institution' app_label='lab' view=view %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
-
-{% partialdef project-section %}
-  {% with title='Projects' icon_class='fa-diagram-project' model_name='Project' app_label='lab' view=view %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
-
-{% partialdef task-section %}
-  {% with title='Tasks' icon_class='fa-list-check' model_name='Task' app_label='lab' view=view %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
-
-{% partialdef hpo-term-section %}
-  {% with title='HPO Terms' icon_class='fa-stethoscope' model_name='Term' app_label='ontologies' view=view %}
-    {% partial search-section %}
-  {% endwith %}
-{% endpartialdef %}
-
-
-{% partialdef hpo-network-visualization-section %}
-  <div id="hpo-section-wrapper">
-    <div class="relative min-h-[30rem]">
-
-      <div
-        id="hpo-visualization-container"
-        class="transition bg-white dark:bg-gray-800 shadow rounded-lg p-4"
-        :class="{ 'opacity-50 blur-sm': isLoading }"
-        @htmx:before-request="isLoading = true"
-        @htmx:after-request="isLoading = false"
-        hx-get="{% url 'lab:hpo_network_visualization' %}"
-        hx-trigger="load, filters-updated from:window"
-        hx-swap="innerHTML"
-        :hx-vals="getHpoVals()"
-      >
-        {% with text="Initializing visualization..." %}
-          {% partial indicator %}
-        {% endwith %}
-      </div>
-
-      <div
-        x-show="isLoading"
-        x-transition
-        class="absolute inset-0 bg-gray-400/20 dark:bg-gray-700/40 flex items-center justify-center rounded-md z-10"
-        style="display: none;"
-      >
-        <div class="text-center text-gray-600 dark:text-gray-300">
-          <p class="mb-4">Updating visualization...</p>
-          <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
-        </div>
-      </div>
-
-    </div>
-  </div>
-{% endpartialdef hpo-network-visualization-section %}
-
-{% partialdef plots-section %}
-  <div class="space-y-6">
-    <!-- Welcome Section -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-      <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-        <i class="fas fa-chart-bar text-indigo-500 mr-2"></i>
-        Data Visualizations
-      </h2>
-      <p class="text-gray-600 dark:text-gray-300 mb-4">
-        Explore your laboratory data through interactive charts and graphs. This section provides various visualizations to help you understand patterns and trends in your data.
-      </p>
-      
-      <!-- Quick Stats Cards -->
-      <div id="stats-cards-loading" class="hidden text-center py-4"><span class="animate-spin inline-block w-6 h-6 border-4 border-blue-400 border-t-transparent rounded-full"></span> Loading stats...</div>
-      <div id="stats-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
-          <div class="flex items-center">
-            <i class="fas fa-users text-2xl mr-3"></i>
-            <div>
-              <p class="text-sm opacity-90">Total Individuals</p>
-              <p class="text-2xl font-bold" id="stat-individuals">{{ individuals_count|default:"0" }}</p>
-            </div>
-          </div>
-        </div>
-        <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
-          <div class="flex items-center">
-            <i class="fas fa-vial text-2xl mr-3"></i>
-            <div>
-              <p class="text-sm opacity-90">Total Samples</p>
-              <p class="text-2xl font-bold" id="stat-samples">{{ samples_count|default:"0" }}</p>
-            </div>
-          </div>
-        </div>
-        <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
-          <div class="flex items-center">
-            <i class="fas fa-flask-vial text-2xl mr-3"></i>
-            <div>
-              <p class="text-sm opacity-90">Total Tests</p>
-              <p class="text-2xl font-bold" id="stat-tests">{{ tests_count|default:"0" }}</p>
-            </div>
-          </div>
-        </div>
-        <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-4 text-white">
-          <div class="flex items-center">
-            <i class="fas fa-laptop text-2xl mr-3"></i>
-            <div>
-              <p class="text-sm opacity-90">Total Analyses</p>
-              <p class="text-2xl font-bold" id="stat-analyses">{{ analyses_count|default:"0" }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Distribution Plots -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {% for plot_data in distribution_plots %}
-        {% partial plot %}
-      {% endfor %}
-    </div>
-
-    <!-- Interactive Pie Chart Generator -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-        <i class="fas fa-chart-pie text-indigo-500 mr-2"></i>
-        Interactive Pie Chart Generator
-      </h3>
-      <div class="mb-4">
-        <h4 class="text-md font-semibold mb-2">Chart will be displayed here</h4>
-        <div id="dynamic-pie-chart-container" class="hidden">
-          <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div id="dynamic-pie-chart" class="h-96"></div>
-          </div>
-        </div>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Model
-          </label>
-          <select id="model-select" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            <option value="">Select Model</option>
-            <option value="Individual">Individual</option>
-            <option value="Sample">Sample</option>
-            <option value="Test">Test</option>
-            <option value="Analysis">Analysis</option>
-            <option value="Project">Project</option>
-            <option value="Task">Task</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Attribute
-          </label>
-          <select id="attribute-select" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            <option value="">Select Attribute</option>
-            <option value="status__name">Status</option>
-            <option value="type__name">Type</option>
-            <option value="institution__name">Institution</option>
-            <option value="project__name">Project</option>
-          </select>
-        </div>
-        <div class="flex items-end">
-          <button 
-            id="generate-pie-chart"
-            class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
-            <i class="fas fa-chart-pie mr-2"></i>
-            Generate Chart
-          </button>
-        </div>
-      </div>
-      <!-- Loading Indicator -->
-      <div id="loading-indicator" class="htmx-indicator hidden">
-        <div class="flex items-center justify-center py-4">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          <span class="ml-2 text-gray-600">Generating chart...</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Interactive Controls -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-        <i class="fas fa-sliders-h text-indigo-500 mr-2"></i>
-        Chart Controls
-      </h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Date Range
-          </label>
-          <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            <option value="7">Last 7 days</option>
-            <option value="30" selected>Last 30 days</option>
-            <option value="90">Last 90 days</option>
-            <option value="365">Last year</option>
-          </select>
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Chart Type
-          </label>
-          <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            <option value="bar">Bar Chart</option>
-            <option value="line" selected>Line Chart</option>
-            <option value="pie">Pie Chart</option>
-            <option value="scatter">Scatter Plot</option>
-          </select>
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Data Source
-          </label>
-          <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            <option value="all" selected>All Data</option>
-            <option value="individuals">Individuals Only</option>
-            <option value="samples">Samples Only</option>
-            <option value="tests">Tests Only</option>
-            <option value="analyses">Analyses Only</option>
-          </select>
-        </div>
-      </div>
-      
-      <div class="mt-4 flex space-x-3">
-        <button class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
-          <i class="fas fa-refresh mr-2"></i>
-          Refresh Charts
-        </button>
-        <button class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors">
-          <i class="fas fa-download mr-2"></i>
-          Export Data
-        </button>
-      </div>
-    </div>
-  </div>
-{% endpartialdef plots-section %}
-
-
-{% partialdef hpo-network-visualization %}
-  <div class="col-span-10 space-y-4">
-    {% if error %}
-      <div class="bg-red-100 dark:bg-red-900 p-4 rounded-lg text-red-800 dark:text-red-200">
-        <b>Error:</b> {{ error }}
-      </div>
-    {% else %}
-      <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
-        <label for="threshold" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Consolidation Threshold
-          <span
-            x-show="!isThresholdValid"
-            x-transition
-            class="text-red-500 dark:text-red-300 text-sm mt-1"
-          >
-            Please enter a number between 1 and 24.
-          </span>
-        </label>
-        <input
-          type="number"
-          id="threshold"
-          name="threshold"
-          placeholder="{{ threshold }}"
-          x-model.debounce.500ms="hpoThreshold"
-          x-ref="hpoThresholdInput"
-          min="1"
-          max="24"
-          class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
-        />
-      </div>
-      <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
-        <p class="text-sm text-gray-900 dark:text-gray-100">
-          Plotting <span class="font-bold">{{ term_count }}</span> terms for
-          <span class="font-bold">{{ individual_count }} individuals</span>.
-        </p>
-        <div
-          id="plotly-div"
-          style="width: 100%; height: 800px;"
-          class="mt-4"
-        ></div>
-      </div>
-      {# prettier-ignore-start #}
-      <script>
-        var plotData = {{ plot_json|safe }};
-        var plotlyDiv = document.getElementById('plotly-div');
-        if (plotlyDiv) { Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout); }
-      </script>
-      {# prettier-ignore-end #}
-    {% endif %}
-  </div>
-{% endpartialdef hpo-network-visualization %}
-
-{% partialdef index %}
-  <h1>INDEX PAGE</h1>
-{% endpartialdef %}
-
 {% block content %}
-
-<div
-  x-data="mainController()"
-  class="flex h-screen bg-gray-50 dark:bg-gray-900">
-  {% include "lab/sidebar.html" %}
-  <main class="flex-1 overflow-y-auto p-6">
-    <div id="main-content">
-      <div id="modal-root"></div>
-      <!-- Main content area for HTMX operations -->
-      <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
-        <button @click="open = true" type="button"
-          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
-          aria-label="Open filters">
-          <i class="fa-solid fa-filter"></i>
-        </button>
-        <!-- Clear Filters Button -->
-        <button
-          x-show="Object.values(filters).some(v => v)"
-          @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
-          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
-          type="button"
-        >
-          <i class="fa-solid fa-filter-circle-xmark"></i>
-        </button>
-      </div>
-      {% partial drawer %}
-      <!-- Detail View Container -->
-      <div x-show="activeItem && activeItem.startsWith('detail-')" id="detail-view" class="relative">
-        <template x-if="detailHtml">
-          <div x-html="detailHtml"></div>
-        </template>
-        <button @click="closeDetail()" class="absolute top-2 right-2 z-10 bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Close</button>
-      </div>
-      <!-- Hide main content when detail is open -->
-      <div x-show="!activeItem || !activeItem.startsWith('detail-')">
-        <div x-show="activeItem === 'index'">
-          <div class="grid grid-cols-4 gap-4 relative">
-            {% with view="index" %}
-            {% partial individual-section %}
-            {% partial sample-section %}
-            {% partial test-section %}
-            {% partial analysis-section %}
-            {% partial institution-section %}
-            {% partial project-section %}
-            {% partial task-section %}
-            {% partial hpo-term-section %}
+  <div
+    x-data="mainController()"
+    class="flex h-screen bg-gray-50 dark:bg-gray-900">
+    {% include "lab/sidebar.html" %}
+    <main class="flex-1 overflow-y-auto p-6">
+      <div id="main-content">
+        <div id="modal-root"></div>
+        <!-- Main content area for HTMX operations -->
+        <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
+          <button @click= "open = true" type="button"
+            class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
+            aria-label="Open filters">
+            <i class="fa-solid fa-filter"></i>
+          </button>
+          <!-- Clear Filters Button -->
+          <button
+            x-show="Object.values(filters).some(v => v)"
+            @click= "filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
+            class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
+            type="button"
+          >
+            <i class="fa-solid fa-filter-circle-xmark"></i>
+          </button>
+        </div>
+        {% include "lab/partials/partials.html#drawer" %}
+        <!-- Detail View Container -->
+        <div x-show="activeItem && activeItem.startsWith('detail-')" id="detail-view" class="relative">
+          <template x-if="detailHtml">
+            <div x-html="detailHtml"></div>
+          </template>
+          <button @click= "closeDetail()" class="absolute top-2 right-2 z-10 bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Close</button>
+        </div>
+        <!-- Hide main content when detail is open -->
+        <div x-show="!activeItem || !activeItem.startsWith('detail-')">
+          <div x-show="activeItem === 'home'" id="plots-content">
+            {% with view="page" %}
+              {% include "lab/visualization.html#plots-section" %}
             {% endwith %}
           </div>
-        </div>
-        <div x-show="activeItem === 'individual'">
-          {% with view="page" %}
-            {% partial individual-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'sample'">
-          {% with view="page" %}
-            {% partial sample-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'test'">
-          {% with view="page" %}
-            {% partial test-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'analysis'">
-          {% with view="page" %}
-            {% partial analysis-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'institution'">
-          {% with view="page" %}
-            {% partial institution-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'project'">
-          {% with view="page" %}
-            {% partial project-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'task'">
-          {% with view="page" %}
-            {% partial task-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'hpo-term'">
-          {% with view="page" %}
-            {% partial hpo-term-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'hpo-network-visualization'">
-          {% with view="page" %}
-            <div x-data="hpoController()">
-              {% partial hpo-network-visualization-section %}
+          <div x-show="activeItem === 'overview'">
+            <div class="grid grid-cols-4 gap-4 relative">
+              {% include "lab/overview.html#overview" %}
             </div>
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'notifications'" id="notifications-content">
-          <!-- Notifications content will be loaded here via HTMX -->
-        </div>
-        <div x-show="activeItem === 'plots'" id="plots-content">
-          {% with view="page" %}
-            {% partial plots-section %}
-          {% endwith %}
-        </div>
-        <div x-show="activeItem === 'map'" id="map-content">
-          {% include "lab/map.html#map-content" %}
-        </div>
-        <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
-          <!-- Natural language search content will be loaded here via HTMX -->
+          </div>
+          <div x-show="activeItem === 'individual'">
+            {% with title='Individuals' icon_class='fa-person' model_name='Individual' app_label='lab' view="page" %}
+              {% include "lab/partials/partials.html#search-section" %}
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'sample'">
+            {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' select='true' field_name='sample_type' view="page" %}
+              {% include "lab/partials/partials.html#search-section" %}
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'test'">
+            {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' select='true' field_name='test_type' view="page" %}
+              {% include "lab/partials/partials.html#search-section" %}
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'analysis'">
+            {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type' view="page" %}
+              {% include "lab/partials/partials.html#search-section" %}
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'institution'">
+            {% with title='Institutions' icon_class='fa-building-columns' model_name='Institution' app_label='lab' view="page" %}
+              {% include "lab/partials/partials.html#search-section" %}
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'project'">
+            {% with title='Projects' icon_class='fa-diagram-project' model_name='Project' app_label='lab' view="page" %}
+              {% include "lab/partials/partials.html#search-section" %}
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'task'">
+            {% with title='Tasks' icon_class='fa-list-check' model_name='Task' app_label='lab' view="page" %}
+              {% include "lab/partials/partials.html#search-section" %}
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'hpo-term'">
+            {% with title='HPO Terms' icon_class='fa-stethoscope' model_name='Term' app_label='ontologies' view="page" %}
+              {% include "lab/partials/partials.html#search-section" %}
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'hpo-network-visualization'">
+            {% with view="page" %}
+              <div x-data="hpoController()">
+                {% include "lab/visualization.html#hpo-network-visualization-section" %}
+              </div>
+            {% endwith %}
+          </div>
+          <div x-show="activeItem === 'notifications'" id="notifications-content">
+            <!-- Notifications content will be loaded here via HTMX -->
+          </div>
+          <div x-show="activeItem === 'map'" id="map-content">
+            {% include "lab/map.html#map-content" %}
+          </div>
+          <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
+            <!-- Natural language search content will be loaded here via HTMX -->
+          </div>
         </div>
       </div>
-    </div>
-  </main>
-</div>
+    </main>
+  </div>
 
   <script>
     function mainController() {
       return {
-        activeItem: 'index',
+        activeItem: 'home',
         open: false,
         filters: {},
         detailHtml: null,
@@ -1002,7 +206,7 @@
 
         syncStateFromURL() {
           const params = new URLSearchParams(window.location.search);
-          this.activeItem = params.get('page') || 'index';
+          this.activeItem = params.get('page') || 'home';
           this.clearModal();
           
           const newFilters = {};
@@ -1026,7 +230,7 @@
 
         updateURL() {
           const newParams = new URLSearchParams();
-          if (this.activeItem && this.activeItem !== 'index') {
+          if (this.activeItem && this.activeItem !== 'home') {
             newParams.set('page', this.activeItem);
           }
           for (const modelName in this.filters) {
@@ -1041,7 +245,8 @@
               }
             }
           }
-          const newPath = newParams.toString() ? `/?${newParams.toString()}` : '/';
+          const newPath = newParams.toString() ? `/?${newParams.toString()}` : 
+          '/';
           history.pushState({}, "", newPath);
         },
 
@@ -1060,9 +265,9 @@
             return;
           }
           
-          // Handle plots navigation
-          if (pageName === 'plots') {
-            this.activeItem = 'plots';
+          // Handle home navigation
+          if (pageName === 'home') {
+            this.activeItem = 'home';
             this.detailHtml = null;
             this.updateURL();
             
@@ -1253,7 +458,7 @@
           setTimeout(() => {
             const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
             relatedModels.forEach(model => {
-              const targetId = `#${this.activeItem === 'index' ? 'index' : 'page'}-${model}-results`;
+              const targetId = `#${this.activeItem === 'home' ? 'home' : 'page'}-${model}-results`;
               const element = document.querySelector(targetId);
               if (element) {
                 htmx.trigger(element, 'filters-updated');
@@ -1270,7 +475,7 @@
           setTimeout(() => {
             const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
             relatedModels.forEach(model => {
-              const targetId = `#${this.activeItem === 'index' ? 'index' : 'page'}-${model}-results`;
+              const targetId = `#${this.activeItem === 'home' ? 'home' : 'page'}-${model}-results`;
               const element = document.querySelector(targetId);
               if (element) {
                 htmx.trigger(element, 'filters-updated');
@@ -1534,358 +739,29 @@
   </script>
 {% endblock content %}
 
-{% partialdef create-form %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          Create New {{ model_name }}
-        </h2>
-        <button @click="document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-          <i class="fa-solid fa-times text-xl"></i>
-        </button>
-      </div>
-      <div class="max-h-[75vh] overflow-y-auto pr-1">
-        <form hx-post="{% url 'lab:generic_create' %}" hx-target="#modal-root" hx-swap="innerHTML">
-          {% csrf_token %}
-          <input type="hidden" name="model_name" value="{{ model_name }}">
-          <input type="hidden" name="app_label" value="{{ app_label }}">
-          
-          <div class="flex flex-col md:flex-row gap-6">
-            <div class="flex-1 space-y-4">
-              {% for field in form %}
-                {% if forloop.counter0|divisibleby:2 %}
-                  <div>
-                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {{ field.label }}
-                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
-                    </label>
-                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
-                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' %}
-                        {% partial generic-combobox %}
-                      {% endwith %}
-                    {% else %}
-                      {{ field }}
-                    {% endif %}
-                    {% if field.help_text %}
-                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
-                    {% endif %}
-                    {% if field.errors %}
-                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
-                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
-              {% endfor %}
-            </div>
-            <div class="flex-1 space-y-4">
-              {% for field in form %}
-                {% if not forloop.counter0|divisibleby:2 %}
-                  <div>
-                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {{ field.label }}
-                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
-                    </label>
-                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
-                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' %}
-                        {% partial generic-combobox %}
-                      {% endwith %}
-                    {% else %}
-                      {{ field }}
-                    {% endif %}
-                    {% if field.help_text %}
-                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
-                    {% endif %}
-                    {% if field.errors %}
-                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
-                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
-              {% endfor %}
-            </div>
-          </div>
-          
-          <div class="flex justify-end space-x-3 mt-6">
-            <button type="button" @click="document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
-            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Create {{ model_name }}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef edit-form %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          Edit {{ model_name }}
-        </h2>
-        <button @click="document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-          <i class="fa-solid fa-times text-xl"></i>
-        </button>
-      </div>
-      <div class="max-h-[75vh] overflow-y-auto pr-1">
-        <form hx-post="{% url 'lab:generic_edit' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit="
-          const form = $event.target;
-          const elements = Array.from(form.elements || []);
-          elements.forEach(el => {
-            if (!el || !el.name || el.disabled) return;
-            if (['csrfmiddlewaretoken','model_name','app_label','pk'].includes(el.name)) return;
-            if (el.tagName === 'SELECT' && el.multiple) {
-              const initial = Array.from(el.options).filter(o => o.defaultSelected).map(o => String(o.value)).sort().join(',');
-              const current = Array.from(el.options).filter(o => o.selected).map(o => String(o.value)).sort().join(',');
-              if (initial === current) el.disabled = true;
-            } else if (el.type === 'checkbox' || el.type === 'radio') {
-              if (el.defaultChecked === el.checked) el.disabled = true;
-            } else {
-              const initial = el.defaultValue ?? '';
-              const current = el.value ?? '';
-              if (String(initial) === String(current)) el.disabled = true;
-            }
-          });
-        ">
-          {% csrf_token %}
-          <input type="hidden" name="model_name" value="{{ model_name }}">
-          <input type="hidden" name="app_label" value="{{ app_label }}">
-          <input type="hidden" name="pk" value="{{ object.pk }}">
-          
-          <div class="flex flex-col md:flex-row gap-6">
-            <div class="flex-1 space-y-4">
-              {% for field in form %}
-                {% if forloop.counter0|divisibleby:2 %}
-                  <div>
-                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {{ field.label }}
-                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
-                    </label>
-                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
-                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
-                        {% partial generic-combobox %}
-                      {% endwith %}
-                    {% else %}
-                      {{ field }}
-                    {% endif %}
-                    {% if field.help_text %}
-                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
-                    {% endif %}
-                    {% if field.errors %}
-                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
-                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
-              {% endfor %}
-            </div>
-            <div class="flex-1 space-y-4">
-              {% for field in form %}
-                {% if not forloop.counter0|divisibleby:2 %}
-                  <div>
-                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {{ field.label }}
-                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
-                    </label>
-                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
-                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
-                        {% partial generic-combobox %}
-                      {% endwith %}
-                    {% else %}
-                      {{ field }}
-                    {% endif %}
-                    {% if field.help_text %}
-                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
-                    {% endif %}
-                    {% if field.errors %}
-                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
-                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
-              {% endfor %}
-            </div>
-          </div>
-          
-          <div class="flex justify-end space-x-3 mt-6">
-            <button type="button" @click="document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Cancel</button>
-            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Update {{ model_name }}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef delete-confirm %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          Delete {{ model_name }}
-        </h2>
-        <button 
-          @click="document.getElementById('modal-root').innerHTML = ''" 
-          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-        >
-          <i class="fa-solid fa-times text-xl"></i>
-        </button>
-      </div>
-      
-      <div class="mb-6">
-        <p class="text-gray-700 dark:text-gray-300">
-          Are you sure you want to delete <strong>{{ object }}</strong>?
-        </p>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
-          This action cannot be undone.
-        </p>
-      </div>
-      
-      <form hx-post="{% url 'lab:generic_delete' %}" hx-target="#modal-root" hx-swap="innerHTML">
-        {% csrf_token %}
-        <input type="hidden" name="model_name" value="{{ model_name }}">
-        <input type="hidden" name="app_label" value="{{ app_label }}">
-        <input type="hidden" name="pk" value="{{ object.pk }}">
-        
-        <div class="flex justify-end space-x-3">
-          <button 
-            type="button" 
-            @click="document.getElementById('modal-root').innerHTML = ''"
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-          >
-            Cancel
-          </button>
-          <button 
-            type="submit"
-            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-          >
-            Delete {{ model_name }}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef create-success %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
-      <div class="mb-4">
-        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
-      </div>
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-        Success!
-      </h2>
-      <p class="text-gray-700 dark:text-gray-300 mb-6">
-        {{ model_name }} "{{ object }}" has been created successfully.
-      </p>
-      <div class="flex justify-center space-x-3">
-        <button 
-          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'index'"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-        >
-          Back to Index
-        </button>
-        <button 
-          hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-          hx-target="#main-content"
-          hx-swap="innerHTML"
-          @click="document.getElementById('modal-root').innerHTML = ''"
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          View Details
-        </button>
-      </div>
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef edit-success %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
-      <div class="mb-4">
-        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
-      </div>
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-        Success!
-      </h2>
-      <p class="text-gray-700 dark:text-gray-300 mb-6">
-        {{ model_name }} "{{ object }}" has been updated successfully.
-      </p>
-      <div class="flex justify-center space-x-3">
-        <button 
-          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'index'"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-        >
-          Back to Index
-        </button>
-        <button 
-          hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-          hx-target="#main-content"
-          hx-swap="innerHTML"
-          @click="document.getElementById('modal-root').innerHTML = ''"
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          View Details
-        </button>
-      </div>
-    </div>
-  </div>
-{% endpartialdef %}
-
-{% partialdef delete-success %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
-      <div class="mb-4">
-        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
-      </div>
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-        Success!
-      </h2>
-      <p class="text-gray-700 dark:text-gray-300 mb-6">
-        {{ model_name }} "{{ object_name }}" has been deleted successfully.
-      </p>
-      <div class="flex justify-center">
-        <button 
-          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'index'"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-        >
-          Back to Index
-        </button>
-      </div>
-    </div>
-  </div>
-{% endpartialdef %}
-
-
-
 {% if initial_detail_html %}
-<script>
-  document.addEventListener('alpine:init', () => {
-    const mainController = document.querySelector('[x-data="mainController()"]').__x;
-    if (mainController) {
-      mainController.openDetail({{ initial_detail_html|safe }});
-    }
-  });
-</script>
+  <script>
+    document.addEventListener('alpine:init', () => {
+      const mainController = document.querySelector('[x-data="mainController()"]').__x;
+      if (mainController) {
+        mainController.openDetail({{ initial_detail_html|safe }});
+      }
+    });
+  </script>
 {% endif %}
 
 {% if initial_nl_search_html %}
-<script>
-  document.addEventListener('alpine:init', () => {
-    const mainController = document.querySelector('[x-data="mainController()"]').__x;
-    if (mainController) {
-      mainController.showNLSearch();
-    }
-  });
-</script>
+  <script>
+    document.addEventListener('alpine:init', () => {
+      const mainController = document.querySelector('[x-data="mainController()"]').__x;
+      if (mainController) {
+        mainController.showNLSearch();
+      }
+    });
+  </script>
 {% endif %}
 
 <!-- Hidden family creation form template -->
 <div id="family-create-form" class="hidden">
-  {% include "lab/individual.html#family-create-form" %}
+  {% include "lab/crud.html#family-create-form" %}
 </div>

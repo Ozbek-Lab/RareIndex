@@ -5,7 +5,7 @@ from .visualization import plots
 app_name = "lab"
 
 urlpatterns = [
-    path("", views.index, name="index"),
+    path("", views.index, name="home"),
     path(
         "search/",
         views.generic_search,
