@@ -85,6 +85,9 @@
           {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
             {% partial generic-search %}
           {% endwith %}
+          {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
+            {% partial generic-type-filter %}
+          {% endwith %}
           {% with app_label='lab' model_name='Individual' %}
             {% partial generic-status-filter %}
           {% endwith %}
@@ -97,8 +100,8 @@
           {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
             {% partial generic-search %}
           {% endwith %}
-          {% with app_label='lab' model_name='Sample' field_name='sample_type' label='Sample Type' icon_class='fa-vial' %}
-            {% partial generic-select %}
+          {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
+            {% partial generic-type-filter %}
           {% endwith %}
           {% with app_label='lab' model_name='Sample' %}
             {% partial generic-status-filter %}
@@ -111,8 +114,8 @@
           {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
             {% partial generic-search %}
           {% endwith %}
-          {% with app_label='lab' model_name='Test' field_name='test_type' label='Test Type' icon_class='fa-flask-vial' %}
-            {% partial generic-select %}
+          {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
+            {% partial generic-type-filter %}
           {% endwith %}
           {% with app_label='lab' model_name='Test' %}
             {% partial generic-status-filter %}
@@ -125,8 +128,8 @@
           {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
             {% partial generic-search %}
           {% endwith %}
-          {% with app_label='lab' model_name='Analysis' field_name='analysis_type' label='Analysis Type' icon_class='fa-laptop' %}
-            {% partial generic-select %}
+          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
+            {% partial generic-type-filter %}
           {% endwith %}
           {% with app_label='lab' model_name='Analysis' %}
             {% partial generic-status-filter %}
@@ -267,6 +270,24 @@
 <hr>
 {% endpartialdef %}
 
+{% partialdef generic-type-filter %}
+<div class="relative w-full mb-2">
+  <div class="flex-1">
+    <div
+      class="flex flex-wrap gap-1"
+      hx-get="{% url 'lab:get_type_buttons' %}"
+      hx-trigger="load, created-{{ model_name }} from:window, {{ event_name|default:'filters-updated' }} from:window"
+      hx-target="this"
+      hx-swap="innerHTML"
+      :hx-vals="getTypeHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
+    >
+      <div class="text-gray-500 text-sm">Loading types...</div>
+    </div>
+  </div>
+</div>
+<hr>
+{% endpartialdef %}
+
 {% partialdef select-options %}
   {% for option in options %}
     <option value="{{ option }}" {% if option in selected_value %}selected{% endif %}>{{ option }}</option>
@@ -287,10 +308,28 @@
     >
       {% if status.icon %}
         <i class="fa-solid {{ status.icon }} mr-1"></i>
+         {{ status.name }} 
       {% endif %}
     </button>
   {% endfor %}
 {% endpartialdef status-buttons %}
+
+{% partialdef type-buttons %}
+  {% for type in types %}
+               <button
+             type="button"
+             class="px-2 py-1 text-xs rounded-full transition-all duration-200 border"
+             :class="{
+               'bg-blue-500 text-white border-blue-500': filters.{{ type.filter_field }} && filters.{{ type.filter_field }}.includes('{{ type.name }}'),
+               'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700': !filters.{{ type.filter_field }} || !filters.{{ type.filter_field }}.includes('{{ type.name }}')
+             }"
+             @click="toggleType('{{ type.name }}', '{{ type.filter_field }}')"
+             title="{{ type.description|default:type.name }}"
+           >
+      {{ type.name }}
+    </button>
+  {% endfor %}
+{% endpartialdef type-buttons %}
 
 
 {% partialdef generic-combobox %}
@@ -1009,8 +1048,8 @@
           params.forEach((value, key) => {
             if (key.startsWith("filter_")) {
               const filterKey = key.replace("filter_", "");
-              // Handle status filters as arrays
-              if (filterKey.endsWith('_status')) {
+              // Handle status and type filters as arrays
+              if (filterKey.endsWith('_status') || filterKey.endsWith('_type')) {
                 newFilters[filterKey] = value.split(',').filter(v => v.trim());
               } else {
                 newFilters[filterKey] = value;
@@ -1031,8 +1070,8 @@
           }
           for (const modelName in this.filters) {
             if (this.filters[modelName]) {
-              // Handle status filters as comma-separated values
-              if (modelName.endsWith('_status') && Array.isArray(this.filters[modelName])) {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[modelName])) {
                 if (this.filters[modelName].length > 0) {
                   newParams.set(`filter_${modelName}`, this.filters[modelName].join(','));
                 }
@@ -1147,8 +1186,8 @@
               if (key === modelName.toLowerCase()){
                   vals['search'] = this.filters[key];
               } else {
-                  // Handle status filters as comma-separated values
-                  if (key.endsWith('_status') && Array.isArray(this.filters[key])) {
+                  // Handle all array values as comma-separated values
+                  if (Array.isArray(this.filters[key])) {
                     if (this.filters[key].length > 0) {
                       vals[`filter_${key}`] = this.filters[key].join(',');
                     }
@@ -1188,8 +1227,8 @@
           };
           for (const key in this.filters) {
             if (key !== fieldName && this.filters[key]) {
-              // Handle status filters as comma-separated values
-              if (key.endsWith('_status') && Array.isArray(this.filters[key])) {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
                 if (this.filters[key].length > 0) {
                   vals[`filter_${key}`] = this.filters[key].join(',');
                 }
@@ -1219,8 +1258,29 @@
           };
           for (const key in this.filters) {
             if (key !== statusKey && this.filters[key]) {
-              // Handle status filters as comma-separated values
-              if (key.endsWith('_status') && Array.isArray(this.filters[key])) {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
+                if (this.filters[key].length > 0) {
+                  vals[`filter_${key}`] = this.filters[key].join(',');
+                }
+              } else {
+                vals[`filter_${key}`] = this.filters[key];
+              }
+            }
+          }
+          return JSON.stringify(vals);
+        },
+        getTypeHxVals(appLabel, modelName) {
+          let vals = {
+            app_label: appLabel,
+            model_name: modelName,
+          };
+          
+          // Add all filters including type filters
+          for (const key in this.filters) {
+            if (this.filters[key]) {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
                 if (this.filters[key].length > 0) {
                   vals[`filter_${key}`] = this.filters[key].join(',');
                 }
@@ -1261,6 +1321,35 @@
             });
           }, 100);
         },
+        toggleType(typePk, filterField) {
+          if (!this.filters[filterField]) {
+            this.filters[filterField] = [];
+          }
+          
+          const index = this.filters[filterField].indexOf(typePk);
+          if (index > -1) {
+            // Remove type if already selected
+            this.filters[filterField].splice(index, 1);
+          } else {
+            // Add type if not selected
+            this.filters[filterField].push(typePk);
+          }
+          
+          // Trigger filter update for all models
+          this.$dispatch('filters-updated');
+          
+          // Force refresh of all related model sections
+          setTimeout(() => {
+            const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
+            relatedModels.forEach(model => {
+              const targetId = `#${this.activeItem === 'index' ? 'index' : 'page'}-${model}-results`;
+              const element = document.querySelector(targetId);
+              if (element) {
+                htmx.trigger(element, 'filters-updated');
+              }
+            });
+          }, 100);
+        },
         clearModelStatusFilter(modelName) {
           const statusKey = `${modelName}_status`;
           this.filters[statusKey] = [];
@@ -1278,6 +1367,7 @@
             });
           }, 100);
         },
+
         // Event-scoped dispatch helper
         dispatchFiltersUpdated(scope = null) {
           const name = scope ? `filters-updated-${scope}` : 'filters-updated';
@@ -1380,7 +1470,14 @@
           };
           for (const key in this.filters) {
             if (this.filters[key]) {
-              vals[`filter_${key}`] = this.filters[key];
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
+                if (this.filters[key].length > 0) {
+                  vals[`filter_${key}`] = this.filters[key].join(',');
+                }
+              } else {
+                vals[`filter_${key}`] = this.filters[key];
+              }
             }
           }
           return JSON.stringify(vals);
