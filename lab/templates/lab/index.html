@@ -76,7 +76,7 @@
             <i class="fa-solid fa-filter-circle-xmark"></i>
           </button>
         </div>
-        {% include "lab/partials/partials.html#drawer" %}
+        {% include "lab/partials/drawer.html#drawer" %}
         <!-- Detail View Container -->
         <div x-show="activeItem && activeItem.startsWith('detail-')" id="detail-view" class="relative">
           <template x-if="detailHtml">
@@ -86,9 +86,9 @@
         </div>
         <!-- Hide main content when detail is open -->
         <div x-show="!activeItem || !activeItem.startsWith('detail-')">
-          <div x-show="activeItem === 'home'" id="plots-content">
+          <div x-show="activeItem === 'home'" id="plots-content" hx-get="{% url 'lab:plots' %}" hx-trigger="load">
             {% with view="page" %}
-              {% include "lab/visualization.html#plots-section" %}
+              {% include "lab/plots.html#plots-section" %}
             {% endwith %}
           </div>
           <div x-show="activeItem === 'overview'">
@@ -139,7 +139,7 @@
           <div x-show="activeItem === 'hpo-network-visualization'">
             {% with view="page" %}
               <div x-data="hpoController()">
-                {% include "lab/visualization.html#hpo-network-visualization-section" %}
+                {% include "lab/plots.html#hpo-network-visualization-section" %}
               </div>
             {% endwith %}
           </div>
@@ -213,8 +213,8 @@
           params.forEach((value, key) => {
             if (key.startsWith("filter_")) {
               const filterKey = key.replace("filter_", "");
-              // Handle status filters as arrays
-              if (filterKey.endsWith('_status')) {
+              // Handle status and type filters as arrays
+              if (filterKey.endsWith('_status') || filterKey.endsWith('_type')) {
                 newFilters[filterKey] = value.split(',').filter(v => v.trim());
               } else {
                 newFilters[filterKey] = value;
@@ -235,8 +235,8 @@
           }
           for (const modelName in this.filters) {
             if (this.filters[modelName]) {
-              // Handle status filters as comma-separated values
-              if (modelName.endsWith('_status') && Array.isArray(this.filters[modelName])) {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[modelName])) {
                 if (this.filters[modelName].length > 0) {
                   newParams.set(`filter_${modelName}`, this.filters[modelName].join(','));
                 }
@@ -352,8 +352,8 @@
               if (key === modelName.toLowerCase()){
                   vals['search'] = this.filters[key];
               } else {
-                  // Handle status filters as comma-separated values
-                  if (key.endsWith('_status') && Array.isArray(this.filters[key])) {
+                  // Handle all array values as comma-separated values
+                  if (Array.isArray(this.filters[key])) {
                     if (this.filters[key].length > 0) {
                       vals[`filter_${key}`] = this.filters[key].join(',');
                     }
@@ -393,8 +393,8 @@
           };
           for (const key in this.filters) {
             if (key !== fieldName && this.filters[key]) {
-              // Handle status filters as comma-separated values
-              if (key.endsWith('_status') && Array.isArray(this.filters[key])) {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
                 if (this.filters[key].length > 0) {
                   vals[`filter_${key}`] = this.filters[key].join(',');
                 }
@@ -424,8 +424,29 @@
           };
           for (const key in this.filters) {
             if (key !== statusKey && this.filters[key]) {
-              // Handle status filters as comma-separated values
-              if (key.endsWith('_status') && Array.isArray(this.filters[key])) {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
+                if (this.filters[key].length > 0) {
+                  vals[`filter_${key}`] = this.filters[key].join(',');
+                }
+              } else {
+                vals[`filter_${key}`] = this.filters[key];
+              }
+            }
+          }
+          return JSON.stringify(vals);
+        },
+        getTypeHxVals(appLabel, modelName) {
+          let vals = {
+            app_label: appLabel,
+            model_name: modelName,
+          };
+          
+          // Add all filters including type filters
+          for (const key in this.filters) {
+            if (this.filters[key]) {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
                 if (this.filters[key].length > 0) {
                   vals[`filter_${key}`] = this.filters[key].join(',');
                 }
@@ -466,6 +487,64 @@
             });
           }, 100);
         },
+        toggleType(typePk, filterField) {
+          if (!this.filters[filterField]) {
+            this.filters[filterField] = [];
+          }
+          
+          const index = this.filters[filterField].indexOf(typePk);
+          if (index > -1) {
+            // Remove type if already selected
+            this.filters[filterField].splice(index, 1);
+          } else {
+            // Add type if not selected
+            this.filters[filterField].push(typePk);
+          }
+          
+          // Trigger filter update for all models
+          this.$dispatch('filters-updated');
+          
+          // Force refresh of all related model sections
+          setTimeout(() => {
+            const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
+            relatedModels.forEach(model => {
+              const targetId = `#${this.activeItem === 'home' ? 'index' : 'page'}-${model}-results`;
+              const element = document.querySelector(targetId);
+              if (element) {
+                htmx.trigger(element, 'filters-updated');
+              }
+            });
+          }, 100);
+        },
+        toggleType(typePk, filterField) {
+          if (!this.filters[filterField]) {
+            this.filters[filterField] = [];
+          }
+          
+          const index = this.filters[filterField].indexOf(typePk);
+          if (index > -1) {
+            // Remove type if already selected
+            this.filters[filterField].splice(index, 1);
+          } else {
+            // Add type if not selected
+            this.filters[filterField].push(typePk);
+          }
+          
+          // Trigger filter update for all models
+          this.$dispatch('filters-updated');
+          
+          // Force refresh of all related model sections
+          setTimeout(() => {
+            const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
+            relatedModels.forEach(model => {
+              const targetId = `#${this.activeItem === 'home' ? 'index' : 'page'}-${model}-results`;
+              const element = document.querySelector(targetId);
+              if (element) {
+                htmx.trigger(element, 'filters-updated');
+              }
+            });
+          }, 100);
+        },
         clearModelStatusFilter(modelName) {
           const statusKey = `${modelName}_status`;
           this.filters[statusKey] = [];
@@ -475,7 +554,7 @@
           setTimeout(() => {
             const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
             relatedModels.forEach(model => {
-              const targetId = `#${this.activeItem === 'home' ? 'home' : 'page'}-${model}-results`;
+              const targetId = `#${this.activeItem === 'home' ? 'index' : 'page'}-${model}-results`;
               const element = document.querySelector(targetId);
               if (element) {
                 htmx.trigger(element, 'filters-updated');
@@ -483,6 +562,7 @@
             });
           }, 100);
         },
+
         // Event-scoped dispatch helper
         dispatchFiltersUpdated(scope = null) {
           const name = scope ? `filters-updated-${scope}` : 'filters-updated';
@@ -585,7 +665,14 @@
           };
           for (const key in this.filters) {
             if (this.filters[key]) {
-              vals[`filter_${key}`] = this.filters[key];
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
+                if (this.filters[key].length > 0) {
+                  vals[`filter_${key}`] = this.filters[key].join(',');
+                }
+              } else {
+                vals[`filter_${key}`] = this.filters[key];
+              }
             }
           }
           return JSON.stringify(vals);

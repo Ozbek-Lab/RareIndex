@@ -1,141 +1,5 @@
 {% load partials %}
 
-{% partialdef drawer %}
-  <!-- Alpine.js Right-side Drawer -->
-  <div x-show="open" x-cloak>
-    <!-- Overlay -->
-    <div x-show="open" @click= "open=false" class="fixed inset-0 bg-black bg-opacity-30 z-40 transition-opacity duration-200" x-transition.opacity></div>
-
-    <!-- Drawer -->
-    <aside
-      x-show="open"
-      x-transition:enter="transition transform duration-300"
-      x-transition:enter-start="translate-x-full"
-      x-transition:enter-end="translate-x-0"
-      x-transition:leave="transition transform duration-200"
-      x-transition:leave-start="translate-x-0"
-      x-transition:leave-end="translate-x-full"
-      class="fixed top-0 right-0 h-full w-80 bg-white dark:bg-gray-800 shadow-lg z-50 flex flex-col"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="filter-drawer-label"
-    >
-      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <h5 id="filter-drawer-label" class="text-base font-semibold text-gray-700 dark:text-gray-200">Filters</h5>
-        <button @click= "open=false" type="button" class="text-gray-400 hover:text-gray-700 dark:hover:text-white focus:outline-none">
-          <i class="fa-solid fa-circle-xmark"></i>
-        </button>
-      </div>
-      <div class="p-4 flex-1 overflow-y-auto space-y-6">
-        <!-- Individuals -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Individual' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </h6>
-        </div>
-        <!-- Samples -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Sample' field_name='sample_type' label='Sample Type' icon_class='fa-vial' %}
-            {% partial generic-select %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Sample' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </div>
-        <!-- Tests -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Test' field_name='test_type' label='Test Type' icon_class='fa-flask-vial' %}
-            {% partial generic-select %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Test' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </div>
-        <!-- Analyses -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Analysis' field_name='analysis_type' label='Analysis Type' icon_class='fa-laptop' %}
-            {% partial generic-select %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Analysis' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </div>
-        <!-- Institutions -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' %}
-            {% partial generic-search %}
-          {% endwith %}
-        </div>
-        <!-- Projects -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' %}
-            {% partial generic-search %}
-          {% endwith %}
-          {% with app_label='lab' model_name='Project' %}
-            {% partial generic-status-filter %}
-          {% endwith %}
-        </div>
-        <!-- Tasks -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='lab' model_name='Task' icon_class='fa-list-check' %}
-            {% partial generic-search %}
-          {% endwith %}
-        </div>
-        <!-- HPO Terms -->
-        <div>
-          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          </h6>
-          {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' %}
-            {% partial generic-search %}
-          {% endwith %}
-        </div>
-      </div>
-    </aside>
-  </div>
-{% endpartialdef drawer %}
-
-{% partialdef indicator %}
-  <div x-show="isLoading" x-transition>
-    {% if text %}
-      <div class="text-center text-gray-500 p-8">{{ text }}</div>
-    {% endif %}
-    {% if model_name %}
-      <div class="text-center text-gray-500 p-8">
-        Updating {{ model_name|lower }} results...
-      </div>
-    {% endif %}
-    <div class="flex justify-center py-4">
-      <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
-    </div>
-  </div>
-{% endpartialdef %}
-
 {% partialdef generic-search %}
   <div class="relative w-full mb-2">
     <i
@@ -197,6 +61,24 @@
   </div>
 {% endpartialdef generic-select %}
 
+{% partialdef generic-type-filter %}
+  <div class="relative w-full mb-2">
+    <div class="flex-1">
+      <div
+        class="flex flex-wrap gap-1"
+        hx-get="{% url 'lab:get_type_buttons' %}"
+        hx-trigger="load, created-{{ model_name }} from:window, {{ event_name|default:'filters-updated' }} from:window"
+        hx-target="this"
+        hx-swap="innerHTML"
+        :hx-vals="getTypeHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}')"
+      >
+        <div class="text-gray-500 text-sm">Loading types...</div>
+      </div>
+    </div>
+  </div>
+  <hr>
+{% endpartialdef %}
+
 {% partialdef generic-status-filter %}
   <div class="relative w-full mb-2">
     <div class="flex-1">
@@ -235,10 +117,28 @@
     >
       {% if status.icon %}
         <i class="fa-solid {{ status.icon }} mr-1"></i>
+        {{ status.name }}
       {% endif %}
     </button>
   {% endfor %}
 {% endpartialdef status-buttons %}
+
+{% partialdef type-buttons %}
+  {% for type in types %}
+               <button
+             type="button"
+             class="px-2 py-1 text-xs rounded-full transition-all duration-200 border"
+             :class="{
+               'bg-blue-500 text-white border-blue-500': filters.{{ type.filter_field }} && filters.{{ type.filter_field }}.includes('{{ type.name }}'),
+               'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700': !filters.{{ type.filter_field }} || !filters.{{ type.filter_field }}.includes('{{ type.name }}')
+             }"
+             @click= "toggleType('{{ type.name }}', '{{ type.filter_field }}')"
+             title="{{ type.description|default:type.name }}"
+           >
+      {{ type.name }}
+    </button>
+  {% endfor %}
+{% endpartialdef type-buttons %}
 
 {% partialdef generic-combobox %}
   <div class="relative w-full" x-data="comboboxController('{{ app_label|default:"lab" }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:'[]'|escapejs }}')" @click.outside= "open=false">
@@ -455,7 +355,7 @@
         class="absolute inset-0 bg-gray-400/20 flex items-center justify-center rounded-md z-10"
         style="display: none;"
       >
-        {% partial indicator %}
+        {% include "lab/partials/indicator.html#indicator" %}
       </div>
 
     </div>

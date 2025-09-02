@@ -41,7 +41,7 @@ from .visualization.hpo_network_visualization import (
 )
 
 
-from .filters import apply_filters, FILTER_CONFIG, get_available_statuses
+from .filters import apply_filters, FILTER_CONFIG, get_available_statuses, get_available_types
 
 # Import SQL agent for natural language search
 from .sql_agent import query_natural_language
@@ -444,7 +444,7 @@ def hpo_network_visualization(request):
     plot_json = json.dumps(fig.to_dict())
     return render(
         request,
-        "lab/visualization.html#hpo-network-visualization",
+        "lab/plots.html#hpo-network-visualization",
         {
             "plot_json": plot_json,
             "threshold": threshold,
@@ -552,6 +552,28 @@ def get_status_buttons(request):
         {
             "statuses": statuses,
             "selected_statuses": selected_statuses,
+            "model_name": model_name,
+        },
+    )
+
+
+@login_required
+def get_type_buttons(request):
+    """Get type buttons for a specific model"""
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+
+    if not model_name:
+        return HttpResponseBadRequest("Model not specified.")
+
+    # Get available types for this model
+    types = get_available_types(model_name, app_label)
+
+    return render(
+        request,
+        "lab/partials/partials.html#type-buttons",
+        {
+            "types": types,
             "model_name": model_name,
         },
     )
@@ -829,21 +851,6 @@ def notifications_page(request):
         return render(request, "lab/notifications.html#notifications-content", context)
 
     return render(request, "lab/notifications.html", context)
-
-
-@login_required
-def individual_timeline(request, pk):
-    from lab.visualization.timeline import timeline
-
-    return timeline(request, pk)
-
-
-@login_required
-def plots_page(request):
-    """View for the plots page showing various data visualizations."""
-    from .visualization.plots import plots_page as plots_view
-
-    return plots_view(request)
 
 
 @login_required
@@ -1926,7 +1933,8 @@ def family_create_segway(request):
 
 
 def plots(request):
-    return render(request, "lab/visualization/plots.html")
+    print("VIEWS PLOTS")
+    return render(request, "lab/index.html", {"activeItem": "plots"})
 
 
 def map_page(request):
