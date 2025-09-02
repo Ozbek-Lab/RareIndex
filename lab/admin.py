@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from reversion.admin import VersionAdmin
 from . import models
 
 class ProjectIndividualsInline(admin.TabularInline):
@@ -18,7 +19,7 @@ class IndividualProjectsInline(admin.TabularInline):
 
 
 @admin.register(models.Note)
-class NoteAdmin(admin.ModelAdmin):
+class NoteAdmin(VersionAdmin):
     list_display = ["content_object", "user", "private_owner", "get_created_at", "get_updated_at"]
     list_filter = ["user", "private_owner", "content_type"]
     search_fields = ["content"]
@@ -36,7 +37,7 @@ class NoteAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.TestType)
-class TestTypeAdmin(admin.ModelAdmin):
+class TestTypeAdmin(VersionAdmin):
     list_display = ["name", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name", "description"]
     list_filter = ["created_by"]
@@ -53,7 +54,7 @@ class TestTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.SampleType)
-class SampleTypeAdmin(admin.ModelAdmin):
+class SampleTypeAdmin(VersionAdmin):
     list_display = ["name", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name", "description"]
     list_filter = ["created_by"]
@@ -70,7 +71,7 @@ class SampleTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Institution)
-class InstitutionAdmin(admin.ModelAdmin):
+class InstitutionAdmin(VersionAdmin):
     list_display = ["name", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name"]
     list_filter = ["created_by"]
@@ -87,7 +88,7 @@ class InstitutionAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Individual)
-class IndividualAdmin(admin.ModelAdmin):
+class IndividualAdmin(VersionAdmin):
     list_display = [
         "full_name",
         "id",
@@ -143,7 +144,7 @@ class IndividualAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Sample)
-class SampleAdmin(admin.ModelAdmin):
+class SampleAdmin(VersionAdmin):
     list_display = ["individual", "sample_type", "status", "receipt_date", "created_by", "get_created_at", "get_updated_at"]
     list_filter = ["status", "sample_type", "receipt_date"]
     search_fields = [
@@ -184,7 +185,7 @@ class SampleAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Test)
-class TestAdmin(admin.ModelAdmin):
+class TestAdmin(VersionAdmin):
     list_display = ["sample", "pk", "test_type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
     list_filter = ["status", "performed_date", "test_type"]
     search_fields = ["sample__individual__lab_id", "test_type__name"]
@@ -211,7 +212,7 @@ class TestAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Status)
-class StatusAdmin(admin.ModelAdmin):
+class StatusAdmin(VersionAdmin):
     list_display = ["name", "content_type", "color", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name", "description"]
     list_filter = ["content_type"]
@@ -228,7 +229,7 @@ class StatusAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Family)
-class FamilyAdmin(admin.ModelAdmin):
+class FamilyAdmin(VersionAdmin):
     list_display = ["family_id", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["family_id", "description"]
 
@@ -244,7 +245,7 @@ class FamilyAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.AnalysisType)
-class AnalysisTypeAdmin(admin.ModelAdmin):
+class AnalysisTypeAdmin(VersionAdmin):
     list_display = ("name", "version", "created_by", "get_created_at", "get_updated_at")
     search_fields = ("name", "description", "version")
     filter_horizontal = ("parent_types",)
@@ -267,7 +268,7 @@ class AnalysisTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Analysis)
-class AnalysisAdmin(admin.ModelAdmin):
+class AnalysisAdmin(VersionAdmin):
     list_display = ["test", "type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
     list_filter = ["type", "status", "performed_date"]
     search_fields = ["test__sample__individual__lab_id", "type__name"]
@@ -294,7 +295,7 @@ class AnalysisAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Task)
-class TaskAdmin(admin.ModelAdmin):
+class TaskAdmin(VersionAdmin):
     list_display = [
         "id",
         "title",
@@ -338,7 +339,7 @@ class TaskAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Project)
-class ProjectAdmin(admin.ModelAdmin):
+class ProjectAdmin(VersionAdmin):
     list_display = [
         "name",
         "created_by",
@@ -381,7 +382,7 @@ class ProjectAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.IdentifierType)
-class IdentifierTypeAdmin(admin.ModelAdmin):
+class IdentifierTypeAdmin(VersionAdmin):
     list_display = ["name", "description", "get_created_at", "get_updated_at", "created_by"]
     list_filter = ["name", "description", "created_by"]
     search_fields = ["name", "description"]
@@ -398,7 +399,7 @@ class IdentifierTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.CrossIdentifier)
-class CrossIdentifierAdmin(admin.ModelAdmin):
+class CrossIdentifierAdmin(VersionAdmin):
     list_display = [
         "individual",
         "id_type",
