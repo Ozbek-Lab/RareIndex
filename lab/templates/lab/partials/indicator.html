@@ -1,0 +1,17 @@
+{% load partials %}
+
+{% partialdef indicator %}
+  <div x-show="isLoading" x-transition>
+    {% if text %}
+      <div class="text-center text-gray-500 p-8">{{ text }}</div>
+    {% endif %}
+    {% if model_name %}
+      <div class="text-center text-gray-500 p-8">
+        Updating {{ model_name|lower }} results...
+      </div>
+    {% endif %}
+    <div class="flex justify-center py-4">
+      <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
+    </div>
+  </div>
+{% endpartialdef %}

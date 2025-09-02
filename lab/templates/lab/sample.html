@@ -11,7 +11,7 @@
     data-item-id="{{ item.id }}"
   >
     {% with float="float-right" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
+      {% include 'lab/partials/badge.html#badge' %}
     {% endwith %}
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
       Sample #{{ item.id }}
@@ -34,7 +34,7 @@
       </span>
       <button
         class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Sample', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Sample', 'lab')"
         title="View Details"
       >
         <i class="fa-solid fa-eye"></i>
@@ -51,7 +51,7 @@
     <div class="flex items-center gap-1 mb-2">
       <button
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Sample', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Sample', 'lab')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
@@ -61,7 +61,7 @@
       </h2>
       <div class="ml-auto">
         {% with float="float-right" color=item.status.color text=item.status.name %}
-          {% include 'lab/partials/badge.html' %}
+          {% include 'lab/partials/badge.html#badge' %}
         {% endwith %}
       </div>
     </div>
@@ -85,7 +85,7 @@
           <button
             type="button"
             class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-            @click="showFullName = !showFullName"
+            @click= "showFullName = !showFullName"
             title="Toggle full name visibility"
           >
             <i class="fas fa-id-card"></i>
@@ -102,7 +102,7 @@
       
       <div x-data="{ open: false }" class="static">
         <button
-          @click="open = ! open"
+          @click= "open = ! open"
           type="button"
           class="inline-flex items-center gap-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
         >
@@ -164,12 +164,12 @@
   </td>
   <td class="px-4 py-3 text-sm">
     {% with float="" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
+      {% include 'lab/partials/badge.html#badge' %}
     {% endwith %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     <button
-      @click="openDetail({{ item.pk }}, 'Sample', 'lab')"
+      @click= "openDetail({{ item.pk }}, 'Sample', 'lab')"
       class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
     >
       <i class="fa-solid fa-eye"></i>
@@ -255,7 +255,7 @@
           <div>
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Individual</h3>
             <p class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-              @click="openDetail({{ item.individual.id }}, 'Individual', 'lab')"
+              @click= "openDetail({{ item.individual.id }}, 'Individual', 'lab')"
             >
               {{ item.individual.individual_id }}
             </p>
@@ -273,7 +273,7 @@
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'notes'"
+            @click= "activeTab = 'notes'"
           >
             Notes ({{ item.notes.count }})
             {% with object=item content_type='sample' %}
@@ -283,28 +283,28 @@
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tests' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'tests'"
+            @click= "activeTab = 'tests'"
           >
             Tests ({{ item.tests.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'analyses' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'analyses'"
+            @click= "activeTab = 'analyses'"
           >
             Analyses ({{ analyses|length }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'tasks'"
+            @click= "activeTab = 'tasks'"
           >
             Tasks ({{ item.tasks.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'history' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'history'"
+            @click= "activeTab = 'history'"
           >
             History
           </button>
@@ -349,7 +349,7 @@
                     ></div>
 
                     <button
-                      @click="viewMode = 'cards'"
+                      @click= "viewMode = 'cards'"
                       class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                       :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                     >
@@ -365,7 +365,7 @@
                     </button>
 
                     <button
-                      @click="viewMode = 'table'"
+                      @click= "viewMode = 'table'"
                       class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                       :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                     >
@@ -445,7 +445,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -461,7 +461,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -540,7 +540,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -556,7 +556,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
