@@ -1943,6 +1943,9 @@ def map_view(request):
         if not individual_types or 'all' in individual_types:
             individual_types = ['all']
     
+    # Get clustering toggle from POST or GET request
+    enable_clustering = request.POST.get('enable_clustering', 'false').lower() == 'true'
+    
     # Apply individual type filtering
     if individual_types != ['all']:
         if 'families' in individual_types:
@@ -1976,20 +1979,10 @@ def map_view(request):
             individuals_queryset = individuals_queryset.filter(filter_conditions)
     
     # Generate map data using the visualization module
-    chart_data = generate_map_data(individuals_queryset, individual_types)
+    chart_data = generate_map_data(individuals_queryset, individual_types, enable_clustering)
     
-    # Handle errors
-    if 'error' in chart_data:
-        if request.htmx:
-            return render(request, 'lab/map.html#map-partial', {
-                'error_message': chart_data['error'],
-                'individual_types': individual_types
-            }, status=404)
-        else:
-            return render(request, 'lab/map.html', {
-                'error_message': chart_data['error'],
-                'individual_types': individual_types
-            })
+    # Add clustering state to context
+    chart_data['enable_clustering'] = enable_clustering
     
     # Return HTML for HTMX requests, render template for page requests
     if request.htmx:

@@ -7,6 +7,8 @@ django-allauth
 whitenoise
 django-template-partials
 
+hpo3
+
 pronto
 
 networkx
@@ -31,3 +33,4 @@ requests
 django-environ
 gunicorn
 psycopg2-binary
+
