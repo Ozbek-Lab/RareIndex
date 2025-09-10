@@ -74,7 +74,7 @@
     <div class="flex items-center gap-1 mb-2">
       <button
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click= "openDetail({{ item.pk }}, 'Individual', 'lab')"
+        @click=" openDetail({{ item.pk }}, 'Individual', 'lab')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
@@ -510,7 +510,7 @@
             :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click= "activeTab = 'tasks'"
           >
-            Tasks ({{ item.tasks.count }})
+            Tasks ({{ item.tasks.all|length }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
@@ -1161,19 +1161,12 @@
 
         <!-- Tasks tab -->
         <div x-show="activeTab === 'tasks'" x-cloak>
-          {% if item.tasks.exists %}
-            <!-- Use existing task partials for consistent UI -->
-            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- View toggle buttons -->
-              <div class="flex justify-end">
-                <div
-                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
-                >
-                  <div
-                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
-                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
-                    style="width: calc(50% - 2px);"
-                  ></div>
+          <!-- Use existing task partials for consistent UI -->
+          <div x-data="{ viewMode: 'cards' }" class="space-y-6">
+            <!-- View toggle buttons -->
+            <div class="flex justify-end">
+              <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center">
+                <div class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out" :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'" style="width: calc(50% - 2px);"></div>
 
                   <button
                     @click= "viewMode = 'cards'"
@@ -1209,49 +1202,100 @@
                 </div>
               </div>
 
-              <!-- Card View with animated transition -->
-              <div
-                x-show="viewMode === 'cards'"
-                x-transition:enter="transition-all duration-500 ease-out"
-                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
-                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                x-transition:leave="transition-all duration-300 ease-in"
-                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
-                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                style="will-change: opacity, transform;"
-              >
-                {% for task in item.tasks.all %}
+            <!-- Card View: render all related tasks -->
+            <div x-show="viewMode === 'cards'" x-transition:enter="transition-all duration-500 ease-out" x-transition:enter-start="opacity-0 scale-95 translate-y-4" x-transition:enter-end="opacity-100 scale-100 translate-y-0" x-transition:leave="transition-all duration-300 ease-in" x-transition:leave-start="opacity-100 scale-100 translate-y-0" x-transition:leave-end="opacity-0 scale-95 translate-y-4" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" style="will-change: opacity, transform;">
+              {# Individual tasks #}
+              {% for task in item.tasks.all %}
+                {% with item=task %}
+                  {% include "lab/task.html#card" %}
+                {% endwith %}
+              {% endfor %}
+
+              {# Sample tasks #}
+              {% for sample in item.samples.all %}
+                {% for task in sample.tasks.all %}
                   {% with item=task %}
                     {% include "lab/task.html#card" %}
                   {% endwith %}
                 {% endfor %}
-              </div>
+              {% endfor %}
 
-                                <!-- Table View with animated transition -->
-                  <div
-                    x-show="viewMode === 'table'"
-                    x-transition:enter="transition-all duration-500 ease-out"
-                    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
-                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                    x-transition:leave="transition-all duration-300 ease-in"
-                    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
-                    class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
-                    style="will-change: opacity, transform;"
-                  >
-                    {% with items=item.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+              {# Test tasks #}
+              {% for sample in item.samples.all %}
+                {% for test in sample.tests.all %}
+                  {% for task in test.tasks.all %}
+                    {% with item=task %}
+                      {% include "lab/task.html#card" %}
+                    {% endwith %}
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+
+              {# Analysis tasks #}
+              {% for sample in item.samples.all %}
+                {% for test in sample.tests.all %}
+                  {% for analysis in test.analyses.all %}
+                    {% for task in analysis.tasks.all %}
+                      {% with item=task %}
+                        {% include "lab/task.html#card" %}
+                      {% endwith %}
+                    {% endfor %}
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+            </div>
+
+            <!-- Table View: render separate tables per section -->
+            <div x-show="viewMode === 'table'" x-transition:enter="transition-all duration-500 ease-out" x-transition:enter-start="opacity-0 scale-95 -translate-y-4" x-transition:enter-end="opacity-100 scale-100 translate-y-0" x-transition:leave="transition-all duration-300 ease-in" x-transition:leave-start="opacity-100 scale-100 translate-y-0" x-transition:leave-end="opacity-0 scale-95 -translate-y-4" class="space-y-6" style="will-change: opacity, transform;">
+              {% if item.tasks.exists %}
+                <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Individual Tasks</h4>
+                <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg">
+                  {% with items=item.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                    {% include "lab/task.html#table" %}
+                  {% endwith %}
+                </div>
+              {% endif %}
+
+              {% for sample in item.samples.all %}
+                {% if sample.tasks.exists %}
+                  <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Sample {{ sample.id }} Tasks</h4>
+                  <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg">
+                    {% with items=sample.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
                       {% include "lab/task.html#table" %}
                     {% endwith %}
                   </div>
+                {% endif %}
+              {% endfor %}
+
+              {% for sample in item.samples.all %}
+                {% for test in sample.tests.all %}
+                  {% if test.tasks.exists %}
+                    <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Test {{ test.id }} Tasks</h4>
+                    <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg">
+                      {% with items=test.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                        {% include "lab/task.html#table" %}
+                      {% endwith %}
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              {% endfor %}
+
+              {% for sample in item.samples.all %}
+                {% for test in sample.tests.all %}
+                  {% for analysis in test.analyses.all %}
+                    {% if analysis.tasks.exists %}
+                      <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Analysis {{ analysis.id }} Tasks</h4>
+                      <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg">
+                        {% with items=analysis.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                          {% include "lab/task.html#table" %}
+                        {% endwith %}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
             </div>
-          {% else %}
-            <div
-              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-            >
-              No tasks available for this individual.
-            </div>
-          {% endif %}
+          </div>
         </div>
 
         <!-- Status History tab -->

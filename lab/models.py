@@ -349,7 +349,7 @@ class Individual(HistoryMixin, models.Model):
     history = HistoricalRecords()
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
-    institution = models.ManyToManyField(Institution)
+    institution = models.ManyToManyField(Institution, related_name="individuals")
     physicians = models.ManyToManyField(User, blank=True, related_name="patients")
     tasks = GenericRelation("Task")
 

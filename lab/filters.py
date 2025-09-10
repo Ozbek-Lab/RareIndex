@@ -103,6 +103,11 @@ FILTER_CONFIG = {
                 "label": "Analysis Type",
                 "select_filter_path": "type__name",
             },
+            "test_type": {
+                "field_path": "test_type__name",
+                "label": "Test Type",
+                "select_filter_path": "test_type__name",
+            },
         },
         "status_filter": {
             "field_path": "status__pk",
@@ -111,8 +116,33 @@ FILTER_CONFIG = {
     },
     "Institution": {
         "app_label": "lab",
-        "search_fields": ["name", "contact"],
-        "filters": {},
+        "search_fields": ["name", "city", "center_name", "speciality", "official_name", "contact", "staff__first_name", "staff__last_name"],
+        "filters": {
+            "Individual": "individuals__pk",
+            "Sample": "individuals__samples__pk",
+            "SampleType": "individuals__samples__sample_type__pk",
+            "Test": "individuals__samples__tests__pk",
+            "TestType": "individuals__samples__tests__test_type__pk",
+            "Analysis": "individuals__samples__tests__analyses__pk",
+            "AnalysisType": "individuals__samples__tests__analyses__type__pk",
+        },
+        "select_fields": {
+            "sample_type": {
+                "field_path": "individuals__samples__sample_type__name",
+                "label": "Sample Type",
+                "select_filter_path": "individuals__samples__sample_type__name",
+            },
+            "test_type": {
+                "field_path": "individuals__samples__tests__test_type__name",
+                "label": "Test Type",
+                "select_filter_path": "individuals__samples__tests__test_type__name",
+            },
+            "analysis_type": {
+                "field_path": "individuals__samples__tests__analyses__type__name",
+                "label": "Analysis Type",
+                "select_filter_path": "individuals__samples__tests__analyses__type__name",
+            },
+        },
     },
     "Project": {
         "app_label": "lab",
