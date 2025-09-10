@@ -16,6 +16,7 @@
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
       {{ item.title }}
     </h3>
+    {% partial connected-object %}
     <p class="text-gray-600 dark:text-gray-400">
       {{ item.description|truncatewords:20 }}
     </p>
@@ -38,7 +39,7 @@
       </span>
       <button
         class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Task', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Task', 'lab')"
         title="View Details"
       >
         <i class="fa-solid fa-eye"></i>
@@ -83,6 +84,7 @@
 
     <div class="mb-2">
       <div class="mb-3">
+        {% partial connected-object %}
         <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
           {{ item.description|truncatewords:30 }}
         </p>
@@ -237,9 +239,64 @@
   </div>
 {% endpartialdef card %}
 
+{% partialdef connected-object inline %}
+  {# Renders the connected object's class and identifying info #}
+  {% if item.content_object %}
+    <div class="mt-1 mb-3 text-base text-gray-800 dark:text-gray-200 flex items-center gap-3">
+      {% if item.content_type.model == 'individual' %}
+        <div class="flex items-center gap-2" x-data="{ showFullName: false }">
+          <i class="fa-solid fa-user text-blue-600 dark:text-blue-400 text-lg"></i>
+          <span class="px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 text-xs font-semibold">Individual</span>
+          <button type="button" class="text-blue-700 dark:text-blue-300 hover:underline"
+                  @click= "openDetail({{ item.content_object.id }}, 'Individual', 'lab')">
+            {{ item.content_object.individual_id }}
+          </button>
+          <button type="button"
+                  class="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  @click= "showFullName = !showFullName"
+                  title="Toggle full name visibility">
+            <i class="fas fa-id-card"></i>
+          </button>
+          {% if perms.lab.view_individual_sensitive_data %}
+            {% if item.content_object.full_name %}
+              <span class="ml-1 text-blue-700 dark:text-blue-300" x-show="showFullName" x-transition>
+                {{ item.content_object.full_name }}
+              </span>
+            {% endif %}
+          {% endif %}
+        </div>
+      {% elif item.content_type.model == 'sample' %}
+        <i class="fa-solid fa-vial text-purple-600 dark:text-purple-400 text-lg"></i>
+        <span class="px-2 py-1 rounded bg-purple-50 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200 text-xs font-semibold">Sample</span>
+        <span class="font-medium">
+          {{ item.content_object.sample_type.name }}
+          <span class="text-gray-500 dark:text-gray-400">- {{ item.content_object.individual.individual_id }}</span>
+        </span>
+      {% elif item.content_type.model == 'test' %}
+        <i class="fa-solid fa-flask text-emerald-600 dark:text-emerald-400 text-lg"></i>
+        <span class="px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200 text-xs font-semibold">Test</span>
+        <span class="font-medium">
+          {{ item.content_object.test_type.name }}
+          <span class="text-gray-500 dark:text-gray-400">- {{ item.content_object.sample.individual.individual_id }}</span>
+        </span>
+      {% elif item.content_type.model == 'analysis' %}
+        <i class="fa-solid fa-chart-line text-orange-600 dark:text-orange-400 text-lg"></i>
+        <span class="px-2 py-1 rounded bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-200 text-xs font-semibold">Analysis</span>
+        <span class="font-medium">
+          {{ item.content_object.type.name }}
+          <span class="text-gray-500 dark:text-gray-400">- {{ item.content_object.test.sample.individual.individual_id }}</span>
+        </span>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endpartialdef %}
+
 {% partialdef table-row %}
   <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 font-medium">
-    {{ item.title }}
+    {% partial connected-object %}
+    <div class="mt-1">
+      {{ item.title }}
+    </div>
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     {{ item.description|truncatewords:10 }}
@@ -260,7 +317,7 @@
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     <button
-      @click="openDetail({{ item.pk }}, 'Task', 'lab')"
+      @click= "openDetail({{ item.pk }}, 'Task', 'lab')"
       class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
     >
       <i class="fa-solid fa-eye"></i>
