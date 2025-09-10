@@ -250,11 +250,11 @@ def generic_search(request):
                 context,
             )
         except TemplateDoesNotExist:
-            return render(request, "lab/index.html#combobox-options", context)
+            return render(request, "lab/partials/partials.html#combobox-options", context)
 
     response = render(
         request,
-        "lab/index.html#generic-search-results",
+        "lab/partials/partials.html#generic-search-results",
         {
             "items": paged_items,
             "num_items": num_items,
@@ -367,7 +367,7 @@ def generic_search_page(request):
                 context,
             )
         except TemplateDoesNotExist:
-            return render(request, "lab/index.html#combobox-options", context)
+            return render(request, "lab/partials/partials.html#combobox-options", context)
 
     context = {
         "items": paged_items,
@@ -444,7 +444,7 @@ def hpo_network_visualization(request):
     plot_json = json.dumps(fig.to_dict())
     return render(
         request,
-        "lab/index.html#hpo-network-visualization",
+        "lab/plots.html#hpo-network-visualization",
         {
             "plot_json": plot_json,
             "threshold": threshold,
@@ -506,7 +506,7 @@ def get_select_options(request):
 
     return render(
         request,
-        "lab/index.html#select-options",
+        "lab/partials.html#select-options",
         {
             "options": list(options),
             "label": select_config.get("label", ""),
@@ -548,7 +548,7 @@ def get_status_buttons(request):
 
     return render(
         request,
-        "lab/index.html#status-buttons",
+        "lab/partials/partials.html#status-buttons",
         {
             "statuses": statuses,
             "selected_statuses": selected_statuses,
@@ -571,7 +571,7 @@ def get_type_buttons(request):
 
     return render(
         request,
-        "lab/index.html#type-buttons",
+        "lab/partials/partials.html#type-buttons",
         {
             "types": types,
             "model_name": model_name,
@@ -854,21 +854,6 @@ def notifications_page(request):
 
 
 @login_required
-def individual_timeline(request, pk):
-    from lab.visualization.timeline import timeline
-
-    return timeline(request, pk)
-
-
-@login_required
-def plots_page(request):
-    """View for the plots page showing various data visualizations."""
-    from .visualization.plots import plots_page as plots_view
-
-    return plots_view(request)
-
-
-@login_required
 def nl_search(request):
     """
     Natural language search view that converts user queries to SQL and returns results.
@@ -994,7 +979,7 @@ def generic_create(request):
             if request.htmx:
                 response = render(
                     request,
-                    "lab/index.html#create-success",
+                    "lab/crud.html#create-success",
                     {
                         "object": obj,
                         "model_name": model_name,
@@ -1032,7 +1017,7 @@ def generic_create(request):
             if request.htmx:
                 return render(
                     request,
-                    "lab/index.html#create-form",
+                    "lab/crud.html#create-form",
                     {
                         "form": form,
                         "model_name": model_name,
@@ -1104,7 +1089,7 @@ def generic_create(request):
     if request.htmx:
         return render(
             request,
-            "lab/index.html#create-form",
+            "lab/crud.html#create-form",
             {
                 "form": form,
                 "model_name": model_name,
@@ -1246,7 +1231,7 @@ def generic_edit(request):
             if request.htmx:
                 return render(
                     request,
-                    "lab/index.html#edit-success",
+                    "lab/crud.html#edit-success",
                     {
                         "object": obj,
                         "model_name": model_name,
@@ -1278,7 +1263,7 @@ def generic_edit(request):
                         context["hpo_initial_json"] = json.dumps(initial)
                 except Exception:
                     context["hpo_initial_json"] = "[]"
-                return render(request, "lab/index.html#edit-form", context)
+                return render(request, "lab/crud.html#edit-form", context)
             else:
                 return render(
                     request,
@@ -1354,7 +1339,7 @@ def generic_edit(request):
         except Exception:
             context["hpo_initial_json"] = "[]"
 
-        return render(request, "lab/index.html#edit-form", context)
+        return render(request, "lab/crud.html#edit-form", context)
     else:
         return render(
             request,
@@ -1400,7 +1385,7 @@ def generic_delete(request):
         if request.htmx:
             return render(
                 request,
-                "lab/index.html#delete-success",
+                "lab/crud.html#delete-success",
                 {
                     "model_name": model_name,
                     "app_label": app_label,
@@ -1431,7 +1416,7 @@ def generic_delete(request):
     if request.htmx:
         return render(
             request,
-            "lab/index.html#delete-confirm",
+            "lab/crud.html#delete-confirm",
             {
                 "object": obj,
                 "model_name": model_name,
@@ -1529,7 +1514,7 @@ def family_create_segway(request):
                     if request.htmx:
                         return render(
                             request,
-                            "lab/individual.html#family-create-error",
+                            "lab/crud.html#family-create-error",
                             {
                                 "error": error_msg,
                             },
@@ -1673,7 +1658,7 @@ def family_create_segway(request):
                     if request.htmx:
                         return render(
                             request,
-                            "lab/individual.html#family-create-error",
+                            "lab/crud.html#family-create-error",
                             {"error": error_msg},
                         )
                     else:
@@ -1875,7 +1860,7 @@ def family_create_segway(request):
             if request.htmx:
                 response = render(
                     request,
-                    "lab/individual.html#family-create-success",
+                    "lab/crud.html#family-create-success",
                     {
                         "family": family,
                         "individuals": [ind for _, ind in created_individuals],
@@ -1922,7 +1907,7 @@ def family_create_segway(request):
             if request.htmx:
                 return render(
                     request,
-                    "lab/individual.html#family-create-error",
+                    "lab/crud.html#family-create-error",
                     {"error": str(e)},
                 )
             else:
@@ -1932,7 +1917,7 @@ def family_create_segway(request):
     if request.htmx:
         return render(
             request,
-            "lab/individual.html#family-create-form",
+            "lab/crud.html#family-create-form",
             {
                 "institutions": Institution.objects.all(),
                 "individual_statuses": Status.objects.filter(
@@ -1948,7 +1933,8 @@ def family_create_segway(request):
 
 
 def plots(request):
-    return render(request, "lab/visualization/plots.html")
+    print("VIEWS PLOTS")
+    return render(request, "lab/index.html", {"activeItem": "plots"})
 
 
 def map_page(request):
