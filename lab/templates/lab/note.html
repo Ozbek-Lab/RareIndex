@@ -34,7 +34,7 @@
                 <button
                   x-show="!editing"
                   class="text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
-                  @click="editing = true; $nextTick(() => $refs.editTextarea.focus())"
+                  @click= "editing = true; $nextTick(() => $refs.editTextarea.focus())"
                   @click.stop
                 >
                   <i class="fa-solid fa-pencil"></i>
@@ -42,7 +42,7 @@
                 <button
                   x-show="editing"
                   class="text-gray-400 dark:text-gray-500 hover:text-green-500 dark:hover:text-green-400 transition-colors"
-                  @click="
+                  @click= "
                     $dispatch('submit-note-edit', { noteId: {{ note.id }}, content: content });
                     editing = false;
                   "
@@ -53,7 +53,7 @@
                 <button
                   x-show="editing"
                   class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
-                  @click="editing = false; content = '{{ note.content|escapejs }}'"
+                  @click= "editing = false; content = '{{ note.content|escapejs }}'"
                   @click.stop
                 >
                   <i class="fa-solid fa-xmark"></i>
@@ -64,7 +64,7 @@
                   hx-delete="{% url 'lab:note_delete' note.id %}"
                   hx-target="closest .notes-list"
                   hx-swap="innerHTML"
-                  @click="$event.stopPropagation()"
+                  @click= "$event.stopPropagation()"
                 >
                   <i class="fa-solid fa-trash"></i>
                 </button>
@@ -109,7 +109,7 @@
         hx-post="{% url 'lab:note_create' %}"
         hx-target="closest .notes-list"
         hx-swap="innerHTML"
-        @submit="$event.stopPropagation()"
+        @submit= "$event.stopPropagation()"
       >
         <input type="hidden" name="content_type" value="{{ content_type }}" />
         <input type="hidden" name="object_id" value="{{ object.id }}" />
@@ -126,7 +126,7 @@
           </label>
           <button
             type="submit"
-            @click="$event.stopPropagation()"
+            @click= "$event.stopPropagation()"
             class="px-2 py-1 bg-blue-600 dark:bg-blue-500 text-white text-xs rounded shadow-sm hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors whitespace-nowrap"
           >
             Add
@@ -172,7 +172,7 @@
     hx-post="{% url 'lab:note_create' %}"
     hx-target="closest .notes-list"
     hx-swap="innerHTML"
-    @submit="$event.stopPropagation()"
+    @submit= "$event.stopPropagation()"
 >
     <input type="hidden" name="content_type" value="{{ content_type }}" />
     <input type="hidden" name="object_id" value="{{ object.id }}" />
@@ -180,7 +180,7 @@
         {{ form.content }}
         <button
             type="submit"
-            @click="$event.stopPropagation()"
+            @click= "$event.stopPropagation()"
             class="px-2 py-1 bg-blue-600 dark:bg-blue-500 text-white text-xs rounded shadow-sm hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors whitespace-nowrap"
         >
             Add
@@ -191,8 +191,8 @@
 
 {% partialdef dropdown %}
 <div x-data="{ open: false }">
-  <button @click="open = !open">{% include 'lab/note.html#summary' %}</button>
-  <div x-show="open" @click.outside="open=false">
+  <button @click= "open = !open">{% include 'lab/note.html#summary' %}</button>
+  <div x-show="open" @click.outside= "open=false">
     {% include 'lab/note.html#list' %}
   </div>
 </div>
