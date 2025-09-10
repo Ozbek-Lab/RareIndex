@@ -418,3 +418,52 @@ def get_available_statuses(model_name, app_label="lab"):
     except Exception as e:
         print(f"Error getting statuses for {model_name}: {e}")
         return []
+
+
+def get_available_types(model_name, app_label="lab"):
+    """Get available types for a specific model."""
+    try:
+        # Map model names to their corresponding type models and filter field names
+        type_config = {
+            'test': {
+                'model': 'TestType',
+                'filter_field': 'test_type',
+                'pk_field': 'pk'
+            },
+            'sample': {
+                'model': 'SampleType',
+                'filter_field': 'sample_type',
+                'pk_field': 'pk'
+            },
+            'analysis': {
+                'model': 'AnalysisType',
+                'filter_field': 'analysis_type',
+                'pk_field': 'pk'
+            },
+            'individual': None,  # Individuals don't have types
+            'project': None,     # Projects don't have types
+            'task': None,        # Tasks don't have types
+            'note': None,        # Notes don't have types
+        }
+        
+        # Get the type config for this model
+        type_config_data = type_config.get(model_name.lower())
+        
+        if not type_config_data:
+            return []
+        
+        # Get the type model
+        type_model = apps.get_model(app_label=app_label, model_name=type_config_data['model'])
+        
+        # Get all types ordered by name
+        types = type_model.objects.all().order_by('name')
+        
+        # Add the filter field name to each type object
+        for type_obj in types:
+            type_obj.filter_field = type_config_data['filter_field']
+            type_obj.pk_field = type_config_data['pk_field']
+        
+        return types
+    except Exception as e:
+        print(f"Error getting types for {model_name}: {e}")
+        return []
