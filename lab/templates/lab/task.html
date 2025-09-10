@@ -10,7 +10,7 @@
     data-item-id="{{ item.id }}"
   >
     {% with float="float-right" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
+      {% include 'lab/partials/badge.html#badge' %}
     {% endwith %}
 
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
@@ -56,7 +56,7 @@
     <div class="flex items-center gap-1 mb-2">
       <button
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Task', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Task', 'lab')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
@@ -66,7 +66,7 @@
       </h2>
       <div class="ml-auto">
         {% with float="float-right" color=item.status.color text=item.status.name %}
-          {% include 'lab/partials/badge.html' %}
+          {% include 'lab/partials/badge.html#badge' %}
         {% endwith %}
 
         <div class="flex items-center float-right">
@@ -130,7 +130,7 @@
       <div class="flex items-center gap-2">
         <div x-data="{ open: false }" class="static">
           <button
-            @click="open = ! open"
+            @click= "open = ! open"
             type="button"
             class="inline-flex items-center gap-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
@@ -312,7 +312,7 @@
   </td>
   <td class="px-4 py-3 text-sm">
     {% with float="" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
+      {% include 'lab/partials/badge.html#badge' %}
     {% endwith %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
