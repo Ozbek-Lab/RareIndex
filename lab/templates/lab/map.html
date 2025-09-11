@@ -63,7 +63,7 @@
      @htmx:after-request="isLoading = false">
     <!-- Loading state while HTMX loads the content -->
     {% with text="Loading map data..." %}
-        {% include 'lab/index.html#indicator' %}
+        {% include 'lab/partials/indicator.html#indicator' %}
     {% endwith %}
 </div>
 {% endpartialdef %}
