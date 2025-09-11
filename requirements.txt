@@ -18,6 +18,8 @@ pygraphviz
 kaleido
 django-encrypted-model-fields
 django-simple-history
+# Model versioning
+django-reversion
 # Use the latest git version of django-notifications-hq for Python 3.12+ compatibility
 openpyxl
 numpy
