@@ -1927,24 +1927,35 @@ def map_page(request):
 
 
 @login_required
-@csrf_exempt
 def map_view(request):
     """
     Generate a scatter map visualization showing institutions of filtered individuals.
     """
+    print(f"=== DEBUG: Map view request: {request} ===")
+    print(f"=== DEBUG: Map view request GET: {request.GET} ===")
     
     # Start with base queryset for individuals
     individuals_queryset = Individual.objects.all()
     
     # Get individual type filter from POST or GET request
     individual_types = ['all']  # Default to all
-    if request.method == 'POST':
-        individual_types = request.POST.getlist('individual_types')
+    if request.method == 'GET':
+        raw_types = request.GET.get('individual_types')
+        if raw_types:
+            try:
+                parsed = json.loads(raw_types)
+                if isinstance(parsed, list) and parsed:
+                    individual_types = parsed
+            except Exception:
+                # Fallback to getlist if not JSON
+                values = request.GET.getlist('individual_types')
+                if values:
+                    individual_types = values
         if not individual_types or 'all' in individual_types:
             individual_types = ['all']
     
     # Get clustering toggle from POST or GET request
-    enable_clustering = request.POST.get('enable_clustering', 'false').lower() == 'true'
+    enable_clustering = request.GET.get('enable_clustering', 'false').lower() == 'true'
     
     # Apply individual type filtering
     if individual_types != ['all']:
@@ -1961,22 +1972,9 @@ def map_view(request):
             # Only probands selected
             individuals_queryset = individuals_queryset.filter(is_index=True)
     
-    # Apply global filters
-    active_filters = request.session.get('active_filters', {})
-    if active_filters:
-        filter_conditions = Q()
-        
-        for filter_key, filter_values in active_filters.items():
-            if filter_values:  # Only apply non-empty filters
-                # Handle different filter types
-                if isinstance(filter_values, list):
-                    if filter_values:  # Non-empty list
-                        filter_conditions &= Q(**{filter_key: filter_values[0]})  # Take first value for now
-                else:
-                    filter_conditions &= Q(**{filter_key: filter_values})
-        
-        if filter_conditions:
-            individuals_queryset = individuals_queryset.filter(filter_conditions)
+    # Apply global filters using the shared filter engine (accepting both GET/POST)
+    # Apply global filters using the shared filter engine (GET-only)
+    individuals_queryset = apply_filters(request, "Individual", individuals_queryset)
     
     # Generate map data using the visualization module
     chart_data = generate_map_data(individuals_queryset, individual_types, enable_clustering)
