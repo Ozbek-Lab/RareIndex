@@ -515,16 +515,8 @@ class Command(BaseCommand):
         else:
             self.stdout.write('Unknown institution already exists')
 
-        # Create or get the project for imported individuals
-        imported_project, _ = Project.objects.get_or_create(
-            name='RareBoost',
-            defaults={
-                'description': 'Boosting Rare Disease Research Capacity and Diagnosing Rare and Undiagnosed Patients',
-                'created_by': admin_user,
-                'status': Status.objects.get(name='In Progress', content_type=ContentType.objects.get(app_label='lab', model='project')),
-                'priority': 'medium'
-            }
-        )
+        # Note: Projects will now be created per-individual based on the new
+        # 'Projeler' column in the OZBEK LAB sheet.
 
         # --- XLSX Reading ---
         wb = openpyxl.load_workbook(file_path, data_only=True)
@@ -707,7 +699,21 @@ class Command(BaseCommand):
                     if institution_list:
                         individual.institution.set(institution_list)
                     self.stdout.write(self.style.SUCCESS(f"Created individual: {self._get_initials(full_name)}"))
-                    imported_project.individuals.add(individual)
+                    # Add individual to projects listed in 'Projeler'
+                    projects_field = row_dict.get('Projeler')
+                    if projects_field:
+                        project_names = [p.strip() for p in str(projects_field).split(',') if p and str(p).strip()]
+                        for pname in project_names:
+                            project_obj, _ = Project.objects.get_or_create(
+                                name=pname,
+                                defaults={
+                                    'description': '',
+                                    'created_by': admin_user,
+                                    'status': imported_project_status,
+                                    'priority': 'medium'
+                                }
+                            )
+                            project_obj.individuals.add(individual)
                 else:
                     if individual.is_index != is_index:
                         individual.is_index = is_index
@@ -820,7 +826,21 @@ class Command(BaseCommand):
             individual.status = Status.objects.get(name='Registered', content_type=ContentType.objects.get(app_label='lab', model='individual'))
             individual.is_index = is_index
             individual.save()
-            imported_project.individuals.add(individual)
+            # Add/ensure individual-project associations from 'Projeler'
+            projects_field = row_dict.get('Projeler')
+            if projects_field:
+                project_names = [p.strip() for p in str(projects_field).split(',') if p and str(p).strip()]
+                for pname in project_names:
+                    project_obj, _ = Project.objects.get_or_create(
+                        name=pname,
+                        defaults={
+                            'description': '',
+                            'created_by': admin_user,
+                            'status': imported_project_status,
+                            'priority': 'medium'
+                        }
+                    )
+                    project_obj.individuals.add(individual)
             hpo_terms = self._get_hpo_terms(row_dict.get('HPO kodları'))
             if hpo_terms:
                 individual.hpo_terms.add(*hpo_terms)
@@ -921,7 +941,7 @@ class Command(BaseCommand):
                     self.stdout.write(f'Individual not found with lab_id: {lab_id}. Available cross_ids: {list(Individual.objects.values_list("cross_ids__id_value", flat=True))[:10]}')
                     leftover_rows.append(row_dict)
                     continue
-                imported_project.individuals.add(individual)
+                # No default project assignment; projects handled via 'Projeler' in OZBEK LAB sheet
             except Exception as e:
                 leftover_rows.append(row_dict)
                 self.stdout.write(self.style.WARNING(f'Error finding individual for {lab_id}: {str(e)}'))

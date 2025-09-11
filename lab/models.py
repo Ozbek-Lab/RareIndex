@@ -10,6 +10,7 @@ from encrypted_model_fields.fields import (
 from simple_history.models import HistoricalRecords
 from django.utils import timezone
 from .middleware import get_current_user
+import reversion
 
 
 class HistoryMixin:
@@ -32,6 +33,7 @@ class HistoryMixin:
         return None
 
 
+@reversion.register()
 class Task(HistoryMixin, models.Model):
     PRIORITY_CHOICES = [
         ("low", "Low"),
@@ -117,6 +119,7 @@ class Task(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+@reversion.register()
 class Project(HistoryMixin, models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -176,6 +179,7 @@ class Project(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+@reversion.register()
 class Note(HistoryMixin, models.Model):
     content = models.TextField()
     user = models.ForeignKey(User, on_delete=models.PROTECT)
@@ -204,6 +208,7 @@ class Note(HistoryMixin, models.Model):
         return f"{self.user.username} - Unknown time"
 
 
+@reversion.register()
 class TestType(HistoryMixin, models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -214,6 +219,7 @@ class TestType(HistoryMixin, models.Model):
         return self.name
 
 
+@reversion.register()
 class SampleType(HistoryMixin, models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -224,6 +230,7 @@ class SampleType(HistoryMixin, models.Model):
         return self.name
 
 
+@reversion.register()
 class Institution(HistoryMixin, models.Model):
     staff = models.ManyToManyField(User, blank=True, related_name="institutions_as_staff")
     latitude = models.FloatField(null=True, blank=True)
@@ -261,6 +268,7 @@ class Institution(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+@reversion.register()
 class Family(HistoryMixin, models.Model):
     family_id = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
@@ -275,6 +283,7 @@ class Family(HistoryMixin, models.Model):
         return self.family_id
 
 
+@reversion.register()
 class Status(HistoryMixin, models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -294,6 +303,7 @@ class Status(HistoryMixin, models.Model):
         return self.name
 
 
+@reversion.register()
 class Individual(HistoryMixin, models.Model):
     id = models.AutoField(primary_key=True)
     full_name = EncryptedCharField(max_length=255)
@@ -339,7 +349,7 @@ class Individual(HistoryMixin, models.Model):
     history = HistoricalRecords()
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
-    institution = models.ManyToManyField(Institution)
+    institution = models.ManyToManyField(Institution, related_name="individuals")
     physicians = models.ManyToManyField(User, blank=True, related_name="patients")
     tasks = GenericRelation("Task")
 
@@ -400,6 +410,7 @@ class Individual(HistoryMixin, models.Model):
         return f"{self.individual_id}"
 
 
+@reversion.register()
 class Sample(HistoryMixin, models.Model):
     individual = models.ForeignKey(
         Individual, on_delete=models.PROTECT, related_name="samples"
@@ -452,6 +463,7 @@ class Sample(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+@reversion.register()
 class Test(HistoryMixin, models.Model):
     """Through model for tracking tests performed on samples"""
 
@@ -507,6 +519,7 @@ class Test(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+@reversion.register()
 class AnalysisType(HistoryMixin, models.Model):
     """Model for defining types of analyses that can be performed"""
 
@@ -540,6 +553,7 @@ class AnalysisType(HistoryMixin, models.Model):
         return f"{self.name} v{self.version}"
 
 
+@reversion.register()
 class Analysis(HistoryMixin, models.Model):
     """Model for tracking analyses performed on sample tests"""
 
@@ -582,6 +596,7 @@ class Analysis(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+@reversion.register()
 class IdentifierType(HistoryMixin, models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -594,6 +609,7 @@ class IdentifierType(HistoryMixin, models.Model):
         return self.name
 
 
+@reversion.register()
 class CrossIdentifier(HistoryMixin, models.Model):
     individual = models.ForeignKey(
         Individual, on_delete=models.PROTECT, related_name="cross_ids"
