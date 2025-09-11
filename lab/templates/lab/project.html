@@ -5,7 +5,7 @@
     data-item-id="{{ item.id }}"
   >
     {% with float="float-right" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
+      {% include 'lab/partials/badge.html#badge' %}
     {% endwith %}
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
       {{ item.name }}
@@ -32,7 +32,7 @@
       </span>
       <button
         class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Project', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Project', 'lab')"
         title="View Details"
       >
         <i class="fa-solid fa-eye"></i>
@@ -49,7 +49,7 @@
     <div class="flex items-center gap-1 mb-2">
       <button
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Project', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Project', 'lab')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
@@ -59,7 +59,7 @@
       </h2>
       <div class="ml-auto">
         {% with float="float-right" color=item.status.color text=item.status.name %}
-          {% include 'lab/partials/badge.html' %}
+          {% include 'lab/partials/badge.html#badge' %}
         {% endwith %}
       </div>
     </div>
@@ -192,12 +192,12 @@
   </td>
   <td class="px-4 py-3 text-sm">
     {% with float="" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
+      {% include 'lab/partials/badge.html#badge' %}
     {% endwith %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     <button
-      @click="openDetail({{ item.pk }}, 'Project', 'lab')"
+      @click= "openDetail({{ item.pk }}, 'Project', 'lab')"
       class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
     >
       <i class="fa-solid fa-eye"></i>
@@ -328,7 +328,7 @@
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'notes' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'notes'"
+            @click= "activeTab = 'notes'"
           >
           Notes ({{ item.notes|visible_count:user }})
           {% with object=item content_type='project' %}
@@ -338,14 +338,14 @@
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'individuals' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'individuals'"
+            @click= "activeTab = 'individuals'"
           >
             Individuals ({{ item.individuals.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tasks' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'tasks'"
+            @click= "activeTab = 'tasks'"
           >
             Tasks ({{ item.tasks.count }})
           </button>
@@ -374,7 +374,7 @@
                 <input type="hidden" name="project_id" value="{{ item.id }}">
                 {% with app_label='lab' model_name='Individual' icon_class='fa-person' value_field='pk' multiple=True name='individual_ids' %}
                   <div class="w-80">
-                    {% include "lab/index.html#generic-combobox" %}
+                    {% include "lab/partials/partials.html#generic-combobox" %}
                   </div>
                 {% endwith %}
                 <button
@@ -407,7 +407,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -419,7 +419,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -501,7 +501,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -513,7 +513,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
