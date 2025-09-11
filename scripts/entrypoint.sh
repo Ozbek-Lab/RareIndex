@@ -6,6 +6,7 @@ set -e
 # Apply database migrations
 echo "Applying database migrations..."
 python manage.py makemigrations
+python manage.py makemigrations lab
 python manage.py migrate
 
 # Collect static files
