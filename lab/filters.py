@@ -103,6 +103,11 @@ FILTER_CONFIG = {
                 "label": "Analysis Type",
                 "select_filter_path": "type__name",
             },
+            "test_type": {
+                "field_path": "test_type__name",
+                "label": "Test Type",
+                "select_filter_path": "test_type__name",
+            },
         },
         "status_filter": {
             "field_path": "status__pk",
@@ -111,8 +116,33 @@ FILTER_CONFIG = {
     },
     "Institution": {
         "app_label": "lab",
-        "search_fields": ["name", "contact"],
-        "filters": {},
+        "search_fields": ["name", "city", "center_name", "speciality", "official_name", "contact", "staff__first_name", "staff__last_name"],
+        "filters": {
+            "Individual": "individuals__pk",
+            "Sample": "individuals__samples__pk",
+            "SampleType": "individuals__samples__sample_type__pk",
+            "Test": "individuals__samples__tests__pk",
+            "TestType": "individuals__samples__tests__test_type__pk",
+            "Analysis": "individuals__samples__tests__analyses__pk",
+            "AnalysisType": "individuals__samples__tests__analyses__type__pk",
+        },
+        "select_fields": {
+            "sample_type": {
+                "field_path": "individuals__samples__sample_type__name",
+                "label": "Sample Type",
+                "select_filter_path": "individuals__samples__sample_type__name",
+            },
+            "test_type": {
+                "field_path": "individuals__samples__tests__test_type__name",
+                "label": "Test Type",
+                "select_filter_path": "individuals__samples__tests__test_type__name",
+            },
+            "analysis_type": {
+                "field_path": "individuals__samples__tests__analyses__type__name",
+                "label": "Analysis Type",
+                "select_filter_path": "individuals__samples__tests__analyses__type__name",
+            },
+        },
     },
     "Project": {
         "app_label": "lab",
@@ -387,4 +417,53 @@ def get_available_statuses(model_name, app_label="lab"):
         return statuses
     except Exception as e:
         print(f"Error getting statuses for {model_name}: {e}")
+        return []
+
+
+def get_available_types(model_name, app_label="lab"):
+    """Get available types for a specific model."""
+    try:
+        # Map model names to their corresponding type models and filter field names
+        type_config = {
+            'test': {
+                'model': 'TestType',
+                'filter_field': 'test_type',
+                'pk_field': 'pk'
+            },
+            'sample': {
+                'model': 'SampleType',
+                'filter_field': 'sample_type',
+                'pk_field': 'pk'
+            },
+            'analysis': {
+                'model': 'AnalysisType',
+                'filter_field': 'analysis_type',
+                'pk_field': 'pk'
+            },
+            'individual': None,  # Individuals don't have types
+            'project': None,     # Projects don't have types
+            'task': None,        # Tasks don't have types
+            'note': None,        # Notes don't have types
+        }
+        
+        # Get the type config for this model
+        type_config_data = type_config.get(model_name.lower())
+        
+        if not type_config_data:
+            return []
+        
+        # Get the type model
+        type_model = apps.get_model(app_label=app_label, model_name=type_config_data['model'])
+        
+        # Get all types ordered by name
+        types = type_model.objects.all().order_by('name')
+        
+        # Add the filter field name to each type object
+        for type_obj in types:
+            type_obj.filter_field = type_config_data['filter_field']
+            type_obj.pk_field = type_config_data['pk_field']
+        
+        return types
+    except Exception as e:
+        print(f"Error getting types for {model_name}: {e}")
         return []
