@@ -100,13 +100,10 @@ def generate_map_data(individuals_queryset, individual_types, enable_clustering=
             colorbar=dict(title="Individuals")
         ),
         text=[f"{name} ({cnt})" for name, cnt in zip(df["name"], df["cnt"])],
-        textposition="top right",
-        textfont=dict(size=11),
-        hovertemplate=(
-            "<b>%{customdata[0]}</b><br>"
-            + "Individuals: %{customdata[1]}<br>"
-            + "Lat: %{lat:.4f}, Lon: %{lon:.4f}<extra></extra>"
-        ),
+        textposition="bottom right",
+        textfont=dict(size=16),
+        hovertemplate=None,
+        hoverinfo="skip",
         customdata=list(zip(df["name"], df["cnt"])),
         name="Institutions",
     )
@@ -131,6 +128,7 @@ def generate_map_data(individuals_queryset, individual_types, enable_clustering=
         ),
         margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(orientation="h"),
+        hovermode=False,
     )
 
     fig_dict = fig.to_dict()
