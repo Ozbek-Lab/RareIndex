@@ -1,6 +1,5 @@
 from django.urls import path
 from . import views
-from .visualization import plots, timeline
 
 app_name = "lab"
 
@@ -18,9 +17,9 @@ urlpatterns = [
         views.hpo_network_visualization,
         name="hpo_network_visualization",
     ),
-    path("plots/", plots.plots_page, name="plots"),
-    path("map/", plots.map_view, name="map"),
-    path("pie-chart/<str:model_name>/<str:attribute_name>/", plots.pie_chart_view, name="pie_chart"),
+    path("plots/", views.plots_page, name="plots"),
+    path("map/", views.map_view, name="map"),
+    path("pie-chart/<str:model_name>/<str:attribute_name>/", views.pie_chart_view, name="pie_chart"),
     path("get-select-options/", views.get_select_options, name="get_select_options"),
     path("individual/<int:pk>/timeline/", timeline.timeline, name="individual_timeline"),
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),

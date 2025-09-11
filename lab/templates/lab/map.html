@@ -7,92 +7,6 @@
 {% block extra_head %}
 <!-- Plotly.js for map visualization -->
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<style>
-    .map-container {
-        height: 800px;
-        width: 100%;
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-    
-    .map-loading {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 800px;
-        background: #f8fafc;
-        border-radius: 8px;
-    }
-    
-    .map-error {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 800px;
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        border-radius: 8px;
-        color: #dc2626;
-    }
-    
-    .map-stats {
-        display: flex;
-        gap: 1rem;
-        margin-bottom: 1rem;
-        flex-wrap: wrap;
-    }
-    
-    .stat-card {
-        background: white;
-        padding: 1rem;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #e5e7eb;
-        min-width: 150px;
-    }
-    
-    .stat-value {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f2937;
-    }
-    
-    .stat-label {
-        font-size: 0.875rem;
-        color: #6b7280;
-        margin-top: 0.25rem;
-    }
-    
-    .filter-controls {
-        background: white;
-        padding: 1rem;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #e5e7eb;
-        margin-bottom: 1rem;
-    }
-    
-    .dark .filter-controls {
-        background: #1f2937;
-        border-color: #374151;
-    }
-    
-    .filter-label {
-        font-weight: 600;
-        color: #374151;
-        margin-bottom: 0.5rem;
-        display: block;
-    }
-    
-    .dark .filter-label {
-        color: #d1d5db;
-    }
-    
-    .select-container {
-        min-width: 200px;
-    }
-</style>
 {% endblock %}
 
 
@@ -102,229 +16,240 @@
 {% endblock %}
 
 {% partialdef map-content inline %}
-<div class="p-6">
-    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
-    <!-- Map Statistics -->
-    <div class="flex gap-4 mb-4 flex-wrap" id="map-stats">
-        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
-            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="institution-count">-</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Institutions</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
-            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="family-count">-</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Families</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
-            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="proband-count">-</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Probands</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
-            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="total-individuals">-</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Total Individuals</div>
-        </div>
-    </div>
+<div id="map-content" 
+     x-data="{
+       isLoading: true,
+       currentFilters: {},
+       getVals() {
+         const vals = {};
+         // 1) URL filters as refresh-safe baseline
+         try {
+           const params = new URLSearchParams(window.location.search);
+           params.forEach((value, key) => {
+             if (key.startsWith('filter_') && value) { vals[key] = value; }
+           });
+         } catch(e) {}
+         // 2) Overlay freshest Alpine filters from mainController
+         const mainEl = document.querySelector('[x-data=\'mainController()\']');
+         const mc = mainEl && mainEl.__x && mainEl.__x.$data ? mainEl.__x.$data : null;
+         const filtersObj = mc && mc.filters ? mc.filters : (this.currentFilters || {});
+         if (filtersObj && typeof filtersObj === 'object') {
+           Object.entries(filtersObj).forEach(([key, value]) => {
+             if (value == null || (Array.isArray(value) && value.length === 0)) return;
+             const paramKey = `filter_${key}`;
+             if (Array.isArray(value)) { vals[paramKey] = value.join(','); }
+             else { vals[paramKey] = value; }
+           });
+         }
+         // 3) Map-specific options
+         const sel = this.$root.querySelector('select[name=\'individual_types\']');
+         let selected = ['all'];
+         if (sel) {
+           const selectedOptions = Array.from(sel.selectedOptions || []);
+           selected = selectedOptions.length ? selectedOptions.map(o => o.value) : ['all'];
+         }
+         vals['individual_types'] = JSON.stringify(selected);
+         const cb = this.$root.querySelector('input[name=\'enable_clustering\']');
+         vals['enable_clustering'] = cb && cb.checked ? 'true' : 'false';
+         return JSON.stringify(vals);
+       }
+     }"
+     hx-get="{% url 'lab:map' %}" 
+     hx-trigger="load, filters-updated from:window"
+     hx-sync="this:replace"
+     :hx-vals="getVals()"
+     @filters-updated.window="currentFilters = $event.detail && $event.detail.filters ? $event.detail.filters : currentFilters"
+     @htmx:before-request="isLoading = true"
+     @htmx:after-request="isLoading = false">
+    <!-- Loading state while HTMX loads the content -->
+    {% with text="Loading map data..." %}
+        {% include 'lab/index.html#indicator' %}
+    {% endwith %}
+</div>
+{% endpartialdef %}
 
-    <!-- Filter Controls -->
-    <div class="filter-controls">
-        <label class="filter-label">Individual Type Filter:</label>
-        <div class="select-container" x-data="individualTypeSelect()">
-            <select 
-                x-model="selectedValue" 
-                @change= "updateSelection()"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
-            >
-                <option value="all">All Individuals</option>
-                <option value="families">One Individual Per Family</option>
-                <option value="probands">Probands Only</option>
-            </select>
-        </div>
+{% partialdef map-partial %}
+<!-- Map Statistics -->
+<div class="flex gap-4 mb-4 flex-wrap" id="map-stats">
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+        <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="institution-count">{{ institution_count|default:"-" }}</div>
+        <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Institutions</div>
     </div>
-
-    <!-- Map Container -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div class="mb-4">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                Institution Distribution
-            </h2>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-                This map shows institutions where your filtered individuals are located. 
-                Plotly automatically clusters nearby institutions for better visualization.
-            </p>
-            <div class="mt-2 text-sm text-gray-500 dark:text-gray-400" id="filter-status">
-                <i class="fas fa-filter mr-1"></i>
-                <span id="filter-text">Showing all individuals</span>
-            </div>
-        </div>
-        
-        {% if error_message %}
-        <!-- Error State -->
-        <div class="map-error">
-            <div class="text-center">
-                <i class="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
-                <p>{{ error_message }}</p>
-                <button 
-                    class="mt-3 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
-                    onclick="loadMap()"
-                >
-                    <i class="fas fa-redo mr-2"></i>Retry
-                </button>
-            </div>
-        </div>
-        {% else %}
-        <!-- Map Loading State -->
-        <div class="map-loading" id="map-loading">
-            <div class="text-center">
-                <i class="fas fa-spinner fa-spin text-3xl text-indigo-500 mb-3"></i>
-                <p class="text-gray-600 dark:text-gray-400">Loading map data...</p>
-            </div>
-        </div>
-        
-        <!-- Map Error State -->
-        <div class="map-error hidden" id="map-error">
-            <div class="text-center">
-                <i class="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
-                <p id="error-message">Error loading map data</p>
-                <button 
-                    class="mt-3 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
-                    onclick="loadMap()"
-                >
-                    <i class="fas fa-redo mr-2"></i>Retry
-                </button>
-            </div>
-        </div>
-        
-        <!-- Map Visualization -->
-        <div class="map-container hidden" id="map-container"></div>
-        {% endif %}
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+        <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="family-count">{{ family_count|default:"-" }}</div>
+        <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Families</div>
+    </div>
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+        <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="proband-count">{{ proband_count|default:"-" }}</div>
+        <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Probands</div>
+    </div>
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 min-w-[150px]">
+        <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="total-individuals">{{ total_individuals|default:"-" }}</div>
+        <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Total Individuals</div>
     </div>
 </div>
 
-<script>
-    // Alpine.js component for individual type select
-    function individualTypeSelect() {
-        return {
-            selectedValue: 'all',
-            
-            updateSelection() {
-                // Reload map with new selection
-                this.$nextTick(() => {
-                    loadMap();
-                });
-            }
-        }
-    }
+<!-- Filter Controls -->
+<div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-4">
+    <div class="flex gap-4 items-end flex-wrap">
+        <!-- Individual Type Filter -->
+        <div class="flex-1 min-w-[200px]">
+            <label class="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">Individual Type Filter:</label>
+            <div class="relative">
+                <select 
+                    name="individual_types"
+                    @change="htmx.trigger($root, 'filters-updated')"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                >
+                    <option value="all" {% if 'all' in individual_types %}selected{% endif %}>All Individuals</option>
+                    <option value="families" {% if 'families' in individual_types %}selected{% endif %}>One Individual Per Family</option>
+                    <option value="probands" {% if 'probands' in individual_types %}selected{% endif %}>Probands Only</option>
+                </select>
+                <div id="map-loading-indicator" class="htmx-indicator absolute inset-y-0 right-0 flex items-center pr-3">
+                    <i class="fas fa-spinner fa-spin text-indigo-500"></i>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Clustering Toggle -->
+        <div class="flex-shrink-0">
+            <label class="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">Clustering:</label>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input 
+                    type="checkbox" 
+                    name="enable_clustering"
+                    value="true"
+                    {% if enable_clustering %}checked{% endif %}
+                    @change="htmx.trigger($root, 'filters-updated')"
+                    class="sr-only peer"
+                >
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                <span class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {% if enable_clustering %}Enabled{% else %}Disabled{% endif %}
+                </span>
+            </label>
+        </div>
+
+        <!-- Fullscreen Button -->
+        <div class="ml-auto flex-shrink-0">
+            <label class="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">View:</label>
+            <button id="map-fullscreen-btn" type="button" class="inline-flex items-center px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600">
+                <i class="fas fa-expand mr-2"></i>
+                Fullscreen
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Map Container -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
     
-    // Load map data when page loads
-    document.addEventListener('DOMContentLoaded', function() {
-        loadMap();
-    });
-    
-    // Function to load map data
-    function loadMap() {
-        const loadingEl = document.getElementById('map-loading');
-        const errorEl = document.getElementById('map-error');
-        const mapContainer = document.getElementById('map-container');
-        const statsContainer = document.getElementById('map-stats');
-        
-        // Get the current selection from Alpine.js
-        const selectContainer = document.querySelector('[x-data="individualTypeSelect()"]');
-        let selectedType = 'all';
-        if (selectContainer && selectContainer._x_dataStack) {
-            const alpineData = selectContainer._x_dataStack[0];
-            if (alpineData && alpineData.selectedValue) {
-                selectedType = alpineData.selectedValue;
-            }
-        }
-        
-        // Show loading state
-        loadingEl.classList.remove('hidden');
-        errorEl.classList.add('hidden');
-        mapContainer.classList.add('hidden');
-        statsContainer.classList.add('hidden');
-        
-        // Prepare request data
-        const requestData = new FormData();
-        requestData.append('individual_types', JSON.stringify([selectedType]));
-        
-        // Fetch map data with POST request to include the selection
-        fetch('{% url "lab:map" %}', {
-            method: 'POST',
-            body: requestData,
-            headers: {
-                'Accept': 'application/json',
-                'HX-Request': 'true',
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-            }
-        })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to load map data');
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                
-                // Hide loading, show map
-                loadingEl.classList.add('hidden');
-                mapContainer.classList.remove('hidden');
-                statsContainer.classList.remove('hidden');
-                
-                // Update statistics
-                if (data.institution_count !== undefined) {
-                    document.getElementById('institution-count').textContent = data.institution_count;
-                }
-                if (data.family_count !== undefined) {
-                    document.getElementById('family-count').textContent = data.family_count;
-                }
-                if (data.proband_count !== undefined) {
-                    document.getElementById('proband-count').textContent = data.proband_count;
-                }
-                document.getElementById('total-individuals').textContent = data.total_individuals;
-                
-                // Update filter status display
-                if (data.individual_types) {
-                    const filterText = document.getElementById('filter-text');
-                    if (filterText) {
-                        if (data.applied_filters.all_types) {
-                            filterText.textContent = 'Showing all individuals';
-                        } else if (data.applied_filters.families_only) {
-                            filterText.textContent = 'Showing one individual per family';
-                        } else if (data.applied_filters.probands_only) {
-                            filterText.textContent = 'Showing probands only';
-                        } else {
-                            filterText.textContent = 'Showing filtered individuals';
-                        }
-                    }
-                }
-                
-                // Render the map
-                const chartData = JSON.parse(data.chart_json);
-                Plotly.newPlot('map-container', chartData.data, chartData.layout, {
+    {% if error_message %}
+    <!-- Error State -->
+    <div class="flex items-center justify-center h-96 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+        <div class="text-center">
+            <i class="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
+            <p>{{ error_message }}</p>
+            <button 
+                class="mt-3 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                hx-post="{% url 'lab:map' %}"
+                hx-target="#map-content"
+                hx-vals='{"individual_types": "[\"all\"]"}'
+            >
+                <i class="fas fa-redo mr-2"></i>Retry
+            </button>
+        </div>
+    </div>
+    {% else %}
+    <!-- Map Visualization -->
+    <div class="h-[600px] w-full rounded-lg overflow-hidden shadow-sm" id="map-container">
+        <script>
+            // Render the Plotly map with the data from the server
+            (function() {
+                var mapChartData = JSON.parse('{{ chart_json|escapejs }}');
+                var container = document.getElementById('map-container');
+                Plotly.newPlot('map-container', mapChartData.data, mapChartData.layout, {
                     responsive: true,
                     displayModeBar: true,
                     scrollZoom: true,
                     modeBarButtonsToRemove: ['lasso2d', 'select2d']
                 });
-            })
-            .catch(error => {
-                console.error('Error loading map:', error);
-                
-                // Hide loading, show error
-                loadingEl.classList.add('hidden');
-                errorEl.classList.remove('hidden');
-                document.getElementById('error-message').textContent = error.message || 'Failed to load map data';
-            });
-    }
-    
-    // Listen for filter updates to refresh map
-    document.addEventListener('htmx:afterRequest', function(event) {
-        if (event.detail.xhr.getResponseHeader('HX-Trigger') && 
-            event.detail.xhr.getResponseHeader('HX-Trigger').includes('filters-updated')) {
-            loadMap();
-        }
-    });
-</script>
+
+                function resizePlot() {
+                    if (container) {
+                        Plotly.Plots.resize(container);
+                    }
+                }
+                window.addEventListener('resize', resizePlot);
+
+                var fsBtn = document.getElementById('map-fullscreen-btn');
+                function enterFullscreen() {
+                    if (container.requestFullscreen) {
+                        container.requestFullscreen();
+                    } else if (container.webkitRequestFullscreen) {
+                        container.webkitRequestFullscreen();
+                    } else if (container.msRequestFullscreen) {
+                        container.msRequestFullscreen();
+                    }
+                }
+                function exitFullscreen() {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                }
+                function isFullscreenActive() {
+                    return document.fullscreenElement === container || document.webkitFullscreenElement === container || document.msFullscreenElement === container;
+                }
+                function updateButtonUI() {
+                    if (!fsBtn) return;
+                    if (isFullscreenActive()) {
+                        fsBtn.innerHTML = '<i class="fas fa-compress mr-2"></i>Exit Fullscreen';
+                    } else {
+                        fsBtn.innerHTML = '<i class="fas fa-expand mr-2"></i>Fullscreen';
+                    }
+                }
+                if (fsBtn) {
+                    fsBtn.addEventListener('click', function() {
+                        if (isFullscreenActive()) {
+                            exitFullscreen();
+                        } else {
+                            enterFullscreen();
+                        }
+                    });
+                }
+                document.addEventListener('fullscreenchange', function() {
+                    // When toggling fullscreen, expand the map area and resize plot
+                    if (isFullscreenActive()) {
+                        container.style.position = 'fixed';
+                        container.style.inset = '0';
+                        container.style.width = '100vw';
+                        container.style.height = '100vh';
+                        container.style.zIndex = '9999';
+                    } else {
+                        container.style.position = '';
+                        container.style.inset = '';
+                        container.style.width = '';
+                        container.style.height = '';
+                        container.style.zIndex = '';
+                    }
+                    updateButtonUI();
+                    // Delay resize slightly to allow layout to settle
+                    setTimeout(resizePlot, 50);
+                });
+
+                // Initial UI sync
+                updateButtonUI();
+            })();
+        </script>
+    </div>
+    {% endif %}
+</div>
+
+
 {% endpartialdef %}
+
+
