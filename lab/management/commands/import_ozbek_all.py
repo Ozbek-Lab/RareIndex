@@ -463,7 +463,7 @@ class Command(BaseCommand):
 
         # Task statuses
         self._get_or_create_status(
-            'Ongoing',
+            'Active',
             'Task is ongoing',
             'yellow',
             admin_user,
