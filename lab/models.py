@@ -283,6 +283,14 @@ class Family(HistoryMixin, models.Model):
     def __str__(self):
         return self.family_id
 
+    @property
+    def is_solved(self): # Check if all index individuals are solved - P/LP or VUS
+        solved_qs = self.individuals.filter(
+            is_index=True,
+            status__name__in=["Solved - P/LP", "Solved - VUS"],
+        )
+        total_index = self.individuals.filter(is_index=True).count()
+        return solved_qs.count() == total_index and total_index > 0
 
 @reversion.register()
 class Status(HistoryMixin, models.Model):
