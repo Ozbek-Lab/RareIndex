@@ -17,6 +17,7 @@ from .models import (
     Family,
 )
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Q
 
 
 class BaseForm(forms.ModelForm):
@@ -107,6 +108,14 @@ class TaskForm(BaseForm):
         super().__init__(*args, **kwargs)
         # Remove StatusLog filtering logic; just show all Status objects
         self.fields["project"].queryset = Project.objects.all().order_by("name")
+        # Limit status choices to Task-specific (or global) statuses
+        try:
+            task_ct = ContentType.objects.get_for_model(Task)
+            self.fields["status"].queryset = Status.objects.filter(
+                Q(content_type=task_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+        except Exception:
+            self.fields["status"].queryset = Status.objects.all().order_by("name")
 
 
 class IndividualForm(BaseForm):

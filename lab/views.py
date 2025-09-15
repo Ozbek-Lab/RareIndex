@@ -29,9 +29,10 @@ from .models import (
     Family,
     Status,
 )
+from django.contrib.auth.models import User
 
 # Import forms
-from .forms import NoteForm, FORMS_MAPPING
+from .forms import NoteForm, FORMS_MAPPING, TaskForm
 
 # Import visualization functions
 from .visualization.hpo_network_visualization import (
@@ -990,6 +991,49 @@ def generic_create(request):
                     obj.status = default_status
                     obj.save()
 
+            # Optionally create an associated Task
+            try:
+                if request.POST.get("create_task"):
+                    from django.utils.dateparse import parse_datetime
+
+                    ct = ContentType.objects.get_for_model(model_class)
+                    title = request.POST.get("task-title") or f"Follow-up for {obj}"
+                    description = request.POST.get("task-description", "")
+                    assigned_to_id = request.POST.get("task-assigned_to") or getattr(
+                        request.user, "id", None
+                    )
+                    due_raw = request.POST.get("task-due_date")
+                    due_dt = parse_datetime(due_raw) if due_raw else None
+                    priority = request.POST.get("task-priority") or "medium"
+                    # Prefer an 'Active' status, else any
+                    status_id = request.POST.get("task-status")
+                    if not status_id:
+                        active = Status.objects.filter(name__iexact="active").first()
+                        status_id = getattr(active, "id", None) or getattr(
+                            Status.objects.first(), "id", None
+                        )
+                    project_id = request.POST.get("task-project") or None
+
+                    task_kwargs = {
+                        "title": title,
+                        "description": description,
+                        "assigned_to_id": assigned_to_id,
+                        "created_by": request.user,
+                        "due_date": due_dt,
+                        "priority": priority,
+                        "status_id": status_id,
+                        "content_type": ct,
+                        "object_id": obj.pk,
+                    }
+                    if project_id:
+                        task_kwargs["project_id"] = project_id
+                    # Only create if we have an assignee and a status
+                    if task_kwargs.get("assigned_to_id") and task_kwargs.get("status_id"):
+                        Task.objects.create(**task_kwargs)
+            except Exception:
+                # Do not block main creation if task creation fails
+                pass
+
             # Return success response for HTMX
             if request.htmx:
                 response = render(
@@ -1107,6 +1151,8 @@ def generic_create(request):
                 "form": form,
                 "model_name": model_name,
                 "app_label": app_label,
+                # Prefixed Task form for sidebar inputs
+                "task_form": TaskForm(prefix="task"),
             },
         )
     else:
@@ -1865,6 +1911,44 @@ def family_create_segway(request):
                 except Exception:
                     pass
 
+            # Per-individual optional Task creation
+            try:
+                from django.utils.dateparse import parse_datetime
+                task_ct = ContentType.objects.get_for_model(Individual)
+                for idx, individual in created_individuals:
+                    prefix = f"individuals[{idx}]"
+                    if not request.POST.get(f"{prefix}[create_task]"):
+                        continue
+                    title = request.POST.get(f"{prefix}[task-title]") or f"Follow-up for {individual}"
+                    description = request.POST.get(f"{prefix}[task-description]", "")
+                    assigned_to_id = request.POST.get(f"{prefix}[task-assigned_to]") or getattr(request.user, "id", None)
+                    due_raw = request.POST.get(f"{prefix}[task-due_date]")
+                    due_dt = parse_datetime(due_raw) if due_raw else None
+                    priority = request.POST.get(f"{prefix}[task-priority]") or "medium"
+                    status_id = request.POST.get(f"{prefix}[task-status]")
+                    if not status_id:
+                        active = Status.objects.filter(name__iexact="active").first()
+                        status_id = getattr(active, "id", None) or getattr(Status.objects.first(), "id", None)
+                    project_id = request.POST.get(f"{prefix}[task-project]") or None
+
+                    task_kwargs = {
+                        "title": title,
+                        "description": description,
+                        "assigned_to_id": assigned_to_id,
+                        "created_by": request.user,
+                        "due_date": due_dt,
+                        "priority": priority,
+                        "status_id": status_id,
+                        "content_type": task_ct,
+                        "object_id": individual.pk,
+                    }
+                    if project_id:
+                        task_kwargs["project_id"] = project_id
+                    if task_kwargs.get("assigned_to_id") and task_kwargs.get("status_id"):
+                        Task.objects.create(**task_kwargs)
+            except Exception:
+                pass
+
             # Return success response
             if request.htmx:
                 response = render(
@@ -1935,6 +2019,13 @@ def family_create_segway(request):
                 ).order_by("name"),
                 "identifier_types": IdentifierType.objects.all().order_by("name"),
                 "existing_families": Family.objects.all().order_by("family_id"),
+                # For per-individual task selects
+                "users": User.objects.all().order_by("username"),
+                "task_statuses": Status.objects.filter(
+                    Q(content_type=ContentType.objects.get_for_model(Task))
+                    | Q(content_type__isnull=True)
+                ).order_by("name"),
+                "projects": Project.objects.all().order_by("name"),
             },
         )
     else:
