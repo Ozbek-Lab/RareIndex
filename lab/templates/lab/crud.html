@@ -18,8 +18,9 @@
           <input type="hidden" name="model_name" value="{{ model_name }}">
           <input type="hidden" name="app_label" value="{{ app_label }}">
           
-          <div class="flex flex-col md:flex-row gap-6">
-            <div class="flex-1 space-y-4">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-4">
               {% for field in form %}
                 {% if forloop.counter0|divisibleby:2 %}
                   <div>
@@ -46,7 +47,7 @@
                 {% endif %}
               {% endfor %}
             </div>
-            <div class="flex-1 space-y-4">
+            <div class="space-y-4">
               {% for field in form %}
                 {% if not forloop.counter0|divisibleby:2 %}
                   <div>
@@ -72,6 +73,74 @@
                   </div>
                 {% endif %}
               {% endfor %}
+            </div>
+            </div>
+            <div class="lg:col-span-1">
+              <div class="space-y-4 bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600 rounded-lg p-4" x-data="{ enabled: false }">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-md font-semibold text-gray-900 dark:text-white flex items-center">
+                    <i class="fa-solid fa-list-check mr-2 text-blue-600"></i>
+                    Create Task
+                  </h3>
+                  <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" name="create_task" value="1" class="sr-only peer" x-model="enabled">
+                    <div class="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all relative peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-300">Optionally create a follow-up task for this {{ model_name }} once it is created.</p>
+
+                <div class="space-y-3" x-show="enabled" x-cloak>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title <span class="text-red-500">*</span></label>
+                    {% if task_form %}{{ task_form.title }}{% else %}
+                      <input type="text" name="task-title" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Task title">
+                    {% endif %}
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                    {% if task_form %}{{ task_form.description }}{% else %}
+                      <textarea name="task-description" rows="3" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></textarea>
+                    {% endif %}
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned To</label>
+                    {% if task_form %}{{ task_form.assigned_to }}{% else %}
+                      <select name="task-assigned_to" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></select>
+                    {% endif %}
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                    {% if task_form %}{{ task_form.due_date }}{% else %}
+                      <input type="datetime-local" name="task-due_date" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    {% endif %}
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                      {% if task_form %}{{ task_form.priority }}{% else %}
+                        <select name="task-priority" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                          <option value="low">Low</option>
+                          <option value="medium" selected>Medium</option>
+                          <option value="high">High</option>
+                          <option value="urgent">Urgent</option>
+                        </select>
+                      {% endif %}
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                      {% if task_form %}{{ task_form.status }}{% else %}
+                        <select name="task-status" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></select>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project</label>
+                    {% if task_form %}{{ task_form.project }}{% else %}
+                      <select name="task-project" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></select>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -342,76 +411,85 @@
       
       <form id="family-create-form" hx-post="{% url 'lab:family_create_segway' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit= "if (!prepareFormSubmission()) { $event.preventDefault(); return false; } debugFormSubmission($event)">
         {% csrf_token %}
-        
-        <!-- Family Information Section -->
-        <div class="mb-8 p-6 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <i class="fas fa-home mr-2 text-blue-600"></i>
-            Family Information
-          </h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label for="family_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Family ID <span class="text-red-500">*</span>
-              </label>
-              <select 
-                name="family_id" 
-                id="family_id" 
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
-                onchange="handleFamilySelection(this)"
-              >
-                <option value="">-- Select existing family or type new ID --</option>
-                {% for family in existing_families %}
-                  <option value="{{ family.family_id }}">{{ family.family_id }} ({{ family.individuals.count }} members)</option>
-                {% endfor %}
-              </select>
-              <div class="mt-2">
-                <label for="new_family_id" class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Or enter new family ID:
+        <div class="grid grid-cols-1 gap-6">
+          <!-- Family Information Section -->
+          <div>
+            <!-- Family Information Section -->
+            <div class="mb-8 p-6 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                <i class="fas fa-home mr-2 text-blue-600"></i>
+                Family Information
+              </h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label for="family_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Family ID <span class="text-red-500">*</span>
+                  </label>
+                  <select 
+                    name="family_id" 
+                    id="family_id" 
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+                    onchange="handleFamilySelection(this)"
+                  >
+                    <option value="">-- Select existing family or type new ID --</option>
+                    {% for family in existing_families %}
+                      <option value="{{ family.family_id }}">{{ family.family_id }} ({{ family.individuals.count }} members)</option>
+                    {% endfor %}
+                  </select>
+                  <div class="mt-2">
+                    <label for="new_family_id" class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      Or enter new family ID:
+                    </label>
+                    <input 
+                      type="text" 
+                      id="new_family_id" 
+                      placeholder="Type new family ID here"
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+                      oninput="handleNewFamilyInput(this)"
+                    >
+                  </div>
+                </div>
+              </div>
+              <div class="mt-6">
+                <label for="family_description" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Description
                 </label>
-                <input 
-                  type="text" 
-                  id="new_family_id" 
-                  placeholder="Type new family ID here"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-                  oninput="handleNewFamilyInput(this)"
-                >
+                <textarea 
+                  name="family_description" 
+                  id="family_description" 
+                  rows="3"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
+                  placeholder="Enter family description"
+                ></textarea>
               </div>
             </div>
-            <div>
-              <label for="family_description" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Description
-              </label>
-              <textarea 
-                name="family_description" 
-                id="family_description" 
-                rows="3"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
-                placeholder="Enter family description"
-              ></textarea>
-            </div>
-          </div>
-        </div>
 
-        <!-- Individuals Section -->
-        <div class="mb-8">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-              <i class="fas fa-users mr-2 text-green-600"></i>
-              Family Members
-            </h3>
-            <button 
-              type="button" 
-              @click= "addIndividualForm()"
-              class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center space-x-2"
-            >
-              <i class="fas fa-plus"></i>
-              <span>Add Member</span>
-            </button>
           </div>
-          
-          <div id="individuals-container" class="space-y-6">
-            <!-- Individual forms will be added here dynamically -->
+
+          <!-- Removed Task Sidebar as requested -->
+
+          <!-- Individuals Section -->
+          <div>
+            <div class="mb-8">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                  <i class="fas fa-users mr-2 text-green-600"></i>
+                  Family Members
+                </h3>
+                <button 
+                  type="button" 
+                  @click= "addIndividualForm()"
+                  class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center space-x-2"
+                >
+                  <i class="fas fa-plus"></i>
+                  <span>Add Member</span>
+                </button>
+              </div>
+              
+              <div id="individuals-container" class="space-y-6">
+                <!-- Individual forms will be added here dynamically -->
+              </div>
+            </div>
           </div>
         </div>
 
@@ -460,7 +538,7 @@
 
   <!-- Individual Form Template (hidden) -->
   <template id="individual-form-template">
-    <div class="individual-form bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-6" x-data="{ showSensitive: false }">
+    <div class="individual-form bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-6" x-data="{ showSensitive: false, taskEnabled: false }">
       <div class="flex items-center justify-between mb-4">
         <h4 class="text-md font-medium text-gray-900 dark:text-white flex items-center">
           <i class="fas fa-user mr-2 text-blue-600"></i>
@@ -622,7 +700,7 @@
           </div>
         </div>
 
-        <!-- Column 3 -->
+        <!-- Column 3 (Flags + HPO + Notes) -->
         <div class="space-y-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -677,10 +755,7 @@
               </label>
             </div>
           </div>
-        </div>
 
-        <!-- Column 4 -->
-        <div class="space-y-4">
           <!-- HPO Terms (Combobox) -->
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -721,6 +796,74 @@
                 </div>
               </div>
             </template>
+          </div>
+        </div>
+
+        <!-- Column 4 (Per-Individual Task) -->
+        <div class="space-y-4">
+          <div class="bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-gray-900 dark:text-white flex items-center">
+                <i class="fa-solid fa-list-check mr-2 text-blue-600"></i>
+                Create Task
+              </h4>
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" name="individuals[INDEX][create_task]" value="1" class="sr-only peer" x-model="taskEnabled">
+                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all relative peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+            <div class="space-y-2" x-show="taskEnabled" x-cloak>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+                <input type="text" name="individuals[INDEX][task-title]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Task title">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                <textarea name="individuals[INDEX][task-description]" rows="2" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></textarea>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned To</label>
+                <select name="individuals[INDEX][task-assigned_to]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                  <option value="">--------</option>
+                  {% for u in users %}
+                    <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                <input type="datetime-local" name="individuals[INDEX][task-due_date]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                  <select name="individuals[INDEX][task-priority]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                  <select name="individuals[INDEX][task-status]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">--------</option>
+                    {% for s in task_statuses %}
+                      <option value="{{ s.id }}">{{ s.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Project</label>
+                <select name="individuals[INDEX][task-project]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                  <option value="">--------</option>
+                  {% for p in projects %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
       </div>
