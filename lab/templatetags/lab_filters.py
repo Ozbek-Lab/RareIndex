@@ -199,3 +199,26 @@ def has_analyses(sample):
         return sample.tests.filter(analyses__isnull=False).exists()
     except Exception:
         return False
+
+
+@register.filter
+def mask_initials(full_name: str) -> str:
+    """Mask a full name to initials plus stars per word.
+
+    Examples:
+    "Mark Smith" -> "M*** S***"
+    "Ada" -> "A***"
+    Handles multiple spaces and hyphenated names gracefully.
+    """
+    if not full_name:
+        return ""
+    try:
+        parts = [p for p in str(full_name).strip().split() if p]
+        masked_parts = []
+        for part in parts:
+            first = part[0]
+            masked = f"{first}{'*' * 3}"
+            masked_parts.append(masked)
+        return " ".join(masked_parts)
+    except Exception:
+        return ""

@@ -643,6 +643,69 @@
       };
     }
 
+    function singleGenericComboboxController(appLabel, modelName, valueField = 'pk', labelField = '', inputName = '', initialValue = '') {
+      return {
+        appLabel,
+        modelName,
+        valueField,
+        labelField,
+        inputName,
+        open: false,
+        query: initialValue || '',
+        options: [],
+        loading: false,
+        selected: null, // {value, label}
+        init() {
+          this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
+          this.$watch('query', () => {
+            if (this.open) {
+              htmx.trigger(this.$refs.opts, 'combo-query-changed');
+            }
+          });
+        },
+        get hiddenInputName() { return this.inputName || `${this.modelName.toLowerCase()}_id`; },
+        get hiddenInputValue() {
+          // If a specific option is selected, submit its value; otherwise submit raw query text
+          if (this.selected && this.selected.value !== undefined && this.selected.value !== null && `${this.selected.value}`.length > 0) {
+            return `${this.selected.value}`;
+          }
+          return this.query || '';
+        },
+        isSelected(value) {
+          return this.selected && String(this.selected.value) === String(value);
+        },
+        toggleOption(value, label) {
+          if (this.isSelected(value)) {
+            this.selected = null;
+          } else {
+            this.selected = { value, label };
+            this.query = label;
+          }
+          this.open = false;
+          try {
+            window.dispatchEvent(new CustomEvent('combobox-selected', { detail: { appLabel: this.appLabel, modelName: this.modelName, valueField: this.valueField, labelField: this.labelField, value, label, inputName: this.inputName } }));
+          } catch (e) {}
+        },
+        clearSelection() {
+          this.selected = null;
+          this.query = '';
+          this.open = false;
+        },
+        getHxVals(page = 1) {
+          const vals = {
+            app_label: this.appLabel,
+            model_name: this.modelName,
+            page: page,
+            render: 'combobox',
+          };
+          if (this.query) vals['search'] = this.query;
+          if (this.valueField) vals['value_field'] = this.valueField;
+          if (this.labelField) vals['label_field'] = this.labelField;
+          return JSON.stringify(vals);
+        },
+      };
+    }
+
     function hpoController() {
       return {
         hpoThreshold: 3,
