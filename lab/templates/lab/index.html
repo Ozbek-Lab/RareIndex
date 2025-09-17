@@ -136,19 +136,25 @@
               {% include "lab/partials/partials.html#search-section" %}
             {% endwith %}
           </div>
-          <div x-show="activeItem === 'hpo-network-visualization'">
-            {% with view="page" %}
-              <div x-data="hpoController()">
-                {% include "lab/plots.html#hpo-network-visualization-section" %}
-              </div>
-            {% endwith %}
-          </div>
+          <!-- Only create the HPO network DOM when the page is active -->
+          <template x-if="activeItem === 'hpo-network-visualization'">
+            <div>
+              {% with view="page" %}
+                <div x-data="hpoController()" x-init="$nextTick(() => { const el = document.getElementById('hpo-visualization-container'); if (el && window.htmx) { htmx.process(el); } })">
+                  {% include "lab/plots.html#hpo-network-visualization-section" %}
+                </div>
+              {% endwith %}
+            </div>
+          </template>
           <div x-show="activeItem === 'notifications'" id="notifications-content">
             <!-- Notifications content will be loaded here via HTMX -->
           </div>
-          <div x-show="activeItem === 'map'" id="map-content">
-            {% include "lab/map.html#map-content" %}
-          </div>
+          <!-- Lazily mount the Map only when navigated to -->
+          <template x-if="activeItem === 'map'">
+            <div x-init="$nextTick(() => { const el = document.getElementById('map-content'); if (el && window.htmx) { htmx.process(el); } })">
+              {% include "lab/map.html#map-content" %}
+            </div>
+          </template>
           <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
             <!-- Natural language search content will be loaded here via HTMX -->
           </div>
