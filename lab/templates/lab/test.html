@@ -437,15 +437,18 @@
               <!-- Toolbar: Add Analysis button (left) + view toggle (right) -->
               <div class="flex items-center justify-between">
                 <div>
-                  <button
-                    hx-get="{% url 'lab:generic_create' %}?model_name=Analysis&app_label=lab&test={{ item.id }}"
-                    hx-target="#modal-root"
-                    hx-swap="innerHTML"
-                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
-                  >
-                    <i class="fa-solid fa-chart-line"></i>
-                    <span>Add Analysis to Test</span>
-                  </button>
+                  {% has_model_perm user 'lab' 'Analysis' 'add' as can_add_analysis %}
+                  {% if can_add_analysis %}
+                    <button
+                      hx-get="{% url 'lab:generic_create' %}?model_name=Analysis&app_label=lab&test={{ item.id }}"
+                      hx-target="#modal-root"
+                      hx-swap="innerHTML"
+                      class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                    >
+                      <i class="fa-solid fa-chart-line"></i>
+                      <span>Add Analysis to Test</span>
+                    </button>
+                  {% endif %}
                 </div>
                 <div
                   class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
