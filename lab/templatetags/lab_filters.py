@@ -222,3 +222,19 @@ def mask_initials(full_name: str) -> str:
         return " ".join(masked_parts)
     except Exception:
         return ""
+
+
+@register.simple_tag
+def has_model_perm(user, app_label: str, model_name: str, action: str) -> bool:
+    """Return True if the user has the specified Django permission on a model.
+
+    action should be one of: 'view', 'add', 'change', 'delete'.
+    model_name is the Django model class name (e.g., 'Sample', 'Task').
+    """
+    try:
+        if not getattr(user, "is_authenticated", False):
+            return False
+        codename = f"{action}_{str(model_name).lower()}"
+        return user.has_perm(f"{app_label}.{codename}")
+    except Exception:
+        return False
