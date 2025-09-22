@@ -199,3 +199,42 @@ def has_analyses(sample):
         return sample.tests.filter(analyses__isnull=False).exists()
     except Exception:
         return False
+
+
+@register.filter
+def mask_initials(full_name: str) -> str:
+    """Mask a full name to initials plus stars per word.
+
+    Examples:
+    "Mark Smith" -> "M*** S***"
+    "Ada" -> "A***"
+    Handles multiple spaces and hyphenated names gracefully.
+    """
+    if not full_name:
+        return ""
+    try:
+        parts = [p for p in str(full_name).strip().split() if p]
+        masked_parts = []
+        for part in parts:
+            first = part[0]
+            masked = f"{first}{'*' * 3}"
+            masked_parts.append(masked)
+        return " ".join(masked_parts)
+    except Exception:
+        return ""
+
+
+@register.simple_tag
+def has_model_perm(user, app_label: str, model_name: str, action: str) -> bool:
+    """Return True if the user has the specified Django permission on a model.
+
+    action should be one of: 'view', 'add', 'change', 'delete'.
+    model_name is the Django model class name (e.g., 'Sample', 'Task').
+    """
+    try:
+        if not getattr(user, "is_authenticated", False):
+            return False
+        codename = f"{action}_{str(model_name).lower()}"
+        return user.has_perm(f"{app_label}.{codename}")
+    except Exception:
+        return False
