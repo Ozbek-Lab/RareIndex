@@ -329,15 +329,18 @@
                 <!-- Toolbar: Add Test button (left) + view toggle (right) -->
                 <div class="flex items-center justify-between">
                   <div>
-                    <button
-                      hx-get="{% url 'lab:generic_create' %}?model_name=Test&app_label=lab&sample={{ item.id }}"
-                      hx-target="#modal-root"
-                      hx-swap="innerHTML"
-                      class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
-                    >
-                      <i class="fa-solid fa-vial"></i>
-                      <span>Add Test to Sample</span>
-                    </button>
+                    {% has_model_perm user 'lab' 'Test' 'add' as can_add_test %}
+                    {% if can_add_test %}
+                      <button
+                        hx-get="{% url 'lab:generic_create' %}?model_name=Test&app_label=lab&sample={{ item.id }}"
+                        hx-target="#modal-root"
+                        hx-swap="innerHTML"
+                        class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                      >
+                        <i class="fa-solid fa-vial"></i>
+                        <span>Add Test to Sample</span>
+                      </button>
+                    {% endif %}
                   </div>
                   <div
                     class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
