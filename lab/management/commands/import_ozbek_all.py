@@ -1003,3 +1003,47 @@ class Command(BaseCommand):
                 writer.writerows(leftover_rows)
             self.stdout.write(self.style.SUCCESS(f'Saved {len(leftover_rows)} rows to {leftovers_path}'))
         self.stdout.write(self.style.SUCCESS('Successfully imported analysis tracking data'))
+
+        # --- SET PARENTS (mother/father) BASED ON RAREBOOST ID SUFFIXES ---
+        # Convention: familyId.1 = proband, .2 = mother, .3 = father,
+        #             .1.1, .1.2 = affected siblings. We set parents for 1 and 1.* members.
+        try:
+            updated_links = 0
+            for fam_id, fam_obj in families.items():
+                # Build code -> individual map using RareBoost ID
+                code_to_individual = {}
+                for ind in fam_obj.individuals.all():
+                    lab_id_val = ind.lab_id
+                    if not lab_id_val or lab_id_val == 'No Lab ID':
+                        continue
+                    parts = str(lab_id_val).split('.')
+                    if len(parts) < 2:
+                        continue
+                    code_str = '.'.join(parts[1:])
+                    # Prefer the first occurrence if duplicates exist
+                    code_to_individual.setdefault(code_str, ind)
+
+                mother_individual = code_to_individual.get('2')
+                father_individual = code_to_individual.get('3')
+                if not mother_individual and not father_individual:
+                    continue
+
+                # Assign parents for proband (1) and siblings (1.*)
+                for code_str, child in code_to_individual.items():
+                    if code_str == '1' or code_str.startswith('1.'):
+                        changed = False
+                        if mother_individual and child.mother_id != mother_individual.id and child.id != mother_individual.id:
+                            child.mother = mother_individual
+                            changed = True
+                        if father_individual and child.father_id != father_individual.id and child.id != father_individual.id:
+                            child.father = father_individual
+                            changed = True
+                        if changed:
+                            child.save()
+                            updated_links += 1
+            if updated_links:
+                self.stdout.write(self.style.SUCCESS(f"Parent links set/updated for {updated_links} individual(s) based on RareBoost IDs"))
+            else:
+                self.stdout.write("No parent links needed/updated based on RareBoost IDs")
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Error while setting parent links: {str(e)}"))
