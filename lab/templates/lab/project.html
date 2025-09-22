@@ -481,15 +481,18 @@
             <div x-data="{ viewMode: 'cards' }" class="space-y-4">
               <div class="flex items-center justify-between">
                 <div>
-                  <button
-                    hx-get="{% url 'lab:generic_create' %}?model_name=Task&app_label=lab&project={{ item.id }}"
-                    hx-target="#modal-root"
-                    hx-swap="innerHTML"
-                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
-                  >
-                    <i class="fa-solid fa-plus"></i>
-                    <span>Add Task</span>
-                  </button>
+                  {% has_model_perm user 'lab' 'Task' 'add' as can_add_task %}
+                  {% if can_add_task %}
+                    <button
+                      hx-get="{% url 'lab:generic_create' %}?model_name=Task&app_label=lab&project={{ item.id }}"
+                      hx-target="#modal-root"
+                      hx-swap="innerHTML"
+                      class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                    >
+                      <i class="fa-solid fa-plus"></i>
+                      <span>Add Task</span>
+                    </button>
+                  {% endif %}
                 </div>
                 <div
                   class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
