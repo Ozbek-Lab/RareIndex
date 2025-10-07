@@ -3,7 +3,7 @@ from django import forms as dj_forms
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.http import HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
+from django.http import HttpResponseBadRequest, HttpResponseForbidden, JsonResponse, HttpResponse
 from django.db.models import Q, Count, Min
 from django.contrib.contenttypes.models import ContentType
 from django.views.decorators.http import require_POST
@@ -29,9 +29,10 @@ from .models import (
     Family,
     Status,
 )
+from django.contrib.auth.models import User
 
 # Import forms
-from .forms import NoteForm, FORMS_MAPPING
+from .forms import NoteForm, FORMS_MAPPING, TaskForm
 
 # Import visualization functions
 from .visualization.hpo_network_visualization import (
@@ -171,7 +172,7 @@ def generic_search(request):
 
     num_items = filtered_items.count()
 
-    # Pagination
+    # Pagination (may be recomputed for combobox below)
     page = request.GET.get("page")
     paginator = Paginator(filtered_items, 12)
     paged_items = paginator.get_page(page)
@@ -184,6 +185,39 @@ def generic_search(request):
     # Combobox render mode (for Select2-like behavior)
     render_mode = request.GET.get("render")
     if render_mode == "combobox":
+        # Apply free-text search for combobox results
+        value_field = request.GET.get("value_field", "pk")
+        label_field = request.GET.get("label_field")
+        base_qs = filtered_items
+        if own_search_term:
+            try:
+                if label_field:
+                    # Try direct icontains on specified label field
+                    base_qs = base_qs.filter(**{f"{label_field}__icontains": own_search_term})
+                else:
+                    # Fallback: OR over all CharField/TextField
+                    from django.db.models import Q as _Q
+
+                    text_fields = []
+                    try:
+                        for f in target_model._meta.get_fields():
+                            internal = getattr(f, "get_internal_type", lambda: None)()
+                            if internal in ("CharField", "TextField"):
+                                text_fields.append(f.name)
+                    except Exception:
+                        text_fields = []
+                    if text_fields:
+                        qobj = _Q()
+                        for fname in text_fields:
+                            qobj |= _Q(**{f"{fname}__icontains": own_search_term})
+                        base_qs = base_qs.filter(qobj)
+            except Exception:
+                # If filtering fails, leave base_qs as-is
+                pass
+
+        # Rebuild pagination after search filtering
+        paginator = Paginator(base_qs, 12)
+        paged_items = paginator.get_page(page)
         # Exclude already selected ids
         exclude_ids_raw = request.GET.get("exclude_ids", "")
         exclude_ids = []
@@ -208,9 +242,6 @@ def generic_search(request):
                 paged_items = paginator.get_page(page)
             except Exception:
                 pass
-
-        value_field = request.GET.get("value_field", "pk")
-        label_field = request.GET.get("label_field")
 
         # Build option dicts for template rendering
         options = []
@@ -253,6 +284,91 @@ def generic_search(request):
             )
         except TemplateDoesNotExist:
             return render(request, "lab/partials/partials.html#combobox-options", context)
+
+    # Render description snippet for Family description autofill
+    if request.GET.get("render") == "family_description" and target_model_name == "Family":
+        search_value = request.GET.get("search", "").strip()
+        family = None
+        if search_value:
+            # search_value may be family_id; try exact match first
+            family = target_model.objects.filter(family_id=search_value).first()
+            if not family:
+                # fallback contains
+                family = target_model.objects.filter(family_id__icontains=search_value).first()
+        description = getattr(family, "description", "") if family else ""
+        return render(
+            request,
+            "lab/partials/partials.html#family-description-field",
+            {"description": description},
+        )
+
+    # Render prefilled individual forms for a selected Family
+    if request.GET.get("render") == "family_individual_forms" and target_model_name == "Family":
+        search_value = request.GET.get("search", "").strip()
+        family = None
+        if search_value:
+            family = target_model.objects.filter(family_id=search_value).first()
+            if not family:
+                family = target_model.objects.filter(family_id__icontains=search_value).first()
+        individuals = []
+        prefills = []
+        try:
+            from django.contrib.contenttypes.models import ContentType as _CT
+            indiv_ct = _CT.get_for_model(Individual)
+            individual_statuses = Status.objects.filter(
+                Q(content_type=indiv_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+        except Exception:
+            individual_statuses = Status.objects.all().order_by("name")
+
+        users = User.objects.all().order_by("username")
+        task_statuses = Status.objects.filter(
+            Q(content_type=ContentType.objects.get_for_model(Task))
+            | Q(content_type__isnull=True)
+        ).order_by("name")
+        projects = Project.objects.all().order_by("name")
+        identifier_types = IdentifierType.objects.all().order_by("name")
+
+        if family:
+            individuals = list(getattr(family, "individuals", Individual.objects.none()).all())
+            # Build initial JSONs for comboboxes per individual
+            import json as _json
+            for ind in individuals:
+                try:
+                    inst_initial = [
+                        {"value": str(i.pk), "label": getattr(i, "name", str(i))}
+                        for i in getattr(ind, "institution", []).all()
+                    ]
+                except Exception:
+                    inst_initial = []
+                try:
+                    hpo_initial = [
+                        {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+                        for t in getattr(ind, "hpo_terms", []).all()
+                    ]
+                except Exception:
+                    hpo_initial = []
+                prefills.append(
+                    {
+                        "individual": ind,
+                        "initial_institutions_json": _json.dumps(inst_initial),
+                        "initial_hpo_json": _json.dumps(hpo_initial),
+                    }
+                )
+
+        return render(
+            request,
+            "lab/crud.html#prefilled-individual-forms",
+            {
+                "prefills": prefills,
+                "count": len(prefills),
+                "identifier_types": identifier_types,
+                "individual_statuses": individual_statuses,
+                "users": users,
+                "task_statuses": task_statuses,
+                "projects": projects,
+            },
+        )
 
     response = render(
         request,
@@ -990,6 +1106,49 @@ def generic_create(request):
                     obj.status = default_status
                     obj.save()
 
+            # Optionally create an associated Task
+            try:
+                if request.POST.get("create_task"):
+                    from django.utils.dateparse import parse_datetime
+
+                    ct = ContentType.objects.get_for_model(model_class)
+                    title = request.POST.get("task-title") or f"Follow-up for {obj}"
+                    description = request.POST.get("task-description", "")
+                    assigned_to_id = request.POST.get("task-assigned_to") or getattr(
+                        request.user, "id", None
+                    )
+                    due_raw = request.POST.get("task-due_date")
+                    due_dt = parse_datetime(due_raw) if due_raw else None
+                    priority = request.POST.get("task-priority") or "medium"
+                    # Prefer an 'Active' status, else any
+                    status_id = request.POST.get("task-status")
+                    if not status_id:
+                        active = Status.objects.filter(name__iexact="active").first()
+                        status_id = getattr(active, "id", None) or getattr(
+                            Status.objects.first(), "id", None
+                        )
+                    project_id = request.POST.get("task-project") or None
+
+                    task_kwargs = {
+                        "title": title,
+                        "description": description,
+                        "assigned_to_id": assigned_to_id,
+                        "created_by": request.user,
+                        "due_date": due_dt,
+                        "priority": priority,
+                        "status_id": status_id,
+                        "content_type": ct,
+                        "object_id": obj.pk,
+                    }
+                    if project_id:
+                        task_kwargs["project_id"] = project_id
+                    # Only create if we have an assignee and a status
+                    if task_kwargs.get("assigned_to_id") and task_kwargs.get("status_id"):
+                        Task.objects.create(**task_kwargs)
+            except Exception:
+                # Do not block main creation if task creation fails
+                pass
+
             # Return success response for HTMX
             if request.htmx:
                 response = render(
@@ -1107,6 +1266,8 @@ def generic_create(request):
                 "form": form,
                 "model_name": model_name,
                 "app_label": app_label,
+                # Prefixed Task form for sidebar inputs
+                "task_form": TaskForm(prefix="task"),
             },
         )
     else:
@@ -1483,22 +1644,26 @@ def family_create_segway(request):
 
             # Extract family data
             family_id = request.POST.get("family_id")
+            family_id_query = request.POST.get("family_id_query")
             family_description = request.POST.get("family_description", "")
 
             print(f"=== DEBUG: Received family_id: '{family_id}' ===")
             print(f"=== DEBUG: Received family_description: '{family_description}' ===")
 
-            if not family_id:
+            if not family_id and not (family_id_query and family_id_query.strip()):
                 return HttpResponseBadRequest("Family ID is required.")
+
+            # Determine the desired family identifier (typed query has precedence when different)
+            desired_family_id = (family_id_query or "").strip() or family_id
 
             # Check if family already exists
             existing_family = None
             try:
-                existing_family = Family.objects.get(family_id=family_id)
+                existing_family = Family.objects.get(family_id=desired_family_id)
                 print(f"=== DEBUG: Family with ID '{family_id}' already exists ===")
             except Family.DoesNotExist:
                 print(
-                    f"=== DEBUG: Family with ID '{family_id}' does not exist, will create new ==="
+                    f"=== DEBUG: Family with ID '{desired_family_id}' does not exist, will create new ==="
                 )
 
             # If family exists, use it; otherwise create new one
@@ -1506,12 +1671,20 @@ def family_create_segway(request):
                 family = existing_family
                 family_was_created = False
                 print(f"=== DEBUG: Using existing family with ID: {family.id} ===")
+                # Update description if provided
+                try:
+                    if family_description is not None and family.description != family_description:
+                        family.description = family_description
+                        family.save(update_fields=["description"])
+                        print("=== DEBUG: Updated family description ===")
+                except Exception as _e:
+                    print(f"=== DEBUG: Failed to update family description: {_e}")
             else:
                 # Create new family directly without form validation
                 # This bypasses the ChoiceField validation issue
                 try:
                     family = Family.objects.create(
-                        family_id=family_id,
+                        family_id=desired_family_id,
                         description=family_description,
                         created_by=request.user,
                     )
@@ -1548,6 +1721,8 @@ def family_create_segway(request):
             print(f"=== DEBUG: Extracted individuals data: {individuals_data} ===")
 
             created_individuals = []  # list of tuples: (index, individual)
+            updated_individuals = []  # list of tuples: (index, individual)
+            reassigned_individuals = []  # list of tuples: (index, individual, old_family_id)
             mother_individual = None
             father_individual = None
 
@@ -1573,16 +1748,17 @@ def family_create_segway(request):
                 print(
                     f"=== DEBUG: Processing individual {index}: {individual_data} ==="
                 )
-                # Only require full_name, role and minimal fields; id is optional (auto field)
+                # If updating existing individual (id present), we don't require role
+                is_update = bool(individual_data.get("id"))
                 if not individual_data.get("full_name"):
                     print(f"=== DEBUG: Skipping individual {index} - no full_name ===")
                     continue
 
-                if not individual_data.get("role"):
-                    print(f"=== DEBUG: Skipping individual {index} - no role ===")
+                if not is_update and not individual_data.get("role"):
+                    print(f"=== DEBUG: Skipping individual {index} - no role for new individual ===")
                     continue
 
-                # Get required fields
+                # Get required fields (allow raw values; M2Ms handled by the form)
                 individual_form_data = {
                     # If explicit id is provided, pass it through; otherwise omit
                     "id": individual_data.get("id"),
@@ -1593,12 +1769,59 @@ def family_create_segway(request):
                     "council_date": individual_data.get("council_date") or None,
                     "diagnosis": individual_data.get("diagnosis") or None,
                     "diagnosis_date": individual_data.get("diagnosis_date") or None,
+                    # explicit mother/father relations (single combobox -> user id)
+                    "mother": individual_data.get("mother") or None,
+                    "father": individual_data.get("father") or None,
+                    # IMPORTANT: generic-combobox posts JSON list under the same field name
+                    # so we pass it as-is; Django form field will parse list values for M2M
                     "institution": individual_data.get("institution"),
+                    # HPO terms may arrive as JSON list; pass through
+                    "hpo_terms": individual_data.get("hpo_term_ids") or individual_data.get("hpo_terms"),
+                    # FKs and scalar fields
                     "status": individual_data.get("status"),
                     "family": family.id,
                     "is_index": individual_data.get("is_index") == "true",
                     "is_affected": individual_data.get("is_affected") == "true",
                 }
+
+                # Normalize M2M payloads coming as JSON strings from comboboxes
+                try:
+                    import json as _json
+                except Exception:
+                    _json = None
+
+                # Institutions (ManyToMany) should be a list of IDs
+                inst_val = individual_form_data.get("institution")
+                if isinstance(inst_val, str):
+                    try:
+                        if _json and inst_val.strip().startswith("["):
+                            parsed = _json.loads(inst_val)
+                            if isinstance(parsed, list):
+                                individual_form_data["institution"] = parsed
+                        else:
+                            # fallback: single value string -> single-item list
+                            individual_form_data["institution"] = [inst_val]
+                    except Exception:
+                        individual_form_data["institution"] = [inst_val]
+
+                # HPO terms (ManyToMany) can also arrive as a JSON string
+                hpo_val = individual_form_data.get("hpo_terms")
+                if isinstance(hpo_val, str):
+                    try:
+                        if _json and hpo_val.strip().startswith("["):
+                            parsed = _json.loads(hpo_val)
+                            if isinstance(parsed, list):
+                                individual_form_data["hpo_terms"] = parsed
+                            else:
+                                individual_form_data.pop("hpo_terms", None)
+                        else:
+                            # if empty string or non-list, drop to avoid validation error
+                            if not hpo_val.strip():
+                                individual_form_data.pop("hpo_terms", None)
+                            else:
+                                individual_form_data["hpo_terms"] = [hpo_val]
+                    except Exception:
+                        individual_form_data.pop("hpo_terms", None)
 
                 print(
                     f"=== DEBUG: Individual form data for {index}: {individual_form_data} ==="
@@ -1618,11 +1841,28 @@ def family_create_segway(request):
                         f"=== DEBUG: Added default status {default_individual_status.id} for individual {index} ==="
                     )
 
-                individual_form = IndividualForm(individual_form_data)
+                # If updating, bind to instance so save() updates instead of creating
+                individual_instance = None
+                if is_update:
+                    try:
+                        individual_instance = Individual.objects.get(pk=int(individual_form_data.get("id")))
+                    except Exception:
+                        individual_instance = None
+                if individual_instance:
+                    # Remove id from form data for binding
+                    individual_form_data.pop("id", None)
+                    individual_form = IndividualForm(individual_form_data, instance=individual_instance)
+                else:
+                    individual_form = IndividualForm(individual_form_data)
                 print(
                     f"=== DEBUG: Individual form is_valid: {individual_form.is_valid()} ==="
                 )
                 if individual_form.is_valid():
+                    # Keep track of previous family for reassignment warnings
+                    previous_family_id = None
+                    if individual_instance:
+                        previous_family_id = getattr(individual_instance, "family_id", None)
+
                     individual = individual_form.save(commit=False)
                     individual.created_by = request.user
                     individual.save()
@@ -1631,7 +1871,16 @@ def family_create_segway(request):
                     print(
                         f"=== DEBUG: Individual {index} created successfully with ID: {individual.id} ==="
                     )
-                    created_individuals.append((index, individual))
+                    if individual_instance:
+                        updated_individuals.append((index, individual))
+                        # Detect reassignment to a different family
+                        try:
+                            if previous_family_id and previous_family_id != getattr(individual, "family_id", None):
+                                reassigned_individuals.append((index, individual, previous_family_id))
+                        except Exception:
+                            pass
+                    else:
+                        created_individuals.append((index, individual))
 
                     # Store mother and father for later reference
                     role = individual_data.get("role", "")
@@ -1650,64 +1899,41 @@ def family_create_segway(request):
                 f"=== DEBUG: Total individuals created: {len(created_individuals)} ==="
             )
 
-            # Validate that we have at least one mother and one father if there are multiple individuals
-            if len(created_individuals) > 1:
-                has_mother = any(
-                    individuals_data.get(idx, {}).get("role") == "mother"
-                    for idx, _ in created_individuals
-                )
-                has_father = any(
-                    individuals_data.get(idx, {}).get("role") == "father"
-                    for idx, _ in created_individuals
-                )
+            # No requirement for mother/father presence across multi-member families
 
-                if not has_mother or not has_father:
-                    error_msg = "For families with multiple members, at least one mother and one father must be specified."
-                    print(f"=== DEBUG: Validation error: {error_msg} ===")
-                    if request.htmx:
-                        return render(
-                            request,
-                            "lab/crud.html#family-create-error",
-                            {"error": error_msg},
-                        )
-                    else:
-                        return HttpResponseBadRequest(error_msg)
-
-            # Second pass: update mother/father relationships based on role and create cross identifiers
-            for idx, individual in created_individuals:
+            # Second pass: resolve mother/father from selection or free-typed query, then create/sync identifiers and notes
+            for idx, individual in (list(created_individuals) + list(updated_individuals)):
                 # Find the corresponding individual data directly by index
                 individual_data = individuals_data.get(idx, {})
+                # Resolve parent references after all individuals exist
+                try:
+                    def resolve_parent(val):
+                        if not val:
+                            return None
+                        sval = str(val).strip()
+                        if sval.isdigit():
+                            return Individual.objects.filter(pk=int(sval)).first()
+                        from .models import CrossIdentifier as _CI
+                        ci = _CI.objects.filter(id_value=sval).first()
+                        return getattr(ci, 'individual', None)
 
-                if individual_data:
-                    # Automatically set mother/father relationships based on role in family
-                    role = individual_data.get("role", "")
+                    mother_val = individual_data.get("mother") or individual_data.get("mother_query")
+                    father_val = individual_data.get("father") or individual_data.get("father_query")
+                    m_obj = resolve_parent(mother_val)
+                    f_obj = resolve_parent(father_val)
+                    changed = False
+                    if m_obj and individual.mother_id != m_obj.id:
+                        individual.mother = m_obj
+                        changed = True
+                    if f_obj and individual.father_id != f_obj.id:
+                        individual.father = f_obj
+                        changed = True
+                    if changed:
+                        individual.save()
+                except Exception:
+                    pass
 
-                    # For siblings and probands, set mother and father if they exist
-                    if role in ["sibling", "proband", "other"]:
-                        if mother_individual:
-                            individual.mother = mother_individual
-                            print(
-                                f"=== DEBUG: Set mother for {role} individual {idx} ==="
-                            )
-                        if father_individual:
-                            individual.father = father_individual
-                            print(
-                                f"=== DEBUG: Set father for {role} individual {idx} ==="
-                            )
-
-                    # For mother, set as mother for all other individuals
-                    elif role == "mother":
-                        mother_individual = individual
-                        print(f"=== DEBUG: Individual {idx} is mother ===")
-
-                    # For father, set as father for all other individuals
-                    elif role == "father":
-                        father_individual = individual
-                        print(f"=== DEBUG: Individual {idx} is father ===")
-
-                individual.save()
-
-                # Create CrossIdentifier rows for this individual
+                # Create/Sync CrossIdentifier rows for this individual
                 try:
                     idx_prefix = f"individuals[{idx}]"
                     # discover all rows present for this individual's ids
@@ -1722,28 +1948,68 @@ def family_create_segway(request):
                                 rows.add(row_str)
                             except Exception:
                                 continue
+                    submitted_pairs = set()
                     for row in rows:
                         value_key = f"{idx_prefix}[ids][{row}][value]"
                         value = request.POST.get(value_key, "").strip()
                         type_key = f"{idx_prefix}[ids][{row}][type]"
                         type_id = request.POST.get(type_key, "").strip()
                         if value and type_id:
+                            key = (int(type_id), value)
+                            if key in submitted_pairs:
+                                # skip duplicate within submitted payload
+                                continue
                             try:
-                                CrossIdentifier.objects.create(
+                                # Try exact match first
+                                exact = CrossIdentifier.objects.filter(
                                     individual=individual,
-                                    id_type_id=int(type_id),
-                                    id_value=value,
-                                    created_by=request.user,
-                                )
-                                print(
-                                    f"=== DEBUG: Created CrossIdentifier for individual {idx}: {type_id}={value} ==="
-                                )
+                                    id_type_id=key[0],
+                                    id_value=key[1],
+                                ).first()
+                                if exact:
+                                    pass  # already correct
+                                else:
+                                    # See if there is an entry for this type with a different value → update one and remove extras
+                                    same_type_qs = CrossIdentifier.objects.filter(
+                                        individual=individual,
+                                        id_type_id=key[0],
+                                    ).order_by("id")
+                                    first_same = same_type_qs.first()
+                                    if first_same and (first_same.id_value or "").strip() != key[1]:
+                                        first_same.id_value = key[1]
+                                        first_same.save(update_fields=["id_value"])
+                                        # remove other duplicates of this type not equal to new value
+                                        same_type_qs.exclude(pk=first_same.pk).exclude(id_value=key[1]).delete()
+                                        print(f"=== DEBUG: Updated CrossIdentifier for individual {idx}: type={type_id} new={value} ===")
+                                    elif not first_same:
+                                        CrossIdentifier.objects.create(
+                                            individual=individual,
+                                            id_type_id=key[0],
+                                            id_value=key[1],
+                                            created_by=request.user,
+                                        )
+                                        print(f"=== DEBUG: Created CrossIdentifier for individual {idx}: {type_id}={value} ===")
+                                submitted_pairs.add(key)
                             except Exception as e:
                                 print(
                                     f"=== DEBUG: Error creating CrossIdentifier for individual {idx}: {e} ==="
                                 )
                                 # Ignore malformed IDs silently for now
                                 pass
+
+                    # Removal sync: delete any existing identifiers for this individual
+                    # that are not present in the submitted payload. If no id rows submitted, remove all.
+                    try:
+                        existing_cis = list(CrossIdentifier.objects.filter(individual=individual))
+                        for ci in existing_cis:
+                            pair = (int(ci.id_type_id), (ci.id_value or "").strip())
+                            if pair not in submitted_pairs:
+                                ci.delete()
+                                print(
+                                    f"=== DEBUG: Deleted CrossIdentifier for individual {idx}: {ci.id_type_id}={ci.id_value} ==="
+                                )
+                    except Exception as e:
+                        print(f"=== DEBUG: Error syncing CrossIdentifiers for individual {idx}: {e} ===")
                 except Exception as e:
                     print(
                         f"=== DEBUG: Error processing IDs for individual {idx}: {e} ==="
@@ -1865,6 +2131,44 @@ def family_create_segway(request):
                 except Exception:
                     pass
 
+            # Per-individual optional Task creation
+            try:
+                from django.utils.dateparse import parse_datetime
+                task_ct = ContentType.objects.get_for_model(Individual)
+                for idx, individual in created_individuals:
+                    prefix = f"individuals[{idx}]"
+                    if not request.POST.get(f"{prefix}[create_task]"):
+                        continue
+                    title = request.POST.get(f"{prefix}[task-title]") or f"Follow-up for {individual}"
+                    description = request.POST.get(f"{prefix}[task-description]", "")
+                    assigned_to_id = request.POST.get(f"{prefix}[task-assigned_to]") or getattr(request.user, "id", None)
+                    due_raw = request.POST.get(f"{prefix}[task-due_date]")
+                    due_dt = parse_datetime(due_raw) if due_raw else None
+                    priority = request.POST.get(f"{prefix}[task-priority]") or "medium"
+                    status_id = request.POST.get(f"{prefix}[task-status]")
+                    if not status_id:
+                        active = Status.objects.filter(name__iexact="active").first()
+                        status_id = getattr(active, "id", None) or getattr(Status.objects.first(), "id", None)
+                    project_id = request.POST.get(f"{prefix}[task-project]") or None
+
+                    task_kwargs = {
+                        "title": title,
+                        "description": description,
+                        "assigned_to_id": assigned_to_id,
+                        "created_by": request.user,
+                        "due_date": due_dt,
+                        "priority": priority,
+                        "status_id": status_id,
+                        "content_type": task_ct,
+                        "object_id": individual.pk,
+                    }
+                    if project_id:
+                        task_kwargs["project_id"] = project_id
+                    if task_kwargs.get("assigned_to_id") and task_kwargs.get("status_id"):
+                        Task.objects.create(**task_kwargs)
+            except Exception:
+                pass
+
             # Return success response
             if request.htmx:
                 response = render(
@@ -1872,24 +2176,34 @@ def family_create_segway(request):
                     "lab/crud.html#family-create-success",
                     {
                         "family": family,
-                        "individuals": [ind for _, ind in created_individuals],
-                        "count": len(created_individuals),
+                        "created_individuals": [ind for _, ind in created_individuals],
+                        "updated_individuals": [ind for _, ind in updated_individuals],
+                        "count_created": len(created_individuals),
+                        "count_updated": len(updated_individuals),
+                        "reassigned_individuals": reassigned_individuals,
                         "family_was_created": family_was_created,
                     },
                 )
                 # Emit events so UI components listening for created Individuals refresh
                 try:
                     created_pks = [ind.id for _, ind in created_individuals]
+                    updated_pks = [ind.id for _, ind in updated_individuals]
                     trigger_payload = {
+                        # Created events
                         "created-Individual": {
                             "pks": created_pks,
                             "count": len(created_pks),
                             "family_pk": getattr(family, "pk", None),
                         },
-                        # Alias form requested
                         "create-individual": {
                             "pks": created_pks,
                             "count": len(created_pks),
+                            "family_pk": getattr(family, "pk", None),
+                        },
+                        # Updated events
+                        "updated-Individual": {
+                            "pks": updated_pks,
+                            "count": len(updated_pks),
                             "family_pk": getattr(family, "pk", None),
                         },
                         # Also refresh global filters-dependent UI
@@ -1899,6 +2213,8 @@ def family_create_segway(request):
                     for pk in created_pks:
                         trigger_payload[f"created-Individual-{pk}"] = True
                         trigger_payload[f"create-individual-{pk}"] = True
+                    for pk in updated_pks:
+                        trigger_payload[f"updated-Individual-{pk}"] = True
                     response["HX-Trigger"] = json.dumps(trigger_payload)
                 except Exception:
                     response["HX-Trigger"] = "created-Individual"
@@ -1935,6 +2251,13 @@ def family_create_segway(request):
                 ).order_by("name"),
                 "identifier_types": IdentifierType.objects.all().order_by("name"),
                 "existing_families": Family.objects.all().order_by("family_id"),
+                # For per-individual task selects
+                "users": User.objects.all().order_by("username"),
+                "task_statuses": Status.objects.filter(
+                    Q(content_type=ContentType.objects.get_for_model(Task))
+                    | Q(content_type__isnull=True)
+                ).order_by("name"),
+                "projects": Project.objects.all().order_by("name"),
             },
         )
     else:
