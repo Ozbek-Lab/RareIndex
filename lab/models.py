@@ -271,6 +271,7 @@ class Institution(HistoryMixin, models.Model):
 @reversion.register()
 class Family(HistoryMixin, models.Model):
     family_id = models.CharField(max_length=100, unique=True)
+    is_consanguineous = models.BooleanField(blank=True, null=True)
     description = models.TextField(blank=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     history = HistoricalRecords()
@@ -282,6 +283,14 @@ class Family(HistoryMixin, models.Model):
     def __str__(self):
         return self.family_id
 
+    @property
+    def is_solved(self): # Check if all index individuals are solved - P/LP or VUS
+        solved_qs = self.individuals.filter(
+            is_index=True,
+            status__name__in=["Solved - P/LP", "Solved - VUS"],
+        )
+        total_index = self.individuals.filter(is_index=True).count()
+        return solved_qs.count() == total_index and total_index > 0
 
 @reversion.register()
 class Status(HistoryMixin, models.Model):
@@ -311,6 +320,9 @@ class Individual(HistoryMixin, models.Model):
     birth_date = EncryptedDateField(null=True, blank=True)
     icd11_code = models.TextField(null=True, blank=True)
     is_index = models.BooleanField(default=False)
+    sex = models.CharField(max_length=10, choices=[("male", "Male"), ("female", "Female"), ("other", "Other")], null=True, blank=True)
+    is_alive = models.BooleanField(default=True)
+    age_of_onset = models.CharField(max_length=255, null=True, blank=True)
     hpo_terms = models.ManyToManyField(
         "ontologies.Term",
         related_name="individuals",
@@ -626,3 +638,27 @@ class CrossIdentifier(HistoryMixin, models.Model):
 
     def __str__(self):
         return f"{self.individual} - {self.id_type} - {self.id_value}"
+
+@reversion.register()
+class Variant(HistoryMixin, models.Model):
+    assembly_version = models.CharField(max_length=10, default="hg38")
+    chromosome = models.CharField(max_length=10)
+    start = models.IntegerField()
+    end = models.IntegerField()
+    aminoacid_change = models.CharField(max_length=100, null=True, blank=True)
+    reference = models.CharField(max_length=100)
+    alternate = models.CharField(max_length=100)
+    type = models.CharField(max_length=100, null=True, blank=True)
+    effect_classification = models.CharField(max_length=100, null=True, blank=True)
+    acmg_evidence = models.CharField(max_length=100, null=True, blank=True)
+    acmg_classification = models.CharField(max_length=100, null=True, blank=True)
+
+    notes = GenericRelation("Note")
+    individual = models.ForeignKey(Individual, on_delete=models.PROTECT, related_name="variants")
+    analysis = models.ForeignKey(Analysis, on_delete=models.PROTECT, related_name="found_variants", null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    history = HistoricalRecords()
+
+    @property
+    def franklin_link(self):
+        return f"https://franklin.genoox.com/clinical-db/variant/snp/{self.chromosome}-{self.start}-{self.reference}-{self.alternate}-{self.assembly_version}"

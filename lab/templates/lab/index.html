@@ -136,19 +136,25 @@
               {% include "lab/partials/partials.html#search-section" %}
             {% endwith %}
           </div>
-          <div x-show="activeItem === 'hpo-network-visualization'">
-            {% with view="page" %}
-              <div x-data="hpoController()">
-                {% include "lab/plots.html#hpo-network-visualization-section" %}
-              </div>
-            {% endwith %}
-          </div>
+          <!-- Only create the HPO network DOM when the page is active -->
+          <template x-if="activeItem === 'hpo-network-visualization'">
+            <div>
+              {% with view="page" %}
+                <div x-data="hpoController()" x-init="$nextTick(() => { const el = document.getElementById('hpo-visualization-container'); if (el && window.htmx) { htmx.process(el); } })">
+                  {% include "lab/plots.html#hpo-network-visualization-section" %}
+                </div>
+              {% endwith %}
+            </div>
+          </template>
           <div x-show="activeItem === 'notifications'" id="notifications-content">
             <!-- Notifications content will be loaded here via HTMX -->
           </div>
-          <div x-show="activeItem === 'map'" id="map-content">
-            {% include "lab/map.html#map-content" %}
-          </div>
+          <!-- Lazily mount the Map only when navigated to -->
+          <template x-if="activeItem === 'map'">
+            <div x-init="$nextTick(() => { const el = document.getElementById('map-content'); if (el && window.htmx) { htmx.process(el); } })">
+              {% include "lab/map.html#map-content" %}
+            </div>
+          </template>
           <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
             <!-- Natural language search content will be loaded here via HTMX -->
           </div>
@@ -634,6 +640,69 @@
             page: page,
             render: 'combobox',
             exclude_ids: JSON.stringify(excludeIds),
+          };
+          if (this.query) vals['search'] = this.query;
+          if (this.valueField) vals['value_field'] = this.valueField;
+          if (this.labelField) vals['label_field'] = this.labelField;
+          return JSON.stringify(vals);
+        },
+      };
+    }
+
+    function singleGenericComboboxController(appLabel, modelName, valueField = 'pk', labelField = '', inputName = '', initialValue = '') {
+      return {
+        appLabel,
+        modelName,
+        valueField,
+        labelField,
+        inputName,
+        open: false,
+        query: initialValue || '',
+        options: [],
+        loading: false,
+        selected: null, // {value, label}
+        init() {
+          this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
+          this.$watch('query', () => {
+            if (this.open) {
+              htmx.trigger(this.$refs.opts, 'combo-query-changed');
+            }
+          });
+        },
+        get hiddenInputName() { return this.inputName || `${this.modelName.toLowerCase()}_id`; },
+        get hiddenInputValue() {
+          // If a specific option is selected, submit its value; otherwise submit raw query text
+          if (this.selected && this.selected.value !== undefined && this.selected.value !== null && `${this.selected.value}`.length > 0) {
+            return `${this.selected.value}`;
+          }
+          return this.query || '';
+        },
+        isSelected(value) {
+          return this.selected && String(this.selected.value) === String(value);
+        },
+        toggleOption(value, label) {
+          if (this.isSelected(value)) {
+            this.selected = null;
+          } else {
+            this.selected = { value, label };
+            this.query = label;
+          }
+          this.open = false;
+          try {
+            window.dispatchEvent(new CustomEvent('combobox-selected', { detail: { appLabel: this.appLabel, modelName: this.modelName, valueField: this.valueField, labelField: this.labelField, value, label, inputName: this.inputName } }));
+          } catch (e) {}
+        },
+        clearSelection() {
+          this.selected = null;
+          this.query = '';
+          this.open = false;
+        },
+        getHxVals(page = 1) {
+          const vals = {
+            app_label: this.appLabel,
+            model_name: this.modelName,
+            page: page,
+            render: 'combobox',
           };
           if (this.query) vals['search'] = this.query;
           if (this.valueField) vals['value_field'] = this.valueField;
