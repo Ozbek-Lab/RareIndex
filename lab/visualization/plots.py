@@ -153,38 +153,31 @@ def get_stats_counts(request):
 
 @login_required
 def plots_page(request):
+    print("Plots page view request", request)
+    print("Plots page GET params:", dict(request.GET))
     """View for the plots page showing various data visualizations."""
     from django.db.models import Count, Q
     from ..models import Individual, Sample, Test, Analysis, Status, SampleType, TestType, AnalysisType, Institution
+    from ..filters import apply_filters
     import plotly.graph_objects as go
     import plotly.express as px
     import json
     
-    # Apply global filters
-    active_filters = request.session.get('active_filters', {})
-    filter_conditions = Q()
-    
-    if active_filters:
-        for filter_key, filter_values in active_filters.items():
-            if filter_values:  # Only apply non-empty filters
-                # Handle different filter types
-                if isinstance(filter_values, list):
-                    if filter_values:  # Non-empty list
-                        filter_conditions &= Q(**{filter_key: filter_values[0]})  # Take first value for now
-                else:
-                    filter_conditions &= Q(**{filter_key: filter_values})
-    
-    # Get counts for stats cards with filters applied
+    # Extract filter params from URL (query string)
+    all_filters = {k: v for k, v in request.GET.items() if k.startswith("filter_")}
+    print("Plots page active URL filters:", all_filters)
+
+    # Base querysets
     individuals_queryset = Individual.objects.all()
     samples_queryset = Sample.objects.all()
     tests_queryset = Test.objects.all()
     analyses_queryset = Analysis.objects.all()
-    
-    if filter_conditions:
-        individuals_queryset = individuals_queryset.filter(filter_conditions)
-        samples_queryset = samples_queryset.filter(filter_conditions)
-        tests_queryset = tests_queryset.filter(filter_conditions)
-        analyses_queryset = analyses_queryset.filter(filter_conditions)
+
+    # Apply URL-based global filters per model using the shared engine
+    individuals_queryset = apply_filters(request, "Individual", individuals_queryset)
+    samples_queryset = apply_filters(request, "Sample", samples_queryset)
+    tests_queryset = apply_filters(request, "Test", tests_queryset)
+    analyses_queryset = apply_filters(request, "Analysis", analyses_queryset)
     
     individuals_count = individuals_queryset.count()
     samples_count = samples_queryset.count()
@@ -195,16 +188,16 @@ def plots_page(request):
     distribution_plots = []
     
     # Get all data for the combined distribution plot
-    individual_status_counts = individuals_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
-    sample_status_counts = samples_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
-    test_status_counts = tests_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
-    analysis_status_counts = analyses_queryset.values('status__name').annotate(count=Count('id')).order_by('-count')
+    individual_status_counts = individuals_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+    sample_status_counts = samples_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+    test_status_counts = tests_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+    analysis_status_counts = analyses_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
     
     # Get other distribution data
-    sample_type_counts = samples_queryset.values('sample_type__name').annotate(count=Count('id')).order_by('-count')
-    test_type_counts = tests_queryset.values('test_type__name').annotate(count=Count('id')).order_by('-count')
-    analysis_type_counts = analyses_queryset.values('type__name').annotate(count=Count('id')).order_by('-count')
-    institution_counts = individuals_queryset.values('institution__name').annotate(count=Count('id')).order_by('-count')
+    sample_type_counts = samples_queryset.values('sample_type__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+    test_type_counts = tests_queryset.values('test_type__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+    analysis_type_counts = analyses_queryset.values('type__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+    institution_counts = individuals_queryset.values('institution__name').annotate(count=Count('id', distinct=True)).order_by('-count')
     
     # Build individual plot figures instead of a combined subplot
     # Color maps
@@ -285,6 +278,7 @@ def plots_page(request):
         'tests_count': tests_count,
         'analyses_count': analyses_count,
         'distribution_plots': distribution_plots,
+        'all_filters': all_filters,
     }
 
     print("PLOTS PAGE")
