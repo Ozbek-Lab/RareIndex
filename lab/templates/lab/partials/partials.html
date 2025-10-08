@@ -246,7 +246,7 @@
     </div>
   {% endfor %}
   {% if items.has_next %}
-    <div hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once" hx-swap="afterend" hx-target="this" :hx-vals="getHxVals({{ items.next_page_number }})"></div>
+    <div hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once" hx-swap="afterend" hx-target="this" :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', {{ items.next_page_number }}, null, null, '{{ icon_class }}')"></div>
   {% endif %}
 {% endpartialdef %}
 
