@@ -163,6 +163,16 @@ def plots_page(request):
     import plotly.express as px
     import json
     
+    # Numeric threshold for grouping small institutions into "Other"
+    try:
+        institute_threshold = int(request.GET.get('institute_threshold', '0'))
+        if institute_threshold < 0:
+            institute_threshold = 0
+        if institute_threshold > 10:
+            institute_threshold = 10
+    except Exception:
+        institute_threshold = 0
+
     # Extract filter params from URL (query string)
     all_filters = {k: v for k, v in request.GET.items() if k.startswith("filter_")}
     print("Plots page active URL filters:", all_filters)
@@ -250,17 +260,16 @@ def plots_page(request):
     add_pie_plot(sample_type_counts, 'sample_type__name', 'Sample Type', 'sample-type', fixed_colors=['#00cc96', '#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF'])
     add_pie_plot(test_type_counts, 'test_type__name', 'Test Type', 'test-type', fixed_colors=['#ab63fa', '#FF6692', '#B6E880', '#FF97FF', '#FECB52', '#636EFA'])
     add_pie_plot(analysis_type_counts, 'type__name', 'Analysis Type', 'analysis-type', fixed_colors=['#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'])
-    # Aggregate small institution slices (<1%) into "Other"
+    # Aggregate small institution slices by numeric threshold into "Other"
     institution_counts_aggregated = institution_counts
     try:
         if institution_counts:
             counts_list = list(institution_counts)
-            total_count = sum(item['count'] for item in counts_list) or 0
-            if total_count > 0:
+            if institute_threshold and institute_threshold > 0:
                 major_items = []
                 other_total = 0
                 for item in counts_list:
-                    if (item['count'] / total_count) < 0.01:
+                    if (item['count'] or 0) < institute_threshold:
                         other_total += item['count']
                     else:
                         major_items.append(item)
@@ -279,6 +288,7 @@ def plots_page(request):
         'analyses_count': analyses_count,
         'distribution_plots': distribution_plots,
         'all_filters': all_filters,
+        'institute_threshold': institute_threshold,
     }
 
     print("PLOTS PAGE")
