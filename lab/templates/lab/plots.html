@@ -588,52 +588,213 @@
       </div>
     {% else %}
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div class="lg:col-span-9">
-          <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+        <div class="lg:col-span-12">
+          <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4 relative">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-md font-semibold text-gray-900 dark:text-gray-100">HPO Network</h3>
+              <div class="flex items-center space-x-2">
+                <div class="inline-flex rounded-md shadow-sm" role="group">
+                <button type="button" id="btn-layout-circular" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-l-md hover:bg-gray-50 dark:hover:bg-gray-600">Circular</button>
+                <button type="button" id="btn-layout-layered" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-r-md hover:bg-gray-50 dark:hover:bg-gray-600">Layered</button>
+                </div>
+                <div class="inline-flex rounded-md shadow-sm" role="group">
+                  <button type="button" id="btn-theme-icefire" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-l-md hover:bg-gray-50 dark:hover:bg-gray-600">Icefire</button>
+                  <button type="button" id="btn-theme-rainbow" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-r-md hover:bg-gray-50 dark:hover:bg-gray-600">Rainbow</button>
+                </div>
+                <div class="inline-flex rounded-md shadow-sm" role="group">
+                  <button type="button" id="btn-export-png" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-l-md hover:bg-gray-50 dark:hover:bg-gray-600">
+                    <i class="fas fa-file-image mr-1"></i> PNG
+                  </button>
+                  <button type="button" id="btn-export-svg" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-r-md hover:bg-gray-50 dark:hover:bg-gray-600">
+                    <i class="fas fa-file-code mr-1"></i> SVG
+                  </button>
+                </div>
+                <!-- Threshold control -->
+                <div class="flex items-center space-x-2">
+                  <label for="threshold" class="text-sm font-medium text-gray-700 dark:text-gray-300">Threshold</label>
+                  <input
+                    type="number"
+                    id="threshold"
+                    name="threshold"
+                    placeholder="{{ threshold }}"
+                    x-model.debounce.500ms="hpoThreshold"
+                    x-ref="hpoThresholdInput"
+                    min="1"
+                    max="24"
+                    class="block w-24 rounded-md border-gray-300 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
+                  />
+                </div>
+              </div>
+              </div>
+            </div>
             <div
-              id="plotly-div"
+              id="hpo-cytoscape"
               style="width: 100%; height: 800px;"
               class="mt-4"
             ></div>
+            <!-- Legend -->
+            <div id="hpo-legend" class="hidden md:flex flex-col items-center absolute right-2 top-14 bg-white/80 dark:bg-gray-800/80 rounded p-2 border border-gray-200 dark:border-gray-700 shadow-sm">
+              <div class="text-xs text-gray-700 dark:text-gray-200 mb-1">Count</div>
+              <div id="hpo-legend-bar" style="width: 14px; height: 180px; border-radius: 4px;"></div>
+              <div class="flex w-full justify-between text-[10px] text-gray-700 dark:text-gray-200 mt-1">
+                <span id="hpo-legend-min">0</span>
+                <span id="hpo-legend-max">100</span>
+              </div>
+            </div>
             <p class="text-sm text-gray-900 dark:text-gray-100">
               Plotting <span class="font-bold">{{ term_count }}</span> terms for
               <span class="font-bold">{{ individual_count }} individuals</span>.
             </p>
           </div>
         </div>
-        <div class="lg:col-span-3">
-          <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
-            <label for="threshold" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Consolidation Threshold
-              <span
-                x-show="!isThresholdValid"
-                x-transition
-                class="text-red-500 dark:text-red-300 text-sm mt-1"
-              >
-                Please enter a number between 1 and 24.
-              </span>
-            </label>
-            <input
-              type="number"
-              id="threshold"
-              name="threshold"
-              placeholder="{{ threshold }}"
-              x-model.debounce.500ms="hpoThreshold"
-              x-ref="hpoThresholdInput"
-              min="1"
-              max="24"
-              class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
-            />
-          </div>
-        </div>
       </div>
       {# prettier-ignore-start #}
       <script>
-        var plotData = {{ plot_json|safe }};
-        var plotlyDiv = document.getElementById('plotly-div');
-        plotData.layout.width = 1000;
-        plotData.layout.height = 800;
-        if (plotlyDiv) { Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout, {editable: true, toImageButtonOptions: {format: 'png', width: 1000, height: 800, filename: 'hpo-network-visualization', displaylogo: false, responsive: true}}); }
+        (function(){
+          try {
+            var elements = JSON.parse('{{ elements_json|escapejs }}');
+            var container = document.getElementById('hpo-cytoscape');
+            if (container && window.cytoscape) {
+              // Compute max count for color/size scales
+              var maxCount = 1;
+              for (var i = 0; i < elements.length; i++) {
+                var el = elements[i];
+                if (el && el.data && typeof el.data.count === 'number') {
+                  if (el.data.count > maxCount) maxCount = el.data.count;
+                }
+              }
+
+              var cy = cytoscape({
+                container: container,
+                elements: elements,
+                layout: { name: 'preset' },
+                style: [
+                  { selector: 'node', style: { 'label': 'data(label)', 'font-size': 10, 'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': 100, 'width': 'mapData(count, 0, ' + maxCount + ', 8, 48)', 'height': 'mapData(count, 0, ' + maxCount + ', 8, 48)', 'background-color': 'data(color)', 'color': '#111827' } },
+                  { selector: 'edge', style: { 'curve-style': 'bezier', 'width': 1, 'line-color': '#9CA3AF', 'opacity': 0.7 } }
+                ]
+              });
+              // Palettes and color helpers
+              var palettes = {
+                icefire: ['#000004','#090720','#140b3d','#1f0a52','#2a0a5f','#350a68','#410a6c','#4c0b6b','#570d69','#611368','#6a1a6b','#74206e','#7f2773','#8b2d78','#97357b','#a23d7b','#ad4577','#b74e70','#c15768','#c9615e','#d06c54','#d57849','#d9843f','#dd9036','#e09b2e','#e3a828','#e6b523','#e8c220','#ebd01f','#efdd22','#f3ea2a','#f8f338','#fcf951'],
+                rainbow: ['#9400D3','#4B0082','#0000FF','#00FFFF','#00FF00','#FFFF00','#FF7F00','#FF0000']
+              };
+              function lerpColor(c1, c2, t){
+                function h2i(h){return parseInt(h,16);} function i2h(i){var s=i.toString(16);return s.length===1?'0'+s:s;}
+                var r=h2i(c1.substr(1,2)), g=h2i(c1.substr(3,2)), b=h2i(c1.substr(5,2));
+                var r2=h2i(c2.substr(1,2)), g2=h2i(c2.substr(3,2)), b2=h2i(c2.substr(5,2));
+                var rn=Math.round(r+(r2-r)*t), gn=Math.round(g+(g2-g)*t), bn=Math.round(b+(b2-b)*t);
+                return '#' + i2h(rn) + i2h(gn) + i2h(bn);
+              }
+              function interpPalette(palette, t){
+                if (t<=0) return palette[0]; if (t>=1) return palette[palette.length-1];
+                var pos = t*(palette.length-1); var i=Math.floor(pos); var f=pos-i;
+                return lerpColor(palette[i], palette[i+1], f);
+              }
+              var activePalette = palettes.icefire;
+              function recolorNodes(){
+                cy.nodes().forEach(function(n){ var c = n.data('count')||0; var t = maxCount>0 ? (c/maxCount) : 0; n.data('color', interpPalette(activePalette, t)); });
+                cy.style().selector('node').style('background-color','data(color)').update();
+                var grad = 'linear-gradient(to top, ' + activePalette.slice().reverse().join(',') + ')';
+                var bar = document.getElementById('hpo-legend-bar'); if (bar) { bar.style.background = grad; }
+                var minL = document.getElementById('hpo-legend-min'); if (minL) { minL.textContent = '0'; }
+                var maxL = document.getElementById('hpo-legend-max'); if (maxL) { maxL.textContent = String(maxCount); }
+                var legend = document.getElementById('hpo-legend'); if (legend) { legend.classList.remove('hidden'); }
+              }
+              // Custom radial tree layout (root-centered, children branch outward in same direction)
+              function radialTreeLayout(options){
+                var rootId = 'HP:0000118';
+                var rStep = (options && options.rStep) || 80;
+                var fullSweep = Math.PI * 2;
+                // Build children map (edges are child -> parent in data), invert to parent -> [children]
+                var children = {};
+                cy.nodes().forEach(function(n){ children[n.id()] = []; });
+                cy.edges().forEach(function(e){ var s=e.data('source'), t=e.data('target'); if (children[t]) { children[t].push(s); } });
+                // Compute subtree sizes
+                var subtreeSize = {};
+                function dfsSize(node){
+                  var kids = children[node] || [];
+                  var size = 1;
+                  for (var i=0;i<kids.length;i++){ size += dfsSize(kids[i]); }
+                  subtreeSize[node] = size; return size;
+                }
+                dfsSize(rootId);
+                // Assign angles (sector) and positions
+                var positions = {};
+                function assign(node, depth, startA, endA){
+                  var mid = (startA + endA) / 2;
+                  positions[node] = { x: Math.cos(mid) * depth * rStep, y: Math.sin(mid) * depth * rStep };
+                  var kids = children[node] || [];
+                  if (!kids.length) return;
+                  var total = 0; for (var i=0;i<kids.length;i++){ total += (subtreeSize[kids[i]] || 1); }
+                  var cursor = startA;
+                  for (var i=0;i<kids.length;i++){
+                    var frac = (subtreeSize[kids[i]] || 1) / total;
+                    var span = frac * (endA - startA);
+                    var nextStart = cursor;
+                    var nextEnd = cursor + span;
+                    assign(kids[i], depth + 1, nextStart, nextEnd);
+                    cursor = nextEnd;
+                  }
+                }
+                assign(rootId, 0, -Math.PI, Math.PI);
+                // Apply positions with preset layout
+                cy.layout({ name: 'preset', positions: function(n){ var p = positions[n.id()]; return p ? p : n.position(); }, animate: !!(options && options.animate), fit: false }).run();
+              }
+              // Initial radial layout
+              radialTreeLayout({ animate: false });
+              recolorNodes();
+              cy.fit(undefined, 20);
+
+              // Layout switchers
+              function runLayout(name){
+                if (name === 'breadthfirst') {
+                  var opts = { name: 'breadthfirst', directed: false, roots: '[id = "HP:0000118"]', spacingFactor: 0.7, padding: 10, animate: true, nodeDimensionsIncludeLabels: false, avoidOverlap: true, fit: false };
+                  cy.layout(opts).run();
+                } else {
+                  radialTreeLayout({ animate: true });
+                }
+                cy.fit(undefined, 20);
+              }
+
+              var btnCircular = document.getElementById('btn-layout-circular');
+              var btnLayered = document.getElementById('btn-layout-layered');
+              if (btnCircular) btnCircular.addEventListener('click', function(){ runLayout('concentric'); });
+              if (btnLayered) btnLayered.addEventListener('click', function(){ runLayout('breadthfirst'); });
+
+              // Export handlers
+              function download(filename, content, mime) {
+                var a = document.createElement('a');
+                a.href = mime ? 'data:' + mime + ';charset=utf-8,' + encodeURIComponent(content) : content;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              }
+              var btnPng = document.getElementById('btn-export-png');
+              if (btnPng) btnPng.addEventListener('click', function(){
+                try {
+                  var png = cy.png({ full: true, scale: 2, bg: 'white' });
+                  // cy.png returns data URL
+                  download('hpo-network.png', png, null);
+                } catch(e) { console.error('PNG export failed', e); }
+              });
+              var btnSvg = document.getElementById('btn-export-svg');
+              if (btnSvg) btnSvg.addEventListener('click', function(){
+                try {
+                  if (typeof cy.svg !== 'function') { console.warn('cytoscape-svg not available'); return; }
+                  var svg = cy.svg({ full: true, scale: 1, bg: 'white' });
+                  download('hpo-network.svg', svg, 'image/svg+xml');
+                } catch(e) { console.error('SVG export failed', e); }
+              });
+
+              // Theme switchers
+              var btnIce = document.getElementById('btn-theme-icefire');
+              var btnRain = document.getElementById('btn-theme-rainbow');
+              if (btnIce) btnIce.addEventListener('click', function(){ activePalette = palettes.icefire; recolorNodes(); });
+              if (btnRain) btnRain.addEventListener('click', function(){ activePalette = palettes.rainbow; recolorNodes(); });
+            }
+          } catch (e) { console.error('Cytoscape init error', e); }
+        })();
       </script>
       {# prettier-ignore-end #}
     {% endif %}
