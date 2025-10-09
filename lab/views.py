@@ -37,7 +37,8 @@ from .forms import NoteForm, FORMS_MAPPING, TaskForm
 # Import visualization functions
 from .visualization.hpo_network_visualization import (
     process_hpo_data,
-    plotly_hpo_network,
+    cytoscape_hpo_network,
+    cytoscape_elements_json,
 )
 from .visualization.plots import plots_page as plots_view
 from .visualization.maps import generate_map_data
@@ -550,21 +551,21 @@ def generic_detail(request):
 def hpo_network_visualization(request):
     initial_queryset = Individual.objects.all()
     filtered_individuals = apply_filters(request, "Individual", initial_queryset)
-    threshold = request.GET.get("threshold", 10)
+    threshold = request.GET.get("threshold", 12)
     if threshold:
         threshold = int(threshold)
     else:
-        threshold = 10
+        threshold = 12
     consolidated_counts, graph, hpo = process_hpo_data(
         filtered_individuals, threshold=threshold
     )
-    fig, _ = plotly_hpo_network(graph, hpo, consolidated_counts, min_count=1)
-    plot_json = json.dumps(fig.to_dict())
+    elements, _ = cytoscape_hpo_network(graph, hpo, consolidated_counts, min_count=1)
+    elements_json = cytoscape_elements_json(elements)
     return render(
         request,
         "lab/plots.html#hpo-network-visualization",
         {
-            "plot_json": plot_json,
+            "elements_json": elements_json,
             "threshold": threshold,
             "term_count": len(consolidated_counts),
             "individuals": filtered_individuals,

@@ -20,6 +20,7 @@ FILTER_CONFIG = {
             "Institution": "institution__pk",
             "Term": "hpo_terms__pk",
             "Sample": "samples__pk",
+            "Project": "projects__pk"
         },
         "select_fields": {
             "sample_type": {
