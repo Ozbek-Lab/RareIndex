@@ -369,10 +369,33 @@
 
 {% partialdef plot %}
   <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-      <i class="fas fa-{{ plot_data.icon|default:'chart-bar' }} text-indigo-500 mr-2"></i>
-      {{ plot_data.title }}
-    </h3>
+    <div class="flex items-center justify-between">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <i class="fas fa-{{ plot_data.icon|default:'chart-bar' }} text-indigo-500 mr-2"></i>
+        {{ plot_data.title }}
+      </h3>
+      {% if plot_data.id == 'institution' %}
+      <div class="flex items-center space-x-2">
+        <span class="text-xs text-gray-600 dark:text-gray-300">Other Threshold</span>
+        <select
+          class="text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1"
+          :value="instituteThreshold"
+          @change="instituteThreshold = parseInt($event.target.value);"
+        >
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+      {% endif %}
+    </div>
     <div id="plot-{{ plot_data.id }}" class="h-128">      
       <script>
         {% if plot_data.chart_data and plot_data.chart_data.data %}
