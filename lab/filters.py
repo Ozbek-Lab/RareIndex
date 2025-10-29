@@ -20,13 +20,9 @@ FILTER_CONFIG = {
             "Institution": "institution__pk",
             "Term": "hpo_terms__pk",
             "Sample": "samples__pk",
-<<<<<<< HEAD
             "Test": "samples__tests__pk",  # Add this line
             "Analysis": "samples__tests__analyses__pk",  # Add this line
-||||||| 1ea2791
-=======
             "Project": "projects__pk",
->>>>>>> 2d2be64f6fdb9b929851e1b22aba65bfb650de91
         },
         "select_fields": {
             "sample_type": {
