@@ -20,12 +20,24 @@ FILTER_CONFIG = {
             "Institution": "institution__pk",
             "Term": "hpo_terms__pk",
             "Sample": "samples__pk",
+            "Test": "samples__tests__pk",  # Add this line
+            "Analysis": "samples__tests__analyses__pk",  # Add this line
         },
         "select_fields": {
             "sample_type": {
                 "field_path": "samples__sample_type__name",
                 "label": "Sample Type",
                 "select_filter_path": "samples__sample_type__name",
+            },
+            "test_type": {  # Add this block
+                "field_path": "samples__tests__test_type__name",
+                "label": "Test Type",
+                "select_filter_path": "samples__tests__test_type__name",
+            },
+            "analysis_type": {  # Add this block
+                "field_path": "samples__tests__analyses__type__name",
+                "label": "Analysis Type",
+                "select_filter_path": "samples__tests__analyses__type__name",
             },
         },
         "status_filter": {
