@@ -395,7 +395,7 @@ def plotly_hpo_network(graph, hpo, term_counts, output_file=None, min_count=1):
     return fig, subgraph
 
 
-def process_hpo_data(individuals, threshold=3):
+def process_hpo_data(individuals, threshold=12):
     """
     Process HPO data from individuals and create visualization data.
     
@@ -429,3 +429,116 @@ def process_hpo_data(individuals, threshold=3):
     consolidated_counts = consolidate_terms(graph, term_counts, threshold=threshold)
     
     return consolidated_counts, graph, hpo
+
+
+def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
+    """
+    Build Cytoscape.js elements for an HPO network from term counts.
+    
+    Args:
+        graph: NetworkX graph of HPO terms
+        hpo: Fastobo HPO object
+        term_counts: Dictionary of term_id -> count
+        min_count: Minimum count threshold for displaying terms
+        
+    Returns:
+        tuple: (elements, subgraph) where elements is a list of Cytoscape.js
+               node/edge dicts suitable for JSON serialization, and subgraph is
+               the NetworkX subgraph that was constructed.
+    """
+    # Function to extract term name from the HPO ontology
+    def get_term_name(term_id):
+        for frame in hpo:
+            if isinstance(frame, fastobo.term.TermFrame) and str(frame.id) == term_id:
+                for clause in frame:
+                    if isinstance(clause, fastobo.term.NameClause):
+                        return str(clause.name)
+        return term_id
+
+    root_node = "HP:0000118"  # Phenotypic abnormality
+
+    # Create a subgraph with terms and paths to root (same logic as Plotly pathing)
+    subgraph = nx.DiGraph()
+
+    for term_id, count in term_counts.items():
+        if term_id in graph and count >= min_count:
+            name = get_term_name(term_id)
+            name = name.replace("system", "sys.")
+            name = name.replace("morphology", "morph.")
+            name = name.replace("Abnormality of the", "")
+            name = name.replace("abnormality", "")
+            name = name.replace("Abnormality of", "")
+            name = name.replace("Abnormal", "")
+
+            if len(name) > 30:
+                name = name[:27] + "..."
+
+            subgraph.add_node(term_id, name=name, count=count, term_id=term_id)
+
+            try:
+                path = nx.shortest_path(graph, term_id, root_node)
+                for i in range(len(path) - 1):
+                    source = path[i]
+                    target = path[i + 1]
+
+                    if source not in subgraph:
+                        subgraph.add_node(
+                            source,
+                            name=get_term_name(source),
+                            count=term_counts.get(source, 0),
+                            term_id=source,
+                        )
+                    if target not in subgraph:
+                        subgraph.add_node(
+                            target,
+                            name=get_term_name(target),
+                            count=term_counts.get(target, 0),
+                            term_id=target,
+                        )
+
+                    subgraph.add_edge(source, target)
+            except nx.NetworkXNoPath:
+                print(f"No path from {term_id} to root node {root_node}")
+
+    if root_node not in subgraph:
+        subgraph.add_node(
+            root_node,
+            name=get_term_name(root_node),
+            count=term_counts.get(root_node, 0),
+            term_id=root_node,
+        )
+
+    # Build Cytoscape.js elements: nodes and edges (positions handled client-side by Cytoscape layouts)
+    elements = []
+
+    for node_id, data in subgraph.nodes(data=True):
+        elements.append(
+            {
+                "data": {
+                    "id": node_id,
+                    "label": data.get("name", node_id),
+                    "count": int(data.get("count", 0)),
+                    "term_id": data.get("term_id", node_id),
+                }
+            }
+        )
+
+    for source, target in subgraph.edges():
+        elements.append(
+            {
+                "data": {
+                    "id": f"{source}->{target}",
+                    "source": source,
+                    "target": target,
+                }
+            }
+        )
+
+    return elements, subgraph
+
+
+def cytoscape_elements_json(elements):
+    """
+    Serialize Cytoscape.js elements to a JSON string for embedding in templates.
+    """
+    return json.dumps(elements)

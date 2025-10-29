@@ -86,7 +86,7 @@
         </div>
         <!-- Hide main content when detail is open -->
         <div x-show="!activeItem || !activeItem.startsWith('detail-')">
-          <div x-show="activeItem === 'home'" id="plots-content" hx-get="{% url 'lab:plots' %}" hx-trigger="load">
+          <div x-show="activeItem === 'home'" id="plots-content" hx-get="{% url 'lab:plots' %}" hx-trigger="load, filters-updated from:window throttle:200ms" :hx-vals="getGlobalFiltersHxVals()">
             {% with view="page" %}
               {% include "lab/plots.html#plots-section" %}
             {% endwith %}
@@ -196,6 +196,13 @@
             );
           });
 
+          // Watch threshold changes and refresh plots
+          this.$watch("instituteThreshold", (val) => {
+            this.updateURL();
+            const el = document.getElementById('plots-content');
+            if (el) { htmx.trigger(el, 'filters-updated'); }
+          });
+
           // Watch viewMode changes and save to localStorage
           this.$watch("viewMode", (newViewMode) => {
             localStorage.setItem('viewMode', newViewMode);
@@ -229,6 +236,9 @@
           });
           this.filters = newFilters;
 
+          const th = params.get('institute_threshold');
+          this.instituteThreshold = th ? parseInt(th) : 0;
+
           if (params.has('pk')) {
             this.loadDetailView(params);
           }
@@ -251,9 +261,25 @@
               }
             }
           }
+          if (typeof this.instituteThreshold === 'number' && this.instituteThreshold > 0) {
+            newParams.set('institute_threshold', String(this.instituteThreshold));
+          }
           const newPath = newParams.toString() ? `/?${newParams.toString()}` : 
           '/';
           history.pushState({}, "", newPath);
+        },
+
+        getGlobalFiltersHxVals() {
+          const vals = {};
+          for (const key in this.filters) {
+            const v = this.filters[key];
+            if (!v || (Array.isArray(v) && v.length === 0)) continue;
+            vals[`filter_${key}`] = Array.isArray(v) ? v.join(',') : v;
+          }
+          if (typeof this.instituteThreshold === 'number') {
+            vals['institute_threshold'] = String(this.instituteThreshold || 0);
+          }
+          return JSON.stringify(vals);
         },
 
         navigateTo(pageName) {
@@ -277,10 +303,8 @@
             this.detailHtml = null;
             this.updateURL();
             
-            // Load plots content via HTMX
-            htmx.ajax('GET', '{% url "lab:plots" %}', '#plots-content').then(() => {
-            // Content loaded successfully
-            });
+            // Ask HTMX to reload plots using bound hx-vals (current filters)
+            setTimeout(() => { const el = document.getElementById('plots-content'); if (el) { htmx.trigger(el, 'filters-updated'); } }, 0);
             return;
           }
           
