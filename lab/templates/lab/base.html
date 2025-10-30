@@ -118,6 +118,21 @@
     {% if user.is_authenticated %}
       {% block content %}
       {% endblock %}
+    {% else %}
+      <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div class="text-center">
+          <div class="mb-4">
+            <i class="fas fa-lock text-6xl text-gray-400 dark:text-gray-600"></i>
+          </div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Authentication Required</h1>
+          <p class="text-gray-600 dark:text-gray-400 mb-6">Please log in to access this application.</p>
+          <a href="{% url 'account_login' %}" 
+             class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-md transition-colors">
+            <i class="fas fa-sign-in-alt mr-2"></i>
+            Sign In
+          </a>
+        </div>
+      </div>
     {% endif %}
 
     <script>
@@ -135,7 +150,7 @@
       // HTMX event handlers for authentication flows
       document.body.addEventListener("htmx:responseError", function (evt) {
         // Handle authentication errors
-        if (evt.detail.xhr.status === 403) {
+        if (evt.detail.xhr.status === 403 || evt.detail.xhr.status === 401) {
           window.location.href = "{% url 'account_login' %}";
         }
       });
