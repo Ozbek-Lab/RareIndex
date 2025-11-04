@@ -327,10 +327,12 @@
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Sample Type</h3>
             <p class="text-gray-900 dark:text-gray-100">{{ item.sample.sample_type.name }}</p>
           </div>
-          <div class="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <div class="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg" x-data="{ showFullName: false }">
             <div class="flex items-center">
               <i class="fa-solid fa-user mr-2 text-blue-600 dark:text-blue-400"></i>
-              <span class="text-lg text-blue-900 dark:text-blue-100 font-medium mr-2">
+              <span class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors mr-2"
+                @click= "openDetail({{ item.individual.id }}, 'Individual', 'lab')"
+              >
                 {{ item.sample.individual.individual_id }}
               </span>
               <button
