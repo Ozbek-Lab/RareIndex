@@ -26,6 +26,7 @@ urlpatterns = [
     path("get-type-buttons/", views.get_type_buttons, name="get_type_buttons"),
     path("get-stats-counts/", views.get_stats_counts, name="get_stats_counts"),
     path("project/add-individuals/", views.project_add_individuals, name="project_add_individuals"),
+    path("project/remove-individuals/", views.project_remove_individuals, name="project_remove_individuals"),
     
     # Natural language search routes
     path("nl-search/", views.nl_search, name="nl_search"),
