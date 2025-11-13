@@ -1,6 +1,7 @@
 from django.apps import apps
 from django import forms as dj_forms
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import HttpResponseBadRequest, HttpResponseForbidden, JsonResponse, HttpResponse
@@ -193,8 +194,14 @@ def generic_search(request):
         if own_search_term:
             try:
                 if label_field:
-                    # Try direct icontains on specified label field
-                    base_qs = base_qs.filter(**{f"{label_field}__icontains": own_search_term})
+                    # Special handling for Individual model with individual_id property
+                    # individual_id is a property, so we search on cross_ids__id_value instead
+                    if target_model_name == "Individual" and label_field == "individual_id":
+                        # Search on cross_ids__id_value (the actual database field containing ID values)
+                        base_qs = base_qs.filter(cross_ids__id_value__icontains=own_search_term).distinct()
+                    else:
+                        # Try direct icontains on specified label field
+                        base_qs = base_qs.filter(**{f"{label_field}__icontains": own_search_term})
                 else:
                     # Fallback: OR over all CharField/TextField
                     from django.db.models import Q as _Q
@@ -758,13 +765,82 @@ def project_add_individuals(request, pk=None):
             "lab/individual.html#individual-projects-fragment",
             {"item": individual},
         )
-    else:
-        # Return only the Project's Individuals fragment
+    if request.htmx:
+        response = HttpResponse(status=204)
+        response["HX-Refresh"] = "true"
+        return response
+
+    redirect_url = request.META.get("HTTP_REFERER") or reverse("lab:home")
+    return redirect(redirect_url)
+
+
+@login_required
+def project_remove_individuals(request, pk=None):
+    """Remove one or more Individuals from a Project via HTMX.
+
+    Expects POST with 'individual_ids' as JSON list string or comma-separated string.
+    Returns updated Individuals tab content fragment.
+    """
+    # Determine target project by URL pk or posted project_id
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST required")
+    project_id = pk or request.POST.get("project_id")
+    # Handle JSON array input from combobox hidden input
+    if isinstance(project_id, str) and project_id.startswith("[") and project_id.endswith("]"):
+        try:
+            import json as _json
+            arr = _json.loads(project_id)
+            if isinstance(arr, list) and arr:
+                project_id = arr[0]
+        except Exception:
+            pass
+    if not project_id:
+        return HttpResponseBadRequest("project_id not specified")
+    project = get_object_or_404(Project, pk=project_id)
+
+    ids_raw = request.POST.get("individual_ids", "")
+    individual_ids = []
+    if ids_raw:
+        try:
+            import json
+
+            parsed = json.loads(ids_raw)
+            if isinstance(parsed, list):
+                individual_ids = [int(x) for x in parsed if str(x).isdigit()]
+        except Exception:
+            # Fallback: comma-separated
+            individual_ids = [int(x) for x in ids_raw.split(",") if x.strip().isdigit()]
+
+    if not individual_ids:
+        # Support single individual via 'individual_id'
+        single_id = request.POST.get("individual_id")
+        if single_id and str(single_id).isdigit():
+            individual_ids = [int(single_id)]
+
+    if individual_ids:
+        qs = Individual.objects.filter(pk__in=individual_ids)
+        project.individuals.remove(*qs)
+
+    # Decide which fragment to return
+    return_context = request.POST.get("return") or request.POST.get("return_context")
+    if return_context == "individual":
+        # Need an individual to refresh; prefer explicit individual_id
+        ind_id = request.POST.get("individual_id")
+        if not ind_id and individual_ids:
+            ind_id = individual_ids[0]
+        individual = get_object_or_404(Individual, pk=ind_id)
         return render(
             request,
-            "lab/project.html#project-individuals-fragment",
-            {"item": project},
+            "lab/individual.html#individual-projects-fragment",
+            {"item": individual},
         )
+    if request.htmx:
+        response = HttpResponse(status=204)
+        response["HX-Refresh"] = "true"
+        return response
+
+    redirect_url = request.META.get("HTTP_REFERER") or reverse("lab:home")
+    return redirect(redirect_url)
 
 
 @login_required
