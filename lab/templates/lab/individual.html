@@ -74,7 +74,7 @@
     <div class="flex items-center gap-1 mb-2">
       <button
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click=" openDetail({{ item.pk }}, 'Individual', 'lab')"
+        @click= " openDetail({{ item.pk }}, 'Individual', 'lab')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
@@ -156,8 +156,8 @@
             <div
               class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
             >
-              {% with object=item content_type='individual' user=user %}
-                {% include 'lab/note.html#list' %}
+              {% with individual=item %}
+                {% include 'lab/partials/note_sections.html#individual-notes-grid' %}
               {% endwith %}
             </div>
           </div>
@@ -223,7 +223,97 @@
     {% endwith %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {{ item.icd11_code|default:"-" }}
+    <div
+      x-data="{
+        open: false,
+        style: '',
+        toggle() {
+          if (this.open) {
+            this.close();
+          } else {
+            this.updatePosition();
+            this.open = true;
+            this.$nextTick(() => {
+              const textarea = this.$refs.panel?.querySelector('textarea');
+              if (textarea) textarea.focus();
+            });
+          }
+        },
+        updatePosition() {
+          const trigger = this.$refs.trigger;
+          if (!trigger) return;
+          const rect = trigger.getBoundingClientRect();
+          const width = Math.min(window.innerWidth * 0.9, 1024);
+          let left = rect.left + rect.width / 2;
+          const halfWidth = width / 2;
+          if (left - halfWidth < 16) {
+            left = halfWidth + 16;
+          } else if (left + halfWidth > window.innerWidth - 16) {
+            left = window.innerWidth - halfWidth - 16;
+          }
+          const viewportHeight = window.innerHeight;
+          const estimatedHeight = 420;
+          let top = rect.bottom + 12;
+          if (viewportHeight - rect.bottom < estimatedHeight && rect.top > estimatedHeight) {
+            top = Math.max(16, rect.top - estimatedHeight);
+          }
+          top = Math.min(top, viewportHeight - 16);
+          this.style = `top:${top}px; left:${left}px; width:${width}px; transform: translateX(-50%);`;
+        },
+        close() {
+          this.open = false;
+        }
+      }"
+      @resize.window= "open && updatePosition()"
+      @scroll.window.passive= "open && updatePosition()"
+      @keydown.escape.window= "open && close()"
+      class="w-full text-left"
+    >
+      <button
+        x-ref="trigger"
+        @click= "toggle()"
+        type="button"
+        class="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+      >
+        {# TODO: note button breaks the page #}
+        <span class="inline-flex items-center">
+          {% with object=item content_type='individual' %}{% include 'lab/note.html#summary' %}{% endwith %}
+        </span>
+        <i
+          class="fa-solid fa-chevron-down transition-transform"
+          :class="{ 'rotate-180': open }"
+        ></i>
+      </button>
+      <template x-if="open">
+        <div
+          x-transition.opacity
+          class="fixed inset-0 z-40 bg-black/10 dark:bg-black/30"
+          @click= "close()"
+        ></div>
+      </template>
+      <div
+        x-show="open"
+        x-cloak
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0 translate-y-2 scale-95"
+        x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+        x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+        x-transition:leave-end="opacity-0 translate-y-2 scale-95"
+        x-ref="panel"
+        @click.outside= "close()"
+        class="fixed z-50 max-h-[80vh] overflow-y-auto origin-top shadow-2xl"
+        :style="style"
+      >
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+        >
+          {% with individual=item %}
+            {% include 'lab/partials/note_sections.html#individual-notes-grid' %}
+          {% endwith %}
+        </div>
+      </div>
+    </div>
   </td>
   <td class="px-4 py-3 text-sm">
     {% with float="" color=item.status.color text=item.status.name %}
@@ -269,6 +359,11 @@
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
             Analyses
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Notes
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
