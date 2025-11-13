@@ -173,6 +173,15 @@ def plots_page(request):
     except Exception:
         institute_threshold = 0
 
+    try:
+        hpo_threshold = int(request.GET.get('hpo_threshold', '0'))
+        if hpo_threshold < 0:
+            hpo_threshold = 0
+        if hpo_threshold > 10:
+            hpo_threshold = 10
+    except Exception:
+        hpo_threshold = 0
+
     # Extract filter params from URL (query string)
     all_filters = {k: v for k, v in request.GET.items() if k.startswith("filter_")}
     print("Plots page active URL filters:", all_filters)
@@ -208,6 +217,36 @@ def plots_page(request):
     test_type_counts = tests_queryset.values('test_type__name').annotate(count=Count('id', distinct=True)).order_by('-count')
     analysis_type_counts = analyses_queryset.values('type__name').annotate(count=Count('id', distinct=True)).order_by('-count')
     institution_counts = individuals_queryset.values('institution__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+
+    # HPO term distribution (counts each individual-term association)
+    raw_hpo_term_counts = list(
+        individuals_queryset
+        .filter(hpo_terms__isnull=False)
+        .values('hpo_terms__identifier', 'hpo_terms__label')
+        .annotate(count=Count('id', distinct=True))
+        .order_by('-count')
+    )
+    hpo_term_counts = []
+    other_hpo_total = 0
+    if raw_hpo_term_counts:
+        for item in raw_hpo_term_counts:
+            identifier = item.get('hpo_terms__identifier')
+            label = item.get('hpo_terms__label')
+            if identifier:
+                term_id = f"HP:{identifier}"
+            else:
+                term_id = 'Unknown'
+            display_name = f"{term_id} - {label}" if label else term_id
+            count = item['count'] or 0
+            if hpo_threshold and (count < hpo_threshold):
+                other_hpo_total += count
+            else:
+                hpo_term_counts.append({
+                    'hpo_display': display_name,
+                    'count': count,
+                })
+        if other_hpo_total > 0:
+            hpo_term_counts.append({'hpo_display': 'Other', 'count': other_hpo_total})
     
     # Build individual plot figures instead of a combined subplot
     # Color maps
@@ -260,6 +299,7 @@ def plots_page(request):
     add_pie_plot(sample_type_counts, 'sample_type__name', 'Sample Type', 'sample-type', fixed_colors=['#00cc96', '#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF'])
     add_pie_plot(test_type_counts, 'test_type__name', 'Test Type', 'test-type', fixed_colors=['#ab63fa', '#FF6692', '#B6E880', '#FF97FF', '#FECB52', '#636EFA'])
     add_pie_plot(analysis_type_counts, 'type__name', 'Analysis Type', 'analysis-type', fixed_colors=['#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'])
+    add_pie_plot(hpo_term_counts, 'hpo_display', 'HPO Term Distribution', 'hpo-terms', icon='dna')
     # Aggregate small institution slices by numeric threshold into "Other"
     institution_counts_aggregated = institution_counts
     try:
@@ -289,6 +329,7 @@ def plots_page(request):
         'distribution_plots': distribution_plots,
         'all_filters': all_filters,
         'institute_threshold': institute_threshold,
+        'hpo_threshold': hpo_threshold,
     }
 
     print("PLOTS PAGE")

@@ -171,6 +171,8 @@
         filters: {},
         detailHtml: null,
         viewMode: 'cards',
+        instituteThreshold: 0,
+        hpoThreshold: 0,
 
         clearModal() {
           const modalRoot = document.getElementById('modal-root');
@@ -198,6 +200,13 @@
 
           // Watch threshold changes and refresh plots
           this.$watch("instituteThreshold", (val) => {
+            this.updateURL();
+            const el = document.getElementById('plots-content');
+            if (el) { htmx.trigger(el, 'filters-updated'); }
+          });
+
+          // Watch threshold changes for HPO plot and refresh plots
+          this.$watch("hpoThreshold", (val) => {
             this.updateURL();
             const el = document.getElementById('plots-content');
             if (el) { htmx.trigger(el, 'filters-updated'); }
@@ -239,6 +248,9 @@
           const th = params.get('institute_threshold');
           this.instituteThreshold = th ? parseInt(th) : 0;
 
+          const hpoTh = params.get('hpo_threshold');
+          this.hpoThreshold = hpoTh ? parseInt(hpoTh) : 0;
+
           if (params.has('pk')) {
             this.loadDetailView(params);
           }
@@ -264,6 +276,9 @@
           if (typeof this.instituteThreshold === 'number' && this.instituteThreshold > 0) {
             newParams.set('institute_threshold', String(this.instituteThreshold));
           }
+          if (typeof this.hpoThreshold === 'number' && this.hpoThreshold > 0) {
+            newParams.set('hpo_threshold', String(this.hpoThreshold));
+          }
           const newPath = newParams.toString() ? `/?${newParams.toString()}` : 
           '/';
           history.pushState({}, "", newPath);
@@ -278,6 +293,9 @@
           }
           if (typeof this.instituteThreshold === 'number') {
             vals['institute_threshold'] = String(this.instituteThreshold || 0);
+          }
+          if (typeof this.hpoThreshold === 'number') {
+            vals['hpo_threshold'] = String(this.hpoThreshold || 0);
           }
           return JSON.stringify(vals);
         },
