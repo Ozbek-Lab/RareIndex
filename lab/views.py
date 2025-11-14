@@ -2470,8 +2470,8 @@ def get_stats_counts(request):
                 else:
                     filter_conditions &= Q(**{filter_key: filter_values})
     individuals_queryset = Individual.objects.all()
-    samples_queryset = Sample.objects.all()
-    tests_queryset = Test.objects.all()
+    samples_queryset = Sample.objects.all().exclude(sample_type__name="Placeholder")
+    tests_queryset = Test.objects.all().exclude(sample__sample_type__name="Placeholder")
     analyses_queryset = Analysis.objects.all()
     if filter_conditions:
         individuals_queryset = individuals_queryset.filter(filter_conditions)
