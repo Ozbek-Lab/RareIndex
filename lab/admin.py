@@ -411,7 +411,7 @@ class CrossIdentifierAdmin(VersionAdmin):
         "created_by",
     ]
     list_filter = ["individual", "id_type", "id_value", "institution", "created_by"]
-    search_fields = ["individual__id", "id_type__name"]
+    search_fields = ["individual__id", "id_type__name", "id_value"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
