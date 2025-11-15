@@ -635,7 +635,7 @@
       };
     }
 
-    function singleGenericComboboxController(appLabel, modelName, valueField = 'pk', labelField = '', inputName = '', initialValue = '') {
+    function singleGenericComboboxController(appLabel, modelName, valueField = 'pk', labelField = '', inputName = '', initialValue = '', initialSelectedValue = '') {
       return {
         appLabel,
         modelName,
@@ -646,8 +646,12 @@
         query: initialValue || '',
         options: [],
         loading: false,
-        selected: null, // {value, label}
+        selected: initialSelectedValue && initialValue ? { value: initialSelectedValue, label: initialValue } : null, // {value, label}
         init() {
+          // If we have an initial selected value, set it
+          if (initialSelectedValue && initialValue) {
+            this.selected = { value: initialSelectedValue, label: initialValue };
+          }
           this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
           this.$watch('query', () => {
             if (this.open) {
