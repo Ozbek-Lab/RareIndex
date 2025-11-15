@@ -736,25 +736,24 @@
 
         <!-- Samples tab -->
         <div x-show="activeTab === 'samples'" x-cloak>
-          {% if item.samples.exists %}
-            <!-- Use existing sample partials for consistent UI -->
-            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- Toolbar: Add Sample button (left) + view toggle (right) -->
-              <div class="flex items-center justify-between">
-                <div>
-                  {% has_model_perm user 'lab' 'Sample' 'add' as can_add_sample %}
-                  {% if can_add_sample %}
-                    <button
-                      hx-get="{% url 'lab:generic_create' %}?model_name=Sample&app_label=lab&individual={{ item.id }}"
-                      hx-target="#modal-root"
-                      hx-swap="innerHTML"
-                      class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
-                    >
-                      <i class="fa-solid fa-vial"></i>
-                      <span>Add Sample to Individual</span>
-                    </button>
-                  {% endif %}
-                </div>
+          <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+            <!-- Toolbar: Add Sample button (left) + view toggle (right) -->
+            <div class="flex items-center justify-between">
+              <div>
+                {% has_model_perm user 'lab' 'Sample' 'add' as can_add_sample %}
+                {% if can_add_sample %}
+                  <button
+                    hx-get="{% url 'lab:generic_create' %}?model_name=Sample&app_label=lab&individual={{ item.id }}"
+                    hx-target="#modal-root"
+                    hx-swap="innerHTML"
+                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                  >
+                    <i class="fa-solid fa-vial"></i>
+                    <span>Add Sample to Individual</span>
+                  </button>
+                {% endif %}
+              </div>
+              {% if item.samples.exists %}
                 <div
                   class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
                 >
@@ -796,8 +795,11 @@
                     >
                   </button>
                 </div>
-              </div>
+              {% endif %}
+            </div>
 
+            {% if item.samples.exists %}
+              <!-- Use existing sample partials for consistent UI -->
               <!-- Card View with animated transition -->
               <div
                 x-show="viewMode === 'cards'"
@@ -833,14 +835,14 @@
                   {% include "lab/sample.html#table" %}
                 {% endwith %}
               </div>
-            </div>
-          {% else %}
-            <div
-              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-            >
-              No samples available for this individual.
-            </div>
-          {% endif %}
+            {% else %}
+              <div
+                class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+              >
+                No samples available for this individual.
+              </div>
+            {% endif %}
+          </div>
         </div>
 
         <!-- Tests tab -->
