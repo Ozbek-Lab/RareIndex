@@ -642,6 +642,32 @@ def get_select_options(request):
 
 
 @login_required
+def get_objects_by_content_type(request):
+    """Get objects of a specific model type for task association"""
+    # Try both parameter names (content_type_id from hx-vals, content_type from hx-include)
+    content_type_id = request.GET.get("content_type_id") or request.GET.get("content_type")
+    
+    if not content_type_id:
+        return HttpResponse("<option value=''>---------</option>")
+    
+    try:
+        content_type = ContentType.objects.get(pk=content_type_id)
+        model_class = content_type.model_class()
+        
+        # Get all objects of this type
+        objects = model_class.objects.all().order_by("-id")[:100]  # Limit to 100 most recent
+        
+        # Build HTML options
+        options_html = "<option value=''>---------</option>\n"
+        for obj in objects:
+            options_html += f"<option value='{obj.pk}'>{str(obj)}</option>\n"
+        
+        return HttpResponse(options_html)
+    except Exception as e:
+        return HttpResponse("<option value=''>Error loading objects</option>")
+
+
+@login_required
 def get_status_buttons(request):
     """Get status buttons for a specific model"""
     model_name = request.GET.get("model_name")
@@ -1138,6 +1164,19 @@ def generic_create(request):
         if form.is_valid():
             # Save the object with the user context for created_by field
             obj = form.save(user=request.user)
+            
+            # Special handling for Task: set content_type and object_id if provided
+            if model_name == 'Task' and isinstance(obj, Task):
+                content_type_id = request.POST.get("content_type")
+                object_id = request.POST.get("object_id")
+                if content_type_id and object_id:
+                    try:
+                        content_type = ContentType.objects.get(pk=content_type_id)
+                        obj.content_type = content_type
+                        obj.object_id = int(object_id)
+                        obj.save()
+                    except (ContentType.DoesNotExist, ValueError, TypeError):
+                        pass  # Silently fail if invalid
             # Generic: handle any ManyToMany fields posted as JSON lists via <field_name>_ids
             try:
                 for m2m_field in obj._meta.many_to_many:
