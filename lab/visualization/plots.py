@@ -135,8 +135,8 @@ def get_stats_counts(request):
                 else:
                     filter_conditions &= Q(**{filter_key: filter_values})
     individuals_queryset = Individual.objects.all()
-    samples_queryset = Sample.objects.all()
-    tests_queryset = Test.objects.all()
+    samples_queryset = Sample.objects.all().exclude(sample_type__name="Placeholder")
+    tests_queryset = Test.objects.all().exclude(sample__sample_type__name="Placeholder")
     analyses_queryset = Analysis.objects.all()
     if filter_conditions:
         individuals_queryset = individuals_queryset.filter(filter_conditions)
@@ -186,10 +186,10 @@ def plots_page(request):
     all_filters = {k: v for k, v in request.GET.items() if k.startswith("filter_")}
     print("Plots page active URL filters:", all_filters)
 
-    # Base querysets
+    # Base querysets (exclude placeholders)
     individuals_queryset = Individual.objects.all()
-    samples_queryset = Sample.objects.all()
-    tests_queryset = Test.objects.all()
+    samples_queryset = Sample.objects.all().exclude(sample_type__name="Placeholder")
+    tests_queryset = Test.objects.all().exclude(sample__sample_type__name="Placeholder")
     analyses_queryset = Analysis.objects.all()
 
     # Apply URL-based global filters per model using the shared engine
@@ -290,6 +290,52 @@ def plots_page(request):
             'icon': icon,
             'chart_data': fig.to_dict(),
         })
+    
+    def add_bar_plot(x_data, y_data_list, y_labels, title, plot_id, colors=None, icon='chart-bar'):
+        """Add a grouped bar plot to distribution_plots."""
+        if not x_data or not y_data_list:
+            return
+        fig = go.Figure()
+        if colors is None:
+            colors = ['#636EFA', '#EF553B', '#00cc96', '#FFA15A', '#ab63fa', '#FF6692']
+        for i, (y_data, y_label) in enumerate(zip(y_data_list, y_labels)):
+            # Only show text labels for non-zero values to avoid overlapping
+            text_labels = [str(val) if val > 0 else '' for val in y_data]
+            fig.add_trace(go.Bar(
+                name=y_label,
+                x=x_data,
+                y=y_data,
+                marker_color=colors[i % len(colors)],
+                text=text_labels,
+                textposition='auto',  # Use 'auto' to place labels inside if outside doesn't fit
+                textfont=dict(size=10),
+            ))
+        fig.update_layout(
+            barmode='group',
+            height=450,
+            showlegend=True,
+            margin=dict(l=50, r=20, t=60, b=80),  # Increased margins for labels
+            xaxis=dict(
+                title='Number of HPO Terms',
+                title_standoff=20,
+                type='category',  # Treat as categorical to ensure all labels show
+                tickangle=0,
+                tickfont=dict(size=10),
+                showgrid=False,
+                automargin=True,  # Let Plotly automatically adjust margins
+            ),
+            yaxis=dict(
+                title='Count',
+                title_standoff=15,
+            ),
+            hovermode='x unified',
+        )
+        distribution_plots.append({
+            'id': plot_id,
+            'title': title,
+            'icon': icon,
+            'chart_data': fig.to_dict(),
+        })
 
     # Create individual charts
     add_pie_plot(individual_status_counts, 'status__name', 'Individual Status', 'individual-status', colors_map=status_colors)
@@ -320,6 +366,51 @@ def plots_page(request):
         institution_counts_aggregated = institution_counts
     # Let Plotly choose colors for variable-length data; avoid fixed colors here
     add_pie_plot(institution_counts_aggregated, 'institution__name', 'Institution', 'institution')
+    
+    # HPO Term Count vs Solved/Unsolved Barplot for Index Individuals
+    index_individuals = individuals_queryset.filter(is_index=True)
+    
+    # Get all index individuals with their HPO term counts and status
+    index_with_hpo_counts = []
+    for individual in index_individuals.select_related('status').prefetch_related('hpo_terms'):
+        # Use len() to utilize prefetched data instead of triggering a query
+        hpo_count = len(individual.hpo_terms.all())
+        status_name = individual.status.name if individual.status else 'Unknown'
+        is_solved = status_name in ["Solved - P/LP", "Solved - VUS"]
+        index_with_hpo_counts.append({
+            'hpo_count': hpo_count,
+            'is_solved': is_solved,
+        })
+    
+    # Group by HPO count: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 15+
+    groups = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '15+']
+    solved_counts = [0] * len(groups)
+    unsolved_counts = [0] * len(groups)
+    
+    for item in index_with_hpo_counts:
+        hpo_count = item['hpo_count']
+        # Determine which group this belongs to
+        if hpo_count <= 15:
+            group_idx = hpo_count
+        else:
+            group_idx = 16  # 15+ group
+        
+        if item['is_solved']:
+            solved_counts[group_idx] += 1
+        else:
+            unsolved_counts[group_idx] += 1
+    
+    # Only add the plot if there's data
+    if sum(solved_counts) + sum(unsolved_counts) > 0:
+        add_bar_plot(
+            x_data=groups,
+            y_data_list=[solved_counts, unsolved_counts],
+            y_labels=['Solved', 'Unsolved'],
+            title='Index Individuals by HPO Term Count',
+            plot_id='index-hpo-solved-status',
+            colors=['#00cc96', '#EF553B'],  # Green for solved, Red for unsolved
+            icon='chart-bar'
+        )
     
     context = {
         'individuals_count': individuals_count,
