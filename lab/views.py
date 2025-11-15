@@ -1374,6 +1374,17 @@ def generic_create(request):
             # Fallback to all statuses if filtering fails
             form.fields["status"].queryset = Status.objects.all().order_by("name")
 
+    # Fetch Individual object if individual is in initial_data (for Sample form)
+    initial_individual = None
+    if model_name == "Sample" and "individual" in initial_data:
+        try:
+            from lab.models import Individual
+            individual_id = initial_data.get("individual")
+            if individual_id:
+                initial_individual = Individual.objects.filter(pk=individual_id).first()
+        except Exception:
+            pass
+
     if request.htmx:
         return render(
             request,
@@ -1382,6 +1393,7 @@ def generic_create(request):
                 "form": form,
                 "model_name": model_name,
                 "app_label": app_label,
+                "initial_individual": initial_individual,
                 # Prefixed Task form for sidebar inputs
                 "task_form": TaskForm(prefix="task"),
             },
@@ -1394,6 +1406,7 @@ def generic_create(request):
                 "create_form": form,
                 "model_name": model_name,
                 "app_label": app_label,
+                "initial_individual": initial_individual,
             },
         )
 
