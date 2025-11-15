@@ -324,7 +324,7 @@
 
       <!-- Tabs for related data -->
       <div class="px-6 border-b border-gray-200 dark:border-gray-700">
-        <div class="flex -mb-px">
+        <div class="flex -mb-px flex-nowrap overflow-x-auto scroll-smooth" style="scrollbar-width: thin;">
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'notes' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
@@ -359,32 +359,60 @@
         <!-- Individuals tab -->
         <div x-show="activeTab === 'individuals'" x-cloak>
           <div
-            x-data="{ viewMode: 'cards', selectedIds: [], get payload(){ return JSON.stringify(this.selectedIds); }, clear(){ this.selectedIds = []; } }"
+            x-data="{ viewMode: 'cards', selectedIds: [], get payload(){ return JSON.stringify(this.selectedIds); }, clear(){ this.selectedIds = []; }, clearCombobox(refName){ const cb = $refs[refName]?.querySelector('[x-data*=\"comboboxController\"]'); if(cb && cb.__x && cb.__x.$data) cb.__x.$data.clearSelection(); } }"
             class="space-y-4"
           >
-            <!-- Toolbar: Add Individuals + view toggle -->
+            <!-- Toolbar: Add/Remove Individuals + view toggle -->
             <div class="flex items-center justify-between">
-              <form
-                hx-post="{% url 'lab:project_add_individuals' %}"
-                hx-target="#project-individuals-fragment"
-                hx-swap="innerHTML"
-                class="flex items-center gap-2"
-              >
-                {% csrf_token %}
-                <input type="hidden" name="project_id" value="{{ item.id }}">
-                {% with app_label='lab' model_name='Individual' icon_class='fa-person' value_field='pk' multiple=True name='individual_ids' %}
-                  <div class="w-80">
-                    {% include "lab/partials/partials.html#generic-combobox" %}
-                  </div>
-                {% endwith %}
-                <button
-                  type="submit"
-                  class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+              <div class="flex items-center gap-4">
+                <!-- Add Individuals Form -->
+                <form
+                  hx-post="{% url 'lab:project_add_individuals' %}"
+                  hx-target="#project-individuals-fragment"
+                  hx-swap="innerHTML"
+                  hx-on::after-swap="clearCombobox('addComboboxContainer')"
+                  class="flex items-center gap-2"
                 >
-                  <i class="fa-solid fa-user-plus"></i>
-                  <span>Add to Project</span>
-                </button>
-              </form>
+                  {% csrf_token %}
+                  <input type="hidden" name="project_id" value="{{ item.id }}">
+                  {% with app_label='lab' model_name='Individual' icon_class='fa-person' value_field='pk' label_field='individual_id' multiple=True name='individual_ids' %}
+                    <div class="w-80" x-ref="addComboboxContainer">
+                      {% include "lab/partials/partials.html#generic-combobox" %}
+                    </div>
+                  {% endwith %}
+                  <button
+                    type="submit"
+                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                  >
+                    <i class="fa-solid fa-user-plus"></i>
+                    <span>Add to Project</span>
+                  </button>
+                </form>
+
+                <!-- Remove Individuals Form -->
+                <form
+                  hx-post="{% url 'lab:project_remove_individuals' %}"
+                  hx-target="#project-individuals-fragment"
+                  hx-swap="innerHTML"
+                  hx-on::after-swap="clearCombobox('removeComboboxContainer')"
+                  class="flex items-center gap-2"
+                >
+                  {% csrf_token %}
+                  <input type="hidden" name="project_id" value="{{ item.id }}">
+                  {% with app_label='lab' model_name='Individual' icon_class='fa-person' value_field='pk' label_field='individual_id' multiple=True name='individual_ids' %}
+                    <div class="w-80" x-ref="removeComboboxContainer" x-data="{ projectId: '{{ item.id }}' }" x-init="$nextTick(() => { const cb = $el.querySelector('[x-data*=\"comboboxController\"]'); if(cb && cb.__x && cb.__x.$data) { const originalGetHxVals = cb.__x.$data.getHxVals; cb.__x.$data.getHxVals = function(page = 1) { const v = JSON.parse(originalGetHxVals.call(this, page)); v.filter_Project = projectId; return JSON.stringify(v); }; } })">
+                      {% include "lab/partials/partials.html#generic-combobox" %}
+                    </div>
+                  {% endwith %}
+                  <button
+                    type="submit"
+                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 transition-colors"
+                  >
+                    <i class="fa-solid fa-user-minus"></i>
+                    <span>Remove from Project</span>
+                  </button>
+                </form>
+              </div>
             </div>
 
             <div id="project-individuals-fragment">

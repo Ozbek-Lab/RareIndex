@@ -21,11 +21,13 @@ urlpatterns = [
     path("map/", views.map_view, name="map"),
     path("pie-chart/<str:model_name>/<str:attribute_name>/", views.pie_chart_view, name="pie_chart"),
     path("get-select-options/", views.get_select_options, name="get_select_options"),
+    path("get-objects-by-content-type/", views.get_objects_by_content_type, name="get_objects_by_content_type"),
     path("individual/<int:pk>/timeline/", views.individual_timeline, name="individual_timeline"),
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
     path("get-type-buttons/", views.get_type_buttons, name="get_type_buttons"),
     path("get-stats-counts/", views.get_stats_counts, name="get_stats_counts"),
     path("project/add-individuals/", views.project_add_individuals, name="project_add_individuals"),
+    path("project/remove-individuals/", views.project_remove_individuals, name="project_remove_individuals"),
     
     # Natural language search routes
     path("nl-search/", views.nl_search, name="nl_search"),

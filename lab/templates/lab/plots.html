@@ -394,6 +394,26 @@
           <option value="10">10</option>
         </select>
       </div>
+      {% elif plot_data.id == 'hpo-terms' %}
+      <div class="flex items-center space-x-2">
+        <span class="text-xs text-gray-600 dark:text-gray-300">Other Threshold</span>
+        <select
+          class="text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1"
+          :value="hpoThreshold"
+          @change="hpoThreshold = parseInt($event.target.value) || 0;"
+        >
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+        </select>
+      </div>
       {% endif %}
     </div>
     <div id="plot-{{ plot_data.id }}" class="h-128">      

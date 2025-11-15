@@ -1,0 +1,71 @@
+{% load partials %}
+{% load lab_filters %}
+
+{% partialdef individual-notes-grid %}
+  {% with individual=individual|default:None %}
+    {% if not individual %}
+      <p class="text-sm text-gray-500 dark:text-gray-400">No individual provided.</p>
+    {% else %}
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div>
+          <h4 class="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Individual</h4>
+          {% with object=individual content_type='individual' user=user %}
+            {% include 'lab/note.html#list' %}
+          {% endwith %}
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Samples</h4>
+          {% with samples=individual.samples.all %}
+            {% if samples %}
+              {% for sample in samples %}
+                <div class="mb-3 last:mb-0">
+                  <p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{{ sample }}</p>
+                  {% with object=sample content_type='sample' user=user %}
+                    {% include 'lab/note.html#list' %}
+                  {% endwith %}
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-xs text-gray-500 dark:text-gray-500">No samples.</p>
+            {% endif %}
+          {% endwith %}
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Tests</h4>
+          {% with tests=individual|get_all_tests %}
+            {% if tests %}
+              {% for test in tests %}
+                <div class="mb-3 last:mb-0">
+                  <p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{{ test }}</p>
+                  {% with object=test content_type='test' user=user %}
+                    {% include 'lab/note.html#list' %}
+                  {% endwith %}
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-xs text-gray-500 dark:text-gray-500">No tests.</p>
+            {% endif %}
+          {% endwith %}
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Analyses</h4>
+          {% with analyses=individual|get_all_analyses %}
+            {% if analyses %}
+              {% for analysis in analyses %}
+                <div class="mb-3 last:mb-0">
+                  <p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{{ analysis }}</p>
+                  {% with object=analysis content_type='analysis' user=user %}
+                    {% include 'lab/note.html#list' %}
+                  {% endwith %}
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-xs text-gray-500 dark:text-gray-500">No analyses.</p>
+            {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+    {% endif %}
+  {% endwith %}
+{% endpartialdef %}
+
