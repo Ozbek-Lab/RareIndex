@@ -88,6 +88,19 @@ class ProjectForm(BaseForm):
 
 # Update the TaskForm to include project field
 class TaskForm(BaseForm):
+    # Add fields for selecting the associated object
+    content_type = forms.ModelChoiceField(
+        queryset=ContentType.objects.none(),
+        required=False,
+        label="Associated Type",
+        help_text="Select the type of object this task is for",
+    )
+    object_id = forms.IntegerField(
+        required=False,
+        label="Associated Object",
+        help_text="Select the specific object",
+    )
+
     class Meta:
         model = Task
         fields = [
@@ -116,6 +129,20 @@ class TaskForm(BaseForm):
             ).order_by("name")
         except Exception:
             self.fields["status"].queryset = Status.objects.all().order_by("name")
+        
+        # Set up content_type choices - models that can have tasks
+        taskable_models = [Individual, Sample, Test, Analysis, Project]
+        content_types = ContentType.objects.filter(
+            model__in=[m._meta.model_name for m in taskable_models],
+            app_label="lab"
+        ).order_by("model")
+        self.fields["content_type"].queryset = content_types
+        
+        # If content_object is provided, set initial values
+        if content_object:
+            ct = ContentType.objects.get_for_model(content_object.__class__)
+            self.fields["content_type"].initial = ct.pk
+            self.fields["object_id"].initial = content_object.pk
 
 
 class IndividualForm(BaseForm):
