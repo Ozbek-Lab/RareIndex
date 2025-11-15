@@ -68,7 +68,7 @@
           </button>
           <!-- Clear Filters Button -->
           <button
-            x-show="Object.values(filters).some(v => v)"
+            x-show="Object.values(filters).some(v => v  && (Array.isArray(v) ? v.length > 0 : true))"
             @click= "filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
             class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
             type="button"
@@ -171,6 +171,8 @@
         filters: {},
         detailHtml: null,
         viewMode: 'cards',
+        instituteThreshold: 0,
+        hpoThreshold: 0,
 
         clearModal() {
           const modalRoot = document.getElementById('modal-root');
@@ -198,6 +200,13 @@
 
           // Watch threshold changes and refresh plots
           this.$watch("instituteThreshold", (val) => {
+            this.updateURL();
+            const el = document.getElementById('plots-content');
+            if (el) { htmx.trigger(el, 'filters-updated'); }
+          });
+
+          // Watch threshold changes for HPO plot and refresh plots
+          this.$watch("hpoThreshold", (val) => {
             this.updateURL();
             const el = document.getElementById('plots-content');
             if (el) { htmx.trigger(el, 'filters-updated'); }
@@ -239,6 +248,9 @@
           const th = params.get('institute_threshold');
           this.instituteThreshold = th ? parseInt(th) : 0;
 
+          const hpoTh = params.get('hpo_threshold');
+          this.hpoThreshold = hpoTh ? parseInt(hpoTh) : 0;
+
           if (params.has('pk')) {
             this.loadDetailView(params);
           }
@@ -264,6 +276,9 @@
           if (typeof this.instituteThreshold === 'number' && this.instituteThreshold > 0) {
             newParams.set('institute_threshold', String(this.instituteThreshold));
           }
+          if (typeof this.hpoThreshold === 'number' && this.hpoThreshold > 0) {
+            newParams.set('hpo_threshold', String(this.hpoThreshold));
+          }
           const newPath = newParams.toString() ? `/?${newParams.toString()}` : 
           '/';
           history.pushState({}, "", newPath);
@@ -278,6 +293,9 @@
           }
           if (typeof this.instituteThreshold === 'number') {
             vals['institute_threshold'] = String(this.instituteThreshold || 0);
+          }
+          if (typeof this.hpoThreshold === 'number') {
+            vals['hpo_threshold'] = String(this.hpoThreshold || 0);
           }
           return JSON.stringify(vals);
         },
@@ -497,25 +515,17 @@
           if (index > -1) {
             // Remove status if already selected
             this.filters[statusKey].splice(index, 1);
+            // If array becomes empty, remove key entirely to reflect no filter
+            if (this.filters[statusKey].length === 0) {
+              delete this.filters[statusKey];
+            }
           } else {
             // Add status if not selected
             this.filters[statusKey].push(statusPk);
           }
           
-          // Trigger filter update for all models
-          this.$dispatch('filters-updated');
-          
-          // Force refresh of all related model sections
-          setTimeout(() => {
-            const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
-            relatedModels.forEach(model => {
-              const targetId = `#${this.activeItem === 'home' ? 'home' : 'page'}-${model}-results`;
-              const element = document.querySelector(targetId);
-              if (element) {
-                htmx.trigger(element, 'filters-updated');
-              }
-            });
-          }, 100);
+          // The $watch("filters") will automatically trigger filters-updated event
+          // No need for setTimeout or manual dispatch - let Alpine's reactivity handle it
         },
         toggleType(typePk, filterField) {
           if (!this.filters[filterField]) {
@@ -526,71 +536,23 @@
           if (index > -1) {
             // Remove type if already selected
             this.filters[filterField].splice(index, 1);
+            // If array becomes empty, remove key entirely to reflect no filter
+            if (this.filters[filterField].length === 0) {
+              delete this.filters[filterField];
+            }
           } else {
             // Add type if not selected
             this.filters[filterField].push(typePk);
           }
           
-          // Trigger filter update for all models
-          this.$dispatch('filters-updated');
-          
-          // Force refresh of all related model sections
-          setTimeout(() => {
-            const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
-            relatedModels.forEach(model => {
-              const targetId = `#${this.activeItem === 'home' ? 'index' : 'page'}-${model}-results`;
-              const element = document.querySelector(targetId);
-              if (element) {
-                htmx.trigger(element, 'filters-updated');
-              }
-            });
-          }, 100);
-        },
-        toggleType(typePk, filterField) {
-          if (!this.filters[filterField]) {
-            this.filters[filterField] = [];
-          }
-          
-          const index = this.filters[filterField].indexOf(typePk);
-          if (index > -1) {
-            // Remove type if already selected
-            this.filters[filterField].splice(index, 1);
-          } else {
-            // Add type if not selected
-            this.filters[filterField].push(typePk);
-          }
-          
-          // Trigger filter update for all models
-          this.$dispatch('filters-updated');
-          
-          // Force refresh of all related model sections
-          setTimeout(() => {
-            const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
-            relatedModels.forEach(model => {
-              const targetId = `#${this.activeItem === 'home' ? 'index' : 'page'}-${model}-results`;
-              const element = document.querySelector(targetId);
-              if (element) {
-                htmx.trigger(element, 'filters-updated');
-              }
-            });
-          }, 100);
+          // The $watch("filters") will automatically trigger filters-updated event
+          // No need for setTimeout or manual dispatch - let Alpine's reactivity handle it
         },
         clearModelStatusFilter(modelName) {
           const statusKey = `${modelName}_status`;
-          this.filters[statusKey] = [];
-          this.$dispatch('filters-updated');
-          
-          // Force refresh of all related model sections
-          setTimeout(() => {
-            const relatedModels = ['individual', 'sample', 'test', 'analysis', 'project', 'task'];
-            relatedModels.forEach(model => {
-              const targetId = `#${this.activeItem === 'home' ? 'index' : 'page'}-${model}-results`;
-              const element = document.querySelector(targetId);
-              if (element) {
-                htmx.trigger(element, 'filters-updated');
-              }
-            });
-          }, 100);
+          // Remove the key entirely instead of leaving an empty array
+          delete this.filters[statusKey];
+          // The $watch("filters") will automatically trigger filters-updated event
         },
 
         // Event-scoped dispatch helper
