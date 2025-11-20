@@ -7,7 +7,7 @@ from django.core.paginator import Paginator
 from django.http import HttpResponseBadRequest, HttpResponseForbidden, JsonResponse, HttpResponse
 from django.db.models import Q, Count, Min
 from django.contrib.contenttypes.models import ContentType
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
@@ -378,22 +378,36 @@ def generic_search(request):
             },
         )
 
+    context = {
+        "items": paged_items,
+        "num_items": num_items,
+        "search": own_search_term,
+        "app_label": target_app_label,
+        "model_name": target_model_name,
+        "all_filters": {
+            k: v for k, v in request.GET.items() if k.startswith("filter_")
+        },
+        "view_mode": view_mode,
+        "card": card_partial,
+        "icon_class": icon_class,
+    }
+    
+    # Add model-specific statuses to context for status badge dropdowns
+    try:
+        model_class = apps.get_model(app_label=target_app_label, model_name=target_model_name)
+        if hasattr(model_class, 'status'):
+            model_ct = ContentType.objects.get_for_model(model_class)
+            statuses_var_name = f"{target_model_name.lower()}_statuses"
+            context[statuses_var_name] = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+    except Exception:
+        pass  # If model doesn't have status field, skip
+    
     response = render(
         request,
         "lab/partials/partials.html#generic-search-results",
-        {
-            "items": paged_items,
-            "num_items": num_items,
-            "search": own_search_term,
-            "app_label": target_app_label,
-            "model_name": target_model_name,
-            "all_filters": {
-                k: v for k, v in request.GET.items() if k.startswith("filter_")
-            },
-            "view_mode": view_mode,
-            "card": card_partial,
-            "icon_class": icon_class,
-        },
+        context,
     )
     return response
 
@@ -505,6 +519,19 @@ def generic_search_page(request):
         "view_mode": view_mode,
         "card": card_partial,
     }
+    
+    # Add model-specific statuses to context for status badge dropdowns
+    try:
+        model_class = apps.get_model(app_label=target_app_label, model_name=target_model_name)
+        if hasattr(model_class, 'status'):
+            model_ct = ContentType.objects.get_for_model(model_class)
+            statuses_var_name = f"{target_model_name.lower()}_statuses"
+            context[statuses_var_name] = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+    except Exception:
+        pass  # If model doesn't have status field, skip
+    
     return render(request, "lab/partials/_infinite_scroll_items.html", context)
 
 
@@ -531,6 +558,15 @@ def generic_detail(request):
         "user": request.user,
     }
 
+    requested_tab = request.GET.get("activeTab")
+    normalized_tab = None
+    if requested_tab:
+        normalized_tab = "history" if requested_tab == "status" else requested_tab
+        context["activeTab"] = normalized_tab
+
+    history_prefetched = normalized_tab == "history"
+    context["history_prefetched"] = history_prefetched
+
     if target_model_name == "Individual":
         context["tests"] = [
             test for sample in obj.samples.all() for test in sample.tests.all()
@@ -538,10 +574,38 @@ def generic_detail(request):
         context["analyses"] = [
             analysis for test in context["tests"] for analysis in test.analyses.all()
         ]
+        # Build initial JSON for HPO terms combobox
+        try:
+            hpo_initial = [
+                {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+                for t in getattr(obj, "hpo_terms", []).all()
+            ]
+            context["hpo_initial_json"] = json.dumps(hpo_initial)
+        except Exception:
+            context["hpo_initial_json"] = "[]"
+        # Get all available Individual statuses for status dropdown
+        individual_ct = ContentType.objects.get_for_model(Individual)
+        context["individual_statuses"] = Status.objects.filter(
+            Q(content_type=individual_ct) | Q(content_type__isnull=True)
+        ).order_by("name")
     elif target_model_name == "Sample":
         context["analyses"] = [
             analysis for test in obj.tests.all() for analysis in test.analyses.all()
         ]
+        # Get all available Sample statuses for status dropdown
+        sample_ct = ContentType.objects.get_for_model(Sample)
+        context["sample_statuses"] = Status.objects.filter(
+            Q(content_type=sample_ct) | Q(content_type__isnull=True)
+        ).order_by("name")
+    
+    # Add statuses for any model that has a status field
+    if hasattr(target_model, 'status'):
+        model_ct = ContentType.objects.get_for_model(target_model)
+        statuses_var_name = f"{target_model_name.lower()}_statuses"
+        if statuses_var_name not in context:  # Only add if not already added above
+            context[statuses_var_name] = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
 
     if request.htmx:
         # For HTMX requests, return only the detail partial
@@ -552,6 +616,207 @@ def generic_detail(request):
             f"{template_base}#detail", context=context, request=request
         )
         return render(request, "lab/index.html", {"initial_detail_html": detail_html})
+
+
+@login_required
+@require_GET
+def history_tab(request):
+    target_app_label = request.GET.get("app_label", "lab").strip()
+    target_model_name = request.GET.get("model_name", "").strip()
+    pk = request.GET.get("pk")
+
+    if not target_model_name or not pk:
+        return HttpResponseBadRequest("Model or pk not specified.")
+
+    target_model = apps.get_model(
+        app_label=target_app_label, model_name=target_model_name
+    )
+    obj = get_object_or_404(target_model, pk=pk)
+
+    template_base = f"lab/{target_model_name.lower()}.html"
+    context = {
+        "item": obj,
+        "model_name": target_model_name,
+        "app_label": target_app_label,
+        "user": request.user,
+        "history_prefetched": True,
+    }
+
+    return render(request, f"{template_base}#history-tab", context)
+
+
+@login_required
+@require_POST
+def update_status(request):
+    """Generic view to update the status of any model."""
+    model_name = request.POST.get("model_name")
+    app_label = request.POST.get("app_label", "lab")
+    object_id = request.POST.get("object_id")
+    status_id = request.POST.get("status_id")
+    
+    if not all([model_name, object_id, status_id]):
+        return HttpResponseBadRequest("model_name, object_id, and status_id are required.")
+    
+    try:
+        # Get the model class
+        model_class = apps.get_model(app_label=app_label, model_name=model_name)
+        obj = get_object_or_404(model_class, pk=object_id)
+        perm_name = f"{model_class._meta.app_label}.change_{model_class._meta.model_name}"
+        if not request.user.has_perm(perm_name):
+            return HttpResponseForbidden(
+                "You do not have permission to modify this object."
+            )
+        
+        # Get model content type to filter statuses
+        model_ct = ContentType.objects.get_for_model(model_class)
+        
+        # Verify the status is valid for this model
+        status = Status.objects.filter(
+            Q(content_type=model_ct) | Q(content_type__isnull=True),
+            pk=status_id
+        ).first()
+        
+        if not status:
+            return HttpResponseBadRequest(f"Invalid status for {model_name}.")
+        
+        # Update the status
+        old_status = obj.status
+        obj.status = status
+        obj.save()
+        
+        # Refresh the object from database to ensure we have latest data
+        obj.refresh_from_db()
+        
+        # If htmx request, return the updated status badge and refresh the card/detail
+        if request.htmx:
+            # Get available statuses for the dropdown
+            available_statuses = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+            
+            # Determine which partial to return based on view parameter
+            view_type = request.POST.get("view", "card")  # Default to card for list views
+            template_name = f"lab/{model_name.lower()}.html"
+            
+            if view_type == "detail":
+                partial_name = "status-badge"
+            else:
+                partial_name = "status-badge-card"
+            
+            # Context variable name for statuses (e.g., individual_statuses, sample_statuses)
+            statuses_var_name = f"{model_name.lower()}_statuses"
+            
+            # Build context similar to generic_detail to ensure all related data is included
+            context = {
+                "item": obj,
+                statuses_var_name: available_statuses,
+                "model_name": model_name,
+                "app_label": app_label,
+                "user": request.user,
+            }
+            
+            # Add model-specific context (same as generic_detail)
+            if model_name == "Individual":
+                context["tests"] = [
+                    test for sample in obj.samples.all() for test in sample.tests.all()
+                ]
+                context["analyses"] = [
+                    analysis for test in context["tests"] for analysis in test.analyses.all()
+                ]
+                # Build initial JSON for HPO terms combobox
+                try:
+                    hpo_initial = [
+                        {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+                        for t in getattr(obj, "hpo_terms", []).all()
+                    ]
+                    context["hpo_initial_json"] = json.dumps(hpo_initial)
+                except Exception:
+                    context["hpo_initial_json"] = "[]"
+            elif model_name == "Sample":
+                context["analyses"] = [
+                    analysis for test in obj.tests.all() for analysis in test.analyses.all()
+                ]
+            
+            # Get the target element ID from the request
+            target_id = request.POST.get("target_id")
+            if not target_id:
+                # Default target based on view type
+                if view_type == "detail":
+                    target_id = "status-badge-container"
+                else:
+                    target_id = f"status-badge-container-{obj.id}"
+            
+            # Render the status badge partial
+            badge_html = render_to_string(
+                f"{template_name}#{partial_name}",
+                context=context,
+                request=request
+            )
+            
+            # Also refresh the card/detail view
+            refresh_card = request.POST.get("refresh_card", "true").lower() == "true"
+            refresh_detail = request.POST.get("refresh_detail", "false").lower() == "true"
+            
+            response = HttpResponse()
+            
+            # Add the status badge update
+            response.write(badge_html)
+            
+            # Add card refresh if requested and in card view
+            if refresh_card and view_type != "detail":
+                card_partial = request.POST.get("card", "card")
+                card_html = render_to_string(
+                    f"{template_name}#{card_partial}",
+                    context=context,
+                    request=request
+                )
+                # Cards are wrapped in divs with IDs like "card-wrapper-{id}" in infinite scroll
+                # Target the wrapper div for OOB swap - need to wrap card_html in the wrapper div
+                card_wrapper_id = f"card-wrapper-{obj.id}"
+                card_wrapper_html = f'<div id="{card_wrapper_id}" hx-swap-oob="outerHTML">{card_html}</div>'
+                response.write(card_wrapper_html)
+            
+            # Add detail refresh if requested
+            if refresh_detail or view_type == "detail":
+                detail_html = render_to_string(
+                    f"{template_name}#detail",
+                    context=context,
+                    request=request
+                )
+                detail_target_id = request.POST.get("detail_target_id", f"{model_name.lower()}-detail")
+                response.write(f'<div id="{detail_target_id}" hx-swap-oob="outerHTML">{detail_html}</div>')
+            
+            # Trigger event to refresh other UI components
+            response["HX-Trigger"] = json.dumps({
+                "status-updated": {
+                    "model_name": model_name,
+                    "object_id": obj.id,
+                    "status_id": status.id,
+                    "status_name": status.name,
+                }
+            })
+            return response
+        else:
+            return JsonResponse({
+                "success": True,
+                "old_status": old_status.name,
+                "new_status": status.name,
+            })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return HttpResponseBadRequest(f"Error updating status: {str(e)}")
+
+
+@login_required
+@require_POST
+def update_individual_status(request):
+    """Update the status of an Individual (kept for backward compatibility)."""
+    # Redirect to generic update_status
+    request.POST = request.POST.copy()
+    request.POST['model_name'] = 'Individual'
+    request.POST['object_id'] = request.POST.get('individual_id')
+    return update_status(request)
 
 
 @login_required
@@ -1363,6 +1628,13 @@ def generic_create(request):
             filtered_statuses = Status.objects.filter(
                 Q(content_type=model_ct) | Q(content_type__isnull=True)
             ).order_by("name")
+            
+            # If this is Sample, exclude Individual-specific statuses
+            if model_name == "Sample":
+                from lab.models import Individual
+                individual_ct = ContentType.objects.get_for_model(Individual)
+                filtered_statuses = filtered_statuses.exclude(content_type=individual_ct)
+            
             form.fields["status"].queryset = filtered_statuses
             print(
                 f"DEBUG: Filtered statuses for {model_name}: {filtered_statuses.count()} statuses found"
@@ -1609,6 +1881,13 @@ def generic_edit(request):
             filtered_statuses = Status.objects.filter(
                 Q(content_type=model_ct) | Q(content_type__isnull=True)
             ).order_by("name")
+            
+            # If this is Sample, exclude Individual-specific statuses
+            if model_name == "Sample":
+                from lab.models import Individual
+                individual_ct = ContentType.objects.get_for_model(Individual)
+                filtered_statuses = filtered_statuses.exclude(content_type=individual_ct)
+            
             form.fields["status"].queryset = filtered_statuses
             print(
                 f"DEBUG: Filtered statuses for {model_name}: {filtered_statuses.count()} statuses found"
@@ -2613,3 +2892,151 @@ def get_stats_counts(request):
         'analyses': analyses_queryset.count(),
     }
     return JsonResponse(data)
+
+
+@login_required
+def edit_individual_hpo_terms(request):
+    """
+    Return the edit form for HPO terms inline (not in a modal).
+    """
+    individual_id = request.GET.get("individual_id")
+    
+    if not individual_id:
+        return HttpResponseBadRequest("Individual ID not specified.")
+    
+    try:
+        individual = Individual.objects.get(pk=individual_id)
+    except Individual.DoesNotExist:
+        return HttpResponseBadRequest("Individual not found.")
+    
+    # Check permissions
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You don't have permission to edit individuals.")
+    
+    # Build initial JSON for HPO terms combobox
+    try:
+        hpo_initial = [
+            {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+            for t in getattr(individual, "hpo_terms", []).all()
+        ]
+        hpo_initial_json = json.dumps(hpo_initial)
+    except Exception:
+        hpo_initial_json = "[]"
+    
+    if request.htmx:
+        return render(
+            request,
+            "lab/individual.html#hpo-terms-edit",
+            {
+                "item": individual,
+                "hpo_initial_json": hpo_initial_json,
+            },
+        )
+    else:
+        return redirect("lab:generic_detail", app_label="lab", model_name="Individual", pk=individual.pk)
+
+
+@login_required
+def view_individual_hpo_terms(request):
+    """
+    Return the view mode for HPO terms (used by cancel button).
+    """
+    individual_id = request.GET.get("individual_id")
+    
+    if not individual_id:
+        return HttpResponseBadRequest("Individual ID not specified.")
+    
+    try:
+        individual = Individual.objects.get(pk=individual_id)
+    except Individual.DoesNotExist:
+        return HttpResponseBadRequest("Individual not found.")
+    
+    # Build initial JSON for HPO terms (for potential future use)
+    try:
+        hpo_initial = [
+            {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+            for t in getattr(individual, "hpo_terms", []).all()
+        ]
+        hpo_initial_json = json.dumps(hpo_initial)
+    except Exception:
+        hpo_initial_json = "[]"
+    
+    if request.htmx:
+        return render(
+            request,
+            "lab/individual.html#hpo-terms-section",
+            {
+                "item": individual,
+                "hpo_initial_json": hpo_initial_json,
+            },
+        )
+    else:
+        return redirect("lab:generic_detail", app_label="lab", model_name="Individual", pk=individual.pk)
+
+
+@login_required
+@require_POST
+def update_individual_hpo_terms(request):
+    """
+    Update HPO terms for an individual.
+    """
+    individual_id = request.POST.get("individual_id")
+    hpo_term_ids = request.POST.get("hpo_term_ids")
+    
+    if not individual_id:
+        return HttpResponseBadRequest("Individual ID not specified.")
+    
+    try:
+        individual = Individual.objects.get(pk=individual_id)
+    except Individual.DoesNotExist:
+        return HttpResponseBadRequest("Individual not found.")
+    
+    # Check permissions
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You don't have permission to update individuals.")
+    
+    # Parse HPO term IDs
+    try:
+        if hpo_term_ids:
+            if isinstance(hpo_term_ids, str) and hpo_term_ids.strip().startswith("["):
+                term_ids = json.loads(hpo_term_ids)
+            else:
+                term_ids = [v for v in (hpo_term_ids or "").split(",") if v]
+        else:
+            term_ids = []
+    except Exception:
+        term_ids = []
+    
+    # Get Term model
+    try:
+        Term = apps.get_model(app_label="ontologies", model_name="Term")
+        # Filter to only HPO terms (ontology type 1)
+        terms = Term.objects.filter(
+            pk__in=term_ids,
+            ontology__type=1
+        )
+        individual.hpo_terms.set(terms)
+    except Exception as e:
+        return HttpResponseBadRequest(f"Error updating HPO terms: {str(e)}")
+    
+    # Return the updated HPO terms section
+    if request.htmx:
+        # Build initial JSON for HPO terms combobox (for modal)
+        try:
+            hpo_initial = [
+                {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+                for t in getattr(individual, "hpo_terms", []).all()
+            ]
+            hpo_initial_json = json.dumps(hpo_initial)
+        except Exception:
+            hpo_initial_json = "[]"
+        return render(
+            request,
+            "lab/individual.html#hpo-terms-section",
+            {
+                "item": individual,
+                "hpo_initial_json": hpo_initial_json,
+            },
+        )
+    else:
+        return redirect("lab:generic_detail", app_label="lab", model_name="Individual", pk=individual.pk)
