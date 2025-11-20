@@ -618,6 +618,22 @@
           this.query = '';
           this.open = false;
         },
+        resetToInitial(initialJson) {
+          try {
+            const initial = JSON.parse(initialJson || '[]');
+            if (Array.isArray(initial)) {
+              this.selected = initial.map(v => ({ value: String(v.value ?? v), label: String(v.label ?? v) }));
+            } else {
+              this.selected = [];
+            }
+            this.query = '';
+            this.open = false;
+          } catch (e) {
+            this.selected = [];
+            this.query = '';
+            this.open = false;
+          }
+        },
         getHxVals(page = 1) {
           const excludeIds = this.selected.map(o => o.value);
           const vals = {

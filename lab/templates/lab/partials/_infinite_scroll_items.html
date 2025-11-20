@@ -15,6 +15,7 @@
   {% else %}
     <!-- Card for infinite scroll -->
     <div
+      id="card-wrapper-{{ item.id }}"
       {% if forloop.last and items.has_next %}
         hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once"
         hx-swap="afterend" hx-target="this"
