@@ -204,7 +204,7 @@
 
 
 {% partialdef single-generic-combobox %}
-  <div class="relative w-full" x-data="singleGenericComboboxController('{{ app_label|default:"lab" }}', '{{ model_name }}', '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:''|escapejs }}')" @click.outside= "open=false">
+  <div class="relative w-full" x-data="singleGenericComboboxController('{{ app_label|default:"lab" }}', '{{ model_name }}', '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:''|escapejs }}', '{{ initial_value|default:''|escapejs }}')" @click.outside= "open=false">
     <div class="flex items-stretch">
       <div class="flex items-center justify-center w-10">
         <i class="fa-solid {{ icon_class|default:'fa-magnifying-glass' }} text-gray-400 dark:text-gray-300"></i>

@@ -33,11 +33,11 @@
                         {% include "lab/partials/partials.html#generic-combobox" %}
                       {% endwith %}
                     {% elif model_name == 'Sample' and field.name == 'individual' %}
-                      {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' name='individual' %}
+                      {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' name='individual' initial=initial_individual.individual_id|default:'' initial_value=initial_individual.pk|default:'' %}
                         {% include "lab/partials/partials.html#single-generic-combobox" %}
                       {% endwith %}
                     {% elif model_name == 'Sample' and field.name == 'isolation_by' %}
-                      {% with app_label='lab' model_name='User' icon_class='fa-face-smile' value_field='pk' name='isolation_by' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-face-smile' value_field='pk' name='isolation_by' %}
                         {% include "lab/partials/partials.html#single-generic-combobox" %}
                       {% endwith %}
                     {% else %}
@@ -68,11 +68,11 @@
                         {% include "lab/partials/partials.html#generic-combobox" %}
                       {% endwith %}
                     {% elif model_name == 'Sample' and field.name == 'individual' %}
-                      {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' name='individual' %}
+                      {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' name='individual' initial=initial_individual.individual_id|default:'' initial_value=initial_individual.pk|default:'' %}
                         {% include "lab/partials/partials.html#single-generic-combobox" %}
                       {% endwith %}
                     {% elif model_name == 'Sample' and field.name == 'isolation_by' %}
-                      {% with app_label='lab' model_name='User' icon_class='fa-face-smile' value_field='pk' name='isolation_by' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-face-smile' value_field='pk' name='isolation_by' %}
                         {% include "lab/partials/partials.html#single-generic-combobox" %}
                       {% endwith %}
                     {% else %}

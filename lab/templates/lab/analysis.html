@@ -9,10 +9,9 @@
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-1 mb-2"
     data-item-id="{{ item.id }}"
   >
-    {% with float="float-right" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html#badge' %}
-    {% endwith %}
-
+    <div class="float-right">
+      {% partial status-badge-card %}
+    </div>
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
       {{ item.type.name }}
     </h3>
@@ -98,9 +97,7 @@
         {{ item.type.name }}
       </h2>
       <div class="ml-auto">
-        {% with float="float-right" color=item.status.color text=item.status.name %}
-          {% include 'lab/partials/badge.html#badge' %}
-        {% endwith %}
+        {% partial status-badge-card %}
       </div>
     </div>
 
@@ -371,25 +368,33 @@
   <div
     id="analysis-detail"
     class="space-y-6"
-    x-data="{ activeTab: '{{ activeTab|default:"notes" }}', showFullName: false }"
+    x-data="{ activeTab: '{{ activeTab|default:"notes" }}', showFullName: false, historyLoaded: {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }"
   >
     <!-- Analysis card -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
       <!-- Header with analysis info -->
-      <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
-        <div class="flex items-center justify-between">
+      <div class="bg-gradient-to-r from-red-600 to-red-800 px-6 py-4">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 class="text-2xl font-bold text-white">{{ item.type.name }}</h2>
             <p class="text-blue-100 mt-1">
               {{ item.test.test_type.name }} Analysis
             </p>
           </div>
-          <span
-            class="px-3 py-1 rounded-full text-sm font-medium"
-            style="background-color: {{ item.status.color }}20; color: white; border: 1px solid white"
-          >
-            {{ item.status.name }}
-          </span>
+          <div class="flex flex-col items-start md:items-end gap-2 text-white">
+            {% partial status-badge %}
+            {% if perms.lab.change_analysis %}
+              <button
+                class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-900 bg-white/90 rounded-md shadow-sm hover:bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white transition"
+                hx-get="{% url 'lab:generic_edit' %}?model_name=Analysis&app_label=lab&pk={{ item.pk }}"
+                hx-target="#modal-root"
+                hx-swap="innerHTML"
+              >
+                <i class="fas fa-edit"></i>
+                <span>Edit Analysis</span>
+              </button>
+            {% endif %}
+          </div>
         </div>
       </div>
 
@@ -528,17 +533,25 @@
             :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click= "activeTab = 'notes'"
           >
-            Notes ({{ item.notes|visible_count:user }})
             {% with object=item content_type='analysis' %}
               {% include 'lab/note.html#summary' %}
             {% endwith %}
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
-            :class="activeTab === 'status' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click= "activeTab = 'status'"
+            :class="activeTab === 'history' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'history'"
+            {% if not history_prefetched %}
+              hx-get="{% url 'lab:history_tab' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ item.pk }}"
+              hx-trigger="click once"
+              hx-target="#history-tab-panel-{{ model_name|lower }}-{{ item.pk }}"
+              hx-swap="innerHTML"
+              hx-indicator="#history-tab-indicator-{{ model_name|lower }}-{{ item.pk }}"
+              hx-on::before-request="historyLoading = true"
+              hx-on::after-on-load="historyLoading = false; historyLoaded = true"
+            {% endif %}
           >
-            Status History
+            History
           </button>
         </div>
       </div>
@@ -552,71 +565,226 @@
           {% endwith %}
         </div>
 
-        <!-- Status History tab -->
-        <div x-show="activeTab === 'status'" x-cloak>
-          {% if item.status_logs.exists %}
-            <div class="space-y-4">
-              {% for log in item.status_logs.all %}
-                <div class="flex items-start space-x-4">
-                  <div class="flex-shrink-0">
-                    <span
-                      class="px-2 py-1 text-xs rounded-full"
-                      style="background-color: {{ log.new_status.color }} 20; color: {{ log.new_status.color }}; border: 1px solid {{ log.new_status.color }}"
-                    >
-                      {{ log.new_status.name }}
-                    </span>
-                  </div>
-                  <div class="flex-1">
-                    <p class="text-sm text-gray-900 dark:text-gray-100">
-                      Changed by
-                      {{ log.changed_by.get_full_name|default:log.changed_by.username }}
-                    </p>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                      {{ log.get_created_at|date:"d M Y H:i"|default:"Unknown" }}
-                    </p>
-                    {% if log.note %}
-                      <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                        {{ log.note }}
-                      </p>
-                    {% endif %}
-                  </div>
-                </div>
-              {% endfor %}
-            </div>
+        <!-- History tab -->
+        <div x-show="activeTab === 'history'" x-cloak class="pt-2">
+          <div
+            id="history-tab-indicator-{{ model_name|lower }}-{{ item.pk }}"
+            class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"
+            x-show="historyLoading"
+          >
+            <i class="fa-solid fa-arrow-rotate-right fa-spin"></i>
+            <span>Loading history…</span>
+          </div>
+          <div id="history-tab-panel-{{ model_name|lower }}-{{ item.pk }}" class="space-y-4 px-1 sm:px-2 lg:px-4">
+            {% if history_prefetched %}
+              {% include "lab/analysis.html#history-tab" %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef status-badge inline %}
+  {% if perms.lab.change_analysis %}
+    <div 
+      id="status-badge-container"
+      class="relative"
+      x-data="{ open: false }"
+      @click.outside="open = false"
+    >
+      <button
+        type="button"
+        @click="open = !open"
+        class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white hover:bg-opacity-40 transition-all cursor-pointer flex items-center gap-1"
+        title="Click to change status"
+      >
+        {{ item.status.name }}
+        <i class="fas fa-chevron-down text-xs"></i>
+      </button>
+      
+      <!-- Dropdown menu -->
+      <div
+        x-show="open"
+        x-transition:enter="transition ease-out duration-100"
+        x-transition:enter-start="transform opacity-0 scale-95"
+        x-transition:enter-end="transform opacity-100 scale-100"
+        x-transition:leave="transition ease-in duration-75"
+        x-transition:leave-start="transform opacity-100 scale-100"
+        x-transition:leave-end="transform opacity-0 scale-95"
+        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+        style="display: none;"
+      >
+        <div class="py-1 max-h-60 overflow-y-auto">
+          {% if analysis_statuses %}
+            {% for status in analysis_statuses %}
+              <button
+                type="button"
+                hx-post="{% url 'lab:update_status' %}"
+                hx-vals='{"model_name": "Analysis", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "detail", "refresh_detail": "true", "detail_target_id": "analysis-detail"}'
+                hx-target="#status-badge-container"
+                hx-swap="outerHTML"
+                @click="open = false"
+                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
+              >
+                <span
+                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+                >
+                  {{ status.name }}
+                </span>
+              </button>
+            {% endfor %}
           {% else %}
-            <div
-              class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-            >
-              No status history available for this analysis.
+            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              No statuses available
             </div>
           {% endif %}
         </div>
       </div>
+    </div>
+  {% else %}
+    <span class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white">
+      {{ item.status.name }}
+    </span>
+  {% endif %}
+{% endpartialdef %}
 
-      <!-- Footer with action buttons -->
-      <div
-        class="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-end space-x-3"
+{% partialdef history-tab %}
+  {% load lab_filters %}
+  <template x-init="historyLoaded = true; historyLoading = false"></template>
+  {% with history_list=item|hierarchical_history %}
+    {% if history_list %}
+      <div class="space-y-4">
+        {% for history_item in history_list %}
+          <div class="flex items-start space-x-4">
+            <div class="flex-shrink-0">
+              {% if history_item.type == 'notification' %}
+                <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 flex items-center justify-center">
+                  <i class="fas fa-bell text-sm"></i>
+                </div>
+              {% else %}
+                <span
+                  class="px-2 py-1 text-xs rounded-full"
+                  style="background-color: {{ history_item.new_status.color|default:'gray' }}20; color: {{ history_item.new_status.color|default:'gray' }}; border: 1px solid {{ history_item.new_status.color|default:'gray' }}"
+                >
+                  {{ history_item.new_status.name }}
+                </span>
+              {% endif %}
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs font-medium px-2 py-1 rounded {% if history_item.type == 'notification' %}bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300{% else %}bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300{% endif %}">
+                  {% if history_item.type == 'notification' %}Notification{% else %}{{ history_item.model_name }}{% endif %}
+                </span>
+                <span class="text-sm text-gray-600 dark:text-gray-400">
+                  {{ history_item.object_id }}
+                </span>
+              </div>
+              {% if history_item.type == 'notification' %}
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {{ history_item.verb }}
+                </p>
+                {% if history_item.description %}
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-line">
+                    {{ history_item.description|linebreaksbr }}
+                  </p>
+                {% endif %}
+              {% else %}
+                <p class="text-sm text-gray-900 dark:text-gray-100">
+                  {% if history_item.previous_status %}
+                    Changed from {{ history_item.previous_status.name }} to {{ history_item.new_status.name }}
+                  {% else %}
+                    Status set to {{ history_item.new_status.name }}
+                  {% endif %}
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  Changed by:
+                  {% if history_item.history_user %}
+                    {{ history_item.history_user.get_full_name|default:history_item.history_user.username }}
+                  {% else %}
+                    System
+                  {% endif %}
+                </p>
+              {% endif %}
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ history_item.history_date|date:"d M Y H:i" }}
+              </p>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+        No history available for this analysis.
+      </div>
+    {% endif %}
+  {% endwith %}
+{% endpartialdef %}
+
+{% partialdef status-badge-card inline %}
+  {% if perms.lab.change_analysis %}
+    <div 
+      id="status-badge-container-{{ item.id }}"
+      class="relative inline-block"
+      x-data="{ open: false }"
+      @click.outside="open = false"
+    >
+      <button
+        type="button"
+        @click="open = !open"
+        class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset hover:ring-{{ item.status.color|default:'gray' }}-600 dark:hover:ring-{{ item.status.color|default:'gray' }}-500 transition-all cursor-pointer gap-1"
+        title="Click to change status"
       >
-        {% if perms.lab.change_analysis %}
-          <button
-            class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 flex items-center transition-colors"
-            hx-get="{% url 'lab:generic_edit' %}?model_name=Analysis&app_label=lab&pk={{ item.pk }}"
-            hx-target="#modal-root"
-            hx-swap="innerHTML"
-          >
-            <i class="fas fa-edit mr-1"></i> Edit Analysis
-          </button>
-        {% endif %}
-        <!-- Disabled for now
-          {% if perms.lab.delete_analysis %}
-          <button
-            class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 flex items-center transition-colors"
-          >
-            <i class="fas fa-trash-alt mr-1"></i> Delete Analysis
-          </button>
-        {% endif %}
-        -->
+        {{ item.status.name }}
+        <i class="fas fa-chevron-down text-xs"></i>
+      </button>
+      
+      <!-- Dropdown menu -->
+      <div
+        x-show="open"
+        x-transition:enter="transition ease-out duration-100"
+        x-transition:enter-start="transform opacity-0 scale-95"
+        x-transition:enter-end="transform opacity-100 scale-100"
+        x-transition:leave="transition ease-in duration-75"
+        x-transition:leave-start="transform opacity-100 scale-100"
+        x-transition:leave-end="transform opacity-0 scale-95"
+        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+        style="display: none;"
+      >
+        <div class="py-1 max-h-60 overflow-y-auto">
+          {% if analysis_statuses %}
+            {% for status in analysis_statuses %}
+              <button
+                type="button"
+                hx-post="{% url 'lab:update_status' %}"
+                hx-vals='{"model_name": "Analysis", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "card", "refresh_card": "true", "card": "card"}'
+                hx-target="#status-badge-container-{{ item.id }}"
+                hx-swap="outerHTML"
+                @click="open = false"
+                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
+              >
+                <span
+                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+                >
+                  {{ status.name }}
+                </span>
+              </button>
+            {% endfor %}
+          {% else %}
+            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              No statuses available
+            </div>
+          {% endif %}
+        </div>
       </div>
     </div>
-  </div>
+  {% else %}
+    <span
+      class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset"
+    >
+      {{ item.status.name }}
+    </span>
+  {% endif %}
 {% endpartialdef %}
