@@ -45,6 +45,12 @@ class BaseForm(forms.ModelForm):
                         "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
                     }
                 )
+            elif isinstance(field.widget, forms.SelectMultiple):
+                field.widget.attrs.update(
+                    {
+                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 h-32"
+                    }
+                )
             elif isinstance(field.widget, forms.DateInput):
                 field.widget.attrs.update(
                     {
@@ -295,10 +301,19 @@ class InstitutionForm(BaseForm):
         model = Institution
         fields = [
             "name",
+            "official_name",
+            "center_name",
+            "speciality",
+            "city",
+            "latitude",
+            "longitude",
             "contact",
+            "staff",
         ]
         widgets = {
             "contact": forms.Textarea(attrs={"rows": 3}),
+            "latitude": forms.NumberInput(attrs={"step": "any"}),
+            "longitude": forms.NumberInput(attrs={"step": "any"}),
         }
 
 

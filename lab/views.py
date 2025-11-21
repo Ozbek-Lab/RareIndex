@@ -52,6 +52,57 @@ from .filters import apply_filters, FILTER_CONFIG, get_available_statuses, get_a
 from .sql_agent import query_natural_language
 
 
+def _format_user_label(user):
+    full_name = (user.get_full_name() or "").strip()
+    if full_name:
+        return full_name
+    if getattr(user, "username", ""):
+        return user.username
+    if getattr(user, "email", ""):
+        return user.email
+    return f"User {user.pk}"
+
+
+def _staff_initial_json_from_queryset(qs):
+    if not qs:
+        return "[]"
+    data = [{"value": str(user.pk), "label": _format_user_label(user)} for user in qs]
+    return json.dumps(data)
+
+
+def _parse_staff_ids(raw_value):
+    if not raw_value:
+        return []
+    if isinstance(raw_value, (list, tuple)):
+        return [str(v) for v in raw_value if str(v).strip()]
+    try:
+        parsed = json.loads(raw_value)
+        if isinstance(parsed, list):
+            return [str(v) for v in parsed if str(v).strip()]
+        if parsed:
+            return [str(parsed)]
+    except Exception:
+        pass
+    return [v.strip() for v in str(raw_value).split(",") if v.strip()]
+
+
+def _staff_initial_json_from_ids(id_list):
+    ids = [str(_id) for _id in id_list if str(_id).strip()]
+    if not ids:
+        return "[]"
+    users = User.objects.filter(pk__in=ids)
+    label_map = {str(user.pk): _format_user_label(user) for user in users}
+    ordered = [{"value": pk, "label": label_map.get(pk, pk)} for pk in ids if pk in label_map]
+    return json.dumps(ordered)
+
+
+def _staff_initial_json_from_post(post_data):
+    if not post_data:
+        return "[]"
+    raw = post_data.get("staff_ids") or post_data.get("staff")
+    return _staff_initial_json_from_ids(_parse_staff_ids(raw))
+
+
 @login_required
 @require_POST
 def task_complete(request, pk):
@@ -1569,6 +1620,9 @@ def generic_create(request):
                 )
         else:
             # Form validation failed
+            staff_initial_json = "[]"
+            if model_name == "Institution":
+                staff_initial_json = _staff_initial_json_from_post(request.POST)
             if request.htmx:
                 return render(
                     request,
@@ -1577,6 +1631,7 @@ def generic_create(request):
                         "form": form,
                         "model_name": model_name,
                         "app_label": app_label,
+                        "staff_initial_json": staff_initial_json,
                     },
                 )
             else:
@@ -1587,6 +1642,7 @@ def generic_create(request):
                         "create_form": form,
                         "model_name": model_name,
                         "app_label": app_label,
+                        "staff_initial_json": staff_initial_json,
                     },
                 )
 
@@ -1657,6 +1713,12 @@ def generic_create(request):
         except Exception:
             pass
 
+    staff_initial_json = "[]"
+    if model_name == "Institution":
+        staff_initial_json = _staff_initial_json_from_ids(
+            _parse_staff_ids(initial_data.get("staff"))
+        )
+
     if request.htmx:
         return render(
             request,
@@ -1668,6 +1730,7 @@ def generic_create(request):
                 "initial_individual": initial_individual,
                 # Prefixed Task form for sidebar inputs
                 "task_form": TaskForm(prefix="task"),
+                "staff_initial_json": staff_initial_json,
             },
         )
     else:
@@ -1679,6 +1742,7 @@ def generic_create(request):
                 "model_name": model_name,
                 "app_label": app_label,
                 "initial_individual": initial_individual,
+                "staff_initial_json": staff_initial_json,
             },
         )
 
@@ -1820,12 +1884,16 @@ def generic_edit(request):
                 )
         else:
             # Form validation failed
+            staff_initial_json = "[]"
+            if model_name == "Institution":
+                staff_initial_json = _staff_initial_json_from_post(request.POST)
             if request.htmx:
                 context = {
                     "form": form,
                     "object": obj,
                     "model_name": model_name,
                     "app_label": app_label,
+                    "staff_initial_json": staff_initial_json,
                 }
                 try:
                     if model_name == "Individual":
@@ -1846,6 +1914,7 @@ def generic_edit(request):
                         "object": obj,
                         "model_name": model_name,
                         "app_label": app_label,
+                        "staff_initial_json": staff_initial_json,
                     },
                 )
 
@@ -1899,12 +1968,17 @@ def generic_edit(request):
             # Fallback to all statuses if filtering fails
             form.fields["status"].queryset = Status.objects.all().order_by("name")
 
+    staff_initial_json = "[]"
+    if model_name == "Institution":
+        staff_initial_json = _staff_initial_json_from_queryset(obj.staff.all())
+
     if request.htmx:
         context = {
             "form": form,
             "object": obj,
             "model_name": model_name,
             "app_label": app_label,
+            "staff_initial_json": staff_initial_json,
         }
         # Provide initial JSON for HPO combobox in Individual edit form
         try:
@@ -1927,6 +2001,7 @@ def generic_edit(request):
                 "object": obj,
                 "model_name": model_name,
                 "app_label": app_label,
+                "staff_initial_json": staff_initial_json,
             },
         )
 
