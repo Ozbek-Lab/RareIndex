@@ -221,15 +221,16 @@ def _apply_own_search(queryset, target_model_name, request):
     return queryset
 
 
-def _apply_select_filter(queryset, select_config, filter_values):
+def _apply_select_filter(queryset, select_config, filter_values, exclude=False):
     """Applies an exact match filter for a select field."""
     select_filter_path = select_config.get("select_filter_path")
     if select_filter_path:
-        return queryset.filter(**{f"{select_filter_path}__in": filter_values})
+        lookup = {f"{select_filter_path}__in": filter_values}
+        return queryset.exclude(**lookup) if exclude else queryset.filter(**lookup)
     return queryset
 
 
-def _apply_status_filter(queryset, status_config, filter_values):
+def _apply_status_filter(queryset, status_config, filter_values, exclude=False):
     """Applies a status filter using OR logic for multiple statuses."""
     status_field_path = status_config.get("field_path")
     if status_field_path and filter_values:
@@ -237,13 +238,14 @@ def _apply_status_filter(queryset, status_config, filter_values):
         try:
             status_pks = [int(pk) for pk in filter_values if pk.isdigit()]
             if status_pks:
-                return queryset.filter(**{f"{status_field_path}__in": status_pks})
+                lookup = {f"{status_field_path}__in": status_pks}
+                return queryset.exclude(**lookup) if exclude else queryset.filter(**lookup)
         except (ValueError, TypeError):
             pass
     return queryset
 
 
-def _apply_cross_model_status_filter(queryset, target_model_name, filter_model_name, filter_values):
+def _apply_cross_model_status_filter(queryset, target_model_name, filter_model_name, filter_values, exclude=False):
     """Applies a cross-model status filter based on relationships."""
     # Define the relationships between models for status filtering
     status_filter_relationships = {
@@ -278,7 +280,7 @@ def _apply_cross_model_status_filter(queryset, target_model_name, filter_model_n
     
     # Special handling for Tasks (they use generic relationships)
     if target_model_name == "Task":
-        return _apply_task_cross_model_status_filter(queryset, filter_model_name, filter_values)
+        return _apply_task_cross_model_status_filter(queryset, filter_model_name, filter_values, exclude=exclude)
     
     # Get the relationship path from the filter model to the target model
     relationships = status_filter_relationships.get(filter_model_name, {})
@@ -308,14 +310,15 @@ def _apply_cross_model_status_filter(queryset, target_model_name, filter_model_n
             filtered_pks = list(filtered_objects.values_list("pk", flat=True))
             if filtered_pks:
                 # Apply the relationship filter
-                return queryset.filter(**{f"{relationship_path}__in": filtered_pks})
+                lookup = {f"{relationship_path}__in": filtered_pks}
+                return queryset.exclude(**lookup) if exclude else queryset.filter(**lookup)
     except (ValueError, TypeError):
         pass
     
     return queryset
 
 
-def _apply_task_cross_model_status_filter(queryset, filter_model_name, filter_values):
+def _apply_task_cross_model_status_filter(queryset, filter_model_name, filter_values, exclude=False):
     """Applies a cross-model status filter specifically for Tasks using generic relationships."""
     from django.contrib.contenttypes.models import ContentType
     
@@ -342,17 +345,18 @@ def _apply_task_cross_model_status_filter(queryset, filter_model_name, filter_va
                 # Get the content type for the filter model
                 filter_content_type = ContentType.objects.get_for_model(filter_model)
                 # Filter tasks by content_type and object_id
-                return queryset.filter(
-                    content_type=filter_content_type,
-                    object_id__in=filtered_pks
-                )
+                lookup = {
+                    "content_type": filter_content_type,
+                    "object_id__in": filtered_pks,
+                }
+                return queryset.exclude(**lookup) if exclude else queryset.filter(**lookup)
     except (ValueError, TypeError):
         pass
     
     return queryset
 
 
-def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_values):
+def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_values, exclude=False):
     """Applies a text search filter from another model."""
     orm_path = target_config.get("filters", {}).get(filter_key.title())
     if not isinstance(orm_path, str):
@@ -375,7 +379,58 @@ def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_v
     if not pks_to_filter_by:
         return queryset.none()
 
-    return queryset.filter(**{f"{orm_path}__in": pks_to_filter_by})
+    lookup = {f"{orm_path}__in": pks_to_filter_by}
+    return queryset.exclude(**lookup) if exclude else queryset.filter(**lookup)
+
+
+def _partition_active_filters(request, exclude_filter=None):
+    include_filters = {}
+    exclude_filters = {}
+    for k, v in request.GET.items():
+        if not k.startswith("filter_") or not v:
+            continue
+        raw_key = k.replace("filter_", "")
+        if not raw_key:
+            continue
+        target_dict = include_filters
+        normalized_key = raw_key
+        if raw_key.endswith("_exclude"):
+            normalized_key = raw_key[: -len("_exclude")]
+            target_dict = exclude_filters
+        if normalized_key == exclude_filter or not normalized_key:
+            continue
+        values = [part for part in v.split(",") if part]
+        if not values:
+            continue
+        target_dict[normalized_key] = values
+    return include_filters, exclude_filters
+
+
+def _apply_filter_group(queryset, target_model_name, filter_key, filter_values, target_config, exclude=False):
+    select_config = _get_select_field_config(filter_key, target_model_name)
+    status_config = _get_status_filter_config(target_model_name)
+
+    expected_status_key = f"{target_model_name.lower()}_status"
+    if filter_key == expected_status_key and status_config:
+        return _apply_status_filter(queryset, status_config, filter_values, exclude=exclude)
+    if filter_key.endswith("_status"):
+        filter_model_name = filter_key.replace("_status", "").title()
+        return _apply_cross_model_status_filter(
+            queryset,
+            target_model_name,
+            filter_model_name,
+            filter_values,
+            exclude=exclude,
+        )
+    if select_config:
+        return _apply_select_filter(queryset, select_config, filter_values, exclude=exclude)
+    return _apply_cross_model_text_filter(
+        queryset,
+        target_config,
+        filter_key,
+        filter_values,
+        exclude=exclude,
+    )
 
 
 def apply_filters(request, target_model_name, queryset, exclude_filter=None):
@@ -385,32 +440,30 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
     """
     queryset = _apply_own_search(queryset, target_model_name, request)
 
-    active_filters = {
-        k.replace("filter_", ""): v.split(",")
-        for k, v in request.GET.items()
-        if k.startswith("filter_") and v and k.replace("filter_", "") != exclude_filter
-    }
-    print(f"Active filters: {active_filters}")
+    include_filters, exclude_filters = _partition_active_filters(request, exclude_filter)
+    print(f"Include filters: {include_filters}")
+    print(f"Exclude filters: {exclude_filters}")
 
     target_config = FILTER_CONFIG.get(target_model_name, {})
-    for filter_key, filter_values in active_filters.items():
-        print(f"Applying filter: {filter_key} with value(s): {filter_values}")
-        select_config = _get_select_field_config(filter_key, target_model_name)
-        status_config = _get_status_filter_config(target_model_name)
 
-        # Check for model-specific status filters (e.g., individual_status, sample_status)
-        expected_status_key = f"{target_model_name.lower()}_status"
-        if filter_key == expected_status_key and status_config:
-            # Apply direct status filter for this model
-            queryset = _apply_status_filter(queryset, status_config, filter_values)
-        elif filter_key.endswith('_status'):
-            # This is a cross-model status filter
-            filter_model_name = filter_key.replace('_status', '').title()
-            queryset = _apply_cross_model_status_filter(queryset, target_model_name, filter_model_name, filter_values)
-        elif select_config:
-            queryset = _apply_select_filter(queryset, select_config, filter_values)
-        else:
-            queryset = _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_values)
+    for filter_key, filter_values in include_filters.items():
+        queryset = _apply_filter_group(
+            queryset,
+            target_model_name,
+            filter_key,
+            filter_values,
+            target_config,
+            exclude=False,
+        )
+    for filter_key, filter_values in exclude_filters.items():
+        queryset = _apply_filter_group(
+            queryset,
+            target_model_name,
+            filter_key,
+            filter_values,
+            target_config,
+            exclude=True,
+        )
     queryset = queryset.order_by("-pk")
     return queryset.distinct()
 
