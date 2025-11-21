@@ -108,10 +108,7 @@
     <button
       type="button"
       class="px-2 py-1 text-xs rounded-full transition-all duration-200 border"
-      :class="{
-        'bg-{{ status.color }}-500 text-white border-{{ status.color }}-500': filters.{{ model_name|lower }}_status && filters.{{ model_name|lower }}_status.includes('{{ status.pk }}'),
-        'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700': !filters.{{ model_name|lower }}_status || !filters.{{ model_name|lower }}_status.includes('{{ status.pk }}')
-      }"
+      :class="triStateClasses('{{ model_name|lower }}_status', '{{ status.pk }}')"
       @click= "toggleStatus('{{ status.pk }}', '{{ model_name|lower }}')"
       title="{{ status.description|default:status.name }}"
     >
@@ -128,10 +125,7 @@
                <button
              type="button"
              class="px-2 py-1 text-xs rounded-full transition-all duration-200 border"
-             :class="{
-               'bg-blue-500 text-white border-blue-500': filters.{{ type.filter_field }} && filters.{{ type.filter_field }}.includes('{{ type.name }}'),
-               'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700': !filters.{{ type.filter_field }} || !filters.{{ type.filter_field }}.includes('{{ type.name }}')
-             }"
+             :class="triStateClasses('{{ type.filter_field }}', '{{ type.name }}')"
              @click= "toggleType('{{ type.name }}', '{{ type.filter_field }}')"
              title="{{ type.description|default:type.name }}"
            >
