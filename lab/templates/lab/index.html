@@ -233,14 +233,17 @@
           
           const newFilters = {};
           params.forEach((value, key) => {
-            if (key.startsWith("filter_")) {
-              const filterKey = key.replace("filter_", "");
-              // Handle status and type filters as arrays
-              if (filterKey.endsWith('_status') || filterKey.endsWith('_type')) {
-                newFilters[filterKey] = value.split(',').filter(v => v.trim());
-              } else {
-                newFilters[filterKey] = value;
-              }
+            if (!key.startsWith("filter_")) return;
+            const filterKey = key.replace("filter_", "");
+            if (!value) return;
+            const shouldSplit =
+              filterKey.includes("_status") ||
+              filterKey.includes("_type") ||
+              filterKey.includes("_exclude");
+            if (shouldSplit) {
+              newFilters[filterKey] = value.split(",").filter((v) => v.trim());
+            } else {
+              newFilters[filterKey] = value;
             }
           });
           this.filters = newFilters;
@@ -505,54 +508,77 @@
           }
           return JSON.stringify(vals);
         },
+        toggleTriState(rawValue, includeKey) {
+          const value = String(rawValue);
+          const excludeKey = `${includeKey}_exclude`;
+          const includeList = this.filters[includeKey] || [];
+          const excludeList = this.filters[excludeKey] || [];
+          const includeIndex = includeList.indexOf(value);
+          const excludeIndex = excludeList.indexOf(value);
+
+          if (includeIndex === -1 && excludeIndex === -1) {
+            if (!this.filters[includeKey]) {
+              this.filters[includeKey] = [];
+            }
+            this.filters[includeKey].push(value);
+            return;
+          }
+
+          if (includeIndex > -1) {
+            this.filters[includeKey].splice(includeIndex, 1);
+            if (this.filters[includeKey].length === 0) {
+              delete this.filters[includeKey];
+            }
+            if (!this.filters[excludeKey]) {
+              this.filters[excludeKey] = [];
+            }
+            if (!this.filters[excludeKey].includes(value)) {
+              this.filters[excludeKey].push(value);
+            }
+            return;
+          }
+
+          if (excludeIndex > -1) {
+            this.filters[excludeKey].splice(excludeIndex, 1);
+            if (this.filters[excludeKey].length === 0) {
+              delete this.filters[excludeKey];
+            }
+          }
+        },
         toggleStatus(statusPk, modelName) {
           const statusKey = `${modelName}_status`;
-          if (!this.filters[statusKey]) {
-            this.filters[statusKey] = [];
-          }
-          
-          const index = this.filters[statusKey].indexOf(statusPk);
-          if (index > -1) {
-            // Remove status if already selected
-            this.filters[statusKey].splice(index, 1);
-            // If array becomes empty, remove key entirely to reflect no filter
-            if (this.filters[statusKey].length === 0) {
-              delete this.filters[statusKey];
-            }
-          } else {
-            // Add status if not selected
-            this.filters[statusKey].push(statusPk);
-          }
-          
-          // The $watch("filters") will automatically trigger filters-updated event
-          // No need for setTimeout or manual dispatch - let Alpine's reactivity handle it
+          this.toggleTriState(statusPk, statusKey);
         },
         toggleType(typePk, filterField) {
-          if (!this.filters[filterField]) {
-            this.filters[filterField] = [];
+          this.toggleTriState(typePk, filterField);
+        },
+        getFilterState(rawValue, includeKey) {
+          const value = String(rawValue);
+          const includeList = this.filters[includeKey] || [];
+          if (includeList.includes(value)) {
+            return 'included';
           }
-          
-          const index = this.filters[filterField].indexOf(typePk);
-          if (index > -1) {
-            // Remove type if already selected
-            this.filters[filterField].splice(index, 1);
-            // If array becomes empty, remove key entirely to reflect no filter
-            if (this.filters[filterField].length === 0) {
-              delete this.filters[filterField];
-            }
-          } else {
-            // Add type if not selected
-            this.filters[filterField].push(typePk);
+          const excludeKey = `${includeKey}_exclude`;
+          const excludeList = this.filters[excludeKey] || [];
+          if (excludeList.includes(value)) {
+            return 'excluded';
           }
-          
-          // The $watch("filters") will automatically trigger filters-updated event
-          // No need for setTimeout or manual dispatch - let Alpine's reactivity handle it
+          return 'none';
+        },
+        triStateClasses(includeKey, rawValue) {
+          const state = this.getFilterState(rawValue, includeKey);
+          if (state === 'included') {
+            return 'bg-green-500 text-white border-green-500 shadow-sm';
+          }
+          if (state === 'excluded') {
+            return 'bg-red-500 text-white border-red-500 shadow-sm ring-1 ring-red-200 dark:ring-red-500';
+          }
+          return 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700';
         },
         clearModelStatusFilter(modelName) {
           const statusKey = `${modelName}_status`;
-          // Remove the key entirely instead of leaving an empty array
           delete this.filters[statusKey];
-          // The $watch("filters") will automatically trigger filters-updated event
+          delete this.filters[`${statusKey}_exclude`];
         },
 
         // Event-scoped dispatch helper
