@@ -618,6 +618,22 @@
           this.query = '';
           this.open = false;
         },
+        resetToInitial(initialJson) {
+          try {
+            const initial = JSON.parse(initialJson || '[]');
+            if (Array.isArray(initial)) {
+              this.selected = initial.map(v => ({ value: String(v.value ?? v), label: String(v.label ?? v) }));
+            } else {
+              this.selected = [];
+            }
+            this.query = '';
+            this.open = false;
+          } catch (e) {
+            this.selected = [];
+            this.query = '';
+            this.open = false;
+          }
+        },
         getHxVals(page = 1) {
           const excludeIds = this.selected.map(o => o.value);
           const vals = {
@@ -635,7 +651,7 @@
       };
     }
 
-    function singleGenericComboboxController(appLabel, modelName, valueField = 'pk', labelField = '', inputName = '', initialValue = '') {
+    function singleGenericComboboxController(appLabel, modelName, valueField = 'pk', labelField = '', inputName = '', initialValue = '', initialSelectedValue = '') {
       return {
         appLabel,
         modelName,
@@ -646,8 +662,12 @@
         query: initialValue || '',
         options: [],
         loading: false,
-        selected: null, // {value, label}
+        selected: initialSelectedValue && initialValue ? { value: initialSelectedValue, label: initialValue } : null, // {value, label}
         init() {
+          // If we have an initial selected value, set it
+          if (initialSelectedValue && initialValue) {
+            this.selected = { value: initialSelectedValue, label: initialValue };
+          }
           this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
           this.$watch('query', () => {
             if (this.open) {
