@@ -40,6 +40,10 @@
                       {% with app_label='auth' model_name='User' icon_class='fa-face-smile' value_field='pk' name='isolation_by' %}
                         {% include "lab/partials/partials.html#single-generic-combobox" %}
                       {% endwith %}
+                    {% elif model_name == 'Institution' and field.name == 'staff' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
                     {% else %}
                       {{ field }}
                     {% endif %}
@@ -74,6 +78,10 @@
                     {% elif model_name == 'Sample' and field.name == 'isolation_by' %}
                       {% with app_label='auth' model_name='User' icon_class='fa-face-smile' value_field='pk' name='isolation_by' %}
                         {% include "lab/partials/partials.html#single-generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Institution' and field.name == 'staff' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
                       {% endwith %}
                     {% else %}
                       {{ field }}
@@ -204,6 +212,10 @@
                       {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
                         {% include "lab/partials/partials.html#generic-combobox" %}
                       {% endwith %}
+                    {% elif model_name == 'Institution' and field.name == 'staff' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
                     {% else %}
                       {{ field }}
                     {% endif %}
@@ -229,6 +241,10 @@
                     </label>
                     {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
                       {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Institution' and field.name == 'staff' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
                         {% include "lab/partials/partials.html#generic-combobox" %}
                       {% endwith %}
                     {% else %}
