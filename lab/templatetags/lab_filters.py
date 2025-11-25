@@ -1,4 +1,5 @@
 from django import template
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 register = template.Library()
@@ -238,3 +239,274 @@ def has_model_perm(user, app_label: str, model_name: str, action: str) -> bool:
         return user.has_perm(f"{app_label}.{codename}")
     except Exception:
         return False
+
+
+@register.filter
+def status_changes(instance):
+    """Get history records where status changed, with previous status info."""
+    if not hasattr(instance, 'history'):
+        return []
+    
+    history_records = list(instance.history.all().order_by('history_date'))
+    status_changes_list = []
+    
+    for i, record in enumerate(history_records):
+        # Get previous record
+        previous_record = history_records[i - 1] if i > 0 else None
+        
+        # Check if status changed
+        current_status = getattr(record, 'status', None)
+        previous_status = getattr(previous_record, 'status', None) if previous_record else None
+        
+        # Compare status IDs (handle None cases)
+        current_status_id = getattr(current_status, 'id', None) if current_status else None
+        previous_status_id = getattr(previous_status, 'id', None) if previous_status else None
+        
+        # Include if status changed, or if it's the first record (creation)
+        if i == 0 or (current_status_id != previous_status_id and current_status_id is not None):
+            status_changes_list.append({
+                'record': record,
+                'new_status': current_status,
+                'previous_status': previous_status,
+                'history_date': record.history_date,
+                'history_user': record.history_user,
+            })
+    
+    return status_changes_list
+
+
+@register.filter
+def hierarchical_history(instance):
+    """Get history records from instance and all hierarchical children, with status changes and notifications."""
+    from lab.models import Individual, Sample, Test, Analysis
+    from django.contrib.contenttypes.models import ContentType
+    
+    all_history = []
+    
+    # Helper function to get status changes from a history record
+    def get_status_change_for_record(record, previous_record):
+        current_status = getattr(record, 'status', None)
+        previous_status = getattr(previous_record, 'status', None) if previous_record else None
+        
+        current_status_id = getattr(current_status, 'id', None) if current_status else None
+        previous_status_id = getattr(previous_status, 'id', None) if previous_status else None
+        
+        return {
+            'new_status': current_status,
+            'previous_status': previous_status,
+            'status_changed': current_status_id != previous_status_id if current_status_id is not None else False,
+        }
+    
+    # Process the main instance
+    if hasattr(instance, 'history'):
+        history_records = list(instance.history.all().order_by('history_date'))
+        model_name = instance._meta.verbose_name
+        object_id = str(instance)
+        
+        for i, record in enumerate(history_records):
+            previous_record = history_records[i - 1] if i > 0 else None
+            status_info = get_status_change_for_record(record, previous_record)
+            
+            # Include if status changed, or if it's the first record (creation)
+            if i == 0 or status_info['status_changed']:
+                all_history.append({
+                    'type': 'status_change',
+                    'record': record,
+                    'history_date': record.history_date,
+                    'history_user': record.history_user,
+                    'model_name': model_name,
+                    'object_id': object_id,
+                    'object_type': type(instance).__name__,
+                    **status_info,
+                })
+    
+    # Process children based on instance type
+    if isinstance(instance, Individual):
+        # Individual -> Samples -> Tests -> Analyses
+        for sample in instance.samples.all():
+            if hasattr(sample, 'history'):
+                history_records = list(sample.history.all().order_by('history_date'))
+                for i, record in enumerate(history_records):
+                    previous_record = history_records[i - 1] if i > 0 else None
+                    status_info = get_status_change_for_record(record, previous_record)
+                    if i == 0 or status_info['status_changed']:
+                        all_history.append({
+                            'type': 'status_change',
+                            'record': record,
+                            'history_date': record.history_date,
+                            'history_user': record.history_user,
+                            'model_name': 'Sample',
+                            'object_id': str(sample),
+                            'object_type': 'Sample',
+                            **status_info,
+                        })
+                
+                # Tests for this sample
+                for test in sample.tests.all():
+                    if hasattr(test, 'history'):
+                        history_records = list(test.history.all().order_by('history_date'))
+                        for i, record in enumerate(history_records):
+                            previous_record = history_records[i - 1] if i > 0 else None
+                            status_info = get_status_change_for_record(record, previous_record)
+                            if i == 0 or status_info['status_changed']:
+                                all_history.append({
+                                    'type': 'status_change',
+                                    'record': record,
+                                    'history_date': record.history_date,
+                                    'history_user': record.history_user,
+                                    'model_name': 'Test',
+                                    'object_id': str(test),
+                                    'object_type': 'Test',
+                                    **status_info,
+                                })
+                    
+                    # Analyses for this test
+                    for analysis in test.analyses.all():
+                        if hasattr(analysis, 'history'):
+                            history_records = list(analysis.history.all().order_by('history_date'))
+                            for i, record in enumerate(history_records):
+                                previous_record = history_records[i - 1] if i > 0 else None
+                                status_info = get_status_change_for_record(record, previous_record)
+                                if i == 0 or status_info['status_changed']:
+                                    all_history.append({
+                                        'type': 'status_change',
+                                        'record': record,
+                                        'history_date': record.history_date,
+                                        'history_user': record.history_user,
+                                        'model_name': 'Analysis',
+                                        'object_id': str(analysis),
+                                        'object_type': 'Analysis',
+                                        **status_info,
+                                    })
+    
+    elif isinstance(instance, Sample):
+        # Sample -> Tests -> Analyses
+        for test in instance.tests.all():
+            if hasattr(test, 'history'):
+                history_records = list(test.history.all().order_by('history_date'))
+                for i, record in enumerate(history_records):
+                    previous_record = history_records[i - 1] if i > 0 else None
+                    status_info = get_status_change_for_record(record, previous_record)
+                    if i == 0 or status_info['status_changed']:
+                        all_history.append({
+                            'type': 'status_change',
+                            'record': record,
+                            'history_date': record.history_date,
+                            'history_user': record.history_user,
+                            'model_name': 'Test',
+                            'object_id': str(test),
+                            'object_type': 'Test',
+                            **status_info,
+                        })
+            
+            # Analyses for this test
+            for analysis in test.analyses.all():
+                if hasattr(analysis, 'history'):
+                    history_records = list(analysis.history.all().order_by('history_date'))
+                    for i, record in enumerate(history_records):
+                        previous_record = history_records[i - 1] if i > 0 else None
+                        status_info = get_status_change_for_record(record, previous_record)
+                        if i == 0 or status_info['status_changed']:
+                            all_history.append({
+                                'type': 'status_change',
+                                'record': record,
+                                'history_date': record.history_date,
+                                'history_user': record.history_user,
+                                'model_name': 'Analysis',
+                                'object_id': str(analysis),
+                                'object_type': 'Analysis',
+                                **status_info,
+                            })
+    
+    elif isinstance(instance, Test):
+        # Test -> Analyses
+        for analysis in instance.analyses.all():
+            if hasattr(analysis, 'history'):
+                history_records = list(analysis.history.all().order_by('history_date'))
+                for i, record in enumerate(history_records):
+                    previous_record = history_records[i - 1] if i > 0 else None
+                    status_info = get_status_change_for_record(record, previous_record)
+                    if i == 0 or status_info['status_changed']:
+                        all_history.append({
+                            'type': 'status_change',
+                            'record': record,
+                            'history_date': record.history_date,
+                            'history_user': record.history_user,
+                            'model_name': 'Analysis',
+                            'object_id': str(analysis),
+                            'object_type': 'Analysis',
+                            **status_info,
+                        })
+    
+    # Collect all related objects for notification lookup
+    related_objects = [instance]
+    
+    if isinstance(instance, Individual):
+        for sample in instance.samples.all():
+            related_objects.append(sample)
+            for test in sample.tests.all():
+                related_objects.append(test)
+                for analysis in test.analyses.all():
+                    related_objects.append(analysis)
+    elif isinstance(instance, Sample):
+        for test in instance.tests.all():
+            related_objects.append(test)
+            for analysis in test.analyses.all():
+                related_objects.append(analysis)
+    elif isinstance(instance, Test):
+        for analysis in instance.analyses.all():
+            related_objects.append(analysis)
+    
+    # Get notifications for all related objects
+    try:
+        from notifications.models import Notification
+        
+        # Get ContentTypes for all related objects
+        for obj in related_objects:
+            content_type = ContentType.objects.get_for_model(obj)
+            notifications = Notification.objects.filter(
+                target_content_type=content_type,
+                target_object_id=obj.pk
+            ).order_by('timestamp')
+            
+            for notification in notifications:
+                try:
+                    # Get the target object to determine model data
+                    target_obj = notification.target
+                except ObjectDoesNotExist:
+                    # Target was deleted; skip this orphaned notification
+                    continue
+
+                if target_obj is None:
+                    model_name = 'Unknown'
+                    object_id = f'ID: {notification.target_object_id}'
+                    object_type = 'Unknown'
+                else:
+                    model_name = target_obj._meta.verbose_name
+                    object_id = str(target_obj)
+                    object_type = type(target_obj).__name__
+                
+                all_history.append({
+                    'type': 'notification',
+                    'notification': notification,
+                    'history_date': notification.timestamp,
+                    'history_user': None,  # Notifications don't have a direct user field
+                    'model_name': model_name,
+                    'object_id': object_id,
+                    'object_type': object_type,
+                    'verb': notification.verb,
+                    'description': notification.description,
+                    'new_status': None,
+                    'previous_status': None,
+                })
+    except ImportError:
+        # notifications app not available
+        pass
+    except Exception:
+        # Handle any other errors gracefully
+        pass
+    
+    # Sort all history by date
+    all_history.sort(key=lambda x: x['history_date'])
+    
+    return all_history

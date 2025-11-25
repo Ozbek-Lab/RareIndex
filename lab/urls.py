@@ -26,8 +26,14 @@ urlpatterns = [
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
     path("get-type-buttons/", views.get_type_buttons, name="get_type_buttons"),
     path("get-stats-counts/", views.get_stats_counts, name="get_stats_counts"),
+    path("history-tab/", views.history_tab, name="history_tab"),
     path("project/add-individuals/", views.project_add_individuals, name="project_add_individuals"),
     path("project/remove-individuals/", views.project_remove_individuals, name="project_remove_individuals"),
+    path("individual/edit-hpo-terms/", views.edit_individual_hpo_terms, name="edit_individual_hpo_terms"),
+    path("individual/view-hpo-terms/", views.view_individual_hpo_terms, name="view_individual_hpo_terms"),
+    path("individual/update-hpo-terms/", views.update_individual_hpo_terms, name="update_individual_hpo_terms"),
+    path("individual/update-status/", views.update_individual_status, name="update_individual_status"),
+    path("update-status/", views.update_status, name="update_status"),
     
     # Natural language search routes
     path("nl-search/", views.nl_search, name="nl_search"),
