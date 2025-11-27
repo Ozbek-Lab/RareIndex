@@ -149,17 +149,18 @@ def task_complete(request, pk):
 def task_reopen(request, pk):
     """Reopen a Task by setting its status to 'Active' and return updated partial."""
     task = get_object_or_404(Task, pk=pk)
-    # Find an 'Active' status (case-insensitive)
-    active_status = Status.objects.filter(name__iexact="active").first()
-    if not active_status:
-        return HttpResponseBadRequest("No 'Active' status found in Status model.")
+    target_status = task.previous_status
+    if target_status is None:
+        target_status = Status.objects.filter(name__iexact="active").first()
+        if not target_status:
+            return HttpResponseBadRequest("No 'Active' status found in Status model.")
     # Update if different
-    if task.status_id != active_status.id:
-        task.status = active_status
+    if task.status_id != target_status.id:
+        task.status = target_status
         # Update related object's status if supported
         if hasattr(task.content_object, "update_status"):
             task.content_object.update_status(
-                active_status,
+                target_status,
                 request.user,
                 f"Status updated via task reopen: {task.title}",
             )

@@ -69,6 +69,14 @@ class Task(HistoryMixin, models.Model):
         max_length=10, choices=PRIORITY_CHOICES, default="medium"
     )
     status = models.ForeignKey("Status", on_delete=models.PROTECT)
+    previous_status = models.ForeignKey(
+        "Status",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks_previous_status",
+        help_text="Stores the task status before it was last completed",
+    )
     notes = GenericRelation("Note")
     history = HistoricalRecords()
 
@@ -86,6 +94,7 @@ class Task(HistoryMixin, models.Model):
             raise ValueError("No 'completed' status found in Status model.")
         if self.status == completed_status:
             return False
+        self.previous_status = self.status
         self.status = completed_status
         # Update the related object's status
         if hasattr(self.content_object, "update_status"):
