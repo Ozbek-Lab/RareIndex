@@ -271,12 +271,24 @@ class Command(BaseCommand):
         return analysis_types
 
     def _get_or_create_institution(self, user):
-        institution, _ = Institution.objects.get_or_create(
+        defaults = {
+            'created_by': user,
+            'latitude': 41.0082,   # Istanbul coordinates
+            'longitude': 28.9784,
+            'city': 'Istanbul',
+        }
+        institution, created = Institution.objects.get_or_create(
             name='Test Hospital',
-            defaults={
-                'created_by': user
-            }
+            defaults=defaults
         )
+        if not created:
+            updated_fields = []
+            for field in ('latitude', 'longitude', 'city'):
+                if getattr(institution, field) in (None, '') and defaults[field] is not None:
+                    setattr(institution, field, defaults[field])
+                    updated_fields.append(field)
+            if updated_fields:
+                institution.save(update_fields=updated_fields)
         return institution
 
     def _create_project(self, user, status):
