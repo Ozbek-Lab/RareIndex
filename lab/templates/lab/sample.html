@@ -390,25 +390,25 @@
         <!-- Tests tab -->
         <div x-show="activeTab === 'tests'" x-cloak>
           {% with tests=item.tests.all %}
-            {% if tests %}
-              <!-- Use existing test partials for consistent UI -->
-              <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-                <!-- Toolbar: Add Test button (left) + view toggle (right) -->
-                <div class="flex items-center justify-between">
-                  <div>
-                    {% has_model_perm user 'lab' 'Test' 'add' as can_add_test %}
-                    {% if can_add_test %}
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <!-- Toolbar: Add Test button (left) + view toggle (right when tests exist) -->
+              <div class="flex items-center justify-between">
+                <div>
+                  {% has_model_perm user 'lab' 'Test' 'add' as can_add_test %}
+                  {% if can_add_test %}
                     <button
                       hx-get="{% url 'lab:generic_create' %}?model_name=Test&app_label=lab&sample={{ item.id }}"
                       hx-target="#modal-root"
                       hx-swap="innerHTML"
                       class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600 transition-colors"
                     >
-                        <i class="fa-solid fa-vial"></i>
-                        <span>Add Test to Sample</span>
-                      </button>
-                    {% endif %}
-                  </div>
+                      <i class="fa-solid fa-vial"></i>
+                      <span>Add Test to Sample</span>
+                    </button>
+                  {% endif %}
+                </div>
+
+                {% if tests %}
                   <div
                     class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
                   >
@@ -450,8 +450,11 @@
                       >
                     </button>
                   </div>
-                </div>
+                {% endif %}
+              </div>
 
+              {% if tests %}
+                <!-- Use existing test partials for consistent UI -->
                 <!-- Card View with animated transition -->
                 <div
                   x-show="viewMode === 'cards'"
@@ -487,14 +490,14 @@
                     {% include "lab/test.html#table" %}
                   {% endwith %}
                 </div>
-              </div>
-            {% else %}
-              <div
-                class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-              >
-                No tests available for this sample.
-              </div>
-            {% endif %}
+              {% else %}
+                <div
+                  class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+                >
+                  No tests available for this sample.
+                </div>
+              {% endif %}
+            </div>
           {% endwith %}
         </div>
 
