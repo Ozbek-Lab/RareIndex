@@ -257,8 +257,23 @@
 {% partialdef detail %}
   <div
     id="project-detail"
-    x-data="{ activeTab: 'notes' }"
-    x-init="activeItem = 'detail-project-{{ item.pk }}'"
+    x-data="{ activeTab: '{{ activeTab|default:'notes' }}' }"
+    x-init="activeItem = 'detail-project-{{ item.pk }}'; (() => {
+      try {
+        const url = new URL(window.location.href);
+        const tabParam = url.searchParams.get('activeTab');
+        if (tabParam) {
+          activeTab = tabParam;
+        }
+        $watch('activeTab', value => {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('activeTab', value);
+          history.replaceState({}, '', currentUrl);
+        });
+      } catch (e) {
+        console.error('Failed to sync activeTab with URL', e);
+      }
+    })()"
     class="space-y-6"
   >
     <!-- Project card -->

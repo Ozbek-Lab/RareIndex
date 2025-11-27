@@ -154,7 +154,22 @@
   <div
     id="institution-detail"
     x-data="{ activeTab: '{{ activeTab|default:'overview' }}' }"
-    x-init="activeItem = 'detail-institution-{{ item.pk }}'"
+    x-init="activeItem = 'detail-institution-{{ item.pk }}'; (() => {
+      try {
+        const url = new URL(window.location.href);
+        const tabParam = url.searchParams.get('activeTab');
+        if (tabParam) {
+          activeTab = tabParam;
+        }
+        $watch('activeTab', value => {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('activeTab', value);
+          history.replaceState({}, '', currentUrl);
+        });
+      } catch (e) {
+        console.error('Failed to sync activeTab with URL', e);
+      }
+    })()"
     class="space-y-6"
   >
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-yellow-200 dark:border-yellow-600/40">
