@@ -16,6 +16,7 @@ from lab.models import (
     Analysis,
     IdentifierType,
     CrossIdentifier,
+    ImportFieldState,
 )
 from lab import history_notifications
 from simple_history.signals import post_create_historical_record
@@ -30,6 +31,9 @@ class Command(BaseCommand):
         self.stdout.write("Clearing database...")
 
         # Delete all data in reverse order of dependencies
+        self.stdout.write("Deleting ImportFieldState entries...")
+        ImportFieldState.objects.all().delete()
+
         self.stdout.write("Deleting Analysis entries...")
         Analysis.objects.all().delete()
 

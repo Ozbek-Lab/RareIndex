@@ -662,3 +662,22 @@ class Variant(HistoryMixin, models.Model):
     @property
     def franklin_link(self):
         return f"https://franklin.genoox.com/clinical-db/variant/snp/{self.chromosome}-{self.start}-{self.reference}-{self.alternate}-{self.assembly_version}"
+
+
+class ImportFieldState(models.Model):
+    """Track the last import timestamp/value for each field per object."""
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    field_name = models.CharField(max_length=100)
+    last_imported_at = models.DateTimeField()
+    last_imported_value = models.TextField(blank=True)
+    last_version = models.ForeignKey(
+        "reversion.Version", null=True, blank=True, on_delete=models.SET_NULL
+    )
+
+    class Meta:
+        unique_together = ("content_type", "object_id", "field_name")
+
+    def __str__(self):
+        return f"{self.content_type}:{self.object_id}:{self.field_name}"

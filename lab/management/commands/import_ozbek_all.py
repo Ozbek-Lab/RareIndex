@@ -3,33 +3,116 @@ import json
 import os
 import csv
 from datetime import datetime
-from django.core.management.base import BaseCommand
-from django.core.management import call_command
+from typing import Dict, List, Optional
+
+import reversion
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.core.management import call_command
+from django.core.management.base import BaseCommand
 from django.utils import timezone
+from reversion.models import Version
+from lab.importers.notes import ensure_note
+from lab.importers.tracking import (
+    evaluate_field_import,
+    record_field_import,
+    normalize_import_value,
+)
 from lab.models import (
-    Family,
-    Individual,
-    Sample,
-    Test,
-    Status,
-    SampleType,
-    Institution,
-    TestType,
     Analysis,
     AnalysisType,
-    Note,
-    IdentifierType,
     CrossIdentifier,
+    Family,
+    IdentifierType,
+    Individual,
+    Institution,
+    Note,
     Project,
-    Task
+    Sample,
+    SampleType,
+    Status,
+    Task,
+    Test,
+    TestType,
 )
 from ontologies.models import Term, Ontology
 import re
 from django.contrib.auth import get_user_model
+from django.utils.text import slugify
 
 User = get_user_model()
+
+
+class ModelFieldUpdater:
+    """Accumulate per-field update decisions before saving an object once."""
+
+    def __init__(self, obj, admin_user: Optional[User], import_started_at: datetime):
+        self.obj = obj
+        self.admin_user = admin_user
+        self.import_started_at = import_started_at
+        self._pending_fields: List[str] = []
+        self._tracker_updates: Dict[str, str] = {}
+
+    def queue(self, field_name: str, new_value, current_value=None):
+        decision = evaluate_field_import(
+            self.obj, field_name, new_value, current_value=current_value
+        )
+
+        if decision.should_update_db:
+            setattr(self.obj, field_name, new_value)
+            if field_name not in self._pending_fields:
+                self._pending_fields.append(field_name)
+
+        if decision.should_update_tracker:
+            self._tracker_updates[field_name] = decision.normalized_value
+
+        return decision.should_update_db
+
+    def commit(self):
+        version: Optional[Version] = None
+        if self._pending_fields:
+            with reversion.create_revision():
+                self.obj.save(update_fields=self._pending_fields)
+                reversion.set_comment("import_ozbek_all")
+                if self.admin_user:
+                    reversion.set_user(self.admin_user)
+                version = Version.objects.get_for_object(self.obj).first()
+
+        for field_name, normalized_value in self._tracker_updates.items():
+            record_field_import(
+                self.obj,
+                field_name,
+                normalized_value,
+                import_time=self.import_started_at,
+                version=version,
+            )
+
+        self._pending_fields = []
+        self._tracker_updates = {}
+
+
+def sync_m2m_field(obj, field_name: str, manager, new_ids, import_started_at):
+    """Update a many-to-many field with import tracking awareness."""
+
+    target_ids = list(new_ids or [])
+    current_ids = list(manager.values_list("id", flat=True))
+    decision = evaluate_field_import(
+        obj, field_name, target_ids, current_value=current_ids
+    )
+
+    if decision.should_update_db:
+        manager.set(target_ids)
+
+    if decision.should_update_tracker:
+        record_field_import(
+            obj,
+            field_name,
+            decision.normalized_value,
+            import_time=import_started_at,
+            version=None,
+        )
+
+    return decision
 
 
 class Command(BaseCommand):
@@ -50,13 +133,25 @@ class Command(BaseCommand):
 
         # Handle string dates
         if isinstance(date_str, str):
-            formats = ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y']
+            formats = ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%d.%m.%Y']
             for fmt in formats:
                 try:
                     return datetime.strptime(date_str.strip(), fmt).date()
                 except ValueError:
                     continue
         return None
+
+    def _parse_ddmmyyyy(self, date_str):
+        """Parse strict DD.MM.YYYY strings."""
+        if not date_str or not isinstance(date_str, str):
+            return None
+        cleaned = date_str.strip()
+        if not re.match(r"^\d{2}\.\d{2}\.\d{4}$", cleaned):
+            return None
+        try:
+            return datetime.strptime(cleaned, "%d.%m.%Y").date()
+        except ValueError:
+            return None
 
     def _get_family_id(self, lab_id):
         """Extract family ID from lab_id"""
@@ -90,15 +185,15 @@ class Command(BaseCommand):
         if not name:
             return None
             
-        institution = Institution.objects.filter(name=name).first()
-        if institution:
-            return institution
-            
-        institution = Institution.objects.create(
+        institution, created = Institution.objects.get_or_create(
             name=name,
-            contact=contact,
-            created_by=admin_user
+            defaults={
+                'contact': contact or '',
+                'created_by': admin_user
+            }
         )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f'Created institution: {name}'))
         return institution
 
     def _get_or_create_sample_type(self, name, admin_user):
@@ -194,14 +289,13 @@ class Command(BaseCommand):
             if not line:
                 continue
             # Create the note with the full line content
-            try:
-                note = Note.objects.create(
-                    content=line,
-                    user=admin_user,
-                    content_type=ct,
-                    object_id=getattr(target_obj, 'pk', None) or getattr(target_obj, 'id', None),
-                )
-            except Exception:
+            note = ensure_note(
+                target_obj=target_obj,
+                content=line,
+                user=admin_user,
+                log_warning=self._log_warning,
+            )
+            if not note:
                 continue
 
             # If line starts with a date, set the note's earliest history_date
@@ -219,6 +313,9 @@ class Command(BaseCommand):
                 except Exception:
                     # If anything goes wrong, skip adjusting history date
                     pass
+
+    def _log_warning(self, message: str):
+        self.stdout.write(self.style.WARNING(message))
 
     def analysis_add_arguments(self, parser):
         parser.add_argument('file_path', type=str, help='Path to the TSV file')
@@ -295,8 +392,705 @@ class Command(BaseCommand):
         parts = [p for p in (full_name or '').split() if p]
         return ''.join(part[0].upper() for part in parts)
 
+    def _record_field_values(self, obj, field_names, version=None):
+        """Record normalized field values for tracking."""
+        for field_name in field_names:
+            record_field_import(
+                obj,
+                field_name,
+                normalize_import_value(getattr(obj, field_name, None)),
+                import_time=self.import_started_at,
+                version=version,
+            )
+
+    def _append_institution_contact_notes(self, institutions, contact_info, admin_user):
+        if not contact_info:
+            return
+        for institution in institutions:
+            ensure_note(
+                target_obj=institution,
+                content=f"Klinisyen & İletişim: {contact_info}",
+                user=admin_user,
+                log_warning=self._log_warning,
+            )
+
+    def _find_header_column(self, worksheet, column_name, *, search_rows=5):
+        """Return (header_row_index, column_index) for a column name."""
+
+        for idx, row in enumerate(
+            worksheet.iter_rows(min_row=1, max_row=search_rows, values_only=True),
+            start=1,
+        ):
+            values = list(row)
+            if not any(values):
+                continue
+            for col_idx, cell_value in enumerate(values):
+                if isinstance(cell_value, str) and cell_value.strip() == column_name:
+                    return idx, col_idx
+        return None, None
+
+    def _get_individual_by_lab_id(self, lab_id):
+        if not lab_id:
+            return None
+        identifier = str(lab_id).strip()
+        if not identifier:
+            return None
+        return Individual.objects.filter(cross_ids__id_value=identifier).first()
+
+    def _ensure_project(self, name, admin_user):
+        project, _ = Project.objects.get_or_create(
+            name=name,
+            defaults={
+                'description': '',
+                'created_by': admin_user,
+                'status': getattr(self, 'imported_project_status', None) or Status.objects.first(),
+                'priority': 'medium'
+            }
+        )
+        return project
+
+    def _add_individual_to_project(self, project_name, individual, admin_user):
+        project = self._ensure_project(project_name, admin_user)
+        if project.individuals.filter(pk=individual.pk).exists():
+            self.stdout.write(f'{individual.lab_id} already in project {project_name}')
+            return False
+        project.individuals.add(individual)
+        self.stdout.write(self.style.SUCCESS(f'Added {individual.lab_id} to project {project_name}'))
+        return True
+
+    def _process_project_sheet(self, wb, sheet_name, id_column, project_name, admin_user):
+        if sheet_name not in wb.sheetnames:
+            self.stdout.write(f'Sheet "{sheet_name}" not found; skipping project import.')
+            return
+        ws = wb[sheet_name]
+        header_row_idx, id_col_idx = self._find_header_column(ws, id_column)
+        if id_col_idx is None:
+            self.stdout.write(f'Column "{id_column}" not found in sheet "{sheet_name}". Skipping.')
+            return
+        processed = missing = 0
+        for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
+            if all(cell is None for cell in row):
+                continue
+            identifier = row[id_col_idx] if len(row) > id_col_idx else None
+            if not identifier:
+                continue
+            if isinstance(identifier, (int, float)):
+                if float(identifier).is_integer():
+                    identifier = str(int(identifier))
+                else:
+                    identifier = str(identifier)
+            identifier = str(identifier).strip()
+            if not identifier or not any(ch.isalpha() for ch in identifier):
+                continue
+            individual = self._get_individual_by_lab_id(identifier)
+            if not individual:
+                missing += 1
+                self._log_warning(f'{sheet_name}: individual not found for ID {identifier}')
+                continue
+            self._add_individual_to_project(project_name, individual, admin_user)
+            processed += 1
+        self.stdout.write(self.style.SUCCESS(f'{sheet_name}: processed {processed} rows, missing {missing}'))
+
+    def _process_wgs_tuseb_sheet(self, wb, admin_user):
+        sheet_name = 'WGS_TÜSEB'
+        if sheet_name not in wb.sheetnames:
+            self.stdout.write(f'Sheet "{sheet_name}" not found; skipping WGS_TÜSEB import.')
+            return
+
+        ws = wb[sheet_name]
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        headers = [h for h in headers if h is not None]
+
+        performer_user, _ = User.objects.get_or_create(
+            username='tuseb',
+            defaults={
+                'first_name': 'TÜSEB',
+                'email': 'tuseb@example.com',
+            },
+        )
+        test_type = self._get_or_create_test_type('WGS_TÜSEB', admin_user)
+        processed = missing = 0
+
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if all(cell is None for cell in row):
+                continue
+            row = row[:len(headers)]
+            row_dict = dict(zip(headers, row))
+            lab_id = row_dict.get('Özbek Lab. ID')
+            if not lab_id:
+                continue
+            individual = self._get_individual_by_lab_id(lab_id)
+            if not individual:
+                missing += 1
+                self._log_warning(f'WGS_TÜSEB: individual not found for {lab_id}')
+                continue
+
+            self._add_individual_to_project('WGS_TÜSEB', individual, admin_user)
+            sample = self._ensure_available_placeholder_sample(individual, admin_user)
+            test = (
+                Test.objects.filter(sample__individual=individual, test_type=test_type)
+                .order_by('id')
+                .first()
+            )
+            created = False
+            if not test:
+                with reversion.create_revision():
+                    test = Test.objects.create(
+                        sample=sample,
+                        test_type=test_type,
+                        status=self.test_status_pending,
+                        service_send_date=self._parse_date(row_dict.get('Dizilemeye Gönderilme Tarihi')),
+                        data_receipt_date=self._parse_date(row_dict.get('Data Gelme Tarihi')),
+                        performed_by=performer_user,
+                        created_by=admin_user,
+                    )
+                    reversion.set_comment('import_ozbek_all:wgs_tuseb_test')
+                    if admin_user:
+                        reversion.set_user(admin_user)
+                self._record_field_values(
+                    test,
+                    ['status', 'service_send_date', 'data_receipt_date', 'performed_by'],
+                    version=Version.objects.get_for_object(test).first(),
+                )
+                created = True
+            else:
+                if not test.sample_id:
+                    test.sample = sample
+                    test.save(update_fields=['sample'])
+
+            updater = ModelFieldUpdater(test, admin_user, self.import_started_at)
+            send_date = self._parse_date(row_dict.get('Dizilemeye Gönderilme Tarihi'))
+            if send_date:
+                updater.queue('service_send_date', send_date)
+            receipt_date = self._parse_date(row_dict.get('Data Gelme Tarihi'))
+            if receipt_date:
+                updater.queue('data_receipt_date', receipt_date)
+            updater.queue('performed_by', performer_user)
+            status_name = row_dict.get('Data Geliş Durumu')
+            if status_name:
+                status_obj = self._ensure_status_for_model(
+                    status_name,
+                    ContentType.objects.get_for_model(Test),
+                    admin_user,
+                )
+                if status_obj:
+                    updater.queue('status', status_obj)
+            updater.commit()
+
+            data_notes = row_dict.get('Data Notları')
+            if data_notes:
+                self._parse_and_add_notes(data_notes, test, admin_user)
+
+            processed += 1
+
+        self.stdout.write(self.style.SUCCESS(f'WGS_TÜSEB: processed {processed} rows, missing {missing}'))
+
+    def _ensure_available_placeholder_sample(self, individual, admin_user):
+        placeholder_type = self._get_or_create_sample_type('Placeholder', admin_user)
+        sample = Sample.objects.filter(individual=individual, sample_type=placeholder_type).order_by('id').first()
+        if not sample:
+            with reversion.create_revision():
+                sample = Sample.objects.create(
+                    individual=individual,
+                    sample_type=placeholder_type,
+                    status=self.sample_status_available,
+                    receipt_date=None,
+                    isolation_by=admin_user,
+                    created_by=admin_user,
+                )
+                reversion.set_comment('import_ozbek_all:create_placeholder_sample')
+                if admin_user:
+                    reversion.set_user(admin_user)
+            self._record_field_values(
+                sample,
+                ['status'],
+                version=Version.objects.get_for_object(sample).first(),
+            )
+            return sample
+        updater = ModelFieldUpdater(sample, admin_user, self.import_started_at)
+        updater.queue('status', self.sample_status_available)
+        updater.commit()
+        return sample
+
+    def _get_or_create_institution_user(self, name, admin_user):
+        if not name:
+            return admin_user
+        base_slug = slugify(name) or "institution"
+        slug = base_slug
+        counter = 1
+        while User.objects.filter(username=slug).exists():
+            slug = f"{base_slug}_{counter}"
+            counter += 1
+        user, created = User.objects.get_or_create(
+            username=slug,
+            defaults={
+                "email": f"{slug}@institution.local",
+                "first_name": name[:30],
+                "last_name": "",
+            },
+        )
+        return user
+
+    def _process_rna_seq_sheet(self, wb, admin_user):
+        sheet_name = 'RNA SEQ'
+        if sheet_name not in wb.sheetnames:
+            self.stdout.write(f'Sheet "{sheet_name}" not found; skipping RNA Seq import.')
+            return
+        ws = wb[sheet_name]
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        headers = [h for h in headers if h is not None]
+        processed = missing = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if all(cell is None for cell in row):
+                continue
+            row = row[:len(headers)]
+            row_dict = dict(zip(headers, row))
+            lab_id = row_dict.get('Özbek Lab. ID')
+            if not lab_id:
+                continue
+            individual = self._get_individual_by_lab_id(lab_id)
+            if not individual:
+                missing += 1
+                self._log_warning(f'RNA SEQ: individual not found for {lab_id}')
+                continue
+            self._add_individual_to_project('RNA Seq', individual, admin_user)
+            sample = self._ensure_available_placeholder_sample(individual, admin_user)
+            test, _ = self._ensure_test_for_analysis(individual, 'RNA Seq', admin_user)
+            if not test:
+                continue
+            if not test.sample_id:
+                test.sample = sample
+                test.save(update_fields=['sample'])
+            sequencing_date = row_dict.get('Dizilemeye Gönderim Tarihi')
+            upload_status = row_dict.get('Data Yüklenme Tarihi (G&More)/Status')
+            if sequencing_date:
+                ensure_note(
+                    target_obj=test,
+                    content=f"Dizilemeye Gönderim Tarihi: {sequencing_date}",
+                    user=admin_user,
+                    log_warning=self._log_warning,
+                )
+            if upload_status:
+                ensure_note(
+                    target_obj=test,
+                    content=f"Data Yüklenme Tarihi (G&More)/Status: {upload_status}",
+                    user=admin_user,
+                    log_warning=self._log_warning,
+                )
+            processed += 1
+        self.stdout.write(self.style.SUCCESS(f'RNA SEQ: processed {processed} rows, missing {missing}'))
+
+    def _process_sanger_sheet(self, wb, admin_user):
+        sheet_name = 'Sanger Konfirmasyonları'
+        if sheet_name not in wb.sheetnames:
+            self.stdout.write(f'Sheet "{sheet_name}" not found; skipping Sanger confirmations.')
+            return
+        ws = wb[sheet_name]
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        headers = [h for h in headers if h is not None]
+        test_type = self._get_or_create_test_type('Sanger Confirmation', admin_user)
+        processed = missing = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if all(cell is None for cell in row):
+                continue
+            row = row[:len(headers)]
+            row_dict = dict(zip(headers, row))
+            lab_id = row_dict.get('Özbek Lab. ID')
+            if not lab_id:
+                continue
+            individual = self._get_individual_by_lab_id(lab_id)
+            if not individual:
+                missing += 1
+                self._log_warning(f'Sanger: individual not found for {lab_id}')
+                continue
+            sample = self._ensure_available_placeholder_sample(individual, admin_user)
+            with reversion.create_revision():
+                test = Test.objects.create(
+                    sample=sample,
+                    test_type=test_type,
+                    status=self.test_status_completed,
+                    created_by=admin_user,
+                )
+                reversion.set_comment('import_ozbek_all:sanger_test')
+                if admin_user:
+                    reversion.set_user(admin_user)
+            with reversion.create_revision():
+                analysis = Analysis.objects.create(
+                    type=self.analysis_type_sanger,
+                    status=self.analysis_status_completed,
+                    performed_date=timezone.now().date(),
+                    performed_by=admin_user,
+                    test=test,
+                    created_by=admin_user,
+                )
+                reversion.set_comment('import_ozbek_all:sanger_analysis')
+                if admin_user:
+                    reversion.set_user(admin_user)
+            chrom_pos = row_dict.get('Chromosomal Position')
+            sanger_status = row_dict.get('Sanger Conf. Status')
+            if chrom_pos:
+                ensure_note(
+                    target_obj=analysis,
+                    content=f"Chromosomal Position: {chrom_pos}",
+                    user=admin_user,
+                    log_warning=self._log_warning,
+                )
+            if sanger_status:
+                ensure_note(
+                    target_obj=analysis,
+                    content=f"Sanger Confirmation Status: {sanger_status}",
+                    user=admin_user,
+                    log_warning=self._log_warning,
+                )
+            processed += 1
+        self.stdout.write(self.style.SUCCESS(f'Sanger confirmations: processed {processed} rows, missing {missing}'))
+
+    def _process_gennext_sheet(self, wb, admin_user):
+        sheet_name = 'Gennext Analiz Listesi'
+        if sheet_name not in wb.sheetnames:
+            self.stdout.write(f'Sheet "{sheet_name}" not found; skipping Gennext analyses.')
+            return
+        ws = wb[sheet_name]
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        headers = [h for h in headers if h is not None]
+        processed = missing = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if all(cell is None for cell in row):
+                continue
+            row = row[:len(headers)]
+            row_dict = dict(zip(headers, row))
+            rb_id = row_dict.get('Gennext RBID')
+            if not rb_id:
+                continue
+            individual = self._get_individual_by_lab_id(rb_id)
+            if not individual:
+                missing += 1
+                self._log_warning(f'Gennext: individual not found for {rb_id}')
+                continue
+            test = self._get_existing_test_for_analysis(individual)
+            if not test:
+                self._log_warning(f'Gennext: no existing test found for {rb_id}, skipping analysis creation.')
+                continue
+            performed_date = self._parse_date(row_dict.get('Gennext Date')) or timezone.now().date()
+            existing_analysis = (
+                Analysis.objects.filter(
+                    test=test,
+                    type=self.analysis_type_gennext,
+                    performed_date=performed_date,
+                )
+                .order_by('id')
+                .first()
+            )
+            if existing_analysis:
+                analysis = existing_analysis
+            else:
+                with reversion.create_revision():
+                    analysis = Analysis.objects.create(
+                        type=self.analysis_type_gennext,
+                        status=self.analysis_status_in_progress,
+                        performed_date=performed_date,
+                        performed_by=admin_user,
+                        test=test,
+                        created_by=admin_user,
+                    )
+                    reversion.set_comment('import_ozbek_all:gennext_analysis')
+                    if admin_user:
+                        reversion.set_user(admin_user)
+            gennext_hash = row_dict.get('Gennext Hash')
+            if gennext_hash:
+                ensure_note(
+                    target_obj=analysis,
+                    content=f"Gennext Hash: {gennext_hash}",
+                    user=admin_user,
+                    log_warning=self._log_warning,
+                )
+            processed += 1
+        self.stdout.write(self.style.SUCCESS(f'Gennext analyses: processed {processed} rows, missing {missing}'))
+
+    def _process_rarepipe_sheet(self, wb, admin_user):
+        sheet_name = 'RarePipe Analiz Listesi'
+        if sheet_name not in wb.sheetnames:
+            self.stdout.write(f'Sheet "{sheet_name}" not found; skipping RarePipe analyses.')
+            return
+        ws = wb[sheet_name]
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        headers = [h for h in headers if h is not None]
+        processed = missing = mismatch = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if all(cell is None for cell in row):
+                continue
+            row = row[:len(headers)]
+            row_dict = dict(zip(headers, row))
+            rb_id = row_dict.get('RarePipe RBID')
+            if not rb_id:
+                continue
+            rarepipe_value = row_dict.get('RarePipe')
+            individual = self._get_individual_by_lab_id(rb_id)
+            if not individual:
+                missing += 1
+                self._log_warning(f'RarePipe: individual not found for {rb_id}')
+                continue
+            if individual.lab_id and str(individual.lab_id).strip() != str(rb_id).strip():
+                mismatch += 1
+                self._log_warning(f'RarePipe: RBID mismatch for {rb_id} vs {individual.lab_id}')
+            test = self._get_existing_test_for_analysis(individual)
+            if not test:
+                self._log_warning(
+                    f'RarePipe: no existing test found for {rb_id}, skipping analysis creation.'
+                )
+                continue
+            existing_analysis = (
+                Analysis.objects.filter(
+                    test=test,
+                    type=self.analysis_type_rarepipe,
+                )
+                .order_by('id')
+                .first()
+            )
+            if existing_analysis:
+                analysis = existing_analysis
+            else:
+                with reversion.create_revision():
+                    analysis = Analysis.objects.create(
+                        type=self.analysis_type_rarepipe,
+                        status=self.analysis_status_in_progress,
+                        performed_date=timezone.now().date(),
+                        performed_by=admin_user,
+                        test=test,
+                        created_by=admin_user,
+                    )
+                    reversion.set_comment('import_ozbek_all:rarepipe_analysis')
+                    if admin_user:
+                        reversion.set_user(admin_user)
+            if rarepipe_value:
+                ensure_note(
+                    target_obj=analysis,
+                    content=f"RarePipe: {rarepipe_value}",
+                    user=admin_user,
+                    log_warning=self._log_warning,
+                )
+            processed += 1
+        self.stdout.write(self.style.SUCCESS(f'RarePipe analyses: processed {processed} rows, missing {missing}, mismatches {mismatch}'))
+
+    def _process_genomize_sheet(self, wb, admin_user):
+        primary_sheet = 'WGS_RB-dragen'
+        legacy_sheet = 'WGS_RB / dragen'
+        target_sheet = None
+        if primary_sheet in wb.sheetnames:
+            target_sheet = primary_sheet
+        elif legacy_sheet in wb.sheetnames:
+            target_sheet = legacy_sheet
+            self._log_warning('Using legacy sheet name "WGS_RB / dragen"; please rename to "WGS_RB-dragen".')
+        else:
+            self.stdout.write(f'Sheet "{primary_sheet}" not found; skipping Genomize analyses.')
+            return
+        ws = wb[target_sheet]
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        headers = [h for h in headers if h is not None]
+        processed = missing = skipped = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if all(cell is None for cell in row):
+                continue
+            row = row[:len(headers)]
+            row_dict = dict(zip(headers, row))
+            lab_id = row_dict.get('Özbek Lab. ID')
+            genomize_status = row_dict.get('GENOMİZE')
+            if not lab_id or genomize_status is None:
+                continue
+            status_str = str(genomize_status).strip().upper()
+            if status_str != 'YÜKLÜ':
+                skipped += 1
+                continue
+            individual = self._get_individual_by_lab_id(lab_id)
+            if not individual:
+                missing += 1
+                self._log_warning(f'Genomize: individual not found for {lab_id}')
+                continue
+            test = self._get_existing_test_for_analysis(individual)
+            if not test:
+                self._log_warning(f'Genomize: no existing test found for {lab_id}, skipping analysis creation.')
+                continue
+            with reversion.create_revision():
+                Analysis.objects.create(
+                    type=self.analysis_type_genomize,
+                    status=self.analysis_status_completed,
+                    performed_date=timezone.now().date(),
+                    performed_by=admin_user,
+                    test=test,
+                    created_by=admin_user,
+                )
+                reversion.set_comment('import_ozbek_all:genomize_analysis')
+                if admin_user:
+                    reversion.set_user(admin_user)
+            processed += 1
+        self.stdout.write(self.style.SUCCESS(f'Genomize analyses: processed {processed}, missing {missing}, skipped {skipped}'))
+
+    def _split_comma_field(self, raw_value):
+        if not raw_value:
+            return []
+        return [piece.strip() for piece in str(raw_value).split(',') if piece and str(piece).strip()]
+
+    def _choose_sample_for_test(self, individual, samples_touched, admin_user):
+        if samples_touched:
+            return samples_touched[0]
+        sample = individual.samples.order_by('id').first()
+        if sample:
+            return sample
+        return self._get_or_create_placeholder_sample(individual, admin_user)
+
+    def _ensure_samples_from_row(self, individual, row_dict, admin_user):
+        sample_types_raw = row_dict.get('Örnek Tipi')
+        sample_type_names = self._split_comma_field(sample_types_raw)
+        touched = []
+        receipt_date = self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl'))
+
+        for sample_type_name in sample_type_names:
+            sample_type = self._get_or_create_sample_type(sample_type_name, admin_user)
+            if not sample_type:
+                continue
+
+            sample_qs = Sample.objects.filter(individual=individual, sample_type=sample_type).order_by('id')
+            sample = sample_qs.first()
+            if not sample:
+                status = self.sample_status_available if receipt_date else self.sample_status_pending_blood
+                with reversion.create_revision():
+                    sample = Sample.objects.create(
+                        individual=individual,
+                        sample_type=sample_type,
+                        status=status,
+                        receipt_date=receipt_date,
+                        isolation_by=admin_user,
+                        created_by=admin_user,
+                    )
+                    reversion.set_comment('import_ozbek_all:create_sample')
+                    if admin_user:
+                        reversion.set_user(admin_user)
+                self._record_field_values(
+                    sample,
+                    ['status', 'receipt_date'],
+                    version=Version.objects.get_for_object(sample).first(),
+                )
+            updater = ModelFieldUpdater(sample, admin_user, self.import_started_at)
+            updater.queue('receipt_date', receipt_date)
+            new_status = self.sample_status_available if receipt_date else self.sample_status_pending_blood
+            updater.queue('status', new_status)
+            updater.commit()
+            touched.append(sample)
+
+            izolasyon = row_dict.get('İzolasyonu yapan')
+            if izolasyon:
+                ensure_note(
+                    target_obj=sample,
+                    content=f"İzolasyonu yapan: {izolasyon}",
+                    user=admin_user,
+                    log_warning=self._log_warning,
+                )
+
+        sample_notes = row_dict.get('Örnek Notları')
+        if sample_notes:
+            for sample in touched:
+                self._parse_and_add_notes(sample_notes, sample, admin_user)
+
+        return touched
+
+    def _ensure_status_for_model(self, status_name, content_type, admin_user, default_color='gray'):
+        if not status_name:
+            return None
+        return self._get_or_create_status(
+            status_name,
+            '',
+            default_color,
+            admin_user,
+            content_type,
+        )
+
+    def _ensure_test_for_analysis(self, individual, test_type_name, admin_user):
+        test_type = self._get_or_create_test_type(test_type_name, admin_user)
+        if not test_type:
+            return None, False
+        sample = individual.samples.order_by('id').first()
+        if not sample:
+            sample = self._get_or_create_placeholder_sample(individual, admin_user)
+        test = Test.objects.filter(test_type=test_type, sample__individual=individual).order_by('id').first()
+        created = False
+        if not test:
+            with reversion.create_revision():
+                test = Test.objects.create(
+                    sample=sample,
+                    test_type=test_type,
+                    status=self.test_status_pending,
+                    created_by=admin_user,
+                )
+                reversion.set_comment('import_ozbek_all:create_analysis_test')
+                if admin_user:
+                    reversion.set_user(admin_user)
+            self._record_field_values(
+                test,
+                ['status'],
+                version=Version.objects.get_for_object(test).first(),
+            )
+            created = True
+        return test, created
+
+    def _get_existing_test_for_analysis(self, individual):
+        """Return the earliest available test for an individual, if any."""
+
+        return (
+            Test.objects.filter(sample__individual=individual)
+            .order_by('id')
+            .first()
+        )
+
+    def _ensure_tests_from_row(self, individual, row_dict, admin_user, samples_touched):
+        test_names = self._split_comma_field(row_dict.get('Çalışılan Test Adı'))
+        tests = []
+        default_sample = None
+        if test_names:
+            default_sample = self._choose_sample_for_test(individual, samples_touched, admin_user)
+
+        for test_name in test_names:
+            test_type = self._get_or_create_test_type(test_name, admin_user)
+            if not test_type:
+                continue
+
+            test_qs = Test.objects.filter(sample__individual=individual, test_type=test_type).order_by('id')
+            test = test_qs.first()
+            created = False
+            if not test:
+                with reversion.create_revision():
+                    test = Test.objects.create(
+                        sample=default_sample,
+                        test_type=test_type,
+                        status=self.test_status_in_progress,
+                        created_by=admin_user,
+                    )
+                    reversion.set_comment('import_ozbek_all:create_test')
+                    if admin_user:
+                        reversion.set_user(admin_user)
+                self._record_field_values(
+                    test,
+                    ['status', 'data_receipt_date'],
+                    version=Version.objects.get_for_object(test).first(),
+                )
+                created = True
+
+            updater = ModelFieldUpdater(test, admin_user, self.import_started_at)
+            updater.queue('status', self.test_status_in_progress)
+            updater.commit()
+
+            tests.append(
+                {
+                    'name': test_name,
+                    'test': test,
+                    'created': created,
+                }
+            )
+
+        return tests
+
     def handle(self, *args, **options):
 
+        self.import_started_at = timezone.now()
         call_command('create_ozbek_users') # Create groups and Ozbek users
 
         file_path = options['file_path']
@@ -341,14 +1135,21 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f'Individual status ensured: {status_name}')
 
+        individual_ct = ContentType.objects.get(app_label='lab', model='individual')
+        self.registered_individual_status = Status.objects.get(
+            name='Registered',
+            content_type=individual_ct,
+        )
+
         # Sample statuses
+        sample_ct = ContentType.objects.get(app_label='lab', model='sample')
         sample_statuses = {
             'placeholder': self._get_or_create_status(
                 'Not Available',
                 'A placeholder sample for tests performed off-center',
                 'gray',
                 admin_user,
-                ContentType.objects.get(app_label='lab', model='sample'),
+                sample_ct,
                 icon='fa-ban'
             ),
             'pending_blood_recovery': self._get_or_create_status(
@@ -356,7 +1157,7 @@ class Command(BaseCommand):
                 'Awaiting blood draw',
                 'red',
                 admin_user,
-                ContentType.objects.get(app_label='lab', model='sample'),
+                sample_ct,
                 icon='fa-droplet'
             ),
             'pending_isolation': self._get_or_create_status(
@@ -364,7 +1165,7 @@ class Command(BaseCommand):
                 'Awaiting isolation of sample',
                 'yellow',
                 admin_user,
-                ContentType.objects.get(app_label='lab', model='sample'),
+                sample_ct,
                 icon='fa-vials'
             ),
             'available': self._get_or_create_status(
@@ -372,10 +1173,13 @@ class Command(BaseCommand):
                 'Available for tests',
                 'green',
                 admin_user,
-                ContentType.objects.get(app_label='lab', model='sample'),
+                sample_ct,
                 icon='fa-circle-check'
             ),
         }
+        self.sample_status_available = sample_statuses['available']
+        self.sample_status_pending_blood = sample_statuses['pending_blood_recovery']
+        self.sample_status_placeholder = sample_statuses['placeholder']
 
         # Project statuses
         imported_project_status = self._get_or_create_status(
@@ -405,59 +1209,88 @@ class Command(BaseCommand):
             icon='fa-flag-checkered'
         )
 
-        # Analysis statuses
-        completed_status = self._get_or_create_status(
+        # Analysis statuses and types
+        analysis_ct = ContentType.objects.get_for_model(Analysis)
+        self.analysis_status_completed = self._get_or_create_status(
             'Completed',
             'Analysis completed',
             'green',
             admin_user,
-            ContentType.objects.get_for_model(Analysis),
+            analysis_ct,
             icon='fa-circle-check'
         )
 
-        self._get_or_create_status(
+        self.analysis_status_in_progress = self._get_or_create_status(
             'In Progress',
             'Analysis is in progress',
             'yellow',
             admin_user,
-            ContentType.objects.get_for_model(Analysis),
+            analysis_ct,
             icon='fa-spinner'
         )
 
-        self._get_or_create_status(
+        self.analysis_status_pending = self._get_or_create_status(
             'Pending Data',
             'Analysis is pending data',
             'red',
             admin_user,
-            ContentType.objects.get_for_model(Analysis),
+            analysis_ct,
             icon='fa-hourglass-half'
         )
 
+        # Analysis types used across sheets
+        self.analysis_type_variant = self._get_or_create_analysis_type(
+            'Variant Analysis',
+            '',
+            admin_user
+        )
+        self.analysis_type_gennext = self._get_or_create_analysis_type(
+            'Gennext',
+            '',
+            admin_user
+        )
+        self.analysis_type_sanger = self._get_or_create_analysis_type(
+            'Sanger Confirmation',
+            '',
+            admin_user
+        )
+        self.analysis_type_rarepipe = self._get_or_create_analysis_type(
+            'RarePipe',
+            '',
+            admin_user
+        )
+        self.analysis_type_genomize = self._get_or_create_analysis_type(
+            'Genomize',
+            '',
+            admin_user
+        )
+
         # Test statuses
-        self._get_or_create_status(
+        test_ct = ContentType.objects.get_for_model(Test)
+        self.test_status_completed = self._get_or_create_status(
             'Completed',
             'Test completed',
             'green',
             admin_user,
-            ContentType.objects.get_for_model(Test),
+            test_ct,
             icon='fa-circle-check'
         )
 
-        self._get_or_create_status(
+        self.test_status_in_progress = self._get_or_create_status(
             'In Progress',
             'Test is in progress',
             'yellow',
             admin_user,
-            ContentType.objects.get_for_model(Test),
+            test_ct,
             icon='fa-spinner'
         )
 
-        self._get_or_create_status(
+        self.test_status_pending = self._get_or_create_status(
             'Pending',
             'Test is pending',
             'red',
             admin_user,
-            ContentType.objects.get_for_model(Test),
+            test_ct,
             icon='fa-clock'
         )
 
@@ -567,9 +1400,15 @@ class Command(BaseCommand):
                     if official_name_val:
                         coords_map[name]['official_name'] = official_name_val.strip()
             self._institution_info = coords_map
+            self._institution_coords = {
+                name: data.get('coords')
+                for name, data in coords_map.items()
+                if data.get('coords')
+            }
         except KeyError:
             # Sheet not present; proceed without coordinates
             self._institution_info = {}
+            self._institution_coords = {}
             print("[Map Import] ERROR: coordinates sheet 'Gönderen Kurum Harita' not found; proceeding without coordinates")
         # --- OZBEK LAB SHEET ---
         ws_lab = wb[ozbek_lab_sheet]
@@ -683,21 +1522,53 @@ class Command(BaseCommand):
                                 tc_identity_val = int(tc_identity_val)
                             except (TypeError, ValueError):
                                 tc_identity_val = None
-                    individual = Individual.objects.create(
-                        full_name=full_name,
-                        family=families[family_id],
-                        birth_date=self._parse_date(row_dict.get('Doğum Tarihi')),
-                        icd11_code='',
-                        status=Status.objects.get(name='Registered', content_type=ContentType.objects.get(app_label='lab', model='individual')),
-                        created_by=admin_user,
-                        diagnosis='',
-                        diagnosis_date=None,
-                        council_date=None,
-                        is_index=is_index,
-                        tc_identity=tc_identity_val
+                    version = None
+                    with reversion.create_revision():
+                        individual = Individual.objects.create(
+                            full_name=full_name,
+                            family=families[family_id],
+                            birth_date=self._parse_date(row_dict.get('Doğum Tarihi')),
+                            icd11_code=row_dict.get('ICD11') or '',
+                            status=self.registered_individual_status,
+                            created_by=admin_user,
+                            diagnosis='',
+                            diagnosis_date=None,
+                            council_date=self._parse_ddmmyyyy(row_dict.get('Konsey Tarihi')),
+                            is_index=is_index,
+                            tc_identity=tc_identity_val
+                        )
+                        reversion.set_comment('import_ozbek_all:create_individual')
+                        if admin_user:
+                            reversion.set_user(admin_user)
+                        version = Version.objects.get_for_object(individual).first()
+                    self._record_field_values(
+                        individual,
+                        [
+                            'full_name',
+                            'family',
+                            'birth_date',
+                            'icd11_code',
+                            'status',
+                            'council_date',
+                            'is_index',
+                            'tc_identity',
+                        ],
+                        version=version,
                     )
                     if institution_list:
                         individual.institution.set(institution_list)
+                        record_field_import(
+                            individual,
+                            'institution',
+                            normalize_import_value([inst.id for inst in institution_list]),
+                            import_time=self.import_started_at,
+                            version=version,
+                        )
+                        self._append_institution_contact_notes(
+                            institution_list,
+                            row_dict.get('Klinisyen & İletişim Bilgileri'),
+                            admin_user,
+                        )
                     self.stdout.write(self.style.SUCCESS(f"Created individual: {self._get_initials(full_name)}"))
                     # Add individual to projects listed in 'Projeler'
                     projects_field = row_dict.get('Projeler')
@@ -806,7 +1677,12 @@ class Command(BaseCommand):
             is_index = False
             if re.search(r'\.1(\.|$)', lab_id):
                 is_index = True
-            individual.full_name = row_dict.get('Ad-Soyad', individual.full_name)
+            updater = ModelFieldUpdater(individual, admin_user, self.import_started_at)
+
+            full_name_candidate = row_dict.get('Ad-Soyad') or individual.full_name
+            if full_name_candidate:
+                updater.queue('full_name', full_name_candidate)
+
             tc_identity_val = row_dict.get('TC Kimlik No', individual.tc_identity)
             if tc_identity_val is not None:
                 if isinstance(tc_identity_val, str) and tc_identity_val.strip() == '':
@@ -818,14 +1694,30 @@ class Command(BaseCommand):
                         tc_identity_val = int(tc_identity_val)
                     except (TypeError, ValueError):
                         tc_identity_val = None
-            individual.tc_identity = tc_identity_val
-            individual.birth_date = self._parse_date(row_dict.get('Doğum Tarihi')) or individual.birth_date
-            individual.icd11_code = row_dict.get('ICD11', individual.icd11_code)
-            if institution_objs:
-                individual.institution.set(institution_objs)
-            individual.status = Status.objects.get(name='Registered', content_type=ContentType.objects.get(app_label='lab', model='individual'))
-            individual.is_index = is_index
-            individual.save()
+            updater.queue('tc_identity', tc_identity_val)
+
+            updater.queue('birth_date', self._parse_date(row_dict.get('Doğum Tarihi')))
+            updater.queue('icd11_code', row_dict.get('ICD11') or '')
+            sync_m2m_field(
+                individual,
+                'institution',
+                individual.institution,
+                [inst.id for inst in institution_objs],
+                self.import_started_at,
+            )
+            self._append_institution_contact_notes(
+                institution_objs,
+                row_dict.get('Klinisyen & İletişim Bilgileri'),
+                admin_user,
+            )
+            updater.queue('status', self.registered_individual_status)
+            updater.queue('is_index', is_index)
+
+            council_candidate = self._parse_ddmmyyyy(row_dict.get('Konsey Tarihi'))
+            if council_candidate:
+                updater.queue('council_date', council_candidate)
+
+            updater.commit()
             # Add/ensure individual-project associations from 'Projeler'
             projects_field = row_dict.get('Projeler')
             if projects_field:
@@ -842,59 +1734,62 @@ class Command(BaseCommand):
                     )
                     project_obj.individuals.add(individual)
             hpo_terms = self._get_hpo_terms(row_dict.get('HPO kodları'))
-            if hpo_terms:
-                individual.hpo_terms.add(*hpo_terms)
-                self.stdout.write(self.style.SUCCESS(f'Added {len(hpo_terms)} HPO terms to {self._get_initials(individual.full_name)}'))
+            term_ids = [term.id for term in hpo_terms]
+            sync_m2m_field(
+                individual,
+                'hpo_terms',
+                individual.hpo_terms,
+                term_ids,
+                self.import_started_at,
+            )
+            if term_ids:
+                self.stdout.write(self.style.SUCCESS(f'Updated {len(term_ids)} HPO terms for {self._get_initials(individual.full_name)}'))
             self.stdout.write(self.style.SUCCESS(f"Updated individual: {self._get_initials(individual.full_name)}"))
-            sample_types = [s.strip() for s in (row_dict.get('Örnek Tipi') or '').split(',')]
-            samples_touched = []
-            for sample_type_name in sample_types:
-                if not sample_type_name:
-                    continue
-                sample_type = self._get_or_create_sample_type(sample_type_name, admin_user)
-                if not sample_type:
-                    continue
-                isolation_by = self._get_or_create_user(row_dict.get('İzolasyonu yapan'), admin_user)
-                existing_sample = None
-                if sample_type_name in ["Tam Kan", "Tam Kan/Serum"]:
-                    existing_sample = Sample.objects.filter(
-                        individual=individual,
-                        sample_type__name__in=["Tam Kan", "Tam Kan/Serum"]
-                    ).first()
-                else:
-                    existing_sample = Sample.objects.filter(
-                        individual=individual,
-                        sample_type=sample_type
-                    ).first()
-                if existing_sample:
-                    if not existing_sample.receipt_date:
-                        existing_sample.receipt_date = self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl'))
-                        if existing_sample.receipt_date:
-                            existing_sample.status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample'))
-                    if not existing_sample.isolation_by:
-                        existing_sample.isolation_by = isolation_by
-                    if not existing_sample.status:
-                        existing_sample.status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample'))
-                    existing_sample.save()
-                    self.stdout.write(self.style.SUCCESS(f'Updated existing sample: {existing_sample}'))
-                    samples_touched.append(existing_sample)
-                else:
-                    initial_status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample')) if self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl')) else Status.objects.get(name='Pending Blood Recovery', content_type=ContentType.objects.get(app_label='lab', model='sample'))
-                    sample = Sample.objects.create(
-                        individual=individual,
-                        sample_type=sample_type,
-                        status=initial_status,
-                        receipt_date=self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl')),
-                        isolation_by=isolation_by,
-                        created_by=admin_user,
+            samples_touched = self._ensure_samples_from_row(individual, row_dict, admin_user)
+            tests_info = self._ensure_tests_from_row(individual, row_dict, admin_user, samples_touched)
+
+            data_receipt = self._parse_date(row_dict.get('Data Geliş tarihi'))
+            if data_receipt and tests_info:
+                target_test = next((info['test'] for info in tests_info if not info['created']), None)
+                if not target_test:
+                    target_test = tests_info[0]['test']
+                updater = ModelFieldUpdater(target_test, admin_user, self.import_started_at)
+                updater.queue('data_receipt_date', data_receipt)
+                updater.commit()
+            elif data_receipt:
+                fallback_test = Test.objects.filter(sample__individual=individual).order_by('id').first()
+                if fallback_test:
+                    updater = ModelFieldUpdater(fallback_test, admin_user, self.import_started_at)
+                    updater.queue('data_receipt_date', data_receipt)
+                    updater.commit()
+
+            test_notes = self._split_comma_field(row_dict.get('Test Notları'))
+            if tests_info and test_notes:
+                for idx, info in enumerate(tests_info):
+                    if idx >= len(test_notes):
+                        break
+                    ensure_note(
+                        target_obj=info['test'],
+                        content=test_notes[idx],
+                        user=admin_user,
+                        log_warning=self._log_warning,
                     )
-                    self.stdout.write(self.style.SUCCESS(f'Created new sample: {sample}'))
-                    samples_touched.append(sample)
-            # After touching samples for this row, add sample-level notes to all
-            sample_notes = row_dict.get('Örnek Notları')
-            if sample_notes and samples_touched:
-                for s in samples_touched:
-                    self._parse_and_add_notes(sample_notes, s, admin_user)
+                extra_notes = test_notes[len(tests_info):]
+                for extra in extra_notes:
+                    ensure_note(
+                        target_obj=individual,
+                        content=f"Test notu (eşleşmedi): {extra}",
+                        user=admin_user,
+                        log_warning=self._log_warning,
+                    )
+            elif test_notes:
+                for note in test_notes:
+                    ensure_note(
+                        target_obj=individual,
+                        content=f"Test notu (test bulunamadı): {note}",
+                        user=admin_user,
+                        log_warning=self._log_warning,
+                    )
         self.stdout.write(self.style.WARNING(f'Leftover Rows: {len(leftover_rows)}'))
         if leftover_rows:
             with open(leftovers_path, 'w', encoding='utf-8', newline='') as f:
@@ -910,18 +1805,9 @@ class Command(BaseCommand):
         headers_analiz = [h for h in headers_analiz if h is not None]
         self.stdout.write(f'Analiz Takip sheet headers: {headers_analiz}')
         
-        gennext_type = self._get_or_create_analysis_type(
-            'Gennext',
-            '',
-            admin_user
-        )
-
-        test_types = {}
         leftover_rows = []
+        missing_veri_kaynagi_rows = []
         leftovers_path = os.path.join(os.path.dirname(file_path), 'import_analiz_takip_leftovers.tsv')
-
-        # Track tests touched per individual (by lab_id) in this section to apply notes
-        tests_touched_by_lab_id = {}
 
         for row in ws_analiz.iter_rows(min_row=2, values_only=True):
             # Skip rows where all values are None (empty rows at the end)
@@ -950,6 +1836,7 @@ class Command(BaseCommand):
             if not veri_kaynagi:
                 self.stdout.write(f'Skipping row with missing VERİ KAYNAĞI for lab_id: {lab_id}. Available fields: {list(row_dict.keys())}')
                 leftover_rows.append(row_dict)
+                missing_veri_kaynagi_rows.append(row_dict)
                 continue
             # Support multiple comma-separated test types in VERİ KAYNAĞI
             test_type_names = [p.strip() for p in str(veri_kaynagi).split(',') if p and str(p).strip()]
@@ -957,45 +1844,105 @@ class Command(BaseCommand):
                 leftover_rows.append(row_dict)
                 self.stdout.write(self.style.WARNING(f'Skipping row with invalid/empty test type(s) for lab_id: {lab_id}'))
                 continue
-            sample = individual.samples.first()
-            if not sample:
-                self.stdout.write(self.style.WARNING(f'No sample found for individual: {self._get_initials(individual.full_name)}'))
-                sample = self._get_or_create_placeholder_sample(individual, admin_user)
-            created_tests_for_row = []
+            tests_for_row = []
             for tt_name in test_type_names:
-                test_type = self._get_or_create_test_type(tt_name, admin_user)
-                if not test_type:
-                    # Shouldn't happen due to guard, but keep parity with previous logic
-                    self.stdout.write(self.style.WARNING(f'Skipping invalid test type "{tt_name}" for lab_id: {lab_id}'))
+                test, _ = self._ensure_test_for_analysis(individual, tt_name, admin_user)
+                if not test:
                     continue
-                test_types[tt_name] = test_type
-                test = Test.objects.create(
-                    test_type=test_type,
-                    status=Status.objects.get(name='Completed', content_type=ContentType.objects.get(app_label='lab', model='test')),
-                    data_receipt_date=self._parse_date(row_dict.get('Data Geliş Tarihi')),
-                    sample=sample,
-                    created_by=admin_user
-                )
-                created_tests_for_row.append(test)
-                # Track touched/created test for this individual's lab id
-                tests_touched_by_lab_id.setdefault(lab_id, []).append(test)
-            # Create Analysis records for each created test, if upload date provided
-            data_upload_date = self._parse_date(row_dict.get('Data yüklenme tarihi/emre'))
-            if data_upload_date and created_tests_for_row:
-                for t in created_tests_for_row:
-                    Analysis.objects.create(
-                        type=gennext_type,
-                        status=Status.objects.get(name='In Progress', content_type=ContentType.objects.get(app_label='lab', model='analysis')),
-                        performed_date=data_upload_date,
+                tests_for_row.append(test)
+
+            if not tests_for_row:
+                leftover_rows.append(row_dict)
+                continue
+
+            test_institutions = self._split_comma_field(row_dict.get('Verinin Geldiği Merkez'))
+            performer_user = None
+            if test_institutions:
+                performer_user = self._get_or_create_institution_user(test_institutions[0], admin_user)
+
+            test_status_name = row_dict.get('Status')
+            data_receipt = self._parse_date(row_dict.get('Data Geliş Tarihi'))
+            plan_notes = row_dict.get('PLAN')
+            data_notes = row_dict.get('Data Notları')
+            veri_icerigi = row_dict.get('Veri İçeriği')
+            veri_notlari = row_dict.get('Veri Notları')
+            test_notes = row_dict.get('Test Notları')
+
+            for test in tests_for_row:
+                if test_institutions:
+                    for inst_name in test_institutions:
+                        ensure_note(
+                            target_obj=test,
+                            content=f"Verinin Geldiği Merkez: {inst_name}",
+                            user=admin_user,
+                            log_warning=self._log_warning,
+                        )
+                if data_receipt:
+                    updater = ModelFieldUpdater(test, admin_user, self.import_started_at)
+                    updater.queue('data_receipt_date', data_receipt)
+                    updater.commit()
+                if test_status_name:
+                    status_obj = self._ensure_status_for_model(
+                        test_status_name,
+                        ContentType.objects.get_for_model(Test),
+                        admin_user,
+                    )
+                    if status_obj:
+                        updater = ModelFieldUpdater(test, admin_user, self.import_started_at)
+                        updater.queue('status', status_obj)
+                        updater.commit()
+                if plan_notes:
+                    self._parse_and_add_notes(plan_notes, test, admin_user)
+                if data_notes:
+                    self._parse_and_add_notes(data_notes, test, admin_user)
+                if veri_icerigi:
+                    self._parse_and_add_notes(veri_icerigi, test, admin_user)
+                if veri_notlari:
+                    self._parse_and_add_notes(veri_notlari, test, admin_user)
+                if test_notes:
+                    self._parse_and_add_notes(test_notes, test, admin_user)
+                if performer_user:
+                    updater = ModelFieldUpdater(test, admin_user, self.import_started_at)
+                    updater.queue('performed_by', performer_user)
+                    updater.commit()
+
+            analyses_created = []
+            performed_date = self._parse_date(row_dict.get('Data yüklenme tarihi/emre')) or timezone.now().date()
+            for test in tests_for_row:
+                with reversion.create_revision():
+                    analysis = Analysis.objects.create(
+                        type=self.analysis_type_variant,
+                        status=self.analysis_status_in_progress,
+                        performed_date=performed_date,
                         performed_by=admin_user,
-                        test=t,
+                        test=test,
                         created_by=admin_user
                     )
-            # Add Test Notları for all tests touched for this individual
-            test_notes = row_dict.get('Test Notları')
-            if test_notes and tests_touched_by_lab_id.get(lab_id):
-                for t in tests_touched_by_lab_id.get(lab_id, []):
-                    self._parse_and_add_notes(test_notes, t, admin_user)
+                    reversion.set_comment('import_ozbek_all:analysis_variant')
+                    if admin_user:
+                        reversion.set_user(admin_user)
+                analyses_created.append(analysis)
+
+            analysis_status_note = row_dict.get('ANALİZ STATUS')
+            analysts = row_dict.get('ANALİZİ KİMLER YAPTI?')
+            if analysis_status_note:
+                for analysis in analyses_created:
+                    ensure_note(
+                        target_obj=analysis,
+                        content=f"ANALİZ STATUS: {analysis_status_note}",
+                        user=admin_user,
+                        log_warning=self._log_warning,
+                    )
+            if analysts:
+                for analysis in analyses_created:
+                    ensure_note(
+                        target_obj=analysis,
+                        content=f"ANALİZİ KİMLER YAPTI?: {analysts}",
+                        user=admin_user,
+                        log_warning=self._log_warning,
+                    )
+        if missing_veri_kaynagi_rows:
+            self.stdout.write(self.style.WARNING(f'{len(missing_veri_kaynagi_rows)} Analiz Takip rows missing VERİ KAYNAĞI'))
         if leftover_rows:
             with open(leftovers_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=headers_analiz, delimiter='\t')
@@ -1003,6 +1950,27 @@ class Command(BaseCommand):
                 writer.writerows(leftover_rows)
             self.stdout.write(self.style.SUCCESS(f'Saved {len(leftover_rows)} rows to {leftovers_path}'))
         self.stdout.write(self.style.SUCCESS('Successfully imported analysis tracking data'))
+
+        # --- PROJECT ENROLLMENT SHEETS ---
+        project_sheet_specs = [
+            ('Uzun Okuma Hastaları', 'RareBoost ID', 'Long Read'),
+            ('TE NDD', 'Viable RareBoost ID', 'TE NDD'),
+        ]
+        for sheet_name, column, project_name in project_sheet_specs:
+            self._process_project_sheet(wb, sheet_name, column, project_name, admin_user)
+
+        self._process_wgs_tuseb_sheet(wb, admin_user)
+
+        # --- RNA SEQ SHEET ---
+        self._process_rna_seq_sheet(wb, admin_user)
+
+        # --- SANGER CONFIRMATIONS ---
+        self._process_sanger_sheet(wb, admin_user)
+
+        # --- GENNEXT / RAREPIPE / GENOMIZE SHEETS ---
+        self._process_gennext_sheet(wb, admin_user)
+        self._process_rarepipe_sheet(wb, admin_user)
+        self._process_genomize_sheet(wb, admin_user)
 
         # --- SET PARENTS (mother/father) BASED ON RAREBOOST ID SUFFIXES ---
         # Convention: familyId.1 = proband, .2 = mother, .3 = father,
