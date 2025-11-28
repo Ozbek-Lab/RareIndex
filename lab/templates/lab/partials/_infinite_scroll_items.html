@@ -1,41 +1,42 @@
 {% load partials %}
 
-{% for item in items %}
+{% if items is None %}
   {% if view_mode == 'table' %}
-    <tr
-      {% if forloop.last and items.has_next %}
-        hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once"
-        hx-swap="afterend" hx-target="this"
-        :hx-vals="getHxVals('{{ app_label }}', '{{ model_name }}',
-        {{ items.next_page_number }}, '{{ view_mode }}', '{{ card }}', '{{ icon_class|default:"fa-magnifying-glass" }}')"
-      {% endif %}
-    >
-      {% include "lab/"|add:model_name|lower|add:'.html#table-row' with item=item %}
+    <tr class="text-gray-500 dark:text-gray-400">
+      <td colspan="12" class="text-center py-4">
+        <i class="fa-solid fa-spinner fa-spin mr-2"></i> Loading {{ model_name|lower }}s...
+      </td>
     </tr>
   {% else %}
-    <!-- Card for infinite scroll -->
-    <div
-      id="card-wrapper-{{ item.id }}"
-      {% if forloop.last and items.has_next %}
-        hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once"
-        hx-swap="afterend" hx-target="this"
-        :hx-vals="getHxVals('{{ app_label }}', '{{ model_name }}',
-        {{ items.next_page_number }}, '{{ view_mode }}', '{{ card }}', '{{ icon_class|default:"fa-magnifying-glass" }}')"
-      {% endif %}
-    >
-      {% include "lab/"|add:model_name|lower|add:'.html#'|add:card with item=item %}
+    <div class="col-span-full text-center text-gray-500 dark:text-gray-400 py-4">
+      <i class="fa-solid fa-spinner fa-spin mr-2"></i> Loading {{ model_name|lower }}s...
     </div>
   {% endif %}
-{% endfor %}
+{% else %}
+  {% for item in items %}
+    {% if view_mode == 'table' %}
+    <tr {% if forloop.last and items.has_next %} hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once"
+      hx-swap="afterend" hx-target="this" :hx-vals="getHxVals('{{ app_label }}', '{{ model_name }}', {{ items.next_page_number }}, '{{ view_mode }}', '{{ card }}', '{{ icon_class|default:' fa-magnifying-glass' }}')" {% endif %}>
+      {% include app_label|add:"/"|add:model_name|lower|add:'.html#table-row' with item=item %}
+    </tr>
+    {% else %}
+    <!-- Card for infinite scroll -->
+    <div id="card-wrapper-{{ item.id }}" {% if forloop.last and items.has_next %}
+      hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once" hx-swap="afterend" hx-target="this" :hx-vals="getHxVals('{{ app_label }}', '{{ model_name }}', {{ items.next_page_number }}, '{{ view_mode }}', '{{ card }}', '{{ icon_class|default:' fa-magnifying-glass' }}')" {% endif %}>
+      {% include app_label|add:"/"|add:model_name|lower|add:'.html#'|add:card with item=item %}
+    </div>
+    {% endif %}
+  {% endfor %}
 
-{% if view_mode == 'table' %}
-  {% if not items.has_next %}
+  {% if view_mode == 'table' %}
+    {% if not items.has_next %}
     <tr class="text-orange-300 dark:text-orange-400">
       <td colspan="5">No more {{ model_name|lower }}s.</td>
     </tr>
-  {% endif %}
-{% else %}
-  {% if not items.has_next %}
-    <div class="text-orange-300 dark:text-orange-400">No more {{ model_name|lower }}s.</div>
+    {% endif %}
+  {% else %}
+    {% if not items.has_next %}
+    <div class="col-span-full text-center text-orange-300 dark:text-orange-400 py-4">No more {{ model_name|lower }}s.</div>
+    {% endif %}
   {% endif %}
 {% endif %}

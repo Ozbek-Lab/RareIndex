@@ -113,6 +113,7 @@
       >
         <input type="hidden" name="content_type" value="{{ content_type }}" />
         <input type="hidden" name="object_id" value="{{ object.id }}" />
+        <input type="hidden" name="app_label" value="{{ app_label|default:'lab' }}" />
         <div class="flex items-end gap-2">
           <textarea
             name="content"
@@ -144,7 +145,7 @@
   hx-trigger="noteCountUpdate-{{ content_type }}-{{ object.id }} from:body"
   hx-target="closest div"
   hx-swap="outerHTML"
-  hx-vals='{"object_id": "{{ object.id }}", "content_type": "{{ content_type }}"}'
+  hx-vals='{"object_id": "{{ object.id }}", "content_type": "{{ content_type }}", "app_label": "{{ app_label|default:"lab" }}"}'
 >
   {% with note_count=object.notes|visible_count:user %}
     {% if note_count == 0 %}
@@ -176,6 +177,7 @@
 >
     <input type="hidden" name="content_type" value="{{ content_type }}" />
     <input type="hidden" name="object_id" value="{{ object.id }}" />
+    <input type="hidden" name="app_label" value="{{ app_label|default:'lab' }}" />
     <div class="flex items-end gap-2">
         {{ form.content }}
         <button

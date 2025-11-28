@@ -13,31 +13,31 @@
     @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
     @apply transition-colors duration-200;
   }
-  
+
   .form-field-wrapper input:focus,
   .form-field-wrapper select:focus,
   .form-field-wrapper textarea:focus {
     @apply border-blue-500 dark:border-blue-400;
   }
-  
+
   /* Dark mode specific adjustments */
   .dark .form-field-wrapper input,
   .dark .form-field-wrapper select,
   .dark .form-field-wrapper textarea {
     @apply bg-gray-700 border-gray-600 text-gray-100;
   }
-  
+
   .dark .form-field-wrapper input:focus,
   .dark .form-field-wrapper select:focus,
   .dark .form-field-wrapper textarea:focus {
     @apply bg-gray-700 border-blue-400 ring-blue-400;
   }
-  
+
   /* Textarea specific styling */
   .form-field-wrapper textarea {
     @apply resize-vertical min-h-[80px];
   }
-  
+
   /* Select dropdown styling */
   .form-field-wrapper select {
     @apply appearance-none bg-no-repeat bg-right;
@@ -45,794 +45,808 @@
     background-size: 1.5em 1.5em;
     padding-right: 2.5rem;
   }
-  
+
   .dark .form-field-wrapper select {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23d1d5db' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
   }
 </style>
 
 {% block content %}
-  <div
-    x-data="mainController()"
-    class="flex h-screen bg-gray-50 dark:bg-gray-900">
-    {% include "lab/sidebar.html" %}
-    <main class="flex-1 overflow-y-auto p-6">
-      <div id="main-content">
-        <div id="modal-root"></div>
-        <!-- Main content area for HTMX operations -->
-        <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
-          <button @click= "open = true" type="button"
-            class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
-            aria-label="Open filters">
-            <i class="fa-solid fa-filter"></i>
-          </button>
-          <!-- Clear Filters Button -->
-          <button
-            x-show="Object.values(filters).some(v => v  && (Array.isArray(v) ? v.length > 0 : true))"
-            @click= "filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
-            class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100"
-            type="button"
-          >
-            <i class="fa-solid fa-filter-circle-xmark"></i>
-          </button>
+<div x-data="mainController()" class="flex h-screen bg-gray-50 dark:bg-gray-900">
+  {% include "lab/sidebar.html" %}
+  <main class="flex-1 overflow-y-auto p-6">
+    <div id="main-content">
+      <div id="modal-root"></div>
+      <!-- Main content area for HTMX operations -->
+      <div class="fixed top-1/2 right-4 z-50 flex flex-col items-end space-y-2">
+        <button @click="open = true" type="button"
+          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100" aria-label="Open filters">
+          <i class="fa-solid fa-filter"></i>
+        </button>
+        <!-- Clear Filters Button -->
+        <button x-show="Object.values(filters).some(v => v  && (Array.isArray(v) ? v.length > 0 : true))"
+          @click="filters = {}; window.dispatchEvent(new CustomEvent('filters-updated', { detail: { filters: {} } }));"
+          class="focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-gray-100" type="button">
+          <i class="fa-solid fa-filter-circle-xmark"></i>
+        </button>
+      </div>
+      {% include "lab/partials/drawer.html#drawer" %}
+      <!-- Detail View Container -->
+      <div x-show="activeItem && activeItem.startsWith('detail-')" id="detail-view" class="relative">
+        <template x-if="detailHtml">
+          <div x-html="detailHtml"></div>
+        </template>
+        <button @click="closeDetail()"
+          class="absolute top-2 right-2 z-10 bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Close</button>
+      </div>
+      <!-- Hide main content when detail is open -->
+      <div x-show="!activeItem || !activeItem.startsWith('detail-')">
+        <div x-show="activeItem === 'home'" id="plots-content" hx-get="{% url 'lab:plots' %}"
+          hx-trigger="load, filters-updated from:window throttle:200ms" :hx-vals="getGlobalFiltersHxVals()">
+          {% with view="page" %}
+          {% include "lab/plots.html#plots-section" %}
+          {% endwith %}
         </div>
-        {% include "lab/partials/drawer.html#drawer" %}
-        <!-- Detail View Container -->
-        <div x-show="activeItem && activeItem.startsWith('detail-')" id="detail-view" class="relative">
-          <template x-if="detailHtml">
-            <div x-html="detailHtml"></div>
-          </template>
-          <button @click= "closeDetail()" class="absolute top-2 right-2 z-10 bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Close</button>
+        <div x-show="activeItem === 'overview'">
+          <div class="grid grid-cols-4 gap-4 relative">
+            {% include "lab/overview.html#overview" %}
+          </div>
         </div>
-        <!-- Hide main content when detail is open -->
-        <div x-show="!activeItem || !activeItem.startsWith('detail-')">
-          <div x-show="activeItem === 'home'" id="plots-content" hx-get="{% url 'lab:plots' %}" hx-trigger="load, filters-updated from:window throttle:200ms" :hx-vals="getGlobalFiltersHxVals()">
+        <div x-show="activeItem === 'individual'">
+          {% with title='Individuals' icon_class='fa-person' model_name='Individual' app_label='lab' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'sample'">
+          {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' select='true' field_name='sample_type' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'test'">
+          {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' select='true' field_name='test_type' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'analysis'">
+          {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'institution'">
+          {% with title='Institutions' icon_class='fa-building-columns' model_name='Institution' app_label='lab' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'project'">
+          {% with title='Projects' icon_class='fa-diagram-project' model_name='Project' app_label='lab' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'task'">
+          {% with title='Tasks' icon_class='fa-list-check' model_name='Task' app_label='lab' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'variant'">
+          {% with title='Variants' icon_class='fa-dna' model_name='Variant' app_label='variant' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <div x-show="activeItem === 'hpo-term'">
+          {% with title='HPO Terms' icon_class='fa-stethoscope' model_name='Term' app_label='ontologies' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
+        <!-- Only create the HPO network DOM when the page is active -->
+        <template x-if="activeItem === 'hpo-network-visualization'">
+          <div>
             {% with view="page" %}
-              {% include "lab/plots.html#plots-section" %}
-            {% endwith %}
-          </div>
-          <div x-show="activeItem === 'overview'">
-            <div class="grid grid-cols-4 gap-4 relative">
-              {% include "lab/overview.html#overview" %}
+            <div x-data="hpoController()"
+              x-init="$nextTick(() => { const el = document.getElementById('hpo-visualization-container'); if (el && window.htmx) { htmx.process(el); } })">
+              {% include "lab/plots.html#hpo-network-visualization-section" %}
             </div>
-          </div>
-          <div x-show="activeItem === 'individual'">
-            {% with title='Individuals' icon_class='fa-person' model_name='Individual' app_label='lab' view="page" %}
-              {% include "lab/partials/partials.html#search-section" %}
             {% endwith %}
           </div>
-          <div x-show="activeItem === 'sample'">
-            {% with title='Samples' icon_class='fa-vial' model_name='Sample' app_label='lab' select='true' field_name='sample_type' view="page" %}
-              {% include "lab/partials/partials.html#search-section" %}
-            {% endwith %}
+        </template>
+        <div x-show="activeItem === 'notifications'" id="notifications-content">
+          <!-- Notifications content will be loaded here via HTMX -->
+        </div>
+        <!-- Lazily mount the Map only when navigated to -->
+        <template x-if="activeItem === 'map'">
+          <div
+            x-init="$nextTick(() => { const el = document.getElementById('map-content'); if (el && window.htmx) { htmx.process(el); } })">
+            {% include "lab/map.html#map-content" %}
           </div>
-          <div x-show="activeItem === 'test'">
-            {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' select='true' field_name='test_type' view="page" %}
-              {% include "lab/partials/partials.html#search-section" %}
-            {% endwith %}
-          </div>
-          <div x-show="activeItem === 'analysis'">
-            {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type' view="page" %}
-              {% include "lab/partials/partials.html#search-section" %}
-            {% endwith %}
-          </div>
-          <div x-show="activeItem === 'institution'">
-            {% with title='Institutions' icon_class='fa-building-columns' model_name='Institution' app_label='lab' view="page" %}
-              {% include "lab/partials/partials.html#search-section" %}
-            {% endwith %}
-          </div>
-          <div x-show="activeItem === 'project'">
-            {% with title='Projects' icon_class='fa-diagram-project' model_name='Project' app_label='lab' view="page" %}
-              {% include "lab/partials/partials.html#search-section" %}
-            {% endwith %}
-          </div>
-          <div x-show="activeItem === 'task'">
-            {% with title='Tasks' icon_class='fa-list-check' model_name='Task' app_label='lab' view="page" %}
-              {% include "lab/partials/partials.html#search-section" %}
-            {% endwith %}
-          </div>
-          <div x-show="activeItem === 'hpo-term'">
-            {% with title='HPO Terms' icon_class='fa-stethoscope' model_name='Term' app_label='ontologies' view="page" %}
-              {% include "lab/partials/partials.html#search-section" %}
-            {% endwith %}
-          </div>
-          <!-- Only create the HPO network DOM when the page is active -->
-          <template x-if="activeItem === 'hpo-network-visualization'">
-            <div>
-              {% with view="page" %}
-                <div x-data="hpoController()" x-init="$nextTick(() => { const el = document.getElementById('hpo-visualization-container'); if (el && window.htmx) { htmx.process(el); } })">
-                  {% include "lab/plots.html#hpo-network-visualization-section" %}
-                </div>
-              {% endwith %}
-            </div>
-          </template>
-          <div x-show="activeItem === 'notifications'" id="notifications-content">
-            <!-- Notifications content will be loaded here via HTMX -->
-          </div>
-          <!-- Lazily mount the Map only when navigated to -->
-          <template x-if="activeItem === 'map'">
-            <div x-init="$nextTick(() => { const el = document.getElementById('map-content'); if (el && window.htmx) { htmx.process(el); } })">
-              {% include "lab/map.html#map-content" %}
-            </div>
-          </template>
-          <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
-            <!-- Natural language search content will be loaded here via HTMX -->
-          </div>
+        </template>
+        <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
+          <!-- Natural language search content will be loaded here via HTMX -->
         </div>
       </div>
-    </main>
-  </div>
+    </div>
+  </main>
+</div>
 
-  <script>
-    function mainController() {
-      return {
-        activeItem: 'home',
-        open: false,
-        filters: {},
-        detailHtml: null,
-        viewMode: 'cards',
-        instituteThreshold: 0,
-        hpoThreshold: 0,
+<script>
+  function mainController() {
+    return {
+      activeItem: 'home',
+      open: false,
+      filters: {},
+      detailHtml: null,
+      viewMode: 'cards',
+      instituteThreshold: 0,
+      hpoThreshold: 0,
 
-        clearModal() {
-          const modalRoot = document.getElementById('modal-root');
-          if (modalRoot) modalRoot.innerHTML = '';
-        },
+      clearModal() {
+        const modalRoot = document.getElementById('modal-root');
+        if (modalRoot) modalRoot.innerHTML = '';
+      },
 
-        init() {
-          this.syncStateFromURL();
-          window.addEventListener('popstate', () => { this.clearModal(); this.syncStateFromURL(); });
+      init() {
+        this.syncStateFromURL();
+        window.addEventListener('popstate', () => { this.clearModal(); this.syncStateFromURL(); });
 
-          // Load viewMode from localStorage
-          const savedViewMode = localStorage.getItem('viewMode');
-          if (savedViewMode) {
-            this.viewMode = savedViewMode;
+        // Load viewMode from localStorage
+        const savedViewMode = localStorage.getItem('viewMode');
+        if (savedViewMode) {
+          this.viewMode = savedViewMode;
+        }
+
+        this.$watch("filters", (newFilters) => {
+          this.updateURL();
+          window.dispatchEvent(
+            new CustomEvent("filters-updated", {
+              detail: { filters: newFilters },
+            }),
+          );
+        });
+
+        // Watch threshold changes and refresh plots
+        this.$watch("instituteThreshold", (val) => {
+          this.updateURL();
+          const el = document.getElementById('plots-content');
+          if (el) { htmx.trigger(el, 'filters-updated'); }
+        });
+
+        // Watch threshold changes for HPO plot and refresh plots
+        this.$watch("hpoThreshold", (val) => {
+          this.updateURL();
+          const el = document.getElementById('plots-content');
+          if (el) { htmx.trigger(el, 'filters-updated'); }
+        });
+
+        // Watch viewMode changes and save to localStorage
+        this.$watch("viewMode", (newViewMode) => {
+          localStorage.setItem('viewMode', newViewMode);
+        });
+
+        // Close modal on page section changes
+        this.$watch('activeItem', () => { this.clearModal(); });
+
+        // Close modal on Escape
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') this.clearModal();
+        });
+      },
+
+      syncStateFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        this.activeItem = params.get('page') || 'home';
+        this.clearModal();
+
+        const newFilters = {};
+        params.forEach((value, key) => {
+          if (!key.startsWith("filter_")) return;
+          const filterKey = key.replace("filter_", "");
+          if (!value) return;
+          const shouldSplit =
+            filterKey.includes("_status") ||
+            filterKey.includes("_type") ||
+            filterKey.includes("_exclude");
+          if (shouldSplit) {
+            newFilters[filterKey] = value.split(",").filter((v) => v.trim());
+          } else {
+            newFilters[filterKey] = value;
           }
+        });
+        this.filters = newFilters;
 
-          this.$watch("filters", (newFilters) => {
-            this.updateURL();
-            window.dispatchEvent(
-              new CustomEvent("filters-updated", {
-                detail: { filters: newFilters },
-              }),
-            );
-          });
+        const th = params.get('institute_threshold');
+        this.instituteThreshold = th ? parseInt(th) : 0;
 
-          // Watch threshold changes and refresh plots
-          this.$watch("instituteThreshold", (val) => {
-            this.updateURL();
-            const el = document.getElementById('plots-content');
-            if (el) { htmx.trigger(el, 'filters-updated'); }
-          });
+        const hpoTh = params.get('hpo_threshold');
+        this.hpoThreshold = hpoTh ? parseInt(hpoTh) : 0;
 
-          // Watch threshold changes for HPO plot and refresh plots
-          this.$watch("hpoThreshold", (val) => {
-            this.updateURL();
-            const el = document.getElementById('plots-content');
-            if (el) { htmx.trigger(el, 'filters-updated'); }
-          });
+        if (params.has('pk')) {
+          this.loadDetailView(params);
+        }
+      },
 
-          // Watch viewMode changes and save to localStorage
-          this.$watch("viewMode", (newViewMode) => {
-            localStorage.setItem('viewMode', newViewMode);
-          });
-
-          // Close modal on page section changes
-          this.$watch('activeItem', () => { this.clearModal(); });
-
-          // Close modal on Escape
-          document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') this.clearModal();
-          });
-        },
-
-        syncStateFromURL() {
-          const params = new URLSearchParams(window.location.search);
-          this.activeItem = params.get('page') || 'home';
-          this.clearModal();
-          
-          const newFilters = {};
-          params.forEach((value, key) => {
-            if (!key.startsWith("filter_")) return;
-            const filterKey = key.replace("filter_", "");
-            if (!value) return;
-            const shouldSplit =
-              filterKey.includes("_status") ||
-              filterKey.includes("_type") ||
-              filterKey.includes("_exclude");
-            if (shouldSplit) {
-              newFilters[filterKey] = value.split(",").filter((v) => v.trim());
-            } else {
-              newFilters[filterKey] = value;
-            }
-          });
-          this.filters = newFilters;
-
-          const th = params.get('institute_threshold');
-          this.instituteThreshold = th ? parseInt(th) : 0;
-
-          const hpoTh = params.get('hpo_threshold');
-          this.hpoThreshold = hpoTh ? parseInt(hpoTh) : 0;
-
-          if (params.has('pk')) {
-            this.loadDetailView(params);
-          }
-        },
-
-        updateURL() {
-          const newParams = new URLSearchParams();
-          if (this.activeItem && this.activeItem !== 'home') {
-            newParams.set('page', this.activeItem);
-          }
-          for (const modelName in this.filters) {
-            if (this.filters[modelName]) {
-              // Handle all array values as comma-separated values
-              if (Array.isArray(this.filters[modelName])) {
-                if (this.filters[modelName].length > 0) {
-                  newParams.set(`filter_${modelName}`, this.filters[modelName].join(','));
-                }
-              } else {
-                newParams.set(`filter_${modelName}`, this.filters[modelName]);
+      updateURL() {
+        const newParams = new URLSearchParams();
+        if (this.activeItem && this.activeItem !== 'home') {
+          newParams.set('page', this.activeItem);
+        }
+        for (const modelName in this.filters) {
+          if (this.filters[modelName]) {
+            // Handle all array values as comma-separated values
+            if (Array.isArray(this.filters[modelName])) {
+              if (this.filters[modelName].length > 0) {
+                newParams.set(`filter_${modelName}`, this.filters[modelName].join(','));
               }
+            } else {
+              newParams.set(`filter_${modelName}`, this.filters[modelName]);
             }
           }
-          if (typeof this.instituteThreshold === 'number' && this.instituteThreshold > 0) {
-            newParams.set('institute_threshold', String(this.instituteThreshold));
-          }
-          if (typeof this.hpoThreshold === 'number' && this.hpoThreshold > 0) {
-            newParams.set('hpo_threshold', String(this.hpoThreshold));
-          }
-          const newPath = newParams.toString() ? `/?${newParams.toString()}` : 
+        }
+        if (typeof this.instituteThreshold === 'number' && this.instituteThreshold > 0) {
+          newParams.set('institute_threshold', String(this.instituteThreshold));
+        }
+        if (typeof this.hpoThreshold === 'number' && this.hpoThreshold > 0) {
+          newParams.set('hpo_threshold', String(this.hpoThreshold));
+        }
+        const newPath = newParams.toString() ? `/?${newParams.toString()}` :
           '/';
-          history.pushState({}, "", newPath);
-        },
+        history.pushState({}, "", newPath);
+      },
 
-        getGlobalFiltersHxVals() {
-          const vals = {};
-          for (const key in this.filters) {
-            const v = this.filters[key];
-            if (!v || (Array.isArray(v) && v.length === 0)) continue;
-            vals[`filter_${key}`] = Array.isArray(v) ? v.join(',') : v;
-          }
-          if (typeof this.instituteThreshold === 'number') {
-            vals['institute_threshold'] = String(this.instituteThreshold || 0);
-          }
-          if (typeof this.hpoThreshold === 'number') {
-            vals['hpo_threshold'] = String(this.hpoThreshold || 0);
-          }
-          return JSON.stringify(vals);
-        },
+      getGlobalFiltersHxVals() {
+        const vals = {};
+        for (const key in this.filters) {
+          const v = this.filters[key];
+          if (!v || (Array.isArray(v) && v.length === 0)) continue;
+          vals[`filter_${key}`] = Array.isArray(v) ? v.join(',') : v;
+        }
+        if (typeof this.instituteThreshold === 'number') {
+          vals['institute_threshold'] = String(this.instituteThreshold || 0);
+        }
+        if (typeof this.hpoThreshold === 'number') {
+          vals['hpo_threshold'] = String(this.hpoThreshold || 0);
+        }
+        return JSON.stringify(vals);
+      },
 
-        navigateTo(pageName) {
-          this.clearModal();
-          // Handle notifications navigation
-          if (pageName === 'notifications') {
-            this.activeItem = 'notifications';
-            this.detailHtml = null;
-            this.updateURL();
-            
-            // Load notifications content via HTMX
-            htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content').then(() => {
-              // Content loaded successfully
-            });
-            return;
-          }
-          
-          // Handle home navigation
-          if (pageName === 'home') {
-            this.activeItem = 'home';
-            this.detailHtml = null;
-            this.updateURL();
-            
-            // Ask HTMX to reload plots using bound hx-vals (current filters)
-            setTimeout(() => { const el = document.getElementById('plots-content'); if (el) { htmx.trigger(el, 'filters-updated'); } }, 0);
-            return;
-          }
-          
-          // Handle map navigation
-          if (pageName === 'map') {
-            this.activeItem = 'map';
-            this.detailHtml = null;
-            this.updateURL();
-            return;
-          }
-          
-          // Handle natural language search navigation
-          if (pageName === 'nl-search-page') {
-            this.activeItem = 'nl-search-page';
-            this.detailHtml = null;
-            this.updateURL();
-            
-            // Load natural language search content via HTMX
-            htmx.ajax('GET', '{% url "lab:nl_search_page" %}', '#nl-search-content').then(() => {
-              // Content loaded successfully
-            });
-            return;
-          }
-          
-          this.activeItem = pageName;
+      navigateTo(pageName) {
+        this.clearModal();
+        // Handle notifications navigation
+        if (pageName === 'notifications') {
+          this.activeItem = 'notifications';
           this.detailHtml = null;
           this.updateURL();
-        },
 
-        openDetail(pk, modelName, appLabel) {
-          this.clearModal();
-          const newParams = new URLSearchParams();
-          newParams.set('pk', pk);
-          newParams.set('model_name', modelName);
-          newParams.set('app_label', appLabel);
-          history.pushState({}, "", `/detail/?${newParams.toString()}`);
-          this.loadDetailView(newParams);
-        },
-
-        loadDetailView(params) {
-            const pk = params.get('pk');
-            const modelName = params.get('model_name');
-            const appLabel = params.get('app_label');
-            if (pk && modelName && appLabel) {
-                const detailUrl = `{% url 'lab:generic_detail' %}?${params.toString()}`;
-                htmx.ajax('GET', detailUrl, '#detail-view').then(response => {
-                    this.detailHtml = response;
-                    this.activeItem = `detail-${modelName}-${pk}`;
-                });
-            }
-        },
-
-        closeDetail() {
-          this.detailHtml = null;
-          this.clearModal();
-          this.navigateTo('index');
-        },
-
-        showNLSearch() {
-          this.activeItem = 'nl-search-page';
-          this.detailHtml = null;
-          this.clearModal();
-          this.updateURL();
-          
-          // Load natural language search content via HTMX
-          htmx.ajax('GET', '{% url 'lab:nl_search_page' %}', '#nl-search-content').then(() => {
+          // Load notifications content via HTMX
+          htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content').then(() => {
             // Content loaded successfully
           });
-        },
+          return;
+        }
 
-        getHxVals(appLabel, modelName, page=1, viewMode=null, card=null, icon_class=null) {
-          let vals = { app_label: appLabel, model_name: modelName, page: page };
-          for (const key in this.filters) {
-            if (this.filters[key]) {
-              if (key === modelName.toLowerCase()){
-                  vals['search'] = this.filters[key];
-              } else {
-                  // Handle all array values as comma-separated values
-                  if (Array.isArray(this.filters[key])) {
-                    if (this.filters[key].length > 0) {
-                      vals[`filter_${key}`] = this.filters[key].join(',');
-                    }
-                  } else {
-                    vals[`filter_${key}`] = this.filters[key];
-                  }
-              }
-            }
-          }
-          if (viewMode) {
-            vals['view_mode'] = viewMode;
-          }
-          if (card) {
-            vals['card'] = card;
-          }
-          if (icon_class) {
-            vals['icon_class'] = icon_class;
-          }
-          return JSON.stringify(vals);
-        },
-        getSelectHxVals(appLabel, modelName, fieldName) {
-          let selectedValue = this.filters[fieldName] || '';
-          // Ensure selected_value is always sent as a JSON string for consistency
-          if (Array.isArray(selectedValue)) {
-            selectedValue = JSON.stringify(selectedValue);
-          } else if (selectedValue) {
-            selectedValue = JSON.stringify([selectedValue]);
-          } else {
-            selectedValue = JSON.stringify([]);
-          }
-          
-          let vals = {
-            app_label: appLabel,
-            model_name: modelName,
-            field_name: fieldName,
-            selected_value: selectedValue
-          };
-          for (const key in this.filters) {
-            if (key !== fieldName && this.filters[key]) {
-              // Handle all array values as comma-separated values
-              if (Array.isArray(this.filters[key])) {
-                if (this.filters[key].length > 0) {
-                  vals[`filter_${key}`] = this.filters[key].join(',');
-                }
-              } else {
-                vals[`filter_${key}`] = this.filters[key];
-              }
-            }
-          }
-          return JSON.stringify(vals);
-        },
-        getStatusHxVals(appLabel, modelName) {
-          const statusKey = `${modelName.toLowerCase()}_status`;
-          let selectedStatuses = this.filters[statusKey] || [];
-          // Ensure statuses is always sent as a JSON string for consistency
-          if (Array.isArray(selectedStatuses)) {
-            selectedStatuses = JSON.stringify(selectedStatuses);
-          } else if (selectedStatuses) {
-            selectedStatuses = JSON.stringify([selectedStatuses]);
-          } else {
-            selectedStatuses = JSON.stringify([]);
-          }
-          
-          let vals = {
-            app_label: appLabel,
-            model_name: modelName,
-            selected_statuses: selectedStatuses
-          };
-          for (const key in this.filters) {
-            if (key !== statusKey && this.filters[key]) {
-              // Handle all array values as comma-separated values
-              if (Array.isArray(this.filters[key])) {
-                if (this.filters[key].length > 0) {
-                  vals[`filter_${key}`] = this.filters[key].join(',');
-                }
-              } else {
-                vals[`filter_${key}`] = this.filters[key];
-              }
-            }
-          }
-          return JSON.stringify(vals);
-        },
-        getTypeHxVals(appLabel, modelName) {
-          let vals = {
-            app_label: appLabel,
-            model_name: modelName,
-          };
-          
-          // Add all filters including type filters
-          for (const key in this.filters) {
-            if (this.filters[key]) {
-              // Handle all array values as comma-separated values
-              if (Array.isArray(this.filters[key])) {
-                if (this.filters[key].length > 0) {
-                  vals[`filter_${key}`] = this.filters[key].join(',');
-                }
-              } else {
-                vals[`filter_${key}`] = this.filters[key];
-              }
-            }
-          }
-          return JSON.stringify(vals);
-        },
-        toggleTriState(rawValue, includeKey) {
-          const value = String(rawValue);
-          const excludeKey = `${includeKey}_exclude`;
-          const includeList = this.filters[includeKey] || [];
-          const excludeList = this.filters[excludeKey] || [];
-          const includeIndex = includeList.indexOf(value);
-          const excludeIndex = excludeList.indexOf(value);
+        // Handle home navigation
+        if (pageName === 'home') {
+          this.activeItem = 'home';
+          this.detailHtml = null;
+          this.updateURL();
 
-          if (includeIndex === -1 && excludeIndex === -1) {
-            if (!this.filters[includeKey]) {
-              this.filters[includeKey] = [];
-            }
-            this.filters[includeKey].push(value);
-            return;
-          }
+          // Ask HTMX to reload plots using bound hx-vals (current filters)
+          setTimeout(() => { const el = document.getElementById('plots-content'); if (el) { htmx.trigger(el, 'filters-updated'); } }, 0);
+          return;
+        }
 
-          if (includeIndex > -1) {
-            this.filters[includeKey].splice(includeIndex, 1);
-            if (this.filters[includeKey].length === 0) {
-              delete this.filters[includeKey];
-            }
-            if (!this.filters[excludeKey]) {
-              this.filters[excludeKey] = [];
-            }
-            if (!this.filters[excludeKey].includes(value)) {
-              this.filters[excludeKey].push(value);
-            }
-            return;
-          }
+        // Handle map navigation
+        if (pageName === 'map') {
+          this.activeItem = 'map';
+          this.detailHtml = null;
+          this.updateURL();
+          return;
+        }
 
-          if (excludeIndex > -1) {
-            this.filters[excludeKey].splice(excludeIndex, 1);
-            if (this.filters[excludeKey].length === 0) {
-              delete this.filters[excludeKey];
-            }
-          }
-        },
-        toggleStatus(statusPk, modelName) {
-          const statusKey = `${modelName}_status`;
-          this.toggleTriState(statusPk, statusKey);
-        },
-        toggleType(typePk, filterField) {
-          this.toggleTriState(typePk, filterField);
-        },
-        getFilterState(rawValue, includeKey) {
-          const value = String(rawValue);
-          const includeList = this.filters[includeKey] || [];
-          if (includeList.includes(value)) {
-            return 'included';
-          }
-          const excludeKey = `${includeKey}_exclude`;
-          const excludeList = this.filters[excludeKey] || [];
-          if (excludeList.includes(value)) {
-            return 'excluded';
-          }
-          return 'none';
-        },
-        triStateClasses(includeKey, rawValue) {
-          const state = this.getFilterState(rawValue, includeKey);
-          if (state === 'included') {
-            return 'bg-green-500 text-white border-green-500 shadow-sm';
-          }
-          if (state === 'excluded') {
-            return 'bg-red-500 text-white border-red-500 shadow-sm ring-1 ring-red-200 dark:ring-red-500';
-          }
-          return 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700';
-        },
-        clearModelStatusFilter(modelName) {
-          const statusKey = `${modelName}_status`;
-          delete this.filters[statusKey];
-          delete this.filters[`${statusKey}_exclude`];
-        },
+        // Handle natural language search navigation
+        if (pageName === 'nl-search-page') {
+          this.activeItem = 'nl-search-page';
+          this.detailHtml = null;
+          this.updateURL();
 
-        // Event-scoped dispatch helper
-        dispatchFiltersUpdated(scope = null) {
-          const name = scope ? `filters-updated-${scope}` : 'filters-updated';
-          window.dispatchEvent(new CustomEvent(name, { detail: { filters: this.filters } }));
-        },
-      };
-    }
-
-    function comboboxController(appLabel, modelName, multiple = true, valueField = 'pk', labelField = '', inputName = '', initialJson = '[]') {
-      return {
-        appLabel,
-        modelName,
-        multiple,
-        valueField,
-        labelField,
-        inputName,
-        open: false,
-        query: '',
-        options: [],
-        nextPage: null,
-        loading: false,
-        selected: [], // [{value, label}]
-        init() {
-          // Initialize from initialJson if provided (for edit forms)
-          try {
-            const initial = JSON.parse(initialJson || '[]');
-            if (Array.isArray(initial)) {
-              this.selected = initial.map(v => ({ value: String(v.value ?? v), label: String(v.label ?? v) }));
-            }
-          } catch (e) {}
-          this.$watch('query', () => {
-            if (this.open) {
-              htmx.trigger(this.$refs.opts, 'combo-query-changed');
-            }
+          // Load natural language search content via HTMX
+          htmx.ajax('GET', '{% url "lab:nl_search_page" %}', '#nl-search-content').then(() => {
+            // Content loaded successfully
           });
-          // Ensure defaultSelected on the hidden input reflects initial state for change detection
-          this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
-        },
-        get hiddenInputName() { return this.inputName || `${this.modelName.toLowerCase()}_ids`; },
-        get hiddenInputValue() { return JSON.stringify(this.selected.map(o => o.value)); },
-        isSelected(value) {
-          return this.selected.some(o => String(o.value) === String(value));
-        },
-        toggleOption(value, label) {
-          const idx = this.selected.findIndex(o => String(o.value) === String(value));
-          if (idx >= 0) {
-            this.selected.splice(idx, 1);
+          return;
+        }
+
+        this.activeItem = pageName;
+        this.detailHtml = null;
+        this.updateURL();
+      },
+
+      openDetail(pk, modelName, appLabel) {
+        this.clearModal();
+        const newParams = new URLSearchParams();
+        newParams.set('pk', pk);
+        newParams.set('model_name', modelName);
+        newParams.set('app_label', appLabel);
+        history.pushState({}, "", `/detail/?${newParams.toString()}`);
+        this.loadDetailView(newParams);
+      },
+
+      loadDetailView(params) {
+        const pk = params.get('pk');
+        const modelName = params.get('model_name');
+        const appLabel = params.get('app_label');
+        if (pk && modelName && appLabel) {
+          const detailUrl = `{% url 'lab:generic_detail' %}?${params.toString()}`;
+          htmx.ajax('GET', detailUrl, '#detail-view').then(response => {
+            this.detailHtml = response;
+            this.activeItem = `detail-${modelName}-${pk}`;
+          });
+        }
+      },
+
+      closeDetail() {
+        this.detailHtml = null;
+        this.clearModal();
+        this.navigateTo('index');
+      },
+
+      showNLSearch() {
+        this.activeItem = 'nl-search-page';
+        this.detailHtml = null;
+        this.clearModal();
+        this.updateURL();
+
+        // Load natural language search content via HTMX
+        htmx.ajax('GET', '{% url 'lab:nl_search_page' %}', '#nl-search-content').then(() => {
+          // Content loaded successfully
+        });
+      },
+
+      getHxVals(appLabel, modelName, page = 1, viewMode = null, card = null, icon_class = null) {
+        // Fallback to controller properties if arguments are empty (though typically they are passed from template)
+        if (!appLabel && this.appLabel) appLabel = this.appLabel;
+        if (!modelName && this.modelName) modelName = this.modelName;
+
+        // If appLabel/modelName are not passed (e.g. from drawer inputs), try to use controller properties if available
+        // But mainController doesn't have appLabel/modelName properties for specific models.
+        // The issue is that in drawer.html, getHxVals is called with arguments.
+        // Wait, in drawer.html: :hx-vals="getHxVals('{{ app_label|default:"lab" }}', '{{ model_name }}', ...)"
+        // The template renders these values.
+        // If they are missing in the rendered HTML, then the template context is wrong.
+
+        let vals = { app_label: appLabel, model_name: modelName, page: page };
+        for (const key in this.filters) {
+          if (this.filters[key]) {
+            if (key === modelName.toLowerCase()) {
+              vals['search'] = this.filters[key];
+            } else {
+              // Handle all array values as comma-separated values
+              if (Array.isArray(this.filters[key])) {
+                if (this.filters[key].length > 0) {
+                  vals[`filter_${key}`] = this.filters[key].join(',');
+                }
+              } else {
+                vals[`filter_${key}`] = this.filters[key];
+              }
+            }
+          }
+        }
+        if (viewMode) {
+          vals['view_mode'] = viewMode;
+        }
+        if (card) {
+          vals['card'] = card;
+        }
+        if (icon_class) {
+          vals['icon_class'] = icon_class;
+        }
+        return JSON.stringify(vals);
+      },
+      getSelectHxVals(appLabel, modelName, fieldName) {
+        let selectedValue = this.filters[fieldName] || '';
+        // Ensure selected_value is always sent as a JSON string for consistency
+        if (Array.isArray(selectedValue)) {
+          selectedValue = JSON.stringify(selectedValue);
+        } else if (selectedValue) {
+          selectedValue = JSON.stringify([selectedValue]);
+        } else {
+          selectedValue = JSON.stringify([]);
+        }
+
+        let vals = {
+          app_label: appLabel,
+          model_name: modelName,
+          field_name: fieldName,
+          selected_value: selectedValue
+        };
+        for (const key in this.filters) {
+          if (key !== fieldName && this.filters[key]) {
+            // Handle all array values as comma-separated values
+            if (Array.isArray(this.filters[key])) {
+              if (this.filters[key].length > 0) {
+                vals[`filter_${key}`] = this.filters[key].join(',');
+              }
+            } else {
+              vals[`filter_${key}`] = this.filters[key];
+            }
+          }
+        }
+        return JSON.stringify(vals);
+      },
+      getStatusHxVals(appLabel, modelName) {
+        const statusKey = `${modelName.toLowerCase()}_status`;
+        let selectedStatuses = this.filters[statusKey] || [];
+        // Ensure statuses is always sent as a JSON string for consistency
+        if (Array.isArray(selectedStatuses)) {
+          selectedStatuses = JSON.stringify(selectedStatuses);
+        } else if (selectedStatuses) {
+          selectedStatuses = JSON.stringify([selectedStatuses]);
+        } else {
+          selectedStatuses = JSON.stringify([]);
+        }
+
+        let vals = {
+          app_label: appLabel,
+          model_name: modelName,
+          selected_statuses: selectedStatuses
+        };
+        for (const key in this.filters) {
+          if (key !== statusKey && this.filters[key]) {
+            // Handle all array values as comma-separated values
+            if (Array.isArray(this.filters[key])) {
+              if (this.filters[key].length > 0) {
+                vals[`filter_${key}`] = this.filters[key].join(',');
+              }
+            } else {
+              vals[`filter_${key}`] = this.filters[key];
+            }
+          }
+        }
+        return JSON.stringify(vals);
+      },
+      getTypeHxVals(appLabel, modelName) {
+        let vals = {
+          app_label: appLabel,
+          model_name: modelName,
+        };
+
+        // Add all filters including type filters
+        for (const key in this.filters) {
+          if (this.filters[key]) {
+            // Handle all array values as comma-separated values
+            if (Array.isArray(this.filters[key])) {
+              if (this.filters[key].length > 0) {
+                vals[`filter_${key}`] = this.filters[key].join(',');
+              }
+            } else {
+              vals[`filter_${key}`] = this.filters[key];
+            }
+          }
+        }
+        return JSON.stringify(vals);
+      },
+      toggleTriState(rawValue, includeKey) {
+        const value = String(rawValue);
+        const excludeKey = `${includeKey}_exclude`;
+        const includeList = this.filters[includeKey] || [];
+        const excludeList = this.filters[excludeKey] || [];
+        const includeIndex = includeList.indexOf(value);
+        const excludeIndex = excludeList.indexOf(value);
+
+        if (includeIndex === -1 && excludeIndex === -1) {
+          if (!this.filters[includeKey]) {
+            this.filters[includeKey] = [];
+          }
+          this.filters[includeKey].push(value);
+          return;
+        }
+
+        if (includeIndex > -1) {
+          this.filters[includeKey].splice(includeIndex, 1);
+          if (this.filters[includeKey].length === 0) {
+            delete this.filters[includeKey];
+          }
+          if (!this.filters[excludeKey]) {
+            this.filters[excludeKey] = [];
+          }
+          if (!this.filters[excludeKey].includes(value)) {
+            this.filters[excludeKey].push(value);
+          }
+          return;
+        }
+
+        if (excludeIndex > -1) {
+          this.filters[excludeKey].splice(excludeIndex, 1);
+          if (this.filters[excludeKey].length === 0) {
+            delete this.filters[excludeKey];
+          }
+        }
+      },
+      toggleStatus(statusPk, modelName) {
+        const statusKey = `${modelName}_status`;
+        this.toggleTriState(statusPk, statusKey);
+      },
+      toggleType(typePk, filterField) {
+        this.toggleTriState(typePk, filterField);
+      },
+      getFilterState(rawValue, includeKey) {
+        const value = String(rawValue);
+        const includeList = this.filters[includeKey] || [];
+        if (includeList.includes(value)) {
+          return 'included';
+        }
+        const excludeKey = `${includeKey}_exclude`;
+        const excludeList = this.filters[excludeKey] || [];
+        if (excludeList.includes(value)) {
+          return 'excluded';
+        }
+        return 'none';
+      },
+      triStateClasses(includeKey, rawValue) {
+        const state = this.getFilterState(rawValue, includeKey);
+        if (state === 'included') {
+          return 'bg-green-500 text-white border-green-500 shadow-sm';
+        }
+        if (state === 'excluded') {
+          return 'bg-red-500 text-white border-red-500 shadow-sm ring-1 ring-red-200 dark:ring-red-500';
+        }
+        return 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700';
+      },
+      clearModelStatusFilter(modelName) {
+        const statusKey = `${modelName}_status`;
+        delete this.filters[statusKey];
+        delete this.filters[`${statusKey}_exclude`];
+      },
+
+      // Event-scoped dispatch helper
+      dispatchFiltersUpdated(scope = null) {
+        const name = scope ? `filters-updated-${scope}` : 'filters-updated';
+        window.dispatchEvent(new CustomEvent(name, { detail: { filters: this.filters } }));
+      },
+    };
+  }
+
+  function comboboxController(appLabel, modelName, multiple = true, valueField = 'pk', labelField = '', inputName = '', initialJson = '[]') {
+    return {
+      appLabel,
+      modelName,
+      multiple,
+      valueField,
+      labelField,
+      inputName,
+      open: false,
+      query: '',
+      options: [],
+      nextPage: null,
+      loading: false,
+      selected: [], // [{value, label}]
+      init() {
+        // Initialize from initialJson if provided (for edit forms)
+        try {
+          const initial = JSON.parse(initialJson || '[]');
+          if (Array.isArray(initial)) {
+            this.selected = initial.map(v => ({ value: String(v.value ?? v), label: String(v.label ?? v) }));
+          }
+        } catch (e) { }
+        this.$watch('query', () => {
+          if (this.open) {
+            htmx.trigger(this.$refs.opts, 'combo-query-changed');
+          }
+        });
+        // Ensure defaultSelected on the hidden input reflects initial state for change detection
+        this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
+      },
+      get hiddenInputName() { return this.inputName || `${this.modelName.toLowerCase()}_ids`; },
+      get hiddenInputValue() { return JSON.stringify(this.selected.map(o => o.value)); },
+      isSelected(value) {
+        return this.selected.some(o => String(o.value) === String(value));
+      },
+      toggleOption(value, label) {
+        const idx = this.selected.findIndex(o => String(o.value) === String(value));
+        if (idx >= 0) {
+          this.selected.splice(idx, 1);
+        } else {
+          if (!this.multiple) this.selected = [];
+          this.selected.push({ value, label });
+        }
+        if (!this.multiple) {
+          this.open = false;
+        }
+      },
+      remove(value) {
+        this.selected = this.selected.filter(o => String(o.value) !== String(value));
+      },
+      clearSelection() {
+        this.selected = [];
+        this.query = '';
+        this.open = false;
+      },
+      resetToInitial(initialJson) {
+        try {
+          const initial = JSON.parse(initialJson || '[]');
+          if (Array.isArray(initial)) {
+            this.selected = initial.map(v => ({ value: String(v.value ?? v), label: String(v.label ?? v) }));
           } else {
-            if (!this.multiple) this.selected = [];
-            this.selected.push({ value, label });
+            this.selected = [];
           }
-          if (!this.multiple) {
-            this.open = false;
-          }
-        },
-        remove(value) {
-          this.selected = this.selected.filter(o => String(o.value) !== String(value));
-        },
-        clearSelection() {
+          this.query = '';
+          this.open = false;
+        } catch (e) {
           this.selected = [];
           this.query = '';
           this.open = false;
-        },
-        resetToInitial(initialJson) {
-          try {
-            const initial = JSON.parse(initialJson || '[]');
-            if (Array.isArray(initial)) {
-              this.selected = initial.map(v => ({ value: String(v.value ?? v), label: String(v.label ?? v) }));
-            } else {
-              this.selected = [];
-            }
-            this.query = '';
-            this.open = false;
-          } catch (e) {
-            this.selected = [];
-            this.query = '';
-            this.open = false;
-          }
-        },
-        getHxVals(page = 1) {
-          const excludeIds = this.selected.map(o => o.value);
-          const vals = {
-            app_label: this.appLabel,
-            model_name: this.modelName,
-            page: page,
-            render: 'combobox',
-            exclude_ids: JSON.stringify(excludeIds),
-          };
-          if (this.query) vals['search'] = this.query;
-          if (this.valueField) vals['value_field'] = this.valueField;
-          if (this.labelField) vals['label_field'] = this.labelField;
-          return JSON.stringify(vals);
-        },
-      };
-    }
-
-    function singleGenericComboboxController(appLabel, modelName, valueField = 'pk', labelField = '', inputName = '', initialValue = '', initialSelectedValue = '') {
-      return {
-        appLabel,
-        modelName,
-        valueField,
-        labelField,
-        inputName,
-        open: false,
-        query: initialValue || '',
-        options: [],
-        loading: false,
-        selected: initialSelectedValue && initialValue ? { value: initialSelectedValue, label: initialValue } : null, // {value, label}
-        init() {
-          // If we have an initial selected value, set it
-          if (initialSelectedValue && initialValue) {
-            this.selected = { value: initialSelectedValue, label: initialValue };
-          }
-          this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
-          this.$watch('query', () => {
-            if (this.open) {
-              htmx.trigger(this.$refs.opts, 'combo-query-changed');
-            }
-          });
-        },
-        get hiddenInputName() { return this.inputName || `${this.modelName.toLowerCase()}_id`; },
-        get hiddenInputValue() {
-          // If a specific option is selected, submit its value; otherwise submit raw query text
-          if (this.selected && this.selected.value !== undefined && this.selected.value !== null && `${this.selected.value}`.length > 0) {
-            return `${this.selected.value}`;
-          }
-          return this.query || '';
-        },
-        isSelected(value) {
-          return this.selected && String(this.selected.value) === String(value);
-        },
-        toggleOption(value, label) {
-          if (this.isSelected(value)) {
-            this.selected = null;
-          } else {
-            this.selected = { value, label };
-            this.query = label;
-          }
-          this.open = false;
-          try {
-            window.dispatchEvent(new CustomEvent('combobox-selected', { detail: { appLabel: this.appLabel, modelName: this.modelName, valueField: this.valueField, labelField: this.labelField, value, label, inputName: this.inputName } }));
-          } catch (e) {}
-        },
-        clearSelection() {
-          this.selected = null;
-          this.query = '';
-          this.open = false;
-        },
-        getHxVals(page = 1) {
-          const vals = {
-            app_label: this.appLabel,
-            model_name: this.modelName,
-            page: page,
-            render: 'combobox',
-          };
-          if (this.query) vals['search'] = this.query;
-          if (this.valueField) vals['value_field'] = this.valueField;
-          if (this.labelField) vals['label_field'] = this.labelField;
-          return JSON.stringify(vals);
-        },
-      };
-    }
-
-    function hpoController() {
-      return {
-        hpoThreshold: 3,
-        isLoading: false,
-        isThresholdValid: true,
-
-        init() {
-          this.$watch("hpoThreshold", () => {
-            this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
-            if (this.isThresholdValid) {
-              window.dispatchEvent(new CustomEvent("filters-updated"));
-            }
-          });
-        },
-
-        getHpoVals() {
-          let vals = {
-            model_name: "Individual",
-            threshold: this.hpoThreshold,
-          };
-          for (const key in this.filters) {
-            if (this.filters[key]) {
-              // Handle all array values as comma-separated values
-              if (Array.isArray(this.filters[key])) {
-                if (this.filters[key].length > 0) {
-                  vals[`filter_${key}`] = this.filters[key].join(',');
-                }
-              } else {
-                vals[`filter_${key}`] = this.filters[key];
-              }
-            }
-          }
-          return JSON.stringify(vals);
         }
-      };
-    }
+      },
+      getHxVals(page = 1) {
+        const excludeIds = this.selected.map(o => o.value);
+        const vals = {
+          app_label: this.appLabel,
+          model_name: this.modelName,
+          page: page,
+          render: 'combobox',
+          exclude_ids: JSON.stringify(excludeIds),
+        };
+        if (this.query) vals['search'] = this.query;
+        if (this.valueField) vals['value_field'] = this.valueField;
+        if (this.labelField) vals['label_field'] = this.labelField;
+        return JSON.stringify(vals);
+      },
+    };
+  }
 
-    // Interactive Pie Chart Generator
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('Setting up interactive pie chart generator...');
-      
-      // Function to setup pie chart generator
-      function setupPieChartGenerator() {
-        const generatePieChartBtn = document.getElementById('generate-pie-chart');
-        const modelSelect = document.getElementById('model-select');
-        const attributeSelect = document.getElementById('attribute-select');
-        const chartContainer = document.getElementById('dynamic-pie-chart-container');
-        const chartDiv = document.getElementById('dynamic-pie-chart');
-        
-        console.log('Button found:', generatePieChartBtn);
-        console.log('Model select found:', modelSelect);
-        console.log('Attribute select found:', attributeSelect);
-        console.log('Chart container found:', chartContainer);
-        console.log('Chart div found:', chartDiv);
-        
-        if (!generatePieChartBtn) {
-          console.error('Generate chart button not found!');
+  function singleGenericComboboxController(appLabel, modelName, valueField = 'pk', labelField = '', inputName = '', initialValue = '', initialSelectedValue = '') {
+    return {
+      appLabel,
+      modelName,
+      valueField,
+      labelField,
+      inputName,
+      open: false,
+      query: initialValue || '',
+      options: [],
+      loading: false,
+      selected: initialSelectedValue && initialValue ? { value: initialSelectedValue, label: initialValue } : null, // {value, label}
+      init() {
+        // If we have an initial selected value, set it
+        if (initialSelectedValue && initialValue) {
+          this.selected = { value: initialSelectedValue, label: initialValue };
+        }
+        this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
+        this.$watch('query', () => {
+          if (this.open) {
+            htmx.trigger(this.$refs.opts, 'combo-query-changed');
+          }
+        });
+      },
+      get hiddenInputName() { return this.inputName || `${this.modelName.toLowerCase()}_id`; },
+      get hiddenInputValue() {
+        // If a specific option is selected, submit its value; otherwise submit raw query text
+        if (this.selected && this.selected.value !== undefined && this.selected.value !== null && `${this.selected.value}`.length > 0) {
+          return `${this.selected.value}`;
+        }
+        return this.query || '';
+      },
+      isSelected(value) {
+        return this.selected && String(this.selected.value) === String(value);
+      },
+      toggleOption(value, label) {
+        if (this.isSelected(value)) {
+          this.selected = null;
+        } else {
+          this.selected = { value, label };
+          this.query = label;
+        }
+        this.open = false;
+        try {
+          window.dispatchEvent(new CustomEvent('combobox-selected', { detail: { appLabel: this.appLabel, modelName: this.modelName, valueField: this.valueField, labelField: this.labelField, value, label, inputName: this.inputName } }));
+        } catch (e) { }
+      },
+      clearSelection() {
+        this.selected = null;
+        this.query = '';
+        this.open = false;
+      },
+      getHxVals(page = 1) {
+        const vals = {
+          app_label: this.appLabel,
+          model_name: this.modelName,
+          page: page,
+          render: 'combobox',
+        };
+        if (this.query) vals['search'] = this.query;
+        if (this.valueField) vals['value_field'] = this.valueField;
+        if (this.labelField) vals['label_field'] = this.labelField;
+        return JSON.stringify(vals);
+      },
+    };
+  }
+
+  function hpoController() {
+    return {
+      hpoThreshold: 3,
+      isLoading: false,
+      isThresholdValid: true,
+
+      init() {
+        this.$watch("hpoThreshold", () => {
+          this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
+          if (this.isThresholdValid) {
+            window.dispatchEvent(new CustomEvent("filters-updated"));
+          }
+        });
+      },
+
+      getHpoVals() {
+        let vals = {
+          model_name: "Individual",
+          threshold: this.hpoThreshold,
+        };
+        for (const key in this.filters) {
+          if (this.filters[key]) {
+            // Handle all array values as comma-separated values
+            if (Array.isArray(this.filters[key])) {
+              if (this.filters[key].length > 0) {
+                vals[`filter_${key}`] = this.filters[key].join(',');
+              }
+            } else {
+              vals[`filter_${key}`] = this.filters[key];
+            }
+          }
+        }
+        return JSON.stringify(vals);
+      }
+    };
+  }
+
+  // Interactive Pie Chart Generator
+  document.addEventListener('DOMContentLoaded', function () {
+    console.log('Setting up interactive pie chart generator...');
+
+    // Function to setup pie chart generator
+    function setupPieChartGenerator() {
+      const generatePieChartBtn = document.getElementById('generate-pie-chart');
+      const modelSelect = document.getElementById('model-select');
+      const attributeSelect = document.getElementById('attribute-select');
+      const chartContainer = document.getElementById('dynamic-pie-chart-container');
+      const chartDiv = document.getElementById('dynamic-pie-chart');
+
+      console.log('Button found:', generatePieChartBtn);
+      console.log('Model select found:', modelSelect);
+      console.log('Attribute select found:', attributeSelect);
+      console.log('Chart container found:', chartContainer);
+      console.log('Chart div found:', chartDiv);
+
+      if (!generatePieChartBtn) {
+        console.error('Generate chart button not found!');
+        return;
+      }
+
+      generatePieChartBtn.addEventListener('click', function () {
+        console.log('Generate Chart button clicked');
+        const model = modelSelect.value;
+        const attribute = attributeSelect.value;
+
+        console.log('Selected model:', model);
+        console.log('Selected attribute:', attribute);
+
+        if (!model || !attribute) {
+          alert('Please select both model and attribute');
           return;
         }
-        
-        generatePieChartBtn.addEventListener('click', function() {
-          console.log('Generate Chart button clicked');
-          const model = modelSelect.value;
-          const attribute = attributeSelect.value;
-          
-          console.log('Selected model:', model);
-          console.log('Selected attribute:', attribute);
-          
-          if (!model || !attribute) {
-            alert('Please select both model and attribute');
-            return;
+
+        // Show loading state
+        generatePieChartBtn.disabled = true;
+        generatePieChartBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
+
+        // Make request to pie chart view
+        const url = `/ pie - chart / ${model} /${attribute}/`;
+        console.log('Making request to:', url);
+
+        // Use fetch to make the request
+        fetch(url, {
+          method: 'GET',
+          headers: {
+            'HX-Request': 'true',
+            'Content-Type': 'application/json',
           }
-          
-          // Show loading state
-          generatePieChartBtn.disabled = true;
-          generatePieChartBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
-          
-          // Make request to pie chart view
-          const url = `/pie-chart/${model}/${attribute}/`;
-          console.log('Making request to:', url);
-          
-          // Use fetch to make the request
-          fetch(url, {
-            method: 'GET',
-            headers: {
-              'HX-Request': 'true',
-              'Content-Type': 'application/json',
-            }
-          })
+        })
           .then(response => {
             if (!response.ok) {
               throw new Error('Failed to generate chart');
@@ -843,10 +857,10 @@
             // Insert the chart HTML
             chartDiv.innerHTML = html;
             chartContainer.classList.remove('hidden');
-            
+
             // Scroll to the chart
             chartContainer.scrollIntoView({ behavior: 'smooth' });
-            
+
             // Reset button state
             generatePieChartBtn.disabled = false;
             generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
@@ -854,99 +868,107 @@
           .catch(error => {
             console.error('Error generating chart:', error);
             alert('Error generating chart. Please try again.');
-            
+
             // Reset button state
             generatePieChartBtn.disabled = false;
             generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
           });
-        });
-        
-        // Dynamic attribute options based on model selection
-        modelSelect.addEventListener('change', function() {
-          const model = this.value;
-          const attributeSelect = document.getElementById('attribute-select');
-          
-          // Reset attribute selection
-          attributeSelect.innerHTML = '<option value="">Select Attribute</option>';
-          
-          if (model) {
-            // Add model-specific attributes
-            const attributes = {
-              'Individual': [
-                { value: 'status__name', label: 'Status' },
-                { value: 'institution__name', label: 'Institution' },
-                { value: 'project__name', label: 'Project' }
-              ],
-              'Sample': [
-                { value: 'status__name', label: 'Status' },
-                { value: 'type__name', label: 'Type' },
-                { value: 'individual__institution__name', label: 'Institution' }
-              ],
-              'Test': [
-                { value: 'status__name', label: 'Status' },
-                { value: 'type__name', label: 'Type' },
-                { value: 'sample__individual__institution__name', label: 'Institution' }
-              ],
-              'Analysis': [
-                { value: 'status__name', label: 'Status' },
-                { value: 'type__name', label: 'Type' },
-                { value: 'test__sample__individual__institution__name', label: 'Institution' }
-              ],
-              'Project': [
-                { value: 'status__name', label: 'Status' },
-                { value: 'institution__name', label: 'Institution' }
-              ],
-              'Task': [
-                { value: 'status__name', label: 'Status' },
-                { value: 'content_type__model', label: 'Related Model' }
-              ]
-            };
-            
-            const modelAttributes = attributes[model] || [];
-            modelAttributes.forEach(attr => {
-              const option = document.createElement('option');
-              option.value = attr.value;
-              option.textContent = attr.label;
-              attributeSelect.appendChild(option);
-            });
-          }
-        });
-      }
-      
-      // Setup initially
-      setupPieChartGenerator();
-      
-      // Setup after HTMX content loads
-      document.body.addEventListener('htmx:afterSwap', function(event) {
-        if (event.target.id === 'plots-content') {
-          console.log('Plots content loaded, setting up pie chart generator...');
-          setTimeout(setupPieChartGenerator, 100);
+      });
+
+      // Dynamic attribute options based on model selection
+      modelSelect.addEventListener('change', function () {
+        const model = this.value;
+        const attributeSelect = document.getElementById('attribute-select');
+
+        // Reset attribute selection
+        attributeSelect.innerHTML = '<option value="">Select Attribute</option>';
+
+        if (model) {
+          // Add model-specific attributes
+          const attributes = {
+            'Individual': [
+              { value: 'status__name', label: 'Status' },
+              { value: 'institution__name', label: 'Institution' },
+              { value: 'project__name', label: 'Project' }
+            ],
+            'Sample': [
+              { value: 'status__name', label: 'Status' },
+              { value: 'type__name', label: 'Type' },
+              { value: 'individual__institution__name', label: 'Institution' }
+            ],
+            'Test': [
+              { value: 'status__name', label: 'Status' },
+              { value: 'type__name', label: 'Type' },
+              { value: 'sample__individual__institution__name', label: 'Institution' }
+            ],
+            'Analysis': [
+              { value: 'status__name', label: 'Status' },
+              { value: 'type__name', label: 'Type' },
+              { value: 'test__sample__individual__institution__name', label: 'Institution' }
+            ],
+            'Project': [
+              { value: 'status__name', label: 'Status' },
+              { value: 'institution__name', label: 'Institution' }
+            ],
+            'Task': [
+              { value: 'status__name', label: 'Status' },
+              { value: 'content_type__model', label: 'Related Model' }
+            ]
+          };
+
+          const modelAttributes = attributes[model] || [];
+          modelAttributes.forEach(attr => {
+            const option = document.createElement('option');
+            option.value = attr.value;
+            option.textContent = attr.label;
+            attributeSelect.appendChild(option);
+          });
         }
       });
+    }
+
+    // Setup initially
+    setupPieChartGenerator();
+
+    // Setup after HTMX content loads
+    document.body.addEventListener('htmx:afterSwap', function (event) {
+      if (event.target.id === 'plots-content') {
+        console.log('Plots content loaded, setting up pie chart generator...');
+        setTimeout(setupPieChartGenerator, 100);
+      }
     });
-  </script>
+  });
+</script>
 {% endblock content %}
 
 {% if initial_detail_html %}
-  <script>
-    document.addEventListener('alpine:init', () => {
-      const mainController = document.querySelector('[x-data="mainController()"]').__x;
-      if (mainController) {
-        mainController.openDetail({{ initial_detail_html|safe }});
-      }
-    });
-  </script>
+<script>
+  document.addEventListener('alpine:init', () => {
+    // Wait for Alpine to initialize the component
+    const el = document.querySelector('[x-data="mainController()"]');
+    if (el) {
+       // We need to wait for the component to be fully initialized
+       Alpine.nextTick(() => {
+         const controller = el.__x.$data;
+         if (controller) {
+            controller.detailHtml = `{{ initial_detail_html|safe }}`;
+            controller.activeItem = 'detail-{{ model_name }}-{{ item.pk }}';
+         }
+       });
+    }
+  });
+</script>
 {% endif %}
 
 {% if initial_nl_search_html %}
-  <script>
-    document.addEventListener('alpine:init', () => {
-      const mainController = document.querySelector('[x-data="mainController()"]').__x;
-      if (mainController) {
-        mainController.showNLSearch();
-      }
-    });
-  </script>
+<script>
+  document.addEventListener('alpine:init', () => {
+    const mainController = document.querySelector('[x-data="mainController()"]').__x;
+    if (mainController) {
+      mainController.showNLSearch();
+    }
+  });
+</script>
 {% endif %}
 
 <!-- Hidden family creation form template -->

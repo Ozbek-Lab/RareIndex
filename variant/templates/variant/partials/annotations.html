@@ -1,0 +1,176 @@
+{% load partials %}
+
+{% partialdef vep %}
+<div class="space-y-4">
+  {% if data %}
+    {% for result in data %}
+      {% for transcript in result.transcript_consequences %}
+      <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-700/50 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+          <span class="font-mono text-sm font-semibold">{{ transcript.transcript_id }}</span>
+          <div class="flex gap-2">
+            {% for term in transcript.consequence_terms %}
+            <span class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+              {{ term }}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <span class="block text-gray-500 text-xs">Gene</span>
+            <span class="font-medium">{{ transcript.gene_symbol|default:transcript.gene_id }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-500 text-xs">Impact</span>
+            <span class="font-medium {{ transcript.impact|lower }}">{{ transcript.impact|default:"-" }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-500 text-xs">HGVSc</span>
+            <span class="font-mono">{{ transcript.hgvsc|default:"-" }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-500 text-xs">HGVSp</span>
+            <span class="font-mono">{{ transcript.hgvsp|default:"-" }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-500 text-xs">Amino Acids</span>
+            <span>{{ transcript.amino_acids|default:"-" }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-500 text-xs">Biotype</span>
+            <span>{{ transcript.biotype|default:"-" }}</span>
+          </div>
+          {% if transcript.sift_prediction %}
+          <div>
+            <span class="block text-gray-500 text-xs">SIFT</span>
+            <span>{{ transcript.sift_prediction }} ({{ transcript.sift_score|default:"-" }})</span>
+          </div>
+          {% endif %}
+          {% if transcript.polyphen_prediction %}
+          <div>
+            <span class="block text-gray-500 text-xs">PolyPhen</span>
+            <span>{{ transcript.polyphen_prediction }} ({{ transcript.polyphen_score|default:"-" }})</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% endfor %}
+  {% else %}
+    <div class="text-gray-500 italic">No VEP data available.</div>
+  {% endif %}
+</div>
+{% endpartialdef %}
+
+{% partialdef myvariant %}
+<div class="space-y-4">
+  {% if data %}
+    <!-- SnpEff -->
+    {% if data.snpeff and data.snpeff.ann %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <h5 class="font-semibold mb-3 text-sm text-gray-700 dark:text-gray-300 border-b pb-2">SnpEff Annotations</h5>
+      <div class="space-y-3">
+        {% for ann in data.snpeff.ann %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm border-b border-gray-100 dark:border-gray-700 last:border-0 pb-2 last:pb-0">
+          <div>
+            <span class="block text-gray-500 text-xs">Gene</span>
+            <span class="font-medium">{{ ann.genename|default:ann.gene_id }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-500 text-xs">Effect</span>
+            <span class="font-medium">{{ ann.effect }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-500 text-xs">HGVSc</span>
+            <span class="font-mono text-xs">{{ ann.hgvs_c|default:"-" }}</span>
+          </div>
+           <div>
+            <span class="block text-gray-500 text-xs">Impact</span>
+            <span class="font-medium">{{ ann.putative_impact }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ClinVar -->
+    {% if data.clinvar %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <h5 class="font-semibold mb-2 text-sm text-gray-700 dark:text-gray-300">ClinVar</h5>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <span class="block text-gray-500 text-xs">Significance</span>
+          <span class="font-medium">{{ data.clinvar.rcv.clinical_significance|default:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-gray-500 text-xs">Review Status</span>
+          <span>{{ data.clinvar.rcv.review_status|default:"-" }}</span>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- gnomAD -->
+    {% if data.gnomad_exome or data.gnomad_genome %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <h5 class="font-semibold mb-2 text-sm text-gray-700 dark:text-gray-300">gnomAD</h5>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        {% if data.gnomad_exome %}
+        <div>
+          <span class="block text-gray-500 text-xs">Exome AF</span>
+          <span class="font-mono">{{ data.gnomad_exome.af.af|default:"-" }}</span>
+        </div>
+        {% endif %}
+        {% if data.gnomad_genome %}
+        <div>
+          <span class="block text-gray-500 text-xs">Genome AF</span>
+          <span class="font-mono">{{ data.gnomad_genome.af.af|default:"-" }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Raw Data Fallback -->
+    <div class="mt-4">
+      <details>
+        <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700">View Raw Data</summary>
+        <pre class="text-xs bg-gray-100 dark:bg-gray-900 p-2 rounded mt-2 overflow-x-auto">{{ data|pprint }}</pre>
+      </details>
+    </div>
+  {% else %}
+    <div class="text-gray-500 italic">No MyVariant.info data available.</div>
+  {% endif %}
+</div>
+{% endpartialdef %}
+
+{% partialdef genebe %}
+<div class="space-y-4">
+  {% if data %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <span class="block text-gray-500 text-xs">Gene</span>
+          <span class="font-medium">{{ data.gene_symbol|default:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-gray-500 text-xs">ACMG Classification</span>
+          <span class="font-medium px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700">
+            {{ data.acmg_classification|default:"-" }}
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="mt-4">
+      <details>
+        <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700">View Raw Data</summary>
+        <pre class="text-xs bg-gray-100 dark:bg-gray-900 p-2 rounded mt-2 overflow-x-auto">{{ data|pprint }}</pre>
+      </details>
+    </div>
+  {% else %}
+    <div class="text-gray-500 italic">No Genebe data available.</div>
+  {% endif %}
+</div>
+{% endpartialdef %}
