@@ -13,6 +13,17 @@ FILTER_CONFIG = {
             "Individual": "individuals__pk",
         },
     },
+    "Gene": {
+        "app_label": "variant",
+        "search_fields": ["symbol", "name", "alias_symbol", "hgnc_id"],
+        "filters": {
+            "Variant": "variants__pk",
+            "Individual": "variants__individual__pk",
+            "Sample": "variants__individual__samples__pk",
+            "Test": "variants__individual__samples__tests__pk",
+            "Analysis": "variants__individual__samples__tests__analyses__pk",
+        },
+    },
     "Individual": {
         "app_label": "lab",
         "search_fields": ["full_name", "cross_ids__id_value", "family__family_id"],
@@ -20,9 +31,11 @@ FILTER_CONFIG = {
             "Institution": "institution__pk",
             "Term": "hpo_terms__pk",
             "Sample": "samples__pk",
-            "Test": "samples__tests__pk",  # Add this line
-            "Analysis": "samples__tests__analyses__pk",  # Add this line
+            "Test": "samples__tests__pk",
+            "Analysis": "samples__tests__analyses__pk",
             "Project": "projects__pk",
+            "Variant": "variants__pk",
+            "Gene": "variants__genes__pk",
         },
         "select_fields": {
             "sample_type": {
@@ -30,12 +43,12 @@ FILTER_CONFIG = {
                 "label": "Sample Type",
                 "select_filter_path": "samples__sample_type__name",
             },
-            "test_type": {  # Add this block
+            "test_type": {
                 "field_path": "samples__tests__test_type__name",
                 "label": "Test Type",
                 "select_filter_path": "samples__tests__test_type__name",
             },
-            "analysis_type": {  # Add this block
+            "analysis_type": {
                 "field_path": "samples__tests__analyses__type__name",
                 "label": "Analysis Type",
                 "select_filter_path": "samples__tests__analyses__type__name",
@@ -54,6 +67,8 @@ FILTER_CONFIG = {
             "Institution": "individual__institution__pk",
             "Term": "individual__hpo_terms__pk",
             "Test": "tests__pk",
+            "Variant": "individual__variants__pk",
+            "Gene": "individual__variants__genes__pk",
         },
         "select_fields": {
             "sample_type": {
@@ -74,6 +89,8 @@ FILTER_CONFIG = {
             "Individual": "sample__individual__pk",
             "Sample": "sample__pk",
             "Institution": "sample__individual__institution__pk",
+            "Variant": "analyses__found_variants__pk",
+            "Gene": "analyses__found_variants__genes__pk",
         },
         "select_fields": {
             "sample_type": {
@@ -104,6 +121,8 @@ FILTER_CONFIG = {
             "Test": "test__pk",
             "Sample": "test__sample__sample_type__pk",
             "Individual": "test__sample__individual__pk",
+            "Variant": "found_variants__pk",
+            "Gene": "found_variants__genes__pk",
         },
         "select_fields": {
             "sample_type": {
@@ -190,6 +209,42 @@ FILTER_CONFIG = {
             ],
         },
     },
+    "Variant": {
+        "app_label": "variant",
+        "search_fields": ["chromosome", "snv__reference", "snv__alternate", "id"],
+        "filters": {
+            "Individual": "individual__pk",
+            "Analysis": "analysis__pk",
+            "Test": "analysis__test__pk",
+            "Gene": "genes__pk",
+        },
+        "select_fields": {
+            "classification": {
+                "field_path": "classifications__classification",
+                "label": "Classification",
+                "select_filter_path": "classifications__classification",
+            },
+            "inheritance": {
+                "field_path": "classifications__inheritance",
+                "label": "Inheritance",
+                "select_filter_path": "classifications__inheritance",
+            },
+            "test_type": {
+                "field_path": "analysis__test__test_type__name",
+                "label": "Test Type",
+                "select_filter_path": "analysis__test__test_type__name",
+            },
+            "analysis_type": {
+                "field_path": "analysis__type__name",
+                "label": "Analysis Type",
+                "select_filter_path": "analysis__type__name",
+            },
+        },
+        "status_filter": {
+            "field_path": "status__pk",
+            "label": "Status",
+        },
+    },
 }
 
 
@@ -254,6 +309,7 @@ def _apply_cross_model_status_filter(queryset, target_model_name, filter_model_n
             "Test": "sample__individual__pk", 
             "Analysis": "test__sample__individual__pk",
             "Term": "individuals__pk",
+            "Variant": "individual__pk",
         },
         "Sample": {
             "Individual": "individual__pk",
@@ -264,17 +320,22 @@ def _apply_cross_model_status_filter(queryset, target_model_name, filter_model_n
             "Individual": "sample__individual__pk",
             "Sample": "sample__pk", 
             "Analysis": "test__pk",
+            "Variant": "analysis__test__pk",
         },
         "Analysis": {
             "Individual": "test__sample__individual__pk",
             "Sample": "test__sample__pk",
             "Test": "test__pk",
+            "Variant": "analysis__pk",
         },
         "Project": {
             "Individual": "individuals__pk",
         },
         "Term": {
             "Individual": "individuals__pk",
+        },
+        "Variant": {
+            "Individual": "variants__pk",
         },
     }
     
@@ -372,8 +433,15 @@ def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_v
     filter_model = apps.get_model(app_label=filter_app_label, model_name=filter_model_name)
 
     q_objects = Q()
-    for field in search_fields:
-        q_objects |= reduce(operator.or_, [Q(**{f"{field}__icontains": filter_value}) for filter_value in filter_values])
+    q_objects = Q()
+    for filter_value in filter_values:
+        # If the value is a digit, it might be a PK (from a combobox selection)
+        if filter_value.isdigit():
+            q_objects |= Q(pk=filter_value)
+        
+        # Also search by text fields
+        for field in search_fields:
+            q_objects |= Q(**{f"{field}__icontains": filter_value})
 
     pks_to_filter_by = list(filter_model.objects.filter(q_objects).values_list("pk", flat=True).distinct())
     if not pks_to_filter_by:
@@ -389,7 +457,7 @@ def _partition_active_filters(request, exclude_filter=None):
     for k, v in request.GET.items():
         if not k.startswith("filter_") or not v:
             continue
-        raw_key = k.replace("filter_", "")
+        raw_key = k.replace("filter_", "").strip()
         if not raw_key:
             continue
         target_dict = include_filters
@@ -422,6 +490,8 @@ def _apply_filter_group(queryset, target_model_name, filter_key, filter_values, 
             filter_values,
             exclude=exclude,
         )
+    if filter_key == "variant_type":
+        return _apply_variant_type_filter(queryset, filter_values, target_model_name, exclude=exclude)
     if select_config:
         return _apply_select_filter(queryset, select_config, filter_values, exclude=exclude)
     return _apply_cross_model_text_filter(
@@ -431,6 +501,37 @@ def _apply_filter_group(queryset, target_model_name, filter_key, filter_values, 
         filter_values,
         exclude=exclude,
     )
+
+def _apply_variant_type_filter(queryset, filter_values, target_model_name, exclude=False):
+    """Applies a filter for variant types (SNV, CNV, SV, Repeat)."""
+    # Determine the path to the variant model based on the target model
+    prefix = ""
+    if target_model_name == "Individual":
+        prefix = "variants__"
+    elif target_model_name == "Sample":
+        prefix = "individual__variants__"
+    elif target_model_name == "Test":
+        prefix = "analyses__found_variants__"
+    elif target_model_name == "Analysis":
+        prefix = "found_variants__"
+    elif target_model_name == "Variant":
+        prefix = ""
+
+    q_objects = Q()
+    for val in filter_values:
+        val = val.lower()
+        if val == "snv":
+            q_objects |= Q(**{f"{prefix}snv__isnull": False})
+        elif val == "cnv":
+            q_objects |= Q(**{f"{prefix}cnv__isnull": False})
+        elif val == "sv":
+            q_objects |= Q(**{f"{prefix}sv__isnull": False})
+        elif val == "repeat":
+            q_objects |= Q(**{f"{prefix}repeat__isnull": False})
+    
+    if exclude:
+        return queryset.exclude(q_objects)
+    return queryset.filter(q_objects)
 
 
 def apply_filters(request, target_model_name, queryset, exclude_filter=None):
@@ -489,6 +590,14 @@ def get_available_statuses(model_name, app_label="lab"):
 def get_available_types(model_name, app_label="lab"):
     """Get available types for a specific model."""
     try:
+        if model_name.lower() == "variant":
+            return [
+                {"pk": "snv", "name": "SNV", "filter_field": "variant_type"},
+                {"pk": "cnv", "name": "CNV", "filter_field": "variant_type"},
+                {"pk": "sv", "name": "SV", "filter_field": "variant_type"},
+                {"pk": "repeat", "name": "Repeat", "filter_field": "variant_type"},
+            ]
+
         # Map model names to their corresponding type models and filter field names
         type_config = {
             'test': {
