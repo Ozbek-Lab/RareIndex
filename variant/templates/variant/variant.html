@@ -1,0 +1,718 @@
+{% extends "lab/base.html" %}
+{% load lab_filters variant_filters %}
+
+{% block content %}
+  {% partial detail %}
+{% endblock content %}
+
+{% partialdef detail %}
+  <div
+    id="variant-detail"
+    class="space-y-6"
+    x-data="{ activeTab: '{{ activeTab|default:" annotations" }}', historyLoaded:
+  {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }"
+  >
+    <!-- Variant card -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+      <!-- Header -->
+      <div class="bg-gradient-to-r from-purple-600 to-purple-800 px-6 py-4">
+        <div
+          class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+        >
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-2xl font-bold text-white">
+                {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
+              </h2>
+              {% if item.classifications.exists %}
+                <span
+                  class="text-xs px-2 py-1 rounded
+                {% if item.classifications.first.classification == 'pathogenic' %}
+                    bg-red-100 text-red-800
+                  {% elif item.classifications.first.classification == 'likely_pathogenic' %}
+                    bg-orange-100 text-orange-800
+                  {% elif item.classifications.first.classification == 'vus' %}
+                    bg-yellow-100 text-yellow-800
+                  {% elif item.classifications.first.classification == 'likely_benign' %}
+                    bg-green-100 text-green-800
+                  {% elif item.classifications.first.classification == 'benign' %}
+                    bg-green-50 text-green-600
+                  {% else %}
+                    bg-gray-100 text-gray-800
+                  {% endif %}"
+                >
+                  {{ item.classifications.first.get_classification_display }}
+                </span>
+              {% endif %}
+            </div>
+            <p class="text-purple-100 mt-1">
+              {{ item.assembly_version }} | {{ item.type|default:"Variant" }}
+            </p>
+          </div>
+          <div class="flex flex-col items-start md:items-end gap-2">
+            {% partial status-badge %}
+            <!-- External Links -->
+            <div class="flex gap-2">
+              <a
+                href="https://gnomad.broadinstitute.org/variant/{{ item.chromosome }}-{{ item.start }}-{{ item.reference }}-{{ item.alternate }}?dataset=gnomad_r4"
+                target="_blank"
+                class="text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded transition"
+              >
+                gnomAD
+              </a>
+              <a
+                href="https://clinvar.ncbi.nlm.nih.gov/clinvar/?term={{ item.chromosome }}%5Bchr%5D+AND+{{ item.start }}%5Bchrpos%5D"
+                target="_blank"
+                class="text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded transition"
+              >
+                ClinVar
+              </a>
+              <a
+                href="https://franklin.genoox.com/clinical-db/variant/snp/{{ item.chromosome }}-{{ item.start }}-{{ item.reference }}-{{ item.alternate }}-{{ item.assembly_version }}"
+                target="_blank"
+                class="text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded transition"
+              >
+                Franklin
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Location
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100">
+              Chr{{ item.chromosome }}:{{ item.start }}-{{ item.end }}
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Change
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100">
+              {{ item.reference }} > {{ item.alternate }}
+            </p>
+          </div>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Individual
+            </h3>
+            <a
+              href="{% url 'lab:generic_detail' %}?app_label=lab&model_name=Individual&pk={{ item.individual.pk }}"
+              class="text-blue-600 hover:underline"
+            >
+              {{ item.individual }}
+            </a>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Analysis
+            </h3>
+            {% if item.analysis %}
+              <a
+                href="{% url 'lab:generic_detail' %}?app_label=lab&model_name=Analysis&pk={{ item.analysis.pk }}"
+                class="text-blue-600 hover:underline"
+              >
+                {{ item.analysis }}
+              </a>
+            {% else %}
+              <span class="text-gray-500">-</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="px-6 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex -mb-px flex-nowrap overflow-x-auto scroll-smooth">
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'annotations' ? 'border-purple-500 text-purple-600 dark:text-purple-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'annotations'"
+          >
+            Annotations
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'notes' ? 'border-purple-500 text-purple-600 dark:text-purple-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'notes'"
+          >
+            Notes
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'classification' ? 'border-purple-500 text-purple-600 dark:text-purple-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'classification'"
+          >
+            Classification
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'history' ? 'border-purple-500 text-purple-600 dark:text-purple-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click="activeTab = 'history'"
+            {% if not history_prefetched %}
+              hx-get="{% url 'lab:history_tab' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ item.pk }}"
+              hx-trigger="click once"
+              hx-target="#history-tab-panel-{{ model_name|lower }}-{{ item.pk }}"
+              hx-swap="innerHTML"
+              hx-indicator="#history-tab-indicator-{{ model_name|lower }}-{{ item.pk }}"
+              hx-on::before-request="historyLoading = true"
+              hx-on::after-on-load="historyLoading = false; historyLoaded =
+              true"
+            {% endif %}
+          >
+            History
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="p-6">
+        <div x-show="activeTab === 'annotations'" x-cloak>
+          {% include "variant/partials/_annotation_tab.html" %}
+        </div>
+        <div x-show="activeTab === 'notes'" x-cloak>
+          {% with variant=item %}
+            {% include 'lab/partials/note_sections.html#variant-notes-grid' %}
+          {% endwith %}
+        </div>
+        <div x-show="activeTab === 'classification'" x-cloak>
+          {% include "variant/partials/_classification_tab.html" %}
+        </div>
+        <div x-show="activeTab === 'history'" x-cloak>
+          <div id="history-tab-panel-{{ model_name|lower }}-{{ item.pk }}">
+            {% if history_prefetched %}
+              {% include "variant/partials/_history_tab.html" %}
+            {% else %}
+              <div
+                id="history-tab-indicator-{{ model_name|lower }}-{{ item.pk }}"
+                class="htmx-indicator py-4 text-center text-gray-500"
+              >
+                <i class="fas fa-spinner fa-spin mr-2"></i> Loading history...
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endpartialdef detail %}
+
+{% partialdef card %}
+  <div
+    class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+    data-item-id="{{ item.id }}"
+  >
+    <div class="flex items-center gap-1 mb-2">
+      <button
+        class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
+        @click="openDetail('{{ item.pk }}', '{{ model_name }}', '{{ app_label }}')"
+        title="View details"
+      >
+        <i class="fa-solid fa-eye text-lg"></i>
+      </button>
+      <h3 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
+      </h3>
+      <div class="ml-auto flex flex-col items-end gap-1">
+        {% partial status-badge-card %}
+        <span class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+          {{ item.assembly_version }}
+        </span>
+        {% if item.classifications.exists %}
+          <span
+            class="text-xs px-2 py-1 rounded
+          {% if item.classifications.first.classification == 'pathogenic' %}
+              bg-red-100 text-red-800
+            {% elif item.classifications.first.classification == 'likely_pathogenic' %}
+              bg-orange-100 text-orange-800
+            {% elif item.classifications.first.classification == 'vus' %}
+              bg-yellow-100 text-yellow-800
+            {% elif item.classifications.first.classification == 'likely_benign' %}
+              bg-green-100 text-green-800
+            {% elif item.classifications.first.classification == 'benign' %}
+              bg-green-50 text-green-600
+            {% else %}
+              bg-gray-100 text-gray-800
+            {% endif %}"
+          >
+            {{ item.classifications.first.get_classification_display }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mb-2">
+      <div class="flex items-center mb-2">
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">
+          {{ item.type|default:"Variant" }}
+        </span>
+      </div>
+    </div>
+
+    <div class="flex justify-between items-end">
+      <div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm flex-grow">
+        <!-- Location & Change -->
+
+
+        <!-- Gene & HGVS -->
+        <div class="col-span-2 sm:col-span-1">
+          <p class="text-xs text-gray-500">Gene</p>
+          <p class="font-medium">
+            {% for gene in item.genes.all %}
+              <span class="italic">{{ gene.symbol }}</span>{% if not forloop.last %},{% endif %}
+              {% empty %}
+              <span class="italic">{{ item|get_annotation_data:"gene"|default:"-" }}</span>
+            {% endfor %}
+          </p>
+        </div>
+        <div class="col-span-2 sm:col-span-1">
+          <p class="text-xs text-gray-500">HGVS</p>
+          <p
+            class="font-medium truncate"
+            {% with hgvsc=item|get_annotation_data:'hgvsc' hgvsp=item|get_annotation_data:'hgvsp' %}
+            title="{{ hgvsc|default:hgvsp }}"
+            >
+            {{ hgvsc|default:hgvsp|default:"-" }}
+            {% endwith %}
+          </p>
+        </div>
+
+        <!-- Context -->
+        <div class="col-span-2 sm:col-span-1">
+          <p class="text-xs text-gray-500">Individual</p>
+          <a
+            href="{% url 'lab:generic_detail' %}?app_label=lab&model_name=Individual&pk={{ item.individual.pk }}"
+            class="font-medium text-blue-600 hover:underline"
+          >
+            {{ item.individual.individual_id }}
+          </a>
+        </div>
+        <div class="col-span-2 sm:col-span-1">
+          <p class="text-xs text-gray-500">Analysis / Test</p>
+          <p class="font-medium truncate">
+            {% if item.analysis %}
+              {{ item.analysis.type.name }}
+              / {{ item.analysis.test.test_type.name }}
+            {% else %}
+              -
+            {% endif %}
+          </p>
+        </div>
+      </div>
+
+      <!-- Notes Dropdown -->
+      <div class="flex items-center gap-1 ml-4 mb-1">
+        <div x-data="{ open: false }" class="static">
+          <button
+            @click= "open = ! open"
+            type="button"
+            class="inline-flex items-center px-1 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            <span class="ml-1 inline-flex items-center"
+              >{% with object=item content_type='variant' app_label='variant' %}{% include 'lab/note.html#summary' %}{% endwith %}</span>
+            <i
+              class="fa-solid fa-chevron-down transition-transform"
+              :class="{ 'rotate-180': open }"
+            ></i>
+          </button>
+          <div
+            x-show="open"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 transform scale-95"
+            x-transition:enter-end="opacity-100 transform scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 transform scale-100"
+            x-transition:leave-end="opacity-0 transform scale-95"
+            class="absolute left-0 right-0 z-10 mt-2 w-full max-w-none"
+            style="left: 50%; transform: translateX(-50%); width: 90vw; max-width: 1200px;"
+          >
+            <div
+              class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+            >
+              {% with variant=item %}
+                {% include 'lab/partials/note_sections.html#variant-notes-grid' %}
+              {% endwith %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endpartialdef card %}
+
+{% partialdef combobox-options %}
+  {% for option in options %}
+    <div
+      class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-blue-600 hover:text-white group"
+      role="option"
+      @click="selectOption('{{ option.value }}', '{{ option.label|escapejs }}')"
+    >
+      <span class="block truncate font-normal group-hover:font-semibold">
+        {{ option.label }}
+      </span>
+    </div>
+    {% empty %}
+    <div
+      class="cursor-default select-none relative py-2 pl-3 pr-9 text-gray-700 dark:text-gray-300"
+    >
+      No results found.
+    </div>
+  {% endfor %}
+{% endpartialdef combobox-options %}
+
+{% partialdef compact-card %}
+  <div
+    class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
+  >
+    <div class="flex justify-between items-center mb-1">
+      <h4
+        class="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate"
+      >
+        <a
+          href="{% url 'lab:generic_detail' %}?app_label=variant&model_name=Variant&pk={{ item.pk }}"
+          class="hover:underline"
+        >
+        >
+          {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
+        </a>
+      </h4>
+      <span
+        class="text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded"
+      >
+        {{ item.assembly_version }}
+      </span>
+    </div>
+    <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">
+      {{ item.type|default:"Variant" }}
+    </div>
+    <div class="flex justify-between items-end">
+      <div class="text-xs">
+        <span class="font-medium"
+          >{% with gene=item|get_annotation_data:"gene" %}<span class="italic">{{ item.genes.first.symbol|default:gene|default:"-" }}</span>{% endwith %}</span
+        >
+      </div>
+      {% if item.classifications.exists %}
+        <span
+          class="text-[10px] px-1.5 py-0.5 rounded
+        {% if item.classifications.first.classification == 'pathogenic' %}
+            bg-red-100 text-red-800
+          {% elif item.classifications.first.classification == 'likely_pathogenic' %}
+            bg-orange-100 text-orange-800
+          {% elif item.classifications.first.classification == 'vus' %}
+            bg-yellow-100 text-yellow-800
+          {% elif item.classifications.first.classification == 'likely_benign' %}
+            bg-green-100 text-green-800
+          {% elif item.classifications.first.classification == 'benign' %}
+            bg-green-50 text-green-600
+          {% else %}
+            bg-gray-100 text-gray-800
+          {% endif %}"
+        >
+          {{ item.classifications.first.get_classification_display }}
+        </span>
+      {% endif %}
+    </div>
+  </div>
+{% endpartialdef compact-card %}
+
+{% partialdef table-row %}
+  <td
+    class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 dark:text-gray-100 sm:pl-6"
+  >
+    <div class="flex flex-col">
+      <a
+        href="{% url 'lab:generic_detail' %}?app_label=variant&model_name=Variant&pk={{ item.pk }}"
+        class="hover:underline text-indigo-600 dark:text-indigo-400"
+      >
+        {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
+      </a>
+      <span class="text-xs text-gray-500">
+        {{ item.chromosome }}:{{ item.start }}
+      </span>
+    </div>
+  </td>
+  <td
+    class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400"
+  >
+    <div class="flex flex-col">
+      <span>{{ item.reference|default:"-" }}</span>
+      <span class="text-xs text-gray-400">&gt;</span>
+      <span>{{ item.alternate|default:"-" }}</span>
+    </div>
+  </td>
+  <td
+    class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400"
+  >
+    <a
+      href="{% url 'lab:generic_detail' %}?app_label=lab&model_name=Individual&pk={{ item.individual.pk }}"
+      class="hover:underline text-blue-600"
+    >
+      {{ item.individual.individual_id }}
+    </a>
+  </td>
+  <td
+    class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400"
+  >
+    {% for gene in item.genes.all %}
+      <span class="italic">{{ gene.symbol }}</span>{% if not forloop.last %},{% endif %}
+      {% empty %}
+      <span class="italic">{{ item|get_annotation_data:"gene"|default:"-" }}</span>
+    {% endfor %}
+  </td>
+  <td
+    class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400"
+  >
+    {% if item.analysis %}
+      <div class="flex flex-col">
+        <span>{{ item.analysis.type.name }}</span>
+        <span class="text-xs text-gray-400"
+          >{{ item.analysis.test.test_type.name }}</span
+        >
+      </div>
+    {% else %}
+      -
+    {% endif %}
+  </td>
+  <td
+    class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400"
+  >
+    <div class="flex flex-col">
+      <span class="text-xs">{{ item.created_at|date:"M d, Y" }}</span>
+      <span class="text-xs text-gray-400"
+        >{{ item.created_by.get_full_name|default:item.created_by.username }}</span
+      >
+    </div>
+  </td>
+  <td
+    class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400"
+  >
+    {% if item.classifications.exists %}
+      <span
+        class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+      {% if item.classifications.first.classification == 'pathogenic' %}
+          bg-red-100 text-red-800
+        {% elif item.classifications.first.classification == 'likely_pathogenic' %}
+          bg-orange-100 text-orange-800
+        {% elif item.classifications.first.classification == 'vus' %}
+          bg-yellow-100 text-yellow-800
+        {% elif item.classifications.first.classification == 'likely_benign' %}
+          bg-green-100 text-green-800
+        {% elif item.classifications.first.classification == 'benign' %}
+          bg-green-50 text-green-600
+        {% else %}
+          bg-gray-100 text-gray-800
+        {% endif %}"
+      >
+        {{ item.classifications.first.get_classification_display }}
+      </span>
+    {% else %}
+      <span class="text-gray-400">-</span>
+    {% endif %}
+  </td>
+{% endpartialdef table-row %}
+
+{% partialdef table %}
+  <div
+    class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg"
+  >
+    <table class="min-w-full divide-y divide-gray-300 dark:divide-gray-700">
+      <thead class="bg-gray-50 dark:bg-gray-800">
+        <tr>
+          <th
+            scope="col"
+            class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 sm:pl-6"
+          >
+            Variant
+          </th>
+          <th
+            scope="col"
+            class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Change
+          </th>
+          <th
+            scope="col"
+            class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Individual
+          </th>
+          <th
+            scope="col"
+            class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Gene
+          </th>
+          <th
+            scope="col"
+            class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Analysis/Test
+          </th>
+          <th
+            scope="col"
+            class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Added By
+          </th>
+          <th
+            scope="col"
+            class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Status
+          </th>
+        </tr>
+      </thead>
+      <tbody
+        class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900"
+      >
+        {% for item in items %}
+          <tr>
+            {% partial table-row %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endpartialdef table %}
+
+{% partialdef status-badge inline %}
+  {% if perms.variant.change_variant %}
+    <div 
+      id="status-badge-container"
+      class="relative"
+      x-data="{ open: false }"
+      @click.outside="open = false"
+    >
+      <button
+        type="button"
+        @click="open = !open"
+        class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white hover:bg-opacity-40 transition-all cursor-pointer flex items-center gap-1"
+        title="Click to change status"
+      >
+        {{ item.status.name|default:"Set Status" }}
+        <i class="fas fa-chevron-down text-xs"></i>
+      </button>
+      
+      <div
+        x-show="open"
+        x-transition:enter="transition ease-out duration-100"
+        x-transition:enter-start="transform opacity-0 scale-95"
+        x-transition:enter-end="transform opacity-100 scale-100"
+        x-transition:leave="transition ease-in duration-75"
+        x-transition:leave-start="transform opacity-100 scale-100"
+        x-transition:leave-end="transform opacity-0 scale-95"
+        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+        style="display: none;"
+      >
+        <div class="py-1 max-h-60 overflow-y-auto">
+          {% if variant_statuses %}
+            {% for status in variant_statuses %}
+              <button
+                type="button"
+                hx-post="{% url 'lab:update_status' %}"
+                hx-vals='{"model_name": "Variant", "app_label": "variant", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "detail", "refresh_detail": "true", "detail_target_id": "variant-detail"}'
+                hx-target="#status-badge-container"
+                hx-swap="outerHTML"
+                @click="open = false"
+                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
+              >
+                <span
+                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+                >
+                  {{ status.name }}
+                </span>
+              </button>
+            {% endfor %}
+          {% else %}
+            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              No statuses available
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% else %}
+    {% if item.status %}
+      <span class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white">
+        {{ item.status.name }}
+      </span>
+    {% endif %}
+  {% endif %}
+{% endpartialdef %}
+
+{% partialdef status-badge-card inline %}
+  {% if perms.variant.change_variant %}
+    <div 
+      id="status-badge-card-container-{{ item.pk }}"
+      class="relative"
+      x-data="{ open: false }"
+      @click.outside="open = false"
+    >
+      <button
+        type="button"
+        @click="open = !open"
+        class="px-2 py-1 rounded-full text-xs font-medium bg-{{ item.status.color|default:'gray' }}-100 text-{{ item.status.color|default:'gray' }}-800 dark:bg-{{ item.status.color|default:'gray' }}-900 dark:text-{{ item.status.color|default:'gray' }}-200 border border-{{ item.status.color|default:'gray' }}-200 dark:border-{{ item.status.color|default:'gray' }}-700 hover:bg-{{ item.status.color|default:'gray' }}-200 transition-all cursor-pointer flex items-center gap-1"
+        title="Click to change status"
+      >
+        {{ item.status.name|default:"Set Status" }}
+        <i class="fas fa-chevron-down text-[10px]"></i>
+      </button>
+      
+      <div
+        x-show="open"
+        x-transition:enter="transition ease-out duration-100"
+        x-transition:enter-start="transform opacity-0 scale-95"
+        x-transition:enter-end="transform opacity-100 scale-100"
+        x-transition:leave="transition ease-in duration-75"
+        x-transition:leave-start="transform opacity-100 scale-100"
+        x-transition:leave-end="transform opacity-0 scale-95"
+        class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+        style="display: none;"
+      >
+        <div class="py-1 max-h-60 overflow-y-auto">
+          {% if variant_statuses %}
+            {% for status in variant_statuses %}
+              <button
+                type="button"
+                hx-post="{% url 'lab:update_status' %}"
+                hx-vals='{"model_name": "Variant", "app_label": "variant", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "card", "refresh_detail": "false"}'
+                hx-target="#status-badge-card-container-{{ item.pk }}"
+                hx-swap="outerHTML"
+                @click="open = false"
+                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
+              >
+                <span
+                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+                >
+                  {{ status.name }}
+                </span>
+              </button>
+            {% endfor %}
+          {% else %}
+            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              No statuses available
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% else %}
+    {% if item.status %}
+      <span class="px-2 py-1 rounded-full text-xs font-medium bg-{{ item.status.color|default:'gray' }}-100 text-{{ item.status.color|default:'gray' }}-800 dark:bg-{{ item.status.color|default:'gray' }}-900 dark:text-{{ item.status.color|default:'gray' }}-200 border border-{{ item.status.color|default:'gray' }}-200 dark:border-{{ item.status.color|default:'gray' }}-700">
+        {{ item.status.name }}
+      </span>
+    {% endif %}
+  {% endif %}
+{% endpartialdef %}
+
+{% partialdef history-tab %}
+  {% include "variant/partials/_history_tab.html" %}
+{% endpartialdef %}

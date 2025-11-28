@@ -338,7 +338,7 @@ def generic_search(request):
         try:
             return render(
                 request,
-                f"lab/{target_model_name.lower()}.html#combobox-options",
+                f"{target_app_label}/{target_model_name.lower()}.html#combobox-options",
                 context,
             )
         except TemplateDoesNotExist:
@@ -554,7 +554,7 @@ def generic_search_page(request):
         try:
             return render(
                 request,
-                f"lab/{target_model_name.lower()}.html#combobox-options",
+                f"{target_app_label}/{target_model_name.lower()}.html#combobox-options",
                 context,
             )
         except TemplateDoesNotExist:
@@ -601,7 +601,10 @@ def generic_detail(request):
 
     obj = get_object_or_404(target_model, pk=pk)
 
-    template_base = f"lab/{target_model_name.lower()}.html"
+    if target_app_label == "variant":
+        template_base = "variant/variant.html"
+    else:
+        template_base = f"{target_app_label}/{target_model_name.lower()}.html"
     context = {
         "item": obj,
         "model_name": target_model_name,
@@ -666,7 +669,16 @@ def generic_detail(request):
         detail_html = render_to_string(
             f"{template_base}#detail", context=context, request=request
         )
-        return render(request, "lab/index.html", {"initial_detail_html": detail_html})
+        return render(
+            request,
+            "lab/index.html",
+            {
+                "initial_detail_html": detail_html,
+                "item": obj,
+                "model_name": target_model_name,
+                "app_label": target_app_label,
+            },
+        )
 
 
 @login_required
@@ -684,9 +696,41 @@ def history_tab(request):
     )
     obj = get_object_or_404(target_model, pk=pk)
 
-    template_base = f"lab/{target_model_name.lower()}.html"
+    # Collect history from the main object
+    history_records = []
+    if hasattr(obj, "history"):
+        for record in obj.history.all():
+            record.model_name = target_model_name
+            history_records.append(record)
+
+    # Collect history from related objects if it's a Variant
+    if target_model_name == "Variant":
+        # Annotations
+        for annotation in obj.annotations.all():
+            if hasattr(annotation, "history"):
+                for record in annotation.history.all():
+                    record.model_name = "Annotation"
+                    history_records.append(record)
+        
+        # Classifications
+        for classification in obj.classifications.all():
+            if hasattr(classification, "history"):
+                for record in classification.history.all():
+                    record.model_name = "Classification"
+                    history_records.append(record)
+
+    # Sort by history_date descending
+    history_records.sort(key=lambda x: x.history_date, reverse=True)
+
+    # Calculate diffs for updates
+    for record in history_records:
+        if record.history_type == "~" and record.prev_record:
+            record.delta = record.diff_against(record.prev_record)
+
+    template_base = f"{target_app_label}/{target_model_name.lower()}.html"
     context = {
         "item": obj,
+        "history_records": history_records,
         "model_name": target_model_name,
         "app_label": target_app_label,
         "user": request.user,
@@ -747,7 +791,7 @@ def update_status(request):
             
             # Determine which partial to return based on view parameter
             view_type = request.POST.get("view", "card")  # Default to card for list views
-            template_name = f"lab/{model_name.lower()}.html"
+            template_name = f"{app_label}/{model_name.lower()}.html"
             
             if view_type == "detail":
                 partial_name = "status-badge"
@@ -1191,9 +1235,10 @@ def note_create(request):
     if request.method == "POST":
         content_type_str = request.POST.get("content_type")
         object_id = request.POST.get("object_id")
+        app_label = request.POST.get("app_label", "lab")
 
         # Get the content type and object
-        model = apps.get_model("lab", content_type_str.capitalize())
+        model = apps.get_model(app_label, content_type_str)
         content_type = ContentType.objects.get_for_model(model)
         obj = model.objects.get(id=object_id)
 
@@ -1214,6 +1259,7 @@ def note_create(request):
             {
                 "object": obj,
                 "content_type": content_type_str,
+                "app_label": app_label,
                 "user": request.user,
             },
         )
@@ -1226,9 +1272,10 @@ def note_create(request):
     # For GET requests, return the form
     content_type_str = request.GET.get("content_type")
     object_id = request.GET.get("object_id")
+    app_label = request.GET.get("app_label", "lab")
 
     # Get the content type and object
-    model = apps.get_model("lab", content_type_str.capitalize())
+    model = apps.get_model(app_label, content_type_str)
     content_type = ContentType.objects.get_for_model(model)
     obj = model.objects.get(id=object_id)
 
@@ -1238,6 +1285,7 @@ def note_create(request):
         {
             "object": obj,
             "content_type": content_type_str,
+            "app_label": app_label,
             "form": NoteForm(),
         },
     )

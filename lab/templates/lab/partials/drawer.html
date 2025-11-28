@@ -83,6 +83,23 @@
             {% include "lab/partials/partials.html#generic-status-filter" %}
           {% endwith %}
         </div>
+        <!-- Variants -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='variant' model_name='Variant' icon_class='fa-dna' target_id='#drawer-results-sink' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+          {% with app_label='variant' model_name='Variant' icon_class='fa-dna' %}
+            {% include "lab/partials/partials.html#generic-type-filter" %}
+          {% endwith %}
+          {% with app_label='variant' model_name='Variant' %}
+            {% include "lab/partials/partials.html#generic-status-filter" %}
+          {% endwith %}
+          {% with app_label='variant' model_name='Gene' icon_class='fa-dna' name='Gene' %}
+            {% include "lab/partials/partials.html#generic-combobox" %}
+          {% endwith %}
+        </div>
         <!-- Institutions -->
         <div>
           <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
@@ -119,6 +136,9 @@
           {% endwith %}
         </div>
       </div>
+      </div>
     </aside>
+    <!-- Hidden sink for HTMX requests that rely on OOB swaps -->
+    <div id="drawer-results-sink" class="hidden"></div>
   </div>
 {% endpartialdef drawer %}

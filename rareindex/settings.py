@@ -59,10 +59,10 @@ INSTALLED_APPS = [
     "lab",
     "ontologies",
     "simple_history",
-    "reversion",
     "notifications",
     "openpyxl",
     "plotly_express",
+    "variant",
 ]
 
 MIDDLEWARE = [
@@ -78,7 +78,6 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",  # For django-allauth 0.54.0+
     "simple_history.middleware.HistoryRequestMiddleware",
-    "reversion.middleware.RevisionMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
 ]
 
