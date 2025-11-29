@@ -30,6 +30,14 @@ class Variant(HistoryMixin, models.Model):
 
     status = models.ForeignKey("lab.Status", on_delete=models.PROTECT, null=True, blank=True)
 
+    ZYGOSITY_CHOICES = [
+        ("het", "Heterozygous"),
+        ("hom", "Homozygous"),
+        ("hemi", "Hemizygous"),
+        ("unknown", "Unknown"),
+    ]
+    zygosity = models.CharField(max_length=20, choices=ZYGOSITY_CHOICES, default="unknown")
+
     def save(self, *args, **kwargs):
         if self.chromosome and not self.chromosome.startswith("chr"):
             self.chromosome = f"chr{self.chromosome}"
