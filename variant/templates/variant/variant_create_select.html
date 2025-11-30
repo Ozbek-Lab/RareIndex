@@ -1,3 +1,5 @@
+{% load partials %}
+
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
   <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
     <div class="flex items-center justify-between mb-4">
@@ -9,14 +11,18 @@
       </button>
     </div>
 
-    <form id="variant-context-form" hx-get="{% url 'lab:variant_create' %}" hx-target="#modal-root" hx-swap="innerHTML" class="space-y-4">
+    <form id="variant-context-form" hx-get="{% url 'lab:variant_create' %}" hx-target="#modal-root" hx-swap="innerHTML" class="space-y-4" hx-trigger="change, combobox-selected from:window">
       <div class="space-y-4">
         {% for field in form %}
           <div>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               {{ field.label }}
             </label>
-            {{ field }}
+            {% if field.name == 'individual' %}
+              {% include "lab/partials/partials.html#single-generic-combobox" with model_name='Individual' app_label='lab' name='individual' value_field='pk' label_field='individual_id' initial=individual_name initial_value=field.value %}
+            {% else %}
+              {{ field }}
+            {% endif %}
             {% if field.help_text %}
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
             {% endif %}
