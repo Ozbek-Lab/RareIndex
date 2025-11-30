@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponseBadRequest
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
-from lab.models import Analysis
+from lab.models import Analysis, Individual
 from .models import Variant
 from .forms import SNVForm, CNVForm, SVForm, RepeatForm, VariantContextForm, VariantUpdateForm
 from django.urls import reverse
@@ -20,7 +20,19 @@ def variant_create(request):
         # If this is an HTMX request for the selection form (filtering)
         # We re-render the form with the current data to update querysets
         form = VariantContextForm(data=request.GET)
-        return render(request, "variant/variant_create_select.html", {"form": form})
+        
+        context = {"form": form}
+        
+        # If individual is selected, get the name for the autocomplete initial value
+        individual_id = request.GET.get("individual")
+        if individual_id:
+            try:
+                individual = Individual.objects.get(pk=individual_id)
+                context["individual_name"] = individual.full_name
+            except (Individual.DoesNotExist, ValueError):
+                pass
+                
+        return render(request, "variant/variant_create_select.html", context)
 
     # If we have analysis_id and variant_type, proceed to specific form
     analysis = get_object_or_404(Analysis, pk=analysis_id)

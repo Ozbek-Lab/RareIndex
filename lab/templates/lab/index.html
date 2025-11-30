@@ -189,6 +189,7 @@
       viewMode: 'cards',
       instituteThreshold: 0,
       hpoThreshold: 0,
+      loadedSections: new Set(),
 
       initialModelName: initialModelName,
       initialPk: initialPk,
@@ -199,7 +200,7 @@
       },
 
       init() {
-        this.syncStateFromURL();
+        // this.syncStateFromURL(); // Moved to end of init
         window.addEventListener('popstate', () => { this.clearModal(); this.syncStateFromURL(); });
 
         // Load viewMode from localStorage
@@ -210,25 +211,20 @@
 
         this.$watch("filters", (newFilters) => {
           this.updateURL();
-          window.dispatchEvent(
-            new CustomEvent("filters-updated", {
-              detail: { filters: newFilters },
-            }),
-          );
+          // Global dispatch removed to prevent loops. 
+          // Specific inputs will dispatch scoped events.
         });
 
         // Watch threshold changes and refresh plots
         this.$watch("instituteThreshold", (val) => {
           this.updateURL();
-          const el = document.getElementById('plots-content');
-          if (el) { htmx.trigger(el, 'filters-updated'); }
+          this.dispatchFiltersUpdated();
         });
 
         // Watch threshold changes for HPO plot and refresh plots
         this.$watch("hpoThreshold", (val) => {
           this.updateURL();
-          const el = document.getElementById('plots-content');
-          if (el) { htmx.trigger(el, 'filters-updated'); }
+          this.dispatchFiltersUpdated();
         });
 
         // Watch viewMode changes and save to localStorage
@@ -237,11 +233,34 @@
         });
 
         // Close modal on page section changes
-        this.$watch('activeItem', () => { this.clearModal(); });
+        this.$watch('activeItem', (val) => { 
+          this.clearModal();
+          if (val && val !== 'home' && val !== 'overview' && !val.startsWith('detail-')) {
+             if (!this.loadedSections.has(val)) {
+                 this.$nextTick(() => {
+                     window.dispatchEvent(new CustomEvent(`load-${val}`));
+                     this.loadedSections.add(val);
+                 });
+             }
+          }
+        });
 
         // Close modal on Escape
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') this.clearModal();
+        });
+
+        // Initial sync
+        this.syncStateFromURL();
+        
+        // Initial dispatch for lazy widgets
+        this.$nextTick(() => {
+            if (this.activeItem && this.activeItem !== 'home' && this.activeItem !== 'overview' && !this.activeItem.startsWith('detail-')) {
+                 if (!this.loadedSections.has(this.activeItem)) {
+                     window.dispatchEvent(new CustomEvent(`load-${this.activeItem}`));
+                     this.loadedSections.add(this.activeItem);
+                 }
+            }
         });
       },
 
@@ -284,6 +303,13 @@
             this.loadDetailView(params);
           }
         }
+        
+        // Dispatch update to trigger initial searches if we have filters
+        if (Object.keys(this.filters).length > 0) {
+             this.$nextTick(() => {
+                 this.dispatchFiltersUpdated();
+             });
+        }
       },
 
       updateURL() {
@@ -314,18 +340,18 @@
         history.pushState({}, "", newPath);
       },
 
-      getGlobalFiltersHxVals() {
+      getGlobalFiltersHxVals(excludeKey = null) {
         const vals = {};
         for (const key in this.filters) {
           const v = this.filters[key];
           if (!v || (Array.isArray(v) && v.length === 0)) continue;
           vals[`filter_${key}`] = Array.isArray(v) ? v.join(',') : v;
         }
-        if (typeof this.instituteThreshold === 'number') {
-          vals['institute_threshold'] = String(this.instituteThreshold || 0);
+        if (typeof this.instituteThreshold === 'number' && this.instituteThreshold > 0 && excludeKey !== 'institute_threshold') {
+          vals['institute_threshold'] = String(this.instituteThreshold);
         }
-        if (typeof this.hpoThreshold === 'number') {
-          vals['hpo_threshold'] = String(this.hpoThreshold || 0);
+        if (typeof this.hpoThreshold === 'number' && this.hpoThreshold > 0 && excludeKey !== 'hpo_threshold') {
+          vals['hpo_threshold'] = String(this.hpoThreshold);
         }
         return JSON.stringify(vals);
       },
@@ -352,7 +378,7 @@
           this.updateURL();
 
           // Ask HTMX to reload plots using bound hx-vals (current filters)
-          setTimeout(() => { const el = document.getElementById('plots-content'); if (el) { htmx.trigger(el, 'filters-updated'); } }, 0);
+          // No need to trigger reload, plots are either already loaded or will update via filter watcher
           return;
         }
 
@@ -586,9 +612,13 @@
       toggleStatus(statusPk, modelName) {
         const statusKey = `${modelName}_status`;
         this.toggleTriState(statusPk, statusKey);
+        this.dispatchFiltersUpdated(modelName);
       },
       toggleType(typePk, filterField) {
         this.toggleTriState(typePk, filterField);
+        // Extract model name from filter field (e.g. individual_type -> individual)
+        const modelName = filterField.split('_')[0];
+        this.dispatchFiltersUpdated(modelName);
       },
       getFilterState(rawValue, includeKey) {
         const value = String(rawValue);
@@ -617,6 +647,7 @@
         const statusKey = `${modelName}_status`;
         delete this.filters[statusKey];
         delete this.filters[`${statusKey}_exclude`];
+        this.dispatchFiltersUpdated(modelName);
       },
 
       // Event-scoped dispatch helper
@@ -819,149 +850,7 @@
     };
   }
 
-  // Interactive Pie Chart Generator
-  document.addEventListener('DOMContentLoaded', function () {
-    console.log('Setting up interactive pie chart generator...');
 
-    // Function to setup pie chart generator
-    function setupPieChartGenerator() {
-      const generatePieChartBtn = document.getElementById('generate-pie-chart');
-      const modelSelect = document.getElementById('model-select');
-      const attributeSelect = document.getElementById('attribute-select');
-      const chartContainer = document.getElementById('dynamic-pie-chart-container');
-      const chartDiv = document.getElementById('dynamic-pie-chart');
-
-      console.log('Button found:', generatePieChartBtn);
-      console.log('Model select found:', modelSelect);
-      console.log('Attribute select found:', attributeSelect);
-      console.log('Chart container found:', chartContainer);
-      console.log('Chart div found:', chartDiv);
-
-      if (!generatePieChartBtn) {
-        console.error('Generate chart button not found!');
-        return;
-      }
-
-      generatePieChartBtn.addEventListener('click', function () {
-        console.log('Generate Chart button clicked');
-        const model = modelSelect.value;
-        const attribute = attributeSelect.value;
-
-        console.log('Selected model:', model);
-        console.log('Selected attribute:', attribute);
-
-        if (!model || !attribute) {
-          alert('Please select both model and attribute');
-          return;
-        }
-
-        // Show loading state
-        generatePieChartBtn.disabled = true;
-        generatePieChartBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
-
-        // Make request to pie chart view
-        const url = `/ pie - chart / ${model} /${attribute}/`;
-        console.log('Making request to:', url);
-
-        // Use fetch to make the request
-        fetch(url, {
-          method: 'GET',
-          headers: {
-            'HX-Request': 'true',
-            'Content-Type': 'application/json',
-          }
-        })
-          .then(response => {
-            if (!response.ok) {
-              throw new Error('Failed to generate chart');
-            }
-            return response.text();
-          })
-          .then(html => {
-            // Insert the chart HTML
-            chartDiv.innerHTML = html;
-            chartContainer.classList.remove('hidden');
-
-            // Scroll to the chart
-            chartContainer.scrollIntoView({ behavior: 'smooth' });
-
-            // Reset button state
-            generatePieChartBtn.disabled = false;
-            generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
-          })
-          .catch(error => {
-            console.error('Error generating chart:', error);
-            alert('Error generating chart. Please try again.');
-
-            // Reset button state
-            generatePieChartBtn.disabled = false;
-            generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
-          });
-      });
-
-      // Dynamic attribute options based on model selection
-      modelSelect.addEventListener('change', function () {
-        const model = this.value;
-        const attributeSelect = document.getElementById('attribute-select');
-
-        // Reset attribute selection
-        attributeSelect.innerHTML = '<option value="">Select Attribute</option>';
-
-        if (model) {
-          // Add model-specific attributes
-          const attributes = {
-            'Individual': [
-              { value: 'status__name', label: 'Status' },
-              { value: 'institution__name', label: 'Institution' },
-              { value: 'project__name', label: 'Project' }
-            ],
-            'Sample': [
-              { value: 'status__name', label: 'Status' },
-              { value: 'type__name', label: 'Type' },
-              { value: 'individual__institution__name', label: 'Institution' }
-            ],
-            'Test': [
-              { value: 'status__name', label: 'Status' },
-              { value: 'type__name', label: 'Type' },
-              { value: 'sample__individual__institution__name', label: 'Institution' }
-            ],
-            'Analysis': [
-              { value: 'status__name', label: 'Status' },
-              { value: 'type__name', label: 'Type' },
-              { value: 'test__sample__individual__institution__name', label: 'Institution' }
-            ],
-            'Project': [
-              { value: 'status__name', label: 'Status' },
-              { value: 'institution__name', label: 'Institution' }
-            ],
-            'Task': [
-              { value: 'status__name', label: 'Status' },
-              { value: 'content_type__model', label: 'Related Model' }
-            ]
-          };
-
-          const modelAttributes = attributes[model] || [];
-          modelAttributes.forEach(attr => {
-            const option = document.createElement('option');
-            option.value = attr.value;
-            option.textContent = attr.label;
-            attributeSelect.appendChild(option);
-          });
-        }
-      });
-    }
-
-    // Setup initially
-    setupPieChartGenerator();
-
-    // Setup after HTMX content loads
-    document.body.addEventListener('htmx:afterSwap', function (event) {
-      if (event.target.id === 'plots-content') {
-        console.log('Plots content loaded, setting up pie chart generator...');
-        setTimeout(setupPieChartGenerator, 100);
-      }
-    });
-  });
 </script>
 {% endblock content %}
 
