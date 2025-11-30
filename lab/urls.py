@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from variant import views as variant_views
 
 app_name = "lab"
 
@@ -132,6 +133,8 @@ urlpatterns = [
     # path("task/create/", views.task_create_standalone, name="task_create_standalone"),
     path("task/<int:pk>/complete/", views.task_complete, name="task_complete"),
     path("task/<int:pk>/reopen/", views.task_reopen, name="task_reopen"),
+    path("variant/create/", variant_views.variant_create, name="variant_create"),
+    path("variant/<int:pk>/update/", variant_views.variant_update, name="variant_update"),
     # path("task/<int:pk>/", views.task_detail, name="task_detail"),
     # path("task/search/", views.task_search, name="task_search"),
     # path("search-hpo-terms/", views.search_hpo_terms, name="search_hpo_terms"),

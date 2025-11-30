@@ -1,0 +1,90 @@
+{% load lab_filters %}
+
+{% load lab_filters %}
+
+<div x-data="{ viewMode: 'cards' }" class="space-y-4">
+  <!-- Toolbar: View toggle (right) -->
+  <div class="flex justify-end">
+    <div
+      class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+    >
+      <div
+        class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+        :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+        style="width: calc(50% - 2px);"
+      ></div>
+
+      <button
+        @click= "viewMode = 'cards'"
+        class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+        :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+      >
+        <i
+          class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+          :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
+        ></i>
+        <span
+          class="transition-all duration-300"
+          :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+          >Card</span
+        >
+      </button>
+
+      <button
+        @click= "viewMode = 'table'"
+        class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+        :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+      >
+        <i
+          class="fa-solid fa-table mr-2 transition-transform duration-300"
+          :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
+        ></i>
+        <span
+          class="transition-all duration-300"
+          :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+          >Table</span
+        >
+      </button>
+    </div>
+  </div>
+
+  <!-- Card View with animated transition -->
+  <div
+    x-show="viewMode === 'cards'"
+    x-transition:enter="transition-all duration-500 ease-out"
+    x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+    x-transition:leave="transition-all duration-300 ease-in"
+    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+    x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+    style="will-change: opacity, transform;"
+  >
+    {% for variant in item.variants.all %}
+      {% with item=variant model_name='Variant' app_label='variant' %}
+        {% include "variant/variant.html#card" %}
+      {% endwith %}
+    {% empty %}
+      <div class="col-span-full text-center text-gray-500 dark:text-gray-400 py-8">
+        No variants found.
+      </div>
+    {% endfor %}
+  </div>
+
+  <!-- Table View with animated transition -->
+  <div
+    x-show="viewMode === 'table'"
+    x-transition:enter="transition-all duration-500 ease-out"
+    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+    x-transition:leave="transition-all duration-300 ease-in"
+    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+    class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+    style="will-change: opacity, transform;"
+  >
+    {% with items=item.variants.all view_mode='table' model_name='Variant' app_label='variant' card='card' %}
+      {% include "variant/variant.html#table" %}
+    {% endwith %}
+  </div>
+</div>
