@@ -1,5 +1,5 @@
 from django import forms
-from .models import SNV, CNV, SV, Repeat
+from .models import Variant, SNV, CNV, SV, Repeat
 from lab.models import Individual, Test, Analysis
 
 class VariantContextForm(forms.Form):
@@ -109,3 +109,21 @@ class RepeatForm(BaseVariantForm):
             'repeat_unit': forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
             'repeat_count': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
         }
+
+class VariantUpdateForm(forms.ModelForm):
+    class Meta:
+        model = Variant
+        fields = ['analysis'] # We only want to update analysis for now
+        
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter analysis based on individual if possible, or show all
+        if self.instance and self.instance.individual:
+            # Show analyses for the same individual
+            self.fields['analysis'].queryset = Analysis.objects.filter(
+                test__sample__individual=self.instance.individual
+            )
+        
+        self.fields['analysis'].widget.attrs.update({
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'
+        })

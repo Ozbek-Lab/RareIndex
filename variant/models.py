@@ -167,6 +167,14 @@ class Gene(models.Model):
     entrez_id = models.CharField(max_length=50, blank=True)
     omim_id = models.CharField(max_length=50, blank=True)
     location = models.CharField(max_length=50, blank=True)
+    prev_symbol = models.TextField(blank=True)
+    prev_name = models.TextField(blank=True)
+    locus_type = models.CharField(max_length=50, blank=True)
+    locus_group = models.CharField(max_length=50, blank=True)
+    gene_family = models.TextField(blank=True)
+    uniprot_ids = models.TextField(blank=True)
+    pubmed_id = models.TextField(blank=True)
+    refseq_accession = models.TextField(blank=True)
     
     def __str__(self):
         return self.symbol

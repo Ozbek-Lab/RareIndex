@@ -79,7 +79,6 @@
         </div>
       </div>
 
-      <!-- Details -->
       <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="space-y-4">
           <div>
@@ -87,7 +86,7 @@
               Location
             </h3>
             <p class="text-gray-900 dark:text-gray-100">
-              Chr{{ item.chromosome }}:{{ item.start }}-{{ item.end }}
+              {{ item.chromosome }}:{{ item.start }}-{{ item.end }}
             </p>
           </div>
           <div>
@@ -95,7 +94,43 @@
               Change
             </h3>
             <p class="text-gray-900 dark:text-gray-100">
-              {{ item.reference }} > {{ item.alternate }}
+              {% if item.snv %}
+                {{ item.snv.reference }} > {{ item.snv.alternate }}
+              {% else %}
+                -
+              {% endif %}
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Zygosity
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100">
+              {{ item.get_zygosity_display }}
+            </p>
+          </div>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Gene
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100">
+              {% for gene in item.genes.all %}
+                <span class="italic">{{ gene.symbol }}</span>{% if not forloop.last %},{% endif %}
+                {% empty %}
+                <span class="italic">{{ item|get_annotation_data:"gene"|default:"-" }}</span>
+              {% endfor %}
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              HGVS
+            </h3>
+            <p class="text-gray-900 dark:text-gray-100 break-all">
+              {% with hgvsc=item|get_annotation_data:'hgvsc' hgvsp=item|get_annotation_data:'hgvsp' %}
+                {{ hgvsc|default:hgvsp|default:"-" }}
+              {% endwith %}
             </p>
           </div>
         </div>
@@ -115,16 +150,29 @@
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
               Analysis
             </h3>
-            {% if item.analysis %}
-              <a
-                href="{% url 'lab:generic_detail' %}?app_label=lab&model_name=Analysis&pk={{ item.analysis.pk }}"
-                class="text-blue-600 hover:underline"
-              >
-                {{ item.analysis }}
-              </a>
-            {% else %}
-              <span class="text-gray-500">-</span>
-            {% endif %}
+            <div id="variant-analysis-{{ item.pk }}" class="flex items-center gap-2">
+              {% if item.analysis %}
+                <a
+                  href="{% url 'lab:generic_detail' %}?app_label=lab&model_name=Analysis&pk={{ item.analysis.pk }}"
+                  class="text-blue-600 hover:underline"
+                >
+                  {{ item.analysis }}
+                </a>
+              {% else %}
+                <span class="text-gray-500">-</span>
+              {% endif %}
+              {% if perms.variant.change_variant %}
+                <button 
+                  hx-get="{% url 'lab:variant_update' item.pk %}"
+                  hx-target="#variant-analysis-{{ item.pk }}"
+                  hx-swap="innerHTML"
+                  class="text-xs text-blue-600 hover:text-blue-800"
+                  title="Edit Variant"
+                >
+                  <i class="fas fa-pencil"></i>
+                </button>
+              {% endif %}
+            </div>
           </div>
         </div>
       </div>
@@ -218,14 +266,11 @@
       >
         <i class="fa-solid fa-eye text-lg"></i>
       </button>
-      <h3 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+      <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">
         {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
       </h3>
       <div class="ml-auto flex flex-col items-end gap-1">
         {% partial status-badge-card %}
-        <span class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-          {{ item.assembly_version }}
-        </span>
         {% if item.classifications.exists %}
           <span
             class="text-xs px-2 py-1 rounded
@@ -250,9 +295,12 @@
     </div>
 
     <div class="mb-2">
-      <div class="flex items-center mb-2">
+      <div class="flex items-center gap-2 mb-2">
         <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">
           {{ item.type|default:"Variant" }}
+        </span>
+        <span class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300">
+          {{ item.assembly_version }}
         </span>
       </div>
     </div>
@@ -265,7 +313,7 @@
         <!-- Gene & HGVS -->
         <div class="col-span-2 sm:col-span-1">
           <p class="text-xs text-gray-500">Gene</p>
-          <p class="font-medium">
+          <p class="font-medium text-gray-900 dark:text-gray-100">
             {% for gene in item.genes.all %}
               <span class="italic">{{ gene.symbol }}</span>{% if not forloop.last %},{% endif %}
               {% empty %}
@@ -276,7 +324,7 @@
         <div class="col-span-2 sm:col-span-1">
           <p class="text-xs text-gray-500">HGVS</p>
           <p
-            class="font-medium truncate"
+            class="font-medium truncate text-gray-900 dark:text-gray-100"
             {% with hgvsc=item|get_annotation_data:'hgvsc' hgvsp=item|get_annotation_data:'hgvsp' %}
             title="{{ hgvsc|default:hgvsp }}"
             >
@@ -297,7 +345,7 @@
         </div>
         <div class="col-span-2 sm:col-span-1">
           <p class="text-xs text-gray-500">Analysis / Test</p>
-          <p class="font-medium truncate">
+          <p class="font-medium truncate text-gray-900 dark:text-gray-100">
             {% if item.analysis %}
               {{ item.analysis.type.name }}
               / {{ item.analysis.test.test_type.name }}
@@ -659,7 +707,7 @@
       <button
         type="button"
         @click="open = !open"
-        class="px-2 py-1 rounded-full text-xs font-medium bg-{{ item.status.color|default:'gray' }}-100 text-{{ item.status.color|default:'gray' }}-800 dark:bg-{{ item.status.color|default:'gray' }}-900 dark:text-{{ item.status.color|default:'gray' }}-200 border border-{{ item.status.color|default:'gray' }}-200 dark:border-{{ item.status.color|default:'gray' }}-700 hover:bg-{{ item.status.color|default:'gray' }}-200 transition-all cursor-pointer flex items-center gap-1"
+        class="px-2 py-1 rounded-md text-xs font-medium bg-{{ item.status.color|default:'gray' }}-100 text-{{ item.status.color|default:'gray' }}-800 dark:bg-{{ item.status.color|default:'gray' }}-900 dark:text-{{ item.status.color|default:'gray' }}-200 border border-{{ item.status.color|default:'gray' }}-200 dark:border-{{ item.status.color|default:'gray' }}-700 hover:bg-{{ item.status.color|default:'gray' }}-200 transition-all cursor-pointer flex items-center gap-1"
         title="Click to change status"
       >
         {{ item.status.name|default:"Set Status" }}
@@ -706,7 +754,7 @@
     </div>
   {% else %}
     {% if item.status %}
-      <span class="px-2 py-1 rounded-full text-xs font-medium bg-{{ item.status.color|default:'gray' }}-100 text-{{ item.status.color|default:'gray' }}-800 dark:bg-{{ item.status.color|default:'gray' }}-900 dark:text-{{ item.status.color|default:'gray' }}-200 border border-{{ item.status.color|default:'gray' }}-200 dark:border-{{ item.status.color|default:'gray' }}-700">
+      <span class="px-2 py-1 rounded-md text-xs font-medium bg-{{ item.status.color|default:'gray' }}-100 text-{{ item.status.color|default:'gray' }}-800 dark:bg-{{ item.status.color|default:'gray' }}-900 dark:text-{{ item.status.color|default:'gray' }}-200 border border-{{ item.status.color|default:'gray' }}-200 dark:border-{{ item.status.color|default:'gray' }}-700">
         {{ item.status.name }}
       </span>
     {% endif %}

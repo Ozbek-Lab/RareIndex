@@ -1,0 +1,23 @@
+<div id="variant-analysis-{{ item.pk }}" class="flex items-center gap-2">
+  {% if item.analysis %}
+    <a
+      href="{% url 'lab:generic_detail' %}?app_label=lab&model_name=Analysis&pk={{ item.analysis.pk }}"
+      class="text-blue-600 hover:underline"
+    >
+      {{ item.analysis }}
+    </a>
+  {% else %}
+    <span class="text-gray-500">-</span>
+  {% endif %}
+  {% if perms.variant.change_variant %}
+    <button 
+      hx-get="{% url 'lab:variant_update' item.pk %}"
+      hx-target="#variant-analysis-{{ item.pk }}"
+      hx-swap="innerHTML"
+      class="text-xs text-blue-600 hover:text-blue-800"
+      title="Edit Variant"
+    >
+      <i class="fas fa-pencil"></i>
+    </button>
+  {% endif %}
+</div>

@@ -1,6 +1,12 @@
 from django.contrib import admin
 from simple_history.admin import SimpleHistoryAdmin
-from .models import SNV, CNV, SV, Repeat, Annotation, Classification
+from .models import SNV, CNV, SV, Repeat, Annotation, Classification, Gene
+
+@admin.register(Gene)
+class GeneAdmin(admin.ModelAdmin):
+    list_display = ("symbol", "hgnc_id", "name", "location")
+    search_fields = ("symbol", "hgnc_id", "name", "ensembl_gene_id", "entrez_id")
+    list_filter = ("location",)
 
 @admin.register(SNV)
 class SNVAdmin(SimpleHistoryAdmin):
