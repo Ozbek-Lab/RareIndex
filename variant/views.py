@@ -3,7 +3,8 @@ from django.http import HttpResponseBadRequest
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from lab.models import Analysis
-from .forms import SNVForm, CNVForm, SVForm, RepeatForm, VariantContextForm
+from .models import Variant
+from .forms import SNVForm, CNVForm, SVForm, RepeatForm, VariantContextForm, VariantUpdateForm
 from django.urls import reverse
 from urllib.parse import urlencode
 
@@ -60,4 +61,37 @@ def variant_create(request):
         "form": form,
         "analysis": analysis,
         "variant_type": variant_type
+    })
+
+@login_required
+def variant_update(request, pk):
+    variant = get_object_or_404(Variant, pk=pk)
+    
+    # Handle cancel request
+    if request.GET.get("cancel") == "true":
+         return render(request, "variant/partials/variant_analysis_display.html", {"item": variant})
+
+    if request.method == "POST":
+        form = VariantUpdateForm(request.POST, instance=variant)
+        if form.is_valid():
+            form.save()
+            
+            if request.headers.get("HX-Request"):
+                return render(request, "variant/partials/variant_analysis_display.html", {"item": variant})
+            
+            url = reverse("lab:generic_detail")
+            params = urlencode({"app_label": "variant", "model_name": "Variant", "pk": variant.pk})
+            return redirect(f"{url}?{params}")
+    else:
+        form = VariantUpdateForm(instance=variant)
+        
+    if request.headers.get("HX-Request"):
+        return render(request, "variant/partials/variant_update_inline.html", {
+            "form": form,
+            "variant": variant
+        })
+
+    return render(request, "variant/variant_update.html", {
+        "form": form,
+        "variant": variant
     })

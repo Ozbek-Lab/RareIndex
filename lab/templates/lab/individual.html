@@ -128,9 +128,16 @@
       </div>
 
       <div class="flex items-center gap-1">
-        <div x-data="{ open: false }" class="static">
+        <div
+          x-data="notesPopup"
+          @resize.window="open && updatePosition()"
+          @scroll.window.passive="open && updatePosition()"
+          @keydown.escape.window="open && close()"
+          class="static"
+        >
           <button
-            @click= "open = ! open"
+            x-ref="trigger"
+            @click="toggle()"
             type="button"
             class="inline-flex items-center px-1 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
@@ -141,24 +148,41 @@
               :class="{ 'rotate-180': open }"
             ></i>
           </button>
-          <div
-            x-show="open"
-            x-transition:enter="transition ease-out duration-200"
-            x-transition:enter-start="opacity-0 transform scale-95"
-            x-transition:enter-end="opacity-100 transform scale-100"
-            x-transition:leave="transition ease-in duration-150"
-            x-transition:leave-start="opacity-100 transform scale-100"
-            x-transition:leave-end="opacity-0 transform scale-95"
-            class="absolute left-0 right-0 z-10 mt-2 w-full max-w-none"
-          >
-            <div
-              class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
-            >
-              {% with individual=item %}
-                {% include 'lab/partials/note_sections.html#individual-notes-grid' %}
-              {% endwith %}
+          <template x-teleport="body">
+            <div x-show="open" class="absolute inset-0 z-[9999] pointer-events-none">
+                <!-- Backdrop -->
+                <div
+                    x-show="open"
+                    x-transition.opacity
+                    class="fixed inset-0 bg-black/10 dark:bg-black/30 pointer-events-auto"
+                    @click="close()"
+                ></div>
+
+                <!-- Popup Panel -->
+                <div
+                    x-show="open"
+                    x-cloak
+                    x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 scale-95"
+                    x-transition:enter-end="opacity-100 scale-100"
+                    x-transition:leave="transition ease-in duration-150"
+                    x-transition:leave-start="opacity-100 scale-100"
+                    x-transition:leave-end="opacity-0 scale-95"
+                    x-ref="panel"
+                    @click.outside="close()"
+                    class="absolute z-[10000] shadow-2xl pointer-events-auto origin-top overflow-y-auto"
+                    :style="style"
+                >
+                    <div
+                    class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+                    >
+                    {% with individual=item %}
+                        {% include 'lab/partials/note_sections.html#individual-notes-grid' %}
+                    {% endwith %}
+                    </div>
+                </div>
             </div>
-          </div>
+          </template>
         </div>
       </div>
     </div>

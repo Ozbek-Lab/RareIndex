@@ -53,6 +53,10 @@
 
 {% block content %}
 <div x-data="mainController()" class="flex h-screen bg-gray-50 dark:bg-gray-900">
+  {{ initial_detail_html|json_script:"initial-detail-html" }}
+  {{ model_name|default:''|json_script:"initial-model-name" }}
+  {{ app_label|default:''|json_script:"initial-app-label" }}
+  {{ item.pk|default:''|json_script:"initial-pk" }}
   {% include "lab/sidebar.html" %}
   <main class="flex-1 overflow-y-auto p-6">
     <div id="main-content">
@@ -76,8 +80,12 @@
         <template x-if="detailHtml">
           <div x-html="detailHtml"></div>
         </template>
-        <button @click="closeDetail()"
-          class="absolute top-2 right-2 z-10 bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Close</button>
+        <template x-if="!detailHtml">
+          <div class="flex items-center justify-center h-full min-h-[200px]">
+            <i class="fa-solid fa-circle-notch fa-spin text-4xl text-gray-400"></i>
+          </div>
+        </template>
+
       </div>
       <!-- Hide main content when detail is open -->
       <div x-show="!activeItem || !activeItem.startsWith('detail-')">
@@ -168,14 +176,22 @@
 
 <script>
   function mainController() {
+    const initialDetailHtml = JSON.parse(document.getElementById('initial-detail-html').textContent || 'null');
+    const initialModelName = JSON.parse(document.getElementById('initial-model-name').textContent || '""');
+    const initialAppLabel = JSON.parse(document.getElementById('initial-app-label').textContent || '""');
+    const initialPk = JSON.parse(document.getElementById('initial-pk').textContent || '""');
+
     return {
       activeItem: 'home',
       open: false,
       filters: {},
-      detailHtml: null,
+      detailHtml: initialDetailHtml || null,
       viewMode: 'cards',
       instituteThreshold: 0,
       hpoThreshold: 0,
+
+      initialModelName: initialModelName,
+      initialPk: initialPk,
 
       clearModal() {
         const modalRoot = document.getElementById('modal-root');
@@ -258,7 +274,15 @@
         this.hpoThreshold = hpoTh ? parseInt(hpoTh) : 0;
 
         if (params.has('pk')) {
-          this.loadDetailView(params);
+          // If we have pre-loaded detail HTML and it matches the requested PK/Model, use it
+          if (this.detailHtml && 
+              String(params.get('pk')) === String(this.initialPk) && 
+              params.get('model_name') === this.initialModelName) {
+            this.activeItem = `detail-${this.initialModelName}-${this.initialPk}`;
+          } else {
+            this.activeItem = 'detail-loading';
+            this.loadDetailView(params);
+          }
         }
       },
 
