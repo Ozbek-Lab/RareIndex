@@ -25,6 +25,7 @@ from lab.models import (
     Project,
     Task
 )
+from variant.models import Variant, SNV, Gene
 from ontologies.models import Term, Ontology
 import re
 from django.contrib.auth import get_user_model
@@ -294,6 +295,33 @@ class Command(BaseCommand):
     def _get_initials(self, full_name: str) -> str:
         parts = [p for p in (full_name or '').split() if p]
         return ''.join(part[0].upper() for part in parts)
+
+    def _parse_variant_string(self, variant_str):
+        """
+        Parse variant string like 'chr10-77984023 A>G'
+        Returns (chromosome, start, reference, alternate)
+        """
+        if not variant_str:
+            return None
+        
+        # Regex for chrX-12345 REF>ALT
+        match = re.match(r'(chr[\w]+)-(\d+)\s+([ACGT]+)>([ACGT]+)', variant_str.strip())
+        if match:
+            return match.groups()
+        return None
+
+    def _map_zygosity(self, zygosity_str):
+        if not zygosity_str:
+            return 'unknown'
+        
+        z_lower = zygosity_str.lower().strip()
+        if 'het' in z_lower:
+            return 'het'
+        if 'hom' in z_lower:
+            return 'hom'
+        if 'hemi' in z_lower:
+            return 'hemi'
+        return 'unknown'
 
     def handle(self, *args, **options):
 
@@ -1047,3 +1075,86 @@ class Command(BaseCommand):
                 self.stdout.write("No parent links needed/updated based on RareBoost IDs")
         except Exception as e:
             self.stdout.write(self.style.WARNING(f"Error while setting parent links: {str(e)}"))
+
+        # --- VARIANT IMPORT ---
+        self.stdout.write("Starting Variant Import...")
+        variant_sheet_name = None
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+            if headers and 'Chromosomal Position' in headers:
+                variant_sheet_name = sheet_name
+                break
+        
+        if not variant_sheet_name:
+            self.stdout.write(self.style.WARNING("No sheet found with 'Chromosomal Position' header. Skipping variant import."))
+        else:
+            self.stdout.write(self.style.SUCCESS(f"Found variant sheet: {variant_sheet_name}"))
+            ws_variant = wb[variant_sheet_name]
+            headers_variant = [cell.value for cell in next(ws_variant.iter_rows(min_row=1, max_row=1))]
+            # Do not filter None headers to preserve alignment
+            
+            for row in ws_variant.iter_rows(min_row=2, values_only=True):
+                if all(cell is None for cell in row):
+                    continue
+                # row = row[:len(headers_variant)] # No need to truncate if we zip
+                row_dict = dict(zip(headers_variant, row))
+                
+                lab_id = row_dict.get('Özbek Lab. ID')
+                if not lab_id:
+                    continue
+                
+                # Find Individual
+                individual = Individual.objects.filter(cross_ids__id_value=lab_id).first()
+                if not individual:
+                    self.stdout.write(self.style.WARNING(f"Individual not found for variant import: {lab_id}"))
+                    continue
+                
+                chrom_pos = row_dict.get('Chromosomal Position')
+                parsed_variant = self._parse_variant_string(chrom_pos)
+                if not parsed_variant:
+                    self.stdout.write(self.style.WARNING(f"Could not parse chromosomal position: {chrom_pos}"))
+                    continue
+                
+                chrom, start, ref, alt = parsed_variant
+                
+                # Create or Get SNV
+                # We assume SNV for now based on the format
+                try:
+                    snv, created = SNV.objects.get_or_create(
+                        individual=individual,
+                        chromosome=chrom,
+                        start=int(start),
+                        end=int(start), # SNV start=end usually, or end=start+len(ref)-1? 
+                                        # Standard VCF: POS is 1-based start. REF/ALT. 
+                                        # Variant model has start/end. 
+                                        # For SNV A>G, length is 1. start=end.
+                                        # If deletion/insertion, length differs.
+                                        # The regex expects A>G (single chars?) No, [ACGT]+
+                        reference=ref,
+                        alternate=alt,
+                        defaults={
+                            'created_by': admin_user,
+                            'zygosity': self._map_zygosity(row_dict.get('Zygosity')),
+                            'assembly_version': 'hg38' # Assumption
+                        }
+                    )
+                    
+                    # If not created, update zygosity if needed?
+                    if not created:
+                        new_zygosity = self._map_zygosity(row_dict.get('Zygosity'))
+                        if snv.zygosity != new_zygosity:
+                            snv.zygosity = new_zygosity
+                            snv.save()
+                            
+                    # Add Clinical Association as Note
+                    clin_assoc = row_dict.get('Clinical Association')
+                    if clin_assoc:
+                        self._parse_and_add_notes(clin_assoc, snv, admin_user)
+                        
+                    self.stdout.write(self.style.SUCCESS(f"Imported variant for {lab_id}: {chrom}:{start} {ref}>{alt}"))
+                    
+                except Exception as e:
+                    self.stdout.write(self.style.ERROR(f"Error importing variant for {lab_id}: {e}"))
+
+        self.stdout.write(self.style.SUCCESS("Variant import process completed."))

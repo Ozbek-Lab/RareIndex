@@ -14,6 +14,14 @@
       };
     </script>
 
+    <script>
+      // Check for dark mode preference immediately to prevent white flash
+      if (localStorage.getItem('darkMode') === 'true' || (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    </script>
     <script defer src="{% static 'lab/js/plotly.min.js' %}"></script>
     <script defer src="{% static 'lab/js/cytoscape.min.js' %}"></script>
     <!-- SVG export extension for Cytoscape -->
@@ -22,6 +30,56 @@
       defer
       src="{% static 'lab/js/alpine.min.js' %}"
     ></script>
+    <script>
+      document.addEventListener('alpine:init', () => {
+        Alpine.data('notesPopup', () => ({
+          open: false,
+          style: '',
+          transformOrigin: 'top',
+          toggle() {
+            if (this.open) {
+              this.close();
+            } else {
+              this.open = true;
+              this.updatePosition();
+              this.$nextTick(() => {
+                setTimeout(() => {
+                  this.updatePosition();
+                  const textarea = this.$refs.panel?.querySelector('textarea');
+                  if (textarea) textarea.focus();
+                }, 100);
+              });
+            }
+          },
+          updatePosition() {
+            const trigger = this.$refs.trigger;
+            if (!trigger) return;
+            const rect = trigger.getBoundingClientRect();
+            const width = Math.min(window.innerWidth * 0.9, 1024);
+            let left = rect.left + rect.width / 2 + window.scrollX;
+            const halfWidth = width / 2;
+            
+            if (left - halfWidth < 16) {
+              left = halfWidth + 16;
+            } else if (left + halfWidth > document.documentElement.scrollWidth - 16) {
+              left = document.documentElement.scrollWidth - halfWidth - 16;
+            }
+
+            let top = rect.bottom + window.scrollY + 8;
+            
+            // Calculate max height based on available space below
+            const viewportHeight = window.innerHeight;
+            const spaceBelow = viewportHeight - rect.bottom - 16; // 16px margin
+            const maxHeight = Math.max(spaceBelow, 200); // Ensure at least 200px
+
+            this.style = `top:${top}px; left:${left}px; width:${width}px; transform: translateX(-50%); max-height: ${maxHeight}px;`;
+          },
+          close() {
+            this.open = false;
+          }
+        }));
+      });
+    </script>
     <!-- Add Font Awesome -->
     <link
       rel="stylesheet"
@@ -107,12 +165,18 @@
     </style>
   </head>
   <body
-    x-data="{ darkMode: localStorage.getItem('darkMode') === 'true',
-                  toggleDark() { this.darkMode = !this.darkMode; localStorage.setItem('darkMode', this.darkMode); },
-                  init() { this.darkMode = localStorage.getItem('darkMode') === 'true'; }
-                }"
-    x-init="init()"
-    :class="{ 'dark': darkMode }"
+    x-data="{ 
+      darkMode: localStorage.getItem('darkMode') === 'true',
+      toggleDark() { 
+        this.darkMode = !this.darkMode; 
+        localStorage.setItem('darkMode', this.darkMode);
+        if (this.darkMode) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+    }"
     class="bg-gray-100"
   >
     {% if user.is_authenticated %}

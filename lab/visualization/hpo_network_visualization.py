@@ -38,7 +38,7 @@ def load_hpo_ontology():
 
 def consolidate_terms(graph, terms, threshold=3):
     """
-    Consolidate rare HPO terms by finding their closest common ancestors.
+    Consolidate rare HPO terms by moving their counts to their parents.
     
     Args:
         graph: NetworkX graph of HPO terms
@@ -50,6 +50,7 @@ def consolidate_terms(graph, terms, threshold=3):
     """
     # Create a working copy of the counts
     working_counts = terms.copy()
+    root_node = "HP:0000118"  # Phenotypic abnormality
 
     # Check if all terms exist in the graph, remove those that don't
     invalid_terms = []
@@ -63,62 +64,44 @@ def consolidate_terms(graph, terms, threshold=3):
     for term in invalid_terms:
         working_counts.pop(term, None)
 
-    # Keep track of consolidation history
-    consolidated_terms = {}  # Maps original term -> ancestor that replaced it
-
     # Continue until we can't consolidate further
-    iteration = 0
     while True:
-        iteration += 1
-
         # Get all current terms that are below threshold
         rare_terms = [
             term for term, count in working_counts.items() if count < threshold
         ]
-
-        # If we have less than 2 rare terms, we can't consolidate further
-        if len(rare_terms) < 2:
+        
+        # If no rare terms, we are done
+        if not rare_terms:
             break
-
-        # Try to find a pair to consolidate
-        consolidated_pair = False
-
-        for i in range(len(rare_terms)):
-            for j in range(i + 1, len(rare_terms)):
-                term1 = rare_terms[i]
-                term2 = rare_terms[j]
-
-                # Find their closest common ancestor
-                ancestor = find_closest_ancestor(graph, term1, term2)
-
-                if ancestor:
-                    # Calculate the combined count
-                    combined_count = working_counts.get(term1, 0) + working_counts.get(
-                        term2, 0
-                    )
-
-                    # Remove the consolidated terms from working counts
-                    count1 = working_counts.pop(term1)
-                    count2 = working_counts.pop(term2)
-
-                    # Add or update the ancestor count
-                    if ancestor in working_counts:
-                        working_counts[ancestor] += combined_count
+            
+        changes_made = False
+        
+        for term in rare_terms:
+            # Don't consolidate the root itself
+            if term == root_node:
+                continue
+                
+            try:
+                # Find path to root to get the immediate parent
+                path = nx.shortest_path(graph, term, root_node)
+                if len(path) > 1:
+                    parent = path[1] # path[0] is term, path[1] is parent
+                    
+                    # Move count to parent
+                    count = working_counts.pop(term)
+                    if parent in working_counts:
+                        working_counts[parent] += count
                     else:
-                        working_counts[ancestor] = combined_count
-
-                    # Update consolidation history
-                    consolidated_terms[term1] = ancestor
-                    consolidated_terms[term2] = ancestor
-
-                    consolidated_pair = True
-                    break
-
-            if consolidated_pair:
-                break
-
-        # If we couldn't find any pair to consolidate, we're done
-        if not consolidated_pair:
+                        working_counts[parent] = count
+                        
+                    changes_made = True
+            except (nx.NetworkXNoPath, IndexError):
+                # Cannot reach root or no parent, skip
+                continue
+                
+        # If we went through all rare terms and made no changes, we are stuck
+        if not changes_made:
             break
 
     return working_counts

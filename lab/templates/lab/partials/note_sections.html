@@ -6,7 +6,7 @@
     {% if not individual %}
       <p class="text-sm text-gray-500 dark:text-gray-400">No individual provided.</p>
     {% else %}
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
           <h4 class="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Individual</h4>
           {% with object=individual content_type='individual' user=user %}
@@ -69,3 +69,19 @@
   {% endwith %}
 {% endpartialdef %}
 
+{% partialdef variant-notes-grid %}
+  {% with variant=variant|default:None %}
+    {% if not variant %}
+      <p class="text-sm text-gray-500 dark:text-gray-400">No variant provided.</p>
+    {% else %}
+      <div class="grid grid-cols-1 gap-4">
+        <div>
+          <h4 class="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Variant</h4>
+          {% with object=variant content_type='variant' app_label='variant' user=user %}
+            {% include 'lab/note.html#list' %}
+          {% endwith %}
+        </div>
+      </div>
+    {% endif %}
+  {% endwith %}
+{% endpartialdef %}

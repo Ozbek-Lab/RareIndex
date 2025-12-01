@@ -155,7 +155,12 @@ def visible_to(notes_manager, user):
         except Exception:
             pass
     result = []
-    for n in notes_manager:
+    try:
+        iterator = iter(notes_manager)
+    except TypeError:
+        return []
+
+    for n in iterator:
         try:
             if getattr(n, 'private_owner_id', None) is None or (user and getattr(n, 'private_owner_id', None) == getattr(user, 'id', None)):
                 result.append(n)
@@ -510,3 +515,22 @@ def hierarchical_history(instance):
     all_history.sort(key=lambda x: x['history_date'])
     
     return all_history
+
+
+@register.filter
+def get_item(dictionary, key):
+    """Get an item from a dictionary (or JSON string)."""
+    if not dictionary:
+        return None
+    
+    if isinstance(dictionary, str):
+        try:
+            import json
+            dictionary = json.loads(dictionary)
+        except (ValueError, TypeError):
+            return None
+            
+    if isinstance(dictionary, dict):
+        return dictionary.get(key)
+        
+    return None
