@@ -29,6 +29,22 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write("Clearing database...")
 
+        # Delete Variant related data FIRST because Variant depends on Analysis, Individual, etc.
+        self.stdout.write("Deleting Variant related entries...")
+        try:
+            from variant.models import Variant, SNV, CNV, SV, Repeat, Gene, Classification, Annotation
+            
+            Classification.objects.all().delete()
+            Annotation.objects.all().delete()
+            SNV.objects.all().delete()
+            CNV.objects.all().delete()
+            SV.objects.all().delete()
+            Repeat.objects.all().delete()
+            Variant.objects.all().delete()
+            Gene.objects.all().delete()
+        except ImportError:
+            self.stdout.write("Variant models not found, skipping...")
+
         # Delete all data in reverse order of dependencies
         self.stdout.write("Deleting Analysis entries...")
         Analysis.objects.all().delete()
