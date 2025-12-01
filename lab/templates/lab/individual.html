@@ -1,4 +1,5 @@
 {% extends "lab/base.html" %}
+{% load lab_filters %}
 
 {% block content %}
   {% partial detail %}
@@ -10,16 +11,16 @@
     data-item-id="{{ item.id }}"
     x-data="{ showFullName: false }"
   >
-    {% with float="float-right" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
-    {% endwith %}
+    <div class="float-right">
+      {% partial status-badge-card %}
+    </div>
 
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
       {{ item.individual_id }}
       <button
         type="button"
         class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-        @click="showFullName = !showFullName"
+        @click= "showFullName = !showFullName"
         title="Toggle full name visibility"
       >
         <i class="fas fa-id-card"></i>
@@ -39,35 +40,23 @@
       <i
         class="fa-solid fa-building-columns mr-1 text-gray-900 dark:text-gray-100"
       ></i>
-      {{ item.institution }}
+      {% with institutions=item.institution.all %}
+      {% if institutions %}
+        {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+      {% endwith %}
     </span>
 
     <div
-      class="flex justify-end mt-3 pt-2 border-t border-gray-200 dark:border-gray-700"
+      class="flex justify-end items-center gap-2 mt-3 pt-2 border-t border-gray-200 dark:border-gray-700"
     >
-      <div x-data="{ open: false }" class="relative mr-2">
-        <button
-          @click="open = ! open"
-          type="button"
-          class="inline-flex items-center gap-x-1 text-sm/6 font-semibold text-gray-900 dark:text-gray-100"
-        >
-          <i class="fa-solid fa-comment"></i>
-        </button>
-        <div
-          x-show="open"
-          class="absolute left-1/2 z-10 mt-5 flex w-full max-w-max -translate-x-1/2 px-4"
-        >
-          <div
-            class="w-full max-w-md flex-auto overflow-hidden rounded-3xl bg-white dark:bg-gray-800 text-sm/6 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-100/10"
-          >
-            Test
-          </div>
-        </div>
-      </div>
+      <span class="inline-flex items-center text-sm text-gray-700 dark:text-gray-300">
+        {% with object=item content_type='individual' %}{% include 'lab/note.html#summary' %}{% endwith %}
+      </span>
 
       <button
         class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Individual', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Individual', 'lab')"
         title="View Details"
       >
         <i class="fa-solid fa-eye"></i>
@@ -85,7 +74,7 @@
     <div class="flex items-center gap-1 mb-2">
       <button
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Individual', 'lab')"
+        @click= " openDetail({{ item.pk }}, 'Individual', 'lab')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
@@ -95,16 +84,14 @@
         <button
           type="button"
           class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-          @click="showFullName = !showFullName"
+          @click= "showFullName = !showFullName"
           title="Toggle full name visibility"
         >
           <i class="fas fa-id-card fa-xs"></i>
         </button>
       </h2>
       <div class="ml-auto">
-        {% with float="float-right" color=item.status.color text=item.status.name %}
-          {% include 'lab/partials/badge.html' %}
-        {% endwith %}
+        {% partial status-badge-card %}
       </div>
     </div>
 
@@ -122,48 +109,80 @@
 
     <div class="flex justify-between">
       <div class="mb-2 p-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-        <div class="flex items-center">
-          <i
-            class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"
-          ></i>
-          <span class="text-lg text-blue-900 dark:text-blue-100 font-medium">
-            {{ item.institution }}
-          </span>
+        <div class="flex flex-col space-y-1">
+          {% with institutions=item.institution.all %}
+          {% if institutions %}
+            {% for inst in institutions %}
+              <div class="flex items-center">
+                <i
+                  class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"
+                ></i>
+                <span class="text-xs text-blue-900 dark:text-blue-100 font-medium">
+                  {{ inst.name }}
+                </span>
+              </div>
+            {% endfor %}
+          {% else %}-{% endif %}
+          {% endwith %}
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <div x-data="{ open: false }" class="static">
+      <div class="flex items-center gap-1">
+        <div
+          x-data="notesPopup"
+          @resize.window="open && updatePosition()"
+          @scroll.window.passive="open && updatePosition()"
+          @keydown.escape.window="open && close()"
+          class="static"
+        >
           <button
-            @click="open = ! open"
+            x-ref="trigger"
+            @click="toggle()"
             type="button"
-            class="inline-flex items-center gap-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            class="inline-flex items-center px-1 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
-            <i class="fa-solid fa-comment"></i>
-            <span>Notes</span>
+            <span class="ml-1 inline-flex items-center"
+              >{% with object=item content_type='individual' %}{% include 'lab/note.html#summary' %}{% endwith %}</span>
             <i
               class="fa-solid fa-chevron-down transition-transform"
               :class="{ 'rotate-180': open }"
             ></i>
           </button>
-          <div
-            x-show="open"
-            x-transition:enter="transition ease-out duration-200"
-            x-transition:enter-start="opacity-0 transform scale-95"
-            x-transition:enter-end="opacity-100 transform scale-100"
-            x-transition:leave="transition ease-in duration-150"
-            x-transition:leave-start="opacity-100 transform scale-100"
-            x-transition:leave-end="opacity-0 transform scale-95"
-            class="absolute left-0 right-0 z-10 mt-2 w-full max-w-none"
-          >
-            <div
-              class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
-            >
-              {% with object=item content_type='individual' %}
-                {% include 'lab/note.html#list' %}
-              {% endwith %}
+          <template x-teleport="body">
+            <div x-show="open" class="absolute inset-0 z-[9999] pointer-events-none">
+                <!-- Backdrop -->
+                <div
+                    x-show="open"
+                    x-transition.opacity
+                    class="fixed inset-0 bg-black/10 dark:bg-black/30 pointer-events-auto"
+                    @click="close()"
+                ></div>
+
+                <!-- Popup Panel -->
+                <div
+                    x-show="open"
+                    x-cloak
+                    x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 scale-95"
+                    x-transition:enter-end="opacity-100 scale-100"
+                    x-transition:leave="transition ease-in duration-150"
+                    x-transition:leave-start="opacity-100 scale-100"
+                    x-transition:leave-end="opacity-0 scale-95"
+                    x-ref="panel"
+                    @click.outside="close()"
+                    class="absolute z-[10000] shadow-2xl pointer-events-auto origin-top overflow-y-auto"
+                    :style="style"
+                >
+                    <div
+                    class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+                    >
+                    {% with individual=item %}
+                        {% include 'lab/partials/note_sections.html#individual-notes-grid' %}
+                    {% endwith %}
+                    </div>
+                </div>
             </div>
-          </div>
+          </template>
         </div>
       </div>
     </div>
@@ -179,7 +198,7 @@
     <button
       type="button"
       class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-      @click="showFullName = !showFullName"
+      @click= "showFullName = !showFullName"
       title="Toggle full name visibility"
     >
       <i class="fas fa-id-card"></i>
@@ -197,19 +216,135 @@
     {% endif %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {{ item.institution.name|default:"-" }}
+    {% with institutions=item.institution.all %}
+    {% if institutions %}
+      {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    {% else %}-{% endif %}
+    {% endwith %}
+  </td>
+  {% load lab_filters %}
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with samples=item.samples.all %}
+      {% if samples %}
+        {% for sample in samples %}{{ sample.sample_type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {{ item.icd11_code|default:"-" }}
+    {% with tests=item|get_all_tests %}
+      {% if tests %}
+        {% for test in tests %}{{ test.test_type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with analyses=item|get_all_analyses %}
+      {% if analyses %}
+        {% for analysis in analyses %}{{ analysis.type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    <div
+      x-data="{
+        open: false,
+        style: '',
+        toggle() {
+          if (this.open) {
+            this.close();
+          } else {
+            this.updatePosition();
+            this.open = true;
+            this.$nextTick(() => {
+              const textarea = this.$refs.panel?.querySelector('textarea');
+              if (textarea) textarea.focus();
+            });
+          }
+        },
+        updatePosition() {
+          const trigger = this.$refs.trigger;
+          if (!trigger) return;
+          const rect = trigger.getBoundingClientRect();
+          const width = Math.min(window.innerWidth * 0.9, 1024);
+          let left = rect.left + rect.width / 2;
+          const halfWidth = width / 2;
+          if (left - halfWidth < 16) {
+            left = halfWidth + 16;
+          } else if (left + halfWidth > window.innerWidth - 16) {
+            left = window.innerWidth - halfWidth - 16;
+          }
+          const viewportHeight = window.innerHeight;
+          const estimatedHeight = 420;
+          let top = rect.bottom + 12;
+          if (viewportHeight - rect.bottom < estimatedHeight && rect.top > estimatedHeight) {
+            top = Math.max(16, rect.top - estimatedHeight);
+          }
+          top = Math.min(top, viewportHeight - 16);
+          this.style = `top:${top}px; left:${left}px; width:${width}px; transform: translateX(-50%);`;
+        },
+        close() {
+          this.open = false;
+        }
+      }"
+      @resize.window= "open && updatePosition()"
+      @scroll.window.passive= "open && updatePosition()"
+      @keydown.escape.window= "open && close()"
+      class="w-full text-left"
+    >
+      <button
+        x-ref="trigger"
+        @click= "toggle()"
+        type="button"
+        class="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+      >
+        {# TODO: note button breaks the page #}
+        <span class="inline-flex items-center">
+          {% with object=item content_type='individual' %}{% include 'lab/note.html#summary' %}{% endwith %}
+        </span>
+        <i
+          class="fa-solid fa-chevron-down transition-transform"
+          :class="{ 'rotate-180': open }"
+        ></i>
+      </button>
+      <template x-if="open">
+        <div
+          x-transition.opacity
+          class="fixed inset-0 z-40 bg-black/10 dark:bg-black/30"
+          @click= "close()"
+        ></div>
+      </template>
+      <div
+        x-show="open"
+        x-cloak
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0 translate-y-2 scale-95"
+        x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+        x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+        x-transition:leave-end="opacity-0 translate-y-2 scale-95"
+        x-ref="panel"
+        @click.outside= "close()"
+        class="fixed z-50 max-h-[80vh] overflow-y-auto origin-top shadow-2xl"
+        :style="style"
+      >
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+        >
+          {% with individual=item %}
+            {% include 'lab/partials/note_sections.html#individual-notes-grid' %}
+          {% endwith %}
+        </div>
+      </div>
+    </div>
   </td>
   <td class="px-4 py-3 text-sm">
     {% with float="" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
+      {% include 'lab/partials/badge.html#badge' %}
     {% endwith %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     <button
-      @click="openDetail({{ item.pk }}, 'Individual', 'lab')"
+      @click= "openDetail({{ item.pk }}, 'Individual', 'lab')"
       class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
     >
       <i class="fa-solid fa-eye"></i>
@@ -230,17 +365,27 @@
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Name
-          </th>
-          <th
-            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-          >
             Institution
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            ICD-11 Code
+            Samples
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Tests
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Analyses
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Notes
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
@@ -270,23 +415,34 @@
   <div
     id="individual-detail"
     class="space-y-6"
-    x-data="{ activeTab: '{{ activeTab|default:"notes" }}' }"
+    x-data="{ activeTab: '{{ activeTab|default:"notes" }}', historyLoaded: {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }"
   >
     <!-- Individual card -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
       <!-- Header with individual info -->
       <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
-                  <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
             <h2 class="text-2xl font-bold text-white">
               {{ item.individual_id }}
             </h2>
-            <span
-              class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white"
-            >
-              {{ item.status.name }}
-            </span>
+            <p class="text-blue-100 mt-1">{{ item.all_ids|join:' - ' }}</p>
           </div>
-        <p class="text-blue-100 mt-1">{{ item.all_ids|join:' - ' }}</p>
+          <div class="flex flex-col items-start md:items-end gap-2">
+            {% partial status-badge %}
+            {% if perms.lab.change_individual %}
+              <button
+                class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-900 bg-white/90 rounded-md shadow-sm hover:bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white transition"
+                hx-get="{% url 'lab:generic_edit' %}?model_name=Individual&app_label=lab&pk={{ item.pk }}"
+                hx-target="#modal-root"
+                hx-swap="innerHTML"
+              >
+                <i class="fas fa-edit"></i>
+                <span>Edit Individual</span>
+              </button>
+            {% endif %}
+          </div>
+        </div>
       </div>
 
       <!-- Individual details -->
@@ -298,7 +454,7 @@
               <button
                 type="button"
                 class="mb-2 px-3 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs font-medium hover:bg-blue-200 dark:hover:bg-blue-900/50 transition"
-                @click="showSensitive = !showSensitive"
+                @click= "showSensitive = !showSensitive"
               >
                 <template x-if="!showSensitive">
                   <span><i class="fas fa-eye"></i> Show Sensitive Info</span>
@@ -383,69 +539,40 @@
 
         <!-- Third column - HPO Terms -->
         <div class="space-y-4">
-          <div>
-            <div class="flex items-center justify-between">
-              <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                HPO Terms
-              </h3>
-              {% if item.hpo_terms.exists %}
-                <button
-                  class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-                  @click="navigator.clipboard.writeText('{{ item.hpo_terms.all|join:', ' }}').then(() => {
-                  $el.innerHTML = '<i class=\'fas fa-check\'></i> Copied!';
-                  setTimeout(() => {
-                    $el.innerHTML = '<i class=\'fas fa-copy\'></i> Copy';
-                  }, 2000);
-                })"
-                >
-                  <i class="fas fa-copy"></i> Copy
-                </button>
-              {% endif %}
-            </div>
-            <div class="flex flex-wrap gap-1 mt-1">
-              {% for term in item.hpo_terms.all %}
-                {% if term %}
-                  <span
-                    class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs font-medium rounded"
-                    >{{ term }} {{ term.label }}</span
-                  >
-                {% endif %}
-                {% empty %}
-                <span class="text-gray-500 dark:text-gray-400">—</span>
-              {% endfor %}
-            </div>
-          </div>
+          {% partial hpo-terms-section %}
         </div>
       </div>
 
       <!-- Tabs for related data -->
       <div class="px-6 border-b border-gray-200 dark:border-gray-700">
-        <div class="flex -mb-px">
+        <div class="flex -mb-px flex-nowrap overflow-x-auto scroll-smooth" style="scrollbar-width: thin;">
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'notes'"
+            @click= "activeTab = 'notes'"
           >
-            Notes ({{ item.notes.count }})
+            {% with object=item content_type='individual' %}
+              {% include 'lab/note.html#summary' %}
+            {% endwith %}
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'samples' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'samples'"
+            @click= "activeTab = 'samples'"
           >
             Samples ({{ item.samples.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tests' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'tests'"
+            @click= "activeTab = 'tests'"
           >
             Tests ({{ tests|length }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'analyses' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'analyses'"
+            @click= "activeTab = 'analyses'"
           >
             Analyses ({{ analyses|length }})
           </button>
@@ -453,7 +580,7 @@
             <button
               class="py-2 px-4 border-b-2 transition-colors"
               :class="activeTab === 'family' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-              @click="activeTab = 'family'"
+              @click= "activeTab = 'family'"
             >
               Family Members ({{ item.family.individuals.count|add:"-1" }})
             </button>
@@ -470,37 +597,53 @@
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'phenotype' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'phenotype'"
+            @click= "activeTab = 'phenotype'"
           >
             Phenotype
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'tasks'"
+            @click= "activeTab = 'tasks'"
           >
-            Tasks ({{ item.tasks.count }})
-          </button>
-          <button
-            class="py-2 px-4 border-b-2 transition-colors"
-            :class="activeTab === 'status' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'status'"
-          >
-            Status History
+            Tasks ({{ item.tasks.all|length }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'projects' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'projects'"
+            @click= "activeTab = 'projects'"
           >
             Projects ({{ item.projects.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'timeline' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'timeline'"
+            @click= "activeTab = 'timeline'"
           >
             Timeline
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'variants' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'variants'"
+          >
+            Variants ({{ item.variants.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'history' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'history'"
+            {% if not history_prefetched %}
+              hx-get="{% url 'lab:history_tab' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ item.pk }}"
+              hx-trigger="click once"
+              hx-target="#history-tab-panel-{{ model_name|lower }}-{{ item.pk }}"
+              hx-swap="innerHTML"
+              hx-indicator="#history-tab-indicator-{{ model_name|lower }}-{{ item.pk }}"
+              hx-on::before-request="historyLoading = true"
+              hx-on::after-on-load="historyLoading = false; historyLoaded = true"
+            {% endif %}
+          >
+            History
           </button>
         </div>
       </div>
@@ -512,29 +655,127 @@
           <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
             Notes
           </h3>
-          {% with object=item content_type="individual" %}
+          {% with object=item content_type="individual" user=user %}
             {% include "lab/note.html#list" %}
           {% endwith %}
+
+          <!-- Sample Notes -->
+          <div class="mt-6">
+            <h4 class="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">
+              Sample Notes
+            </h4>
+            {% if item.samples.exists %}
+              {% for sample in item.samples.all %}
+                <div class="mb-4">
+                  <div class="text-sm text-gray-700 dark:text-gray-300 mb-1 font-medium">
+                    {{ sample }}
+                  </div>
+                  {% with object=sample content_type="sample" user=user %}
+                    {% include "lab/note.html#list" %}
+                  {% endwith %}
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-sm text-gray-500 dark:text-gray-400">No sample notes.</p>
+            {% endif %}
+          </div>
+
+          <!-- Test Notes -->
+          <div class="mt-6">
+            <h4 class="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">
+              Test Notes
+            </h4>
+            {% if item.samples.exists %}
+              {% for sample in item.samples.all %}
+                {% if sample.tests.exists %}
+                  <div class="mb-4">
+                    <div class="text-sm text-gray-700 dark:text-gray-300 mb-1 font-medium">
+                      {{ sample }}
+                    </div>
+                    {% for test in sample.tests.all %}
+                      <div class="mb-3">
+                        <div class="text-[13px] text-gray-600 dark:text-gray-400 mb-1">
+                          {{ test }}
+                        </div>
+                        {% with object=test content_type="test" user=user %}
+                          {% include "lab/note.html#list" %}
+                        {% endwith %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <p class="text-sm text-gray-500 dark:text-gray-400">No test notes.</p>
+            {% endif %}
+          </div>
+
+          <!-- Analysis Notes -->
+          <div class="mt-6">
+            <h4 class="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">
+              Analysis Notes
+            </h4>
+            {% if item.samples.exists %}
+              {% load lab_filters %}
+              {% for sample in item.samples.all %}
+                {% if sample|has_analyses %}
+                  <div class="mb-4">
+                    <div class="text-sm text-gray-700 dark:text-gray-300 mb-1 font-medium">
+                      {{ sample }}
+                    </div>
+                    {% for test in sample.tests.all %}
+                      {% if test.analyses.exists %}
+                        <div class="mb-3">
+                          <div class="text-[13px] text-gray-600 dark:text-gray-400 mb-1">
+                            {{ test }}
+                          </div>
+                          {% for analysis in test.analyses.all %}
+                            <div class="mb-2">
+                              <div class="text-[12px] text-gray-500 dark:text-gray-400 mb-1">
+                                {{ analysis }}
+                              </div>
+                              {% with object=analysis content_type="analysis" user=user %}
+                                {% include "lab/note.html#list" %}
+                              {% endwith %}
+                            </div>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <p class="text-sm text-gray-500 dark:text-gray-400">No analysis notes.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Variants tab -->
+        <div x-show="activeTab === 'variants'" x-cloak>
+          {% include "lab/partials/variant_list.html" %}
         </div>
 
         <!-- Samples tab -->
         <div x-show="activeTab === 'samples'" x-cloak>
-          {% if item.samples.exists %}
-            <!-- Use existing sample partials for consistent UI -->
-            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- Toolbar: Add Sample button (left) + view toggle (right) -->
-              <div class="flex items-center justify-between">
-                <div>
+          <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+            <!-- Toolbar: Add Sample button (left) + view toggle (right) -->
+            <div class="flex items-center justify-between">
+              <div>
+                {% has_model_perm user 'lab' 'Sample' 'add' as can_add_sample %}
+                {% if can_add_sample %}
                   <button
                     hx-get="{% url 'lab:generic_create' %}?model_name=Sample&app_label=lab&individual={{ item.id }}"
                     hx-target="#modal-root"
                     hx-swap="innerHTML"
-                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 transition-colors"
                   >
                     <i class="fa-solid fa-vial"></i>
                     <span>Add Sample to Individual</span>
                   </button>
-                </div>
+                {% endif %}
+              </div>
+              {% if item.samples.exists %}
                 <div
                   class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
                 >
@@ -545,7 +786,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -561,7 +802,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -576,8 +817,11 @@
                     >
                   </button>
                 </div>
-              </div>
+              {% endif %}
+            </div>
 
+            {% if item.samples.exists %}
+              <!-- Use existing sample partials for consistent UI -->
               <!-- Card View with animated transition -->
               <div
                 x-show="viewMode === 'cards'"
@@ -613,14 +857,14 @@
                   {% include "lab/sample.html#table" %}
                 {% endwith %}
               </div>
-            </div>
-          {% else %}
-            <div
-              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-            >
-              No samples available for this individual.
-            </div>
-          {% endif %}
+            {% else %}
+              <div
+                class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+              >
+                No samples available for this individual.
+              </div>
+            {% endif %}
+          </div>
         </div>
 
         <!-- Tests tab -->
@@ -640,7 +884,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -656,7 +900,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -735,7 +979,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -751,7 +995,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -832,7 +1076,7 @@
                       ></div>
 
                       <button
-                        @click="viewMode = 'cards'"
+                        @click= "viewMode = 'cards'"
                         class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                         :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                       >
@@ -848,7 +1092,7 @@
                       </button>
 
                       <button
-                        @click="viewMode = 'table'"
+                        @click= "viewMode = 'table'"
                         class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                         :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                       >
@@ -939,7 +1183,7 @@
                     >
                     <button
                       class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                      @click="navigator.clipboard.writeText('{{ item.icd11_code }}').then(() => {
+                      @click= "navigator.clipboard.writeText('{{ item.icd11_code|escapejs }}').then(() => {
                       $el.innerHTML = '<i class=\'fas fa-check\'></i> Copied!';
                       setTimeout(() => {
                         $el.innerHTML = '<i class=\'fas fa-copy\'></i> Copy';
@@ -980,7 +1224,7 @@
                 {% if item.hpo_terms.exists %}
                   <button
                     class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                    @click="navigator.clipboard.writeText('{{ item.hpo_terms.all|join:', ' }}').then(() => {
+                    @click= "navigator.clipboard.writeText('{{ item.hpo_terms.all|join:", "|escapejs }}').then(() => {
                     $el.innerHTML = '<i class=\'fas fa-check\'></i> Copied!';
                     setTimeout(() => {
                         $el.innerHTML = '<i class=\'fas fa-copy\'></i> Copy';
@@ -1039,22 +1283,15 @@
 
         <!-- Tasks tab -->
         <div x-show="activeTab === 'tasks'" x-cloak>
-          {% if item.tasks.exists %}
-            <!-- Use existing task partials for consistent UI -->
-            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- View toggle buttons -->
-              <div class="flex justify-end">
-                <div
-                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
-                >
-                  <div
-                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
-                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
-                    style="width: calc(50% - 2px);"
-                  ></div>
+          <!-- Use existing task partials for consistent UI -->
+          <div x-data="{ viewMode: 'cards' }" class="space-y-6">
+            <!-- View toggle buttons -->
+            <div class="flex justify-end">
+              <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center">
+                <div class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out" :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'" style="width: calc(50% - 2px);"></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -1070,7 +1307,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -1087,191 +1324,198 @@
                 </div>
               </div>
 
-              <!-- Card View with animated transition -->
-              <div
-                x-show="viewMode === 'cards'"
-                x-transition:enter="transition-all duration-500 ease-out"
-                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
-                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                x-transition:leave="transition-all duration-300 ease-in"
-                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
-                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                style="will-change: opacity, transform;"
-              >
-                {% for task in item.tasks.all %}
+            <!-- Card View: render all related tasks -->
+            <div x-show="viewMode === 'cards'" x-transition:enter="transition-all duration-500 ease-out" x-transition:enter-start="opacity-0 scale-95 translate-y-4" x-transition:enter-end="opacity-100 scale-100 translate-y-0" x-transition:leave="transition-all duration-300 ease-in" x-transition:leave-start="opacity-100 scale-100 translate-y-0" x-transition:leave-end="opacity-0 scale-95 translate-y-4" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" style="will-change: opacity, transform;">
+              {# Individual tasks #}
+              {% for task in item.tasks.all %}
+                {% with item=task %}
+                  {% include "lab/task.html#card" %}
+                {% endwith %}
+              {% endfor %}
+
+              {# Sample tasks #}
+              {% for sample in item.samples.all %}
+                {% for task in sample.tasks.all %}
                   {% with item=task %}
                     {% include "lab/task.html#card" %}
                   {% endwith %}
                 {% endfor %}
-              </div>
+              {% endfor %}
 
-                                <!-- Table View with animated transition -->
-                  <div
-                    x-show="viewMode === 'table'"
-                    x-transition:enter="transition-all duration-500 ease-out"
-                    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
-                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                    x-transition:leave="transition-all duration-300 ease-in"
-                    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
-                    class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
-                    style="will-change: opacity, transform;"
-                  >
-                    {% with items=item.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+              {# Test tasks #}
+              {% for sample in item.samples.all %}
+                {% for test in sample.tests.all %}
+                  {% for task in test.tasks.all %}
+                    {% with item=task %}
+                      {% include "lab/task.html#card" %}
+                    {% endwith %}
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+
+              {# Analysis tasks #}
+              {% for sample in item.samples.all %}
+                {% for test in sample.tests.all %}
+                  {% for analysis in test.analyses.all %}
+                    {% for task in analysis.tasks.all %}
+                      {% with item=task %}
+                        {% include "lab/task.html#card" %}
+                      {% endwith %}
+                    {% endfor %}
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+            </div>
+
+            <!-- Table View: render separate tables per section -->
+            <div x-show="viewMode === 'table'" x-transition:enter="transition-all duration-500 ease-out" x-transition:enter-start="opacity-0 scale-95 -translate-y-4" x-transition:enter-end="opacity-100 scale-100 translate-y-0" x-transition:leave="transition-all duration-300 ease-in" x-transition:leave-start="opacity-100 scale-100 translate-y-0" x-transition:leave-end="opacity-0 scale-95 -translate-y-4" class="space-y-6" style="will-change: opacity, transform;">
+              {% if item.tasks.exists %}
+                <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Individual Tasks</h4>
+                <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg">
+                  {% with items=item.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                    {% include "lab/task.html#table" %}
+                  {% endwith %}
+                </div>
+              {% endif %}
+
+              {% for sample in item.samples.all %}
+                {% if sample.tasks.exists %}
+                  <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Sample {{ sample.id }} Tasks</h4>
+                  <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg">
+                    {% with items=sample.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
                       {% include "lab/task.html#table" %}
                     {% endwith %}
                   </div>
-            </div>
-          {% else %}
-            <div
-              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-            >
-              No tasks available for this individual.
-            </div>
-          {% endif %}
-        </div>
+                {% endif %}
+              {% endfor %}
 
-        <!-- Status History tab -->
-        <div x-show="activeTab === 'status'" x-cloak>
-          {% if item.status_logs.exists %}
-            <div class="relative">
-              <div
-                class="absolute h-full w-0.5 bg-gray-200 dark:bg-gray-600 left-5 top-0"
-              ></div>
-              {% for log in item.status_logs.all %}
-                <div class="mb-4 ml-10 relative">
-                  <!-- Status circle -->
-                  <div
-                    class="absolute w-10 h-10 rounded-full bg-{{ log.new_status.color|default:'gray' }}-100 dark:bg-{{ log.new_status.color|default:'gray' }}-900/30 text-{{ log.new_status.color|default:'gray' }}-800 dark:text-{{ log.new_status.color|default:'gray' }}-200 flex items-center justify-center -left-10 border-2 border-white dark:border-gray-800 shadow"
-                  >
-                    <i class="fas fa-arrow-right"></i>
-                  </div>
-                  <!-- Status card -->
-                  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                    <div class="flex justify-between">
-                      <span
-                        class="font-medium text-gray-900 dark:text-gray-100"
-                      >
-                        {{ log.previous_status.name }} →
-                        <span
-                          class="text-{{ log.new_status.color|default:'gray' }}-600 dark:text-{{ log.new_status.color|default:'gray' }}-400"
-                          >{{ log.new_status.name }}</span
-                        >
-                      </span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400"
-                        >{{ log.changed_at|date:"d M Y H:i" }}</span
-                      >
+              {% for sample in item.samples.all %}
+                {% for test in sample.tests.all %}
+                  {% if test.tasks.exists %}
+                    <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Test {{ test.id }} Tasks</h4>
+                    <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg">
+                      {% with items=test.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                        {% include "lab/task.html#table" %}
+                      {% endwith %}
                     </div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      Changed by:
-                      {{ log.changed_by.get_full_name|default:log.changed_by.username }}
-                    </p>
-                    {% if log.notes %}
-                      <p
-                        class="mt-2 text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 p-2 rounded whitespace-pre-line"
-                      >
-                        {{ log.notes }}
-                      </p>
+                  {% endif %}
+                {% endfor %}
+              {% endfor %}
+
+              {% for sample in item.samples.all %}
+                {% for test in sample.tests.all %}
+                  {% for analysis in test.analyses.all %}
+                    {% if analysis.tasks.exists %}
+                      <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Analysis {{ analysis.id }} Tasks</h4>
+                      <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg">
+                        {% with items=analysis.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                          {% include "lab/task.html#table" %}
+                        {% endwith %}
+                      </div>
                     {% endif %}
-                  </div>
-                </div>
+                  {% endfor %}
+                {% endfor %}
               {% endfor %}
             </div>
-          {% else %}
-            <div
-              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-            >
-              No status history available for this individual.
-            </div>
-          {% endif %}
+          </div>
         </div>
+
 
         <!-- Projects tab -->
         <div x-show="activeTab === 'projects'" x-cloak>
-          {% if item.projects.all %}
-            <!-- Use existing project partials for consistent UI -->
-            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- View toggle buttons -->
-              <div class="flex justify-end">
-                <div
-                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
-                >
-                  <div
-                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
-                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
-                    style="width: calc(50% - 2px);"
-                  ></div>
-
-                  <button
-                    @click="viewMode = 'cards'"
-                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
-                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
-                  >
-                    <i
-                      class="fa-solid fa-th-large mr-2 transition-transform duration-300"
-                      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
-                    ></i>
-                    <span
-                      class="transition-all duration-300"
-                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
-                      >Card</span
-                    >
-                  </button>
-
-                  <button
-                    @click="viewMode = 'table'"
-                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
-                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
-                  >
-                    <i
-                      class="fa-solid fa-table mr-2 transition-transform duration-300"
-                      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
-                    ></i>
-                    <span
-                      class="transition-all duration-300"
-                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
-                      >Table</span
-                    >
-                  </button>
-                </div>
-              </div>
-
-              <!-- Card View with animated transition -->
-              <div
-                x-show="viewMode === 'cards'"
-                x-transition:enter="transition-all duration-500 ease-out"
-                x-transition:enter-start="opacity-0 scale-95 translate-y-4"
-                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                x-transition:leave="transition-all duration-300 ease-in"
-                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                x-transition:leave-end="opacity-0 scale-95 translate-y-4"
-                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                style="will-change: opacity, transform;"
+          <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+            <!-- Toolbar: Add to Project + view toggle -->
+            <div class="flex items-center justify-between">
+              <form
+                hx-post="{% url 'lab:project_add_individuals' %}"
+                hx-target="#individual-projects-fragment"
+                hx-swap="innerHTML"
+                class="flex items-center gap-2"
               >
-                {% for project in item.projects.all %}
-                  {% with item=project %}
-                    {% include "lab/project.html#card" %}
-                  {% endwith %}
-                {% endfor %}
-              </div>
-
-                                <!-- Table View with animated transition -->
-                  <div
-                    x-show="viewMode === 'table'"
-                    x-transition:enter="transition-all duration-500 ease-out"
-                    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
-                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                    x-transition:leave="transition-all duration-300 ease-in"
-                    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                    x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
-                    class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
-                    style="will-change: opacity, transform;"
-                  >
-                    {% with items=item.projects.all view_mode='table' model_name='Project' app_label='lab' card='card' %}
-                      {% include "lab/project.html#table" %}
-                    {% endwith %}
+                {% csrf_token %}
+                {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' value_field='pk' multiple=False name='project_id' %}
+                  <div class="w-80">
+                    {% include "lab/partials/partials.html#generic-combobox" %}
                   </div>
+                {% endwith %}
+                <input type="hidden" name="individual_id" value="{{ item.id }}">
+                <input type="hidden" name="return" value="individual">
+                <button type="submit"
+                  class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                >
+                  <i class="fa-solid fa-plus"></i>
+                  <span>Add to Project</span>
+                </button>
+              </form>
+              <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center">
+                <div
+                  class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                  :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                  style="width: calc(50% - 2px);"
+                ></div>
+
+                <button
+                  @click= "viewMode = 'cards'"
+                  class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                  :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                >
+                  <i class="fa-solid fa-th-large mr-2 transition-transform duration-300" :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"></i>
+                  <span class="transition-all duration-300" :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'">Card</span>
+                </button>
+
+                <button
+                  @click= "viewMode = 'table'"
+                  class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                  :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                >
+                  <i class="fa-solid fa-table mr-2 transition-transform duration-300" :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"></i>
+                  <span class="transition-all duration-300" :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'">Table</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="individual-projects-fragment">
+              {% partial individual-projects-fragment %}
+            </div>
+          </div>
+        </div>
+
+        {% partialdef individual-projects-fragment %}
+          {% if item.projects.all %}
+            <!-- Card View with animated transition -->
+            <div
+              x-show="viewMode === 'cards'"
+              x-transition:enter="transition-all duration-500 ease-out"
+              x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+              x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+              x-transition:leave="transition-all duration-300 ease-in"
+              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+              x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+              style="will-change: opacity, transform;"
+            >
+              {% for project in item.projects.all %}
+                {% with item=project %}
+                  {% include "lab/project.html#card" %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+
+            <!-- Table View with animated transition -->
+            <div
+              x-show="viewMode === 'table'"
+              x-transition:enter="transition-all duration-500 ease-out"
+              x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+              x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+              x-transition:leave="transition-all duration-300 ease-in"
+              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+              x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
+              class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
+              style="will-change: opacity, transform;"
+            >
+              {% with items=item.projects.all view_mode='table' model_name='Project' app_label='lab' card='card' %}
+                {% include "lab/project.html#table" %}
+              {% endwith %}
             </div>
           {% else %}
             <div
@@ -1288,7 +1532,7 @@
               </p>
             </div>
           {% endif %}
-        </div>
+        {% endpartialdef %}
       </div>
 
       <!-- Timeline tab -->
@@ -1321,34 +1565,23 @@
         </div>
       </div>
 
-      <!-- Footer with action buttons -->
-      <div
-        class="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-t flex justify-end space-x-3"
-      >
-        {% if perms.lab.change_individual %}
-          <button
-            class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 flex items-center"
-            hx-get="{% url 'lab:generic_edit' %}?model_name=Individual&app_label=lab&pk={{ item.pk }}"
-            hx-target="#modal-root"
-            hx-swap="innerHTML"
-          >
-            <i class="fas fa-edit mr-1"></i> Edit Individual
-          </button>
-        {% endif %}
-        <!-- Disabled for now
-          {% if perms.lab.delete_individual %}
-            <button
-              class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 flex items-center"
-              hx-target="#individual-detail"
-              hx-confirm="Are you sure you want to delete this individual?"
-              hx-swap="outerHTML swap:1s"
-              @click="showDetail = false"
-            >
-              <i class="fas fa-trash-alt mr-1"></i> Delete Individual
-            </button>
+      <!-- History tab -->
+      <div x-show="activeTab === 'history'" x-cloak class="pt-2">
+        <div
+          id="history-tab-indicator-{{ model_name|lower }}-{{ item.pk }}"
+          class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"
+          x-show="historyLoading"
+        >
+          <i class="fa-solid fa-arrow-rotate-right fa-spin"></i>
+          <span>Loading history…</span>
+        </div>
+        <div id="history-tab-panel-{{ model_name|lower }}-{{ item.pk }}" class="space-y-4 px-1 sm:px-2 lg:px-4">
+          {% if history_prefetched %}
+            {% include "lab/individual.html#history-tab" %}
           {% endif %}
-        -->
+        </div>
       </div>
+
     </div>
   </div>
 {% endpartialdef %}
@@ -1482,24 +1715,111 @@
   {% if plot_json %}
     {# prettier-ignore-start #}
     <script>
-      var plotData = {{ plot_json|safe }};
+      var plotData = JSON.parse('{{ plot_json|escapejs|default:"null" }}');
       var plotlyDiv = document.getElementById('timeline-plot');
-      if (plotlyDiv) { 
-        Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout, {responsive: true}); 
+      if (plotlyDiv && plotData) {
+        Plotly.newPlot(plotlyDiv, plotData.data, plotData.layout, {responsive: true});
       }
     </script>
     {# prettier-ignore-end #}
   {% endif %}
 {% endpartialdef %}
 
+{% partialdef history-tab %}
+  {% load lab_filters %}
+  <template x-init="historyLoaded = true; historyLoading = false"></template>
+  {% with history_list=item|hierarchical_history %}
+    {% if history_list %}
+      <div class="relative">
+        <div class="absolute h-full w-0.5 bg-gray-200 dark:bg-gray-600 left-5 top-0"></div>
+        {% for history_item in history_list %}
+          <div class="mb-4 ml-10 relative">
+            {% if history_item.type == 'notification' %}
+              <div class="absolute w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 flex items-center justify-center -left-10 border-2 border-white dark:border-gray-800 shadow">
+                <i class="fas fa-bell"></i>
+              </div>
+              <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-indigo-500">
+                <div class="flex justify-between items-start mb-2">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="text-xs font-medium px-2 py-1 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
+                        Notification
+                      </span>
+                      <span class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ history_item.model_name }}: {{ history_item.object_id }}
+                      </span>
+                    </div>
+                    <p class="font-medium text-gray-900 dark:text-gray-100">
+                      {{ history_item.verb }}
+                    </p>
+                    {% if history_item.description %}
+                      <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-line">
+                        {{ history_item.description|linebreaksbr }}
+                      </p>
+                    {% endif %}
+                  </div>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ history_item.history_date|date:"d M Y H:i" }}
+                  </span>
+                </div>
+              </div>
+            {% else %}
+              <div class="absolute w-10 h-10 rounded-full bg-{{ history_item.new_status.color|default:'gray' }}-100 dark:bg-{{ history_item.new_status.color|default:'gray' }}-900/30 text-{{ history_item.new_status.color|default:'gray' }}-800 dark:text-{{ history_item.new_status.color|default:'gray' }}-200 flex items-center justify-center -left-10 border-2 border-white dark:border-gray-800 shadow">
+                <i class="fas fa-arrow-right"></i>
+              </div>
+              <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="flex justify-between items-start mb-2">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="text-xs font-medium px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                        {{ history_item.model_name }}
+                      </span>
+                      <span class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ history_item.object_id }}
+                      </span>
+                    </div>
+                    <span class="font-medium text-gray-900 dark:text-gray-100">
+                      {% if history_item.previous_status %}
+                        {{ history_item.previous_status.name }} →
+                      {% endif %}
+                      <span class="text-{{ history_item.new_status.color|default:'gray' }}-600 dark:text-{{ history_item.new_status.color|default:'gray' }}-400">
+                        {{ history_item.new_status.name }}
+                      </span>
+                    </span>
+                  </div>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ history_item.history_date|date:"d M Y H:i" }}
+                  </span>
+                </div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Changed by:
+                  {% if history_item.history_user %}
+                    {{ history_item.history_user.get_full_name|default:history_item.history_user.username }}
+                  {% else %}
+                    System
+                  {% endif %}
+                </p>
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+        No history available for this individual.
+      </div>
+    {% endif %}
+  {% endwith %}
+{% endpartialdef %}
+
 {% partialdef create-form %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="saveFormData(); document.getElementById('modal-root').innerHTML = ''">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "saveFormData(); document.getElementById('modal-root').innerHTML = ''">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
           Create New Individual
         </h2>
-        <button @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+        <button @click= "saveFormData(); document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
           <i class="fa-solid fa-times text-xl"></i>
         </button>
       </div>
@@ -1736,7 +2056,7 @@
           </div>
           
           <div class="flex justify-end space-x-3 mt-6">
-            <button type="button" @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
+            <button type="button" @click= "saveFormData(); document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
             <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Create Individual</button>
           </div>
         </form>
@@ -1745,1127 +2065,223 @@
   </div>
 {% endpartialdef %}
 
-{% partialdef family-create-form %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="handleCloseWithConfirmation()">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-7xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          Create New Family with Individuals
-        </h2>
-        <button @click="handleCloseWithConfirmation()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-          <i class="fa-solid fa-times text-xl"></i>
-        </button>
+{% partialdef hpo-terms-section %}
+  <div id="hpo-terms-section">
+    <div>
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+          HPO Terms
+        </h3>
+        <div class="flex items-center gap-2">
+          {% if perms.lab.change_individual %}
+            <button
+              type="button"
+              hx-get="{% url 'lab:edit_individual_hpo_terms' %}?individual_id={{ item.id }}"
+              hx-target="#hpo-terms-section"
+              hx-swap="innerHTML"
+              class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+              title="Add/Edit HPO Terms"
+            >
+              <i class="fas fa-pen"></i>
+            </button>
+          {% endif %}
+          {% if item.hpo_terms.exists %}
+            <button
+              class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+              @click= "navigator.clipboard.writeText('{{ item.hpo_terms.all|join:", "|escapejs }}').then(() => {
+                $el.innerHTML = '<i class=\'fas fa-check\'></i> Copied!';
+                setTimeout(() => {
+                  $el.innerHTML = '<i class=\'fas fa-copy\'></i> Copy';
+                }, 2000);
+              })"
+            >
+              <i class="fas fa-copy"></i> Copy
+            </button>
+          {% endif %}
+        </div>
       </div>
-      
-      <form id="family-create-form" hx-post="{% url 'lab:family_create_segway' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit="if (!prepareFormSubmission()) { $event.preventDefault(); return false; } debugFormSubmission($event)">
+      <div class="flex flex-wrap gap-1 mt-1">
+        {% for term in item.hpo_terms.all %}
+          {% if term %}
+            <span
+              class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs font-medium rounded"
+              >{{ term }} {{ term.label }}</span
+            >
+          {% endif %}
+          {% empty %}
+          <span class="text-gray-500 dark:text-gray-400">—</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef hpo-terms-edit %}
+  <div id="hpo-terms-section">
+    <div>
+      <form
+        hx-post="{% url 'lab:update_individual_hpo_terms' %}"
+        hx-target="#hpo-terms-section"
+        hx-swap="innerHTML"
+      >
         {% csrf_token %}
-        
-        <!-- Family Information Section -->
-        <div class="mb-8 p-6 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <i class="fas fa-home mr-2 text-blue-600"></i>
-            Family Information
-          </h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label for="family_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Family ID <span class="text-red-500">*</span>
-              </label>
-              <select 
-                name="family_id" 
-                id="family_id" 
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
-                onchange="handleFamilySelection(this)"
-              >
-                <option value="">-- Select existing family or type new ID --</option>
-                {% for family in existing_families %}
-                  <option value="{{ family.family_id }}">{{ family.family_id }} ({{ family.individuals.count }} members)</option>
-                {% endfor %}
-              </select>
-              <div class="mt-2">
-                <label for="new_family_id" class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Or enter new family ID:
-                </label>
-                <input 
-                  type="text" 
-                  id="new_family_id" 
-                  placeholder="Type new family ID here"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-                  oninput="handleNewFamilyInput(this)"
-                >
-              </div>
-            </div>
-            <div>
-              <label for="family_description" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Description
-              </label>
-              <textarea 
-                name="family_description" 
-                id="family_description" 
-                rows="3"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
-                placeholder="Enter family description"
-              ></textarea>
-            </div>
-          </div>
+        <input type="hidden" name="individual_id" value="{{ item.id }}">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            HPO Terms
+          </label>
+          {% with app_label='ontologies' model_name='Term' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
+            {% include "lab/partials/partials.html#generic-combobox" %}
+          {% endwith %}
         </div>
-
-        <!-- Individuals Section -->
-        <div class="mb-8">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-              <i class="fas fa-users mr-2 text-green-600"></i>
-              Family Members
-            </h3>
-            <button 
-              type="button" 
-              @click="addIndividualForm()"
-              class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center space-x-2"
-            >
-              <i class="fas fa-plus"></i>
-              <span>Add Member</span>
-            </button>
-          </div>
-          
-          <div id="individuals-container" class="space-y-6">
-            <!-- Individual forms will be added here dynamically -->
-          </div>
-        </div>
-
-        <!-- Form Actions -->
-        <div class="flex justify-between items-center pt-6 border-t border-gray-200 dark:border-gray-700">
-          <!-- Left side - Restore button -->
-          <div>
-            <button 
-              type="button" 
-              @click="restoreFormData()" 
-              class="px-4 py-2 text-sm font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-md hover:bg-green-200 dark:hover:bg-green-800/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              title="Restore previously saved form data"
-            >
-              <i class="fas fa-undo mr-2"></i>
-              Restore Saved Data
-            </button>
-          </div>
-          
-          <!-- Right side - Action buttons -->
-          <div class="flex space-x-3">
-            <button 
-              type="button" 
-              @click="saveFormData(); document.getElementById('modal-root').innerHTML = ''; showToast('Form data saved and popup closed', 'success')" 
-              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-            >
-              Save & Close
-            </button>
-            <button 
-              type="button" 
-              @click="clearFormData(); document.getElementById('modal-root').innerHTML = ''" 
-              class="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-md hover:bg-red-200 dark:hover:bg-red-800/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-            >
-              Clear & Close
-            </button>
-            <button 
-              type="submit" 
-              class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Create Family & Individuals
-            </button>
-          </div>
+        <div class="flex justify-end space-x-3">
+          <button
+            type="button"
+            hx-get="{% url 'lab:view_individual_hpo_terms' %}?individual_id={{ item.id }}"
+            hx-target="#hpo-terms-section"
+            hx-swap="innerHTML"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors"
+          >
+            Save
+          </button>
         </div>
       </form>
     </div>
   </div>
-
-  <!-- Individual Form Template (hidden) -->
-  <template id="individual-form-template">
-    <div class="individual-form bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-6" x-data="{ showSensitive: false }">
-      <div class="flex items-center justify-between mb-4">
-        <h4 class="text-md font-medium text-gray-900 dark:text-white flex items-center">
-          <i class="fas fa-user mr-2 text-blue-600"></i>
-          Family Member <span class="member-number"></span>
-        </h4>
-        <button 
-          type="button" 
-          @click="removeIndividualForm($el.closest('.individual-form'))"
-          class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-          title="Remove this member"
-        >
-          <i class="fas fa-trash"></i>
-        </button>
-      </div>
-      
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- Column 1 -->
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Role in Family <span class="text-red-500">*</span>
-            </label>
-            <select 
-              name="individuals[INDEX][role]" 
-              required
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
-            >
-              <option value="">Select Role</option>
-              <option value="proband">Proband</option>
-              <option value="mother">Mother</option>
-              <option value="father">Father</option>
-              <option value="sibling">Sibling</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Full Name <span class="text-red-500">*</span>
-            </label>
-            <input 
-              type="text" 
-              name="individuals[INDEX][full_name]" 
-              required
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-              placeholder="Enter full name"
-            >
-          </div>
-
-          <!-- TC Identity -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              TC Identity
-            </label>
-            <input 
-              type="number" 
-              name="individuals[INDEX][tc_identity]" 
-              min="10000000000"
-              max="99999999999"
-              step="1"
-              pattern="[0-9]{11}"
-              title="TC Identity must be exactly 11 digits"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-              placeholder="Enter TC identity (11 digits)"
-            >
-          </div>
-
-          <!-- IDs Box (multiple rows) -->
-          <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
-            <div class="flex items-center justify-between mb-2">
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IDs</label>
-              <button type="button" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700" @click="addIdRow($el.closest('.individual-form'))">
-                <i class="fas fa-plus mr-1"></i> Add ID
-              </button>
-            </div>
-            <div class="space-y-2 id-rows" data-row-index="0">
-              <!-- rows injected here by JS -->
-            </div>
-            <!-- Hidden template for an ID row -->
-            <template class="id-row-template">
-              <div class="id-row grid grid-cols-7 gap-2 items-center">
-                <div class="col-span-3">
-                  <label class="sr-only">ID Type</label>
-                  <select name="individuals[INDEX][ids][ROW][type]" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                    {% for idt in identifier_types %}
-                      <option value="{{ idt.id }}">{{ idt.name }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-span-3">
-                  <label class="sr-only">ID</label>
-                  <input type="text" name="individuals[INDEX][ids][ROW][value]" placeholder="ID" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-                </div>
-                <div class="col-span-1 flex justify-end">
-                  <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click="removeIdRow($el.closest('.id-row'))" title="Remove this ID row">
-                    <i class="fas fa-trash"></i>
-                  </button>
-                </div>
-              </div>
-            </template>
-          </div>
-
-        </div>
-
-        <!-- Column 2 -->
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Institution <span class="text-red-500">*</span>
-            </label>
-            <select 
-              name="individuals[INDEX][institution]" 
-              required
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
-            >
-              <option value="">Select Institution</option>
-              {% for institution in institutions %}
-                <option value="{{ institution.id }}">{{ institution.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Status <span class="text-red-500">*</span>
-            </label>
-            <select 
-              name="individuals[INDEX][status]" 
-              required
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
-            >
-              <option value="">Select Status</option>
-              {% for status in individual_statuses %}
-                <option value="{{ status.id }}">{{ status.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Birth Date
-            </label>
-            <input 
-              type="date" 
-              name="individuals[INDEX][birth_date]" 
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-            >
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Council Date
-            </label>
-            <input 
-              type="date" 
-              name="individuals[INDEX][council_date]" 
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-            >
-          </div>
-        </div>
-
-        <!-- Column 3 -->
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Is Index Case
-            </label>
-            <div class="flex items-center space-x-3">
-              <label class="flex items-center">
-                <input 
-                  type="radio" 
-                  name="individuals[INDEX][is_index]" 
-                  value="true"
-                  class="mr-2 text-blue-600 focus:ring-blue-500"
-                >
-                <span class="text-sm text-gray-700 dark:text-gray-300">Yes</span>
-              </label>
-              <label class="flex items-center">
-                <input 
-                  type="radio" 
-                  name="individuals[INDEX][is_index]" 
-                  value="false"
-                  checked
-                  class="mr-2 text-blue-600 focus:ring-blue-500"
-                >
-                <span class="text-sm text-gray-700 dark:text-gray-300">No</span>
-              </label>
-            </div>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Is Affected
-            </label>
-            <div class="flex items-center space-x-3">
-              <label class="flex items-center">
-                <input 
-                  type="radio" 
-                  name="individuals[INDEX][is_affected]" 
-                  value="true"
-                  class="mr-2 text-blue-600 focus:ring-blue-500"
-                >
-                <span class="text-sm text-gray-700 dark:text-gray-300">Yes</span>
-              </label>
-              <label class="flex items-center">
-                <input 
-                  type="radio" 
-                  name="individuals[INDEX][is_affected]" 
-                  value="false"
-                  checked
-                  class="mr-2 text-blue-600 focus:ring-blue-500"
-                >
-                <span class="text-sm text-gray-700 dark:text-gray-300">No</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- Column 4 -->
-        <div class="space-y-4">
-          <!-- HPO Terms (Combobox) -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              HPO Terms
-            </label>
-            {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='individuals[INDEX][hpo_term_ids]' %}
-              {% include "lab/index.html#generic-combobox" %}
-            {% endwith %}
-          </div>
-          
-          <!-- Notes Box (multiple rows) -->
-          <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
-            <div class="flex items-center justify-between mb-2">
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
-              <button type="button" class="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700" @click="addNoteRow($el.closest('.individual-form'))">
-                <i class="fas fa-plus mr-1"></i> Add Note
-              </button>
-            </div>
-            <div class="space-y-2 note-rows" data-row-index="0">
-              <!-- rows injected here by JS -->
-            </div>
-            <!-- Hidden template for a note row -->
-            <template class="note-row-template">
-              <div class="note-row grid grid-cols-6 gap-2 items-center">
-                <div class="col-span-5">
-                  <label class="sr-only">Note Content</label>
-                  <textarea 
-                    name="individuals[INDEX][notes][ROW][content]" 
-                    rows="2"
-                    placeholder="Enter note content"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
-                  ></textarea>
-                </div>
-                <div class="col-span-1 flex justify-end">
-                  <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click="removeNoteRow($el.closest('.note-row'))" title="Remove this note">
-                    <i class="fas fa-trash"></i>
-                  </button>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-    </div>
-  </template>
-
-  <script>
-    // Family selection handling functions
-    function handleFamilySelection(selectElement) {
-      const newFamilyInput = document.getElementById('new_family_id');
-      if (selectElement.value) {
-        // An existing family was selected, clear the new family input
-        newFamilyInput.value = '';
-        newFamilyInput.disabled = true;
-        newFamilyInput.classList.add('opacity-50', 'cursor-not-allowed');
-      } else {
-        // No family selected, enable new family input
-        newFamilyInput.disabled = false;
-        newFamilyInput.classList.remove('opacity-50', 'cursor-not-allowed');
-      }
-    }
-    
-    function handleNewFamilyInput(inputElement) {
-      const familySelect = document.getElementById('family_id');
-      if (inputElement.value.trim()) {
-        // New family ID entered, clear the select
-        familySelect.value = '';
-        // Update the hidden input that will be submitted
-        const hiddenInput = document.createElement('input');
-        hiddenInput.type = 'hidden';
-        hiddenInput.name = 'family_id';
-        hiddenInput.value = inputElement.value.trim();
-        // Remove any existing hidden input
-        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
-        if (existingHidden) {
-          existingHidden.remove();
-        }
-        // Add the new hidden input
-        inputElement.parentNode.appendChild(hiddenInput);
-      } else {
-        // Clear input, remove hidden input
-        const hiddenInput = document.querySelector('input[name="family_id"][type="hidden"]');
-        if (hiddenInput) {
-          existingHidden.remove();
-        }
-      }
-    }
-    
-    // Function to ensure form submission includes the correct family_id
-    function prepareFormSubmission() {
-      const familySelect = document.getElementById('family_id');
-      const newFamilyInput = document.getElementById('new_family_id');
-      
-      // Validate that either existing family is selected or new family ID is entered
-      const hasExistingFamily = familySelect.value && familySelect.value !== '';
-      const hasNewFamily = newFamilyInput.value.trim() !== '';
-      
-      if (!hasExistingFamily && !hasNewFamily) {
-        alert('Please either select an existing family or enter a new family ID.');
-        return false;
-      }
-      
-      // Validate that all individuals have required fields
-      const individualForms = document.querySelectorAll('.individual-form');
-      if (individualForms.length > 1) {
-        let hasMother = false;
-        let hasFather = false;
-        
-        for (let form of individualForms) {
-          const fullName = form.querySelector('input[name*="[full_name]"]')?.value || '';
-          const role = form.querySelector('select[name*="[role]"]')?.value || '';
-          
-          if (!fullName.trim()) {
-            alert('All individuals must have a full name.');
-            return false;
-          }
-          
-          if (!role) {
-            alert('All individuals must have a role in family.');
-            return false;
-          }
-          
-          if (role === 'mother') hasMother = true;
-          if (role === 'father') hasFather = true;
-        }
-        
-        if (!hasMother || !hasFather) {
-          alert('For families with multiple members, at least one mother and one father must be specified.');
-          return false;
-        }
-      } else {
-        // Single individual - just check required fields
-        for (let form of individualForms) {
-          const fullName = form.querySelector('input[name*="[full_name]"]')?.value || '';
-          const role = form.querySelector('select[name*="[role]"]')?.value || '';
-          
-          if (!fullName.trim()) {
-            alert('All individuals must have a full name.');
-            return false;
-          }
-          
-          if (!role) {
-            alert('All individuals must have a role in family.');
-            return false;
-          }
-        }
-      }
-      
-      // If new family input has a value, use that; otherwise use the select value
-      if (newFamilyInput.value.trim()) {
-        // Clear the select field to avoid conflicts
-        familySelect.value = '';
-        
-        // Remove any existing hidden input
-        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
-        if (existingHidden) {
-          existingHidden.remove();
-        }
-        // Add hidden input with new family ID
-        const hiddenInput = document.createElement('input');
-        hiddenInput.type = 'hidden';
-        hiddenInput.name = 'family_id';
-        hiddenInput.value = newFamilyInput.value.trim();
-        newFamilyInput.parentNode.appendChild(hiddenInput);
-        
-        console.log(`=== DEBUG: Using new family ID: ${newFamilyInput.value.trim()} ===`);
-      } else {
-        // Ensure no hidden input exists when using select
-        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
-        if (existingHidden) {
-          existingHidden.remove();
-        }
-      }
-      
-      return true;
-    }
-    
-    let individualIndex = 0;
-    
-    // Form data persistence functions
-    function saveFormData() {
-      const form = document.getElementById('family-create-form');
-      if (!form) return;
-      
-      const formData = {
-        family_id: form.querySelector('#family_id')?.value || '',
-        family_description: form.querySelector('#family_description')?.value || '',
-        individuals: []
-      };
-      
-      // Save individual form data
-      const individualForms = form.querySelectorAll('.individual-form');
-      individualForms.forEach((individualForm, index) => {
-        const individualData = {
-          full_name: individualForm.querySelector('input[name*="[full_name]"]')?.value || '',
-          tc_identity: individualForm.querySelector('input[name*="[tc_identity]"]')?.value || '',
-          birth_date: individualForm.querySelector('input[name*="[birth_date]"]')?.value || '',
-          icd11_code: individualForm.querySelector('input[name*="[icd11_code]"]')?.value || '',
-          council_date: individualForm.querySelector('input[name*="[council_date]"]')?.value || '',
-          diagnosis: individualForm.querySelector('textarea[name*="[diagnosis]"]')?.value || '',
-          diagnosis_date: individualForm.querySelector('input[name*="[diagnosis_date]"]')?.value || '',
-          institution: individualForm.querySelector('select[name*="[institution]"]')?.value || '',
-          status: individualForm.querySelector('select[name*="[status]"]')?.value || '',
-          is_index: individualForm.querySelector('input[name*="[is_index]"]:checked')?.value || 'false',
-          is_affected: individualForm.querySelector('input[name*="[is_affected]"]:checked')?.value || 'false',
-
-          role: individualForm.querySelector('select[name*="[role]"]')?.value || '',
-          ids: [],
-          notes: []
-        };
-        
-        // Save ID rows data
-        const idRows = individualForm.querySelectorAll('.id-row');
-        idRows.forEach(idRow => {
-          const idType = idRow.querySelector('select[name*="[type]"]')?.value || '';
-          const idValue = idRow.querySelector('input[name*="[value]"]')?.value || '';
-          if (idType && idValue) {
-            individualData.ids.push({ type: idType, value: idValue });
-          }
-        });
-        
-        // Save note rows data
-        const noteRows = individualForm.querySelectorAll('.note-row');
-        noteRows.forEach(noteRow => {
-          const noteContent = noteRow.querySelector('textarea[name*="[content]"]')?.value || '';
-          if (noteContent.trim()) {
-            individualData.notes.push({ content: noteContent });
-          }
-        });
-        
-        formData.individuals.push(individualData);
-      });
-      
-      localStorage.setItem('familyCreationFormData', JSON.stringify(formData));
-      console.log('Form data saved to localStorage:', formData);
-      showToast('Form data saved successfully!', 'success');
-    }
-    
-    function restoreFormData() {
-      const savedData = localStorage.getItem('familyCreationFormData');
-      if (!savedData) {
-        showToast('No saved data found', 'warning');
-        return;
-      }
-      
-      try {
-        const formData = JSON.parse(savedData);
-        const form = document.getElementById('family-create-form');
-        if (!form) return;
-        
-        // Restore family data
-        const familyIdField = form.querySelector('#family_id');
-        const familyDescField = form.querySelector('#family_description');
-        
-        if (familyIdField && formData.family_id) {
-          familyIdField.value = formData.family_id;
-        }
-        if (familyDescField && formData.family_description) {
-          familyDescField.value = formData.family_description;
-        }
-        
-        // Clear existing individual forms and restore saved ones
-        const container = document.getElementById('individuals-container');
-        if (container) {
-          container.innerHTML = '';
-          individualIndex = 0;
-          
-          // Restore individual forms
-          formData.individuals.forEach((individualData, index) => {
-            addIndividualForm();
-            
-            // Get the newly added form
-            const individualForms = container.querySelectorAll('.individual-form');
-            const currentForm = individualForms[index];
-            if (!currentForm) return;
-            
-            // Restore individual data
-            const fullNameField = currentForm.querySelector('input[name*="[full_name]"]');
-            const tcIdentityField = currentForm.querySelector('input[name*="[tc_identity]"]');
-            const birthDateField = currentForm.querySelector('input[name*="[birth_date]"]');
-            const icd11Field = currentForm.querySelector('input[name*="[icd11_code]"]');
-            const councilDateField = currentForm.querySelector('input[name*="[council_date]"]');
-            const diagnosisField = currentForm.querySelector('textarea[name*="[diagnosis]"]');
-            const diagnosisDateField = currentForm.querySelector('input[name*="[diagnosis_date]"]');
-            const institutionField = currentForm.querySelector('select[name*="[institution]"]');
-            const statusField = currentForm.querySelector('select[name*="[status]"]');
-            const motherField = currentForm.querySelector('select[name*="[mother]"]');
-            const fatherField = currentForm.querySelector('select[name*="[father]"]');
-            const roleField = currentForm.querySelector('select[name*="[role]"]');
-
-            
-            // Set values
-            if (fullNameField) fullNameField.value = individualData.full_name || '';
-            if (tcIdentityField) tcIdentityField.value = individualData.tc_identity || '';
-            if (birthDateField) birthDateField.value = individualData.birth_date || '';
-            if (icd11Field) icd11Field.value = individualData.icd11_code || '';
-            if (councilDateField) councilDateField.value = individualData.council_date || '';
-            if (diagnosisField) diagnosisField.value = individualData.diagnosis || '';
-            if (diagnosisDateField) diagnosisDateField.value = individualData.diagnosis_date || '';
-            if (institutionField) institutionField.value = individualData.institution || '';
-            if (statusField) statusField.value = individualData.status || '';
-            if (motherField) motherField.value = individualData.mother || '';
-            if (fatherField) fatherField.value = individualData.father || '';
-            if (roleField) roleField.value = individualData.role || '';
-            
-            // Set radio button values
-            const isIndexRadios = currentForm.querySelectorAll('input[name*="[is_index]"]');
-            isIndexRadios.forEach(radio => {
-              radio.checked = radio.value === individualData.is_index;
-            });
-            
-            const isAffectedRadios = currentForm.querySelectorAll('input[name*="[is_affected]"]');
-            isAffectedRadios.forEach(radio => {
-              radio.checked = radio.value === individualData.is_affected;
-            });
-            
-            // Restore ID rows
-            if (individualData.ids && individualData.ids.length > 0) {
-              individualData.ids.forEach(idData => {
-                addIdRow(currentForm);
-                
-                // Get the newly added ID row
-                const idRows = currentForm.querySelectorAll('.id-row');
-                const lastIdRow = idRows[idRows.length - 1];
-                if (lastIdRow) {
-                  const typeField = lastIdRow.querySelector('select[name*="[type]"]');
-                  const valueField = lastIdRow.querySelector('input[name*="[value]"]');
-                  
-                  if (typeField) typeField.value = idData.type;
-                  if (valueField) valueField.value = idData.value;
-                }
-              });
-            }
-            
-            // Restore note rows
-            if (individualData.notes && individualData.notes.length > 0) {
-              individualData.notes.forEach(noteData => {
-                addNoteRow(currentForm);
-                
-                // Get the newly added note row
-                const noteRows = currentForm.querySelectorAll('.note-row');
-                const lastNoteRow = noteRows[noteRows.length - 1];
-                if (lastNoteRow) {
-                  const contentField = lastNoteRow.querySelector('textarea[name*="[content]"]');
-                  
-                  if (contentField) contentField.value = noteData.content;
-                }
-              });
-            }
-          });
-          
-          // Update individual index
-          individualIndex = formData.individuals.length;
-        }
-        
-        console.log('Form data restored from localStorage:', formData);
-        showToast(`Restored ${formData.individuals.length} individual(s) and family data`, 'success');
-      } catch (error) {
-        console.error('Error restoring form data:', error);
-        localStorage.removeItem('familyCreationFormData');
-        showToast('Error restoring form data', 'error');
-      }
-    }
-    
-    function clearFormData() {
-      localStorage.removeItem('familyCreationFormData');
-      console.log('Form data cleared from localStorage');
-      showToast('Form data cleared', 'info');
-    }
-    
-    function hasSavedData() {
-      return localStorage.getItem('familyCreationFormData') !== null;
-    }
-    
-    function showSavedDataIndicator() {
-      if (hasSavedData()) {
-        // Add a small indicator to the restore button
-        const restoreButton = document.querySelector('button[onclick*="restoreFormData"]');
-        if (restoreButton) {
-          restoreButton.classList.add('ring-2', 'ring-green-400', 'ring-opacity-50');
-          restoreButton.innerHTML = '<i class="fas fa-undo mr-2"></i>Restore Saved Data <span class="ml-2 px-2 py-1 text-xs bg-green-500 text-white rounded-full">Saved</span>';
-        }
-      }
-    }
-    
-    function showToast(message, type = 'info') {
-      // Create toast element
-      const toast = document.createElement('div');
-      toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 translate-x-full`;
-      
-      // Set color based on type
-      switch (type) {
-        case 'success':
-          toast.className += ' bg-green-600';
-          break;
-        case 'error':
-          toast.className += ' bg-red-600';
-          break;
-        case 'warning':
-          toast.className += ' bg-yellow-600';
-          break;
-        default:
-          toast.className += ' bg-blue-600';
-      }
-      
-      toast.innerHTML = `
-        <div class="flex items-center space-x-2">
-          <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : type === 'warning' ? 'exclamation' : 'info'}-circle"></i>
-          <span>${message}</span>
-        </div>
-      `;
-      
-      // Add to page
-      document.body.appendChild(toast);
-      
-      // Animate in
-      setTimeout(() => {
-        toast.classList.remove('translate-x-full');
-      }, 100);
-      
-      // Remove after 3 seconds
-      setTimeout(() => {
-        toast.classList.add('translate-x-full');
-        setTimeout(() => {
-          document.body.removeChild(toast);
-        }, 300);
-      }, 3000);
-    }
-    
-    function handleCloseWithConfirmation() {
-      // Check if there's any data entered
-      const form = document.getElementById('family-create-form');
-      if (!form) return;
-      
-      const familyId = form.querySelector('#family_id')?.value || '';
-      const familyDesc = form.querySelector('#family_description')?.value || '';
-      const individualForms = form.querySelectorAll('.individual-form');
-      
-      let hasData = false;
-      if (familyId.trim() || familyDesc.trim()) {
-        hasData = true;
-      } else {
-        individualForms.forEach(individualForm => {
-          const fullName = individualForm.querySelector('input[name*="[full_name]"]')?.value || '';
-          if (fullName.trim()) {
-            hasData = true;
-          }
-        });
-      }
-      
-      if (hasData) {
-        // Automatically save data and close
-        saveFormData();
-        document.getElementById('modal-root').innerHTML = '';
-        showToast('Form data saved automatically', 'success');
-      } else {
-        // No data to save, just close
-        document.getElementById('modal-root').innerHTML = '';
-      }
-    }
-    
-    function debugFormSubmission(event) {
-      console.log("=== DEBUG: Form submission started ===");
-      const form = event.target;
-      const formData = new FormData(form);
-      
-      console.log("=== DEBUG: Form data being sent ===");
-      for (let [key, value] of formData.entries()) {
-        console.log(`${key}: ${value}`);
-      }
-      console.log("=== END Form data ===");
-      
-      // Also check the DOM elements directly
-      console.log("=== DEBUG: Checking DOM elements ===");
-      const individualForms = document.querySelectorAll('.individual-form');
-      console.log(`Found ${individualForms.length} individual forms`);
-      
-      individualForms.forEach((form, index) => {
-        const fullName = form.querySelector('input[name*="[full_name]"]');
-        const institution = form.querySelector('select[name*="[institution]"]');
-        const status = form.querySelector('select[name*="[status]"]');
-        const tcIdentity = form.querySelector('input[name*="[tc_identity]"]');
-        
-        console.log(`Individual ${index}:`);
-        console.log(`  Full Name: ${fullName ? fullName.value : 'NOT FOUND'}`);
-        console.log(`  Institution: ${institution ? institution.value : 'NOT FOUND'}`);
-        console.log(`  Status: ${status ? status.value : 'NOT FOUND'}`);
-        console.log(`  TC Identity: ${tcIdentity ? tcIdentity.value : 'NOT FOUND'}`);
-      });
-      console.log("=== END DOM check ===");
-      
-      // Validate required fields before submission
-      let isValid = true;
-      const errors = [];
-      
-      // Check family ID
-      const familyId = document.getElementById('family_id');
-      if (!familyId || !familyId.value.trim()) {
-        errors.push('Family ID is required');
-        isValid = false;
-      }
-      
-      // Check each individual form
-      individualForms.forEach((form, index) => {
-        const fullName = form.querySelector('input[name*="[full_name]"]');
-        const institution = form.querySelector('select[name*="[institution]"]');
-        const status = form.querySelector('select[name*="[status]"]');
-        const tcIdentity = form.querySelector('input[name*="[tc_identity]"]');
-        
-        if (!fullName || !fullName.value.trim()) {
-          errors.push(`Individual ${index + 1}: Full name is required`);
-          isValid = false;
-        }
-        
-        if (!institution || !institution.value) {
-          errors.push(`Individual ${index + 1}: Institution is required`);
-          isValid = false;
-        }
-        
-        if (!status || !status.value) {
-          errors.push(`Individual ${index + 1}: Status is required`);
-          isValid = false;
-        }
-        
-        // Validate TC Identity if provided
-        if (tcIdentity && tcIdentity.value.trim()) {
-          const tcValue = tcIdentity.value.trim();
-          if (!/^\d{11}$/.test(tcValue)) {
-            errors.push(`Individual ${index + 1}: TC Identity must be exactly 11 digits`);
-            isValid = false;
-          }
-        }
-      });
-      
-      if (!isValid) {
-        event.preventDefault();
-        event.stopPropagation();
-        console.error("=== VALIDATION ERRORS ===");
-        errors.forEach(error => console.error(error));
-        console.error("=== END VALIDATION ERRORS ===");
-        
-        // Show error message to user
-        alert('Please fill in all required fields:\n\n' + errors.join('\n'));
-        return false;
-      }
-      
-      console.log("=== Form validation passed, proceeding with submission ===");
-    }
-    
-    function addIndividualForm() {
-      const container = document.getElementById('individuals-container');
-      const template = document.getElementById('individual-form-template');
-      const clone = template.content.cloneNode(true);
-      
-      // Update all the INDEX placeholders
-      const inputs = clone.querySelectorAll('input, select, textarea');
-      inputs.forEach(input => {
-        if (input.name) {
-          input.name = input.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
-        }
-      });
-      
-      // Also update any template elements that might contain INDEX placeholders
-      const templates = clone.querySelectorAll('template');
-      templates.forEach(tmpl => {
-        const templateInputs = tmpl.content.querySelectorAll('input, select, textarea');
-        templateInputs.forEach(input => {
-          if (input.name) {
-            input.name = input.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
-          }
-        });
-      });
-      
-      // Update member number
-      const memberNumber = clone.querySelector('.member-number');
-      if (memberNumber) {
-        memberNumber.textContent = individualIndex + 1;
-      }
-      
-      container.appendChild(clone);
-      // Initialize Alpine and HTMX behaviors for newly added content
-      try {
-        const lastChild = container.lastElementChild;
-        if (window.Alpine && Alpine.initTree && lastChild) {
-          Alpine.initTree(lastChild);
-        }
-        if (window.htmx && lastChild) {
-          htmx.process(lastChild);
-        }
-      } catch (e) {
-        console.warn('Init error for new individual form:', e);
-      }
-      individualIndex++;
-    }
-    
-        function addIdRow(individualFormEl) {
-          // Find the id-rows container and its template within this individual form
-          const rowsContainer = individualFormEl.querySelector('.id-rows');
-          const tmpl = individualFormEl.querySelector('template.id-row-template');
-          if (!rowsContainer || !tmpl) return;
-          const rowIndex = parseInt(rowsContainer.getAttribute('data-row-index') || '0', 10);
-
-          const fragment = tmpl.content.cloneNode(true);
-          
-          // First, find the individual index from the form's existing inputs
-          const individualIndex = individualFormEl.querySelector('input, select, textarea')?.name?.match(/individuals\[(\d+)\]/)?.[1] || '0';
-          
-          // Replace both INDEX and ROW placeholders
-          fragment.querySelectorAll('input, select').forEach(el => {
-            if (el.name) {
-              el.name = el.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
-              el.name = el.name.replace(/\[ROW\]/g, `[${rowIndex}]`);
-            }
-          });
-          
-          rowsContainer.appendChild(fragment);
-          rowsContainer.setAttribute('data-row-index', String(rowIndex + 1));
-        }
-
-        function removeIdRow(rowEl) {
-          if (!rowEl) return;
-          rowEl.remove();
-        }
-
-        function addNoteRow(individualFormEl) {
-          // Find the note-rows container and its template within this individual form
-          const rowsContainer = individualFormEl.querySelector('.note-rows');
-          const tmpl = individualFormEl.querySelector('template.note-row-template');
-          if (!rowsContainer || !tmpl) return;
-          const rowIndex = parseInt(rowsContainer.getAttribute('data-row-index') || '0', 10);
-
-          const fragment = tmpl.content.cloneNode(true);
-          
-          // First, find the individual index from the form's existing inputs
-          const individualIndex = individualFormEl.querySelector('input, select, textarea')?.name?.match(/individuals\[(\d+)\]/)?.[1] || '0';
-          
-          // Replace both INDEX and ROW placeholders
-          fragment.querySelectorAll('input, textarea, select').forEach(el => {
-            if (el.name) {
-              el.name = el.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
-              el.name = el.name.replace(/\[ROW\]/g, `[${rowIndex}]`);
-            }
-          });
-          
-          rowsContainer.appendChild(fragment);
-          rowsContainer.setAttribute('data-row-index', String(rowIndex + 1));
-        }
-
-        function removeNoteRow(rowEl) {
-          if (!rowEl) return;
-          rowEl.remove();
-        }
-
-    function removeIndividualForm(formElement) {
-      if (document.querySelectorAll('.individual-form').length > 1) {
-        formElement.remove();
-      }
-    }
-    
-    // Add the first individual form when the page loads
-    document.addEventListener('DOMContentLoaded', function() {
-          addIndividualForm();
-          // Restore saved form data if available
-          setTimeout(() => {
-            restoreFormData();
-            showSavedDataIndicator();
-          }, 100); // Small delay to ensure DOM is ready
-    });
-  </script>
 {% endpartialdef %}
 
-{% partialdef family-create-success %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-2xl w-full mx-4">
-      <div class="text-center">
-        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
-          <i class="fas fa-check text-green-600 dark:text-green-400 text-xl"></i>
-        </div>
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
-          {% if family_was_created %}
-            Family Created Successfully!
-          {% else %}
-            Family Updated Successfully!
-          {% endif %}
-        </h3>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          {% if family_was_created %}
-            Family "{{ family.family_id }}" has been created with {{ count }} individual{{ count|pluralize }}.
-          {% else %}
-            Family "{{ family.family_id }}" has been updated with {{ count }} new individual{{ count|pluralize }}.
-          {% endif %}
-        </p>
-        
-        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
-          <h4 class="font-medium text-gray-900 dark:text-white mb-2">
-            {% if family_was_created %}
-              Created Family:
-            {% else %}
-              Updated Family:
-            {% endif %}
-          </h4>
-          <p class="text-sm text-gray-600 dark:text-gray-300">
-            <strong>ID:</strong> {{ family.family_id }}<br>
-            <strong>Description:</strong> {{ family.description|default:"No description" }}
-          </p>
-        </div>
-        
-        {% if individuals %}
-        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
-          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Created Individuals:</h4>
-          <div class="space-y-2">
-            {% for individual in individuals %}
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-gray-600 dark:text-gray-300">{{ individual.full_name }}</span>
-              <span class="text-gray-500 dark:text-gray-400">({{ individual.id }})</span>
-            </div>
+{% partialdef status-badge inline %}
+  {% if perms.lab.change_individual %}
+    <div 
+      id="status-badge-container"
+      class="relative"
+      x-data="{ open: false }"
+      @click.outside="open = false"
+    >
+      <button
+        type="button"
+        @click="open = !open"
+        class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white hover:bg-opacity-40 transition-all cursor-pointer flex items-center gap-1"
+        title="Click to change status"
+      >
+        {{ item.status.name }}
+        <i class="fas fa-chevron-down text-xs"></i>
+      </button>
+      
+      <!-- Dropdown menu -->
+      <div
+        x-show="open"
+        x-transition:enter="transition ease-out duration-100"
+        x-transition:enter-start="transform opacity-0 scale-95"
+        x-transition:enter-end="transform opacity-100 scale-100"
+        x-transition:leave="transition ease-in duration-75"
+        x-transition:leave-start="transform opacity-100 scale-100"
+        x-transition:leave-end="transform opacity-0 scale-95"
+        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+        style="display: none;"
+      >
+        <div class="py-1 max-h-60 overflow-y-auto">
+          {% if individual_statuses %}
+            {% for status in individual_statuses %}
+              <button
+                type="button"
+                hx-post="{% url 'lab:update_status' %}"
+                hx-vals='{"model_name": "Individual", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "detail", "refresh_detail": "true", "detail_target_id": "individual-detail"}'
+                hx-target="#status-badge-container"
+                hx-swap="outerHTML"
+                @click="open = false"
+                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
+              >
+                <span
+                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+                >
+                  {{ status.name }}
+                </span>
+              </button>
             {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-        
-        <div class="flex justify-center space-x-3">
-          <button 
-            type="button" 
-            @click="document.getElementById('modal-root').innerHTML = ''" 
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-          >
-            Close
-          </button>
+          {% else %}
+            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              No statuses available
+            </div>
+          {% endif %}
         </div>
       </div>
     </div>
-  </div>
+  {% else %}
+    <span class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white">
+      {{ item.status.name }}
+    </span>
+  {% endif %}
 {% endpartialdef %}
 
-{% partialdef family-create-error %}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="document.getElementById('modal-root').innerHTML = ''">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-2xl w-full mx-4">
-      <div class="text-center">
-        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
-          <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-xl"></i>
-        </div>
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
-          Error Creating Family
-        </h3>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          {{ error }}
-        </p>
-        
-        <div class="flex justify-center space-x-3">
-          <button 
-            type="button" 
-            @click="document.getElementById('modal-root').innerHTML = ''" 
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-          >
-            Close
-          </button>
-          <button 
-            type="button" 
-            @click="document.getElementById('modal-root').innerHTML = ''; document.getElementById('modal-root').innerHTML = document.getElementById('family-create-form').innerHTML"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Try Again
-          </button>
+{% partialdef status-badge-card inline %}
+  {% if perms.lab.change_individual %}
+    <div 
+      id="status-badge-container-{{ item.id }}"
+      class="relative inline-block"
+      x-data="{ open: false }"
+      @click.outside="open = false"
+    >
+      <button
+        type="button"
+        @click="open = !open"
+        class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset hover:ring-{{ item.status.color|default:'gray' }}-600 dark:hover:ring-{{ item.status.color|default:'gray' }}-500 transition-all cursor-pointer gap-1"
+        title="Click to change status"
+      >
+        {{ item.status.name }}
+        <i class="fas fa-chevron-down text-xs"></i>
+      </button>
+      
+      <!-- Dropdown menu -->
+      <div
+        x-show="open"
+        x-transition:enter="transition ease-out duration-100"
+        x-transition:enter-start="transform opacity-0 scale-95"
+        x-transition:enter-end="transform opacity-100 scale-100"
+        x-transition:leave="transition ease-in duration-75"
+        x-transition:leave-start="transform opacity-100 scale-100"
+        x-transition:leave-end="transform opacity-0 scale-95"
+        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+        style="display: none;"
+      >
+        <div class="py-1 max-h-60 overflow-y-auto">
+          {% if individual_statuses %}
+            {% for status in individual_statuses %}
+              <button
+                type="button"
+                hx-post="{% url 'lab:update_status' %}"
+                hx-vals='{"model_name": "Individual", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "card", "refresh_card": "true", "card": "card"}'
+                hx-target="#status-badge-container-{{ item.id }}"
+                hx-swap="outerHTML"
+                @click="open = false"
+                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
+              >
+                <span
+                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+                >
+                  {{ status.name }}
+                </span>
+              </button>
+            {% endfor %}
+          {% else %}
+            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              No statuses available
+            </div>
+          {% endif %}
         </div>
       </div>
     </div>
-  </div>
+  {% else %}
+    <span
+      class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset"
+    >
+      {{ item.status.name }}
+    </span>
+  {% endif %}
 {% endpartialdef %}
-
-

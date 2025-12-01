@@ -41,7 +41,11 @@ staticfiles/
 # Data
 *.json
 *.xlsx
+*.tsv
+*.csv
 
 # User-specific files
 create_ozbek_users.py
 create_groups.py
+lab/management/commands/backfill_status_icons.py
+node_modules/

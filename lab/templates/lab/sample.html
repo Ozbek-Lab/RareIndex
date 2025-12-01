@@ -1,4 +1,5 @@
 {% extends "lab/base.html" %}
+{% load lab_filters %}
 
 {% block content %}
   {% partial detail %}
@@ -9,9 +10,9 @@
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700 m-1 mb-2"
     data-item-id="{{ item.id }}"
   >
-    {% with float="float-right" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
-    {% endwith %}
+    <div class="float-right">
+      {% partial status-badge-card %}
+    </div>
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
       Sample #{{ item.id }}
     </h3>
@@ -26,11 +27,14 @@
       </p>
     {% endif %}
     <div
-      class="flex justify-end mt-3 pt-2 border-t border-gray-200 dark:border-gray-700"
+      class="flex justify-end items-center gap-2 mt-3 pt-2 border-t border-gray-200 dark:border-gray-700"
     >
+      <span class="inline-flex items-center text-sm text-gray-700 dark:text-gray-300">
+        {% with object=item content_type='sample' %}{% include 'lab/note.html#summary' %}{% endwith %}
+      </span>
       <button
         class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Sample', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Sample', 'lab')"
         title="View Details"
       >
         <i class="fa-solid fa-eye"></i>
@@ -47,7 +51,7 @@
     <div class="flex items-center gap-1 mb-2">
       <button
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click="openDetail({{ item.pk }}, 'Sample', 'lab')"
+        @click= "openDetail({{ item.pk }}, 'Sample', 'lab')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
@@ -56,9 +60,7 @@
         Sample #{{ item.id }}
       </h2>
       <div class="ml-auto">
-        {% with float="float-right" color=item.status.color text=item.status.name %}
-          {% include 'lab/partials/badge.html' %}
-        {% endwith %}
+        {% partial status-badge-card %}
       </div>
     </div>
 
@@ -81,7 +83,7 @@
           <button
             type="button"
             class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-            @click="showFullName = !showFullName"
+            @click= "showFullName = !showFullName"
             title="Toggle full name visibility"
           >
             <i class="fas fa-id-card"></i>
@@ -98,12 +100,12 @@
       
       <div x-data="{ open: false }" class="static">
         <button
-          @click="open = ! open"
+          @click= "open = ! open"
           type="button"
           class="inline-flex items-center gap-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
         >
-          <i class="fa-solid fa-comment"></i>
-          <span>Notes</span>
+          <span class="ml-1 inline-flex items-center"
+            >{% with object=item content_type='sample' %}{% include 'lab/note.html#summary' %}{% endwith %}</span>
           <i
             class="fa-solid fa-chevron-down transition-transform"
             :class="{ 'rotate-180': open }"
@@ -122,7 +124,7 @@
           <div
             class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
           >
-            {% with object=item content_type='individual' %}
+            {% with object=item content_type='sample' user=user %}
               {% include 'lab/note.html#list' %}
             {% endwith %}
           </div>
@@ -158,14 +160,51 @@
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     {{ item.receipt_date|date:"M d, Y"|default:"-" }}
   </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    <div x-data="{ open: false }" class="relative inline-block text-left">
+      <button
+        @click= "open = !open"
+        type="button"
+        class="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+      >
+        <span class="inline-flex items-center">
+          {% with object=item content_type='sample' %}{% include 'lab/note.html#summary' %}{% endwith %}
+        </span>
+        <i
+          class="fa-solid fa-chevron-down transition-transform"
+          :class="{ 'rotate-180': open }"
+        ></i>
+      </button>
+      <div
+        x-show="open"
+        @click.outside="open = false"
+        @keydown.escape.window="open = false"
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0 transform scale-95"
+        x-transition:enter-end="opacity-100 transform scale-100"
+        x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100 transform scale-100"
+        x-transition:leave-end="opacity-0 transform scale-95"
+        class="absolute right-0 z-10 mt-2 w-[32rem] max-w-[90vw] origin-top-right"
+      >
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+        >
+          {% with object=item content_type='sample' user=user %}
+            {% include 'lab/note.html#list' %}
+          {% endwith %}
+        </div>
+      </div>
+    </div>
+  </td>
   <td class="px-4 py-3 text-sm">
     {% with float="" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html' %}
+      {% include 'lab/partials/badge.html#badge' %}
     {% endwith %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     <button
-      @click="openDetail({{ item.pk }}, 'Sample', 'lab')"
+      @click= "openDetail({{ item.pk }}, 'Sample', 'lab')"
       class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
     >
       <i class="fa-solid fa-eye"></i>
@@ -178,7 +217,7 @@
     <table class="min-w-full">
       <thead class="bg-gray-50 dark:bg-gray-700">
         <tr>
-          <th
+          <th 
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
             ID
@@ -197,6 +236,11 @@
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
             Receipt Date
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Notes
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
@@ -220,27 +264,28 @@
 {% endpartialdef table %}
 
 {% partialdef detail %}
-  <div id="sample-detail" class="space-y-6" x-data="{ activeTab: '{{ activeTab|default:"notes" }}' }">
+  <div id="sample-detail" class="space-y-6" x-data="{ activeTab: '{{ activeTab|default:"notes" }}', historyLoaded: {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }">
     <!-- Header -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-      <div class="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
-        <div class="flex justify-between items-center">
+      <div class="px-6 py-4 bg-gradient-to-r from-green-600 to-green-700">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 class="text-2xl font-bold text-white">Sample #{{ item.id }}</h1>
             <p class="text-blue-100">{{ item.sample_type.name }}</p>
           </div>
-          <div class="text-right">
-            <span
-              class="px-3 py-1 text-sm rounded-full font-medium {% if item.status.name == 'Complete' %}
-                bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200
-              {% elif item.status.name == 'In Progress' %}
-                bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200
-              {% else %}
-                bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200
-              {% endif %}"
-            >
-              {{ item.status.name }}
-            </span>
+          <div class="flex flex-col items-start md:items-end gap-2 text-white">
+            {% partial status-badge %}
+            {% if perms.lab.change_sample %}
+              <button
+                class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-900 bg-white/90 rounded-md shadow-sm hover:bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white transition"
+                hx-get="{% url 'lab:generic_edit' %}?model_name=Sample&app_label=lab&pk={{ item.pk }}"
+                hx-target="#modal-root"
+                hx-swap="innerHTML"
+              >
+                <i class="fas fa-edit"></i>
+                <span>Edit Sample</span>
+              </button>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -248,13 +293,31 @@
       <!-- Sample Information -->
       <div class="px-6 py-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
+          <div x-data="{ showFullName: false }">
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Individual</h3>
-            <p class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-              @click="openDetail({{ item.individual.id }}, 'Individual', 'lab')"
-            >
-              {{ item.individual.individual_id }}
-            </p>
+            <div class="flex items-center">
+              <i class="fa-solid fa-user mr-2 text-blue-600 dark:text-blue-400"></i>
+              <span class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors mr-2"
+                @click= "openDetail({{ item.individual.id }}, 'Individual', 'lab')"
+              >
+                {{ item.individual.individual_id }}
+              </span>
+              <button
+                type="button"
+                class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                @click= "showFullName = !showFullName"
+                title="Toggle full name visibility"
+              >
+                <i class="fas fa-id-card"></i>
+              </button>
+            </div>
+            {% if perms.lab.view_individual_sensitive_data %}
+              {% if item.individual.full_name %}
+                <p class="text-sm text-blue-700 dark:text-blue-300 mt-1" x-show="showFullName" x-transition>
+                  {{ item.individual.full_name }}
+                </p>
+              {% endif %}
+            {% endif %}
           </div>
           <div>
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Receipt Date</h3>
@@ -265,39 +328,50 @@
 
       <!-- Tabs -->
       <div class="border-t border-gray-200 dark:border-gray-700">
-        <div class="px-6 flex space-x-8">
+        <div class="px-6 flex -mb-px flex-nowrap overflow-x-auto scroll-smooth" style="scrollbar-width: thin;">
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'notes' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'notes'"
+            @click= "activeTab = 'notes'"
           >
-            Notes ({{ item.notes.count }})
+            {% with object=item content_type='sample' %}
+              {% include 'lab/note.html#summary' %}
+            {% endwith %}
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tests' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'tests'"
+            @click= "activeTab = 'tests'"
           >
             Tests ({{ item.tests.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'analyses' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'analyses'"
+            @click= "activeTab = 'analyses'"
           >
             Analyses ({{ analyses|length }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'tasks'"
+            @click= "activeTab = 'tasks'"
           >
             Tasks ({{ item.tasks.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'history' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click="activeTab = 'history'"
+            @click= "activeTab = 'history'"
+            {% if not history_prefetched %}
+              hx-get="{% url 'lab:history_tab' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ item.pk }}"
+              hx-trigger="click once"
+              hx-target="#history-tab-panel-{{ model_name|lower }}-{{ item.pk }}"
+              hx-swap="innerHTML"
+              hx-indicator="#history-tab-indicator-{{ model_name|lower }}-{{ item.pk }}"
+              hx-on::before-request="historyLoading = true"
+              hx-on::after-on-load="historyLoading = false; historyLoaded = true"
+            {% endif %}
           >
             History
           </button>
@@ -308,7 +382,7 @@
       <div class="px-6 py-4">
         <!-- Notes tab -->
         <div x-show="activeTab === 'notes'" x-cloak>
-          {% with object=item content_type="sample" %}
+          {% with object=item content_type="sample" user=user %}
             {% include "lab/note.html#list" %}
           {% endwith %}
         </div>
@@ -322,15 +396,18 @@
                 <!-- Toolbar: Add Test button (left) + view toggle (right) -->
                 <div class="flex items-center justify-between">
                   <div>
+                    {% has_model_perm user 'lab' 'Test' 'add' as can_add_test %}
+                    {% if can_add_test %}
                     <button
                       hx-get="{% url 'lab:generic_create' %}?model_name=Test&app_label=lab&sample={{ item.id }}"
                       hx-target="#modal-root"
                       hx-swap="innerHTML"
-                      class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors"
+                      class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600 transition-colors"
                     >
-                      <i class="fa-solid fa-vial"></i>
-                      <span>Add Test to Sample</span>
-                    </button>
+                        <i class="fa-solid fa-vial"></i>
+                        <span>Add Test to Sample</span>
+                      </button>
+                    {% endif %}
                   </div>
                   <div
                     class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
@@ -342,7 +419,7 @@
                     ></div>
 
                     <button
-                      @click="viewMode = 'cards'"
+                      @click= "viewMode = 'cards'"
                       class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                       :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                     >
@@ -358,7 +435,7 @@
                     </button>
 
                     <button
-                      @click="viewMode = 'table'"
+                      @click= "viewMode = 'table'"
                       class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                       :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                     >
@@ -438,7 +515,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -454,7 +531,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -533,7 +610,7 @@
                   ></div>
 
                   <button
-                    @click="viewMode = 'cards'"
+                    @click= "viewMode = 'cards'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -549,7 +626,7 @@
                   </button>
 
                   <button
-                    @click="viewMode = 'table'"
+                    @click= "viewMode = 'table'"
                     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
                     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                   >
@@ -612,77 +689,245 @@
         </div>
 
         <!-- History tab -->
-        <div x-show="activeTab === 'history'" x-cloak>
-          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Status History</h3>
+        <div x-show="activeTab === 'history'" x-cloak class="pt-2">
+          <div
+            id="history-tab-indicator-{{ model_name|lower }}-{{ item.pk }}"
+            class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"
+            x-show="historyLoading"
+          >
+            <i class="fa-solid fa-arrow-rotate-right fa-spin"></i>
+            <span>Loading history…</span>
+          </div>
+          <div id="history-tab-panel-{{ model_name|lower }}-{{ item.pk }}" class="space-y-4 px-1 sm:px-2 lg:px-4">
+            {% if history_prefetched %}
+              {% include "lab/sample.html#history-tab" %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
 
-          {% if item.status_logs.exists %}
-            <div class="relative">
-              <div class="absolute h-full w-0.5 bg-gray-200 dark:bg-gray-600 left-5 top-0"></div>
-              {% for log in item.status_logs.all %}
-                <div class="mb-4 ml-10 relative">
-                  <!-- Status circle -->
-                  <div
-                    class="absolute w-10 h-10 rounded-full bg-{{ log.new_status.color|default:'gray' }}-100 dark:bg-{{ log.new_status.color|default:'gray' }}-900/30 text-{{ log.new_status.color|default:'gray' }}-800 dark:text-{{ log.new_status.color|default:'gray' }}-200 flex items-center justify-center -left-10 border-2 border-white dark:border-gray-800 shadow"
-                  >
-                    <i class="fas fa-circle text-sm"></i>
-                  </div>
-                  
-                  <!-- Status card -->
-                  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700">
-                    <div class="flex justify-between items-start">
-                      <div>
-                        <p class="text-sm text-gray-900 dark:text-gray-100">
-                          Status changed to <span class="font-medium">{{ log.new_status.name }}</span>
-                        </p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">
-                          {{ log.get_created_at|date:"d M Y H:i"|default:"Unknown" }}
-                        </p>
-                        {% if log.notes %}
-                          <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                            {{ log.notes }}
-                          </p>
-                        {% endif %}
-                      </div>
-                      <span
-                        class="px-2 py-1 text-xs rounded-full font-medium bg-{{ log.new_status.color|default:'gray' }}-100 dark:bg-{{ log.new_status.color|default:'gray' }}-900/30 text-{{ log.new_status.color|default:'gray' }}-800 dark:text-{{ log.new_status.color|default:'gray' }}-200"
-                      >
-                        {{ log.new_status.name }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              {% endfor %}
-            </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef status-badge inline %}
+  {% if perms.lab.change_sample %}
+    <div 
+      id="status-badge-container"
+      class="relative"
+      x-data="{ open: false }"
+      @click.outside="open = false"
+    >
+      <button
+        type="button"
+        @click="open = !open"
+        class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white hover:bg-opacity-40 transition-all cursor-pointer flex items-center gap-1"
+        title="Click to change status"
+      >
+        {{ item.status.name }}
+        <i class="fas fa-chevron-down text-xs"></i>
+      </button>
+      
+      <!-- Dropdown menu -->
+      <div
+        x-show="open"
+        x-transition:enter="transition ease-out duration-100"
+        x-transition:enter-start="transform opacity-0 scale-95"
+        x-transition:enter-end="transform opacity-100 scale-100"
+        x-transition:leave="transition ease-in duration-75"
+        x-transition:leave-start="transform opacity-100 scale-100"
+        x-transition:leave-end="transform opacity-0 scale-95"
+        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+        style="display: none;"
+      >
+        <div class="py-1 max-h-60 overflow-y-auto">
+          {% if sample_statuses %}
+            {% for status in sample_statuses %}
+              <button
+                type="button"
+                hx-post="{% url 'lab:update_status' %}"
+                hx-vals='{"model_name": "Sample", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "detail", "refresh_detail": "true", "detail_target_id": "sample-detail"}'
+                hx-target="#status-badge-container"
+                hx-swap="outerHTML"
+                @click="open = false"
+                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
+              >
+                <span
+                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+                >
+                  {{ status.name }}
+                </span>
+              </button>
+            {% endfor %}
           {% else %}
-            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
-              <i class="fas fa-history text-gray-300 dark:text-gray-500 text-5xl mb-3"></i>
-              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">No status history</h3>
-              <p class="text-gray-500 dark:text-gray-400 mt-1">Status changes will appear here.</p>
+            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              No statuses available
             </div>
           {% endif %}
         </div>
       </div>
+    </div>
+  {% else %}
+    <span class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white">
+      {{ item.status.name }}
+    </span>
+  {% endif %}
+{% endpartialdef %}
 
-      <!-- Footer -->
-      <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-end space-x-3">
-        <button
-          class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 flex items-center transition-colors"
-          hx-get="{% url 'lab:generic_edit' %}?model_name=Sample&app_label=lab&pk={{ item.pk }}"
-          hx-target="#modal-root"
-          hx-swap="innerHTML"
-        >
-          <i class="fas fa-edit mr-2"></i>
-          Edit Sample
-        </button>
-        <!-- Disabled for now
-          <button
-            class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 flex items-center transition-colors"
-          >
-            <i class="fas fa-trash mr-2"></i>
-            Delete Sample
-          </button>
-        -->
+{% partialdef history-tab %}
+  {% load lab_filters %}
+  <template x-init="historyLoaded = true; historyLoading = false"></template>
+  {% with history_list=item|hierarchical_history %}
+    {% if history_list %}
+      <div class="relative">
+        <div class="absolute h-full w-0.5 bg-gray-200 dark:bg-gray-600 left-5 top-0"></div>
+        {% for history_item in history_list %}
+          <div class="mb-4 ml-10 relative">
+            {% if history_item.type == 'notification' %}
+              <div class="absolute w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 flex items-center justify-center -left-10 border-2 border-white dark:border-gray-800 shadow">
+                <i class="fas fa-bell"></i>
+              </div>
+              <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-indigo-500">
+                <div class="flex justify-between items-start mb-2">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="text-xs font-medium px-2 py-1 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
+                        Notification
+                      </span>
+                      <span class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ history_item.model_name }}: {{ history_item.object_id }}
+                      </span>
+                    </div>
+                    <p class="font-medium text-gray-900 dark:text-gray-100">
+                      {{ history_item.verb }}
+                    </p>
+                    {% if history_item.description %}
+                      <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-line">
+                        {{ history_item.description|linebreaksbr }}
+                      </p>
+                    {% endif %}
+                  </div>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ history_item.history_date|date:"d M Y H:i" }}
+                  </span>
+                </div>
+              </div>
+            {% else %}
+              <div class="absolute w-10 h-10 rounded-full bg-{{ history_item.new_status.color|default:'gray' }}-100 dark:bg-{{ history_item.new_status.color|default:'gray' }}-900/30 text-{{ history_item.new_status.color|default:'gray' }}-800 dark:text-{{ history_item.new_status.color|default:'gray' }}-200 flex items-center justify-center -left-10 border-2 border-white dark:border-gray-800 shadow">
+                <i class="fas fa-circle text-sm"></i>
+              </div>
+              <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                      <span class="text-xs font-medium px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                        {{ history_item.model_name }}
+                      </span>
+                      <span class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ history_item.object_id }}
+                      </span>
+                    </div>
+                    <p class="text-sm text-gray-900 dark:text-gray-100">
+                      {% if history_item.previous_status %}
+                        Status changed from <span class="font-medium">{{ history_item.previous_status.name }}</span>
+                        to <span class="font-medium">{{ history_item.new_status.name }}</span>
+                      {% else %}
+                        Status set to <span class="font-medium">{{ history_item.new_status.name }}</span>
+                      {% endif %}
+                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      {{ history_item.history_date|date:"d M Y H:i" }}
+                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Changed by:
+                      {% if history_item.history_user %}
+                        {{ history_item.history_user.get_full_name|default:history_item.history_user.username }}
+                      {% else %}
+                        System
+                      {% endif %}
+                    </p>
+                  </div>
+                  <span class="px-2 py-1 text-xs rounded-full font-medium bg-{{ history_item.new_status.color|default:'gray' }}-100 dark:bg-{{ history_item.new_status.color|default:'gray' }}-900/30 text-{{ history_item.new_status.color|default:'gray' }}-800 dark:text-{{ history_item.new_status.color|default:'gray' }}-200">
+                    {{ history_item.new_status.name }}
+                  </span>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+        <i class="fas fa-history text-gray-300 dark:text-gray-500 text-5xl mb-3"></i>
+        <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">No history</h3>
+        <p class="text-gray-500 dark:text-gray-400 mt-1">Status changes will appear here.</p>
+      </div>
+    {% endif %}
+  {% endwith %}
+{% endpartialdef %}
+
+{% partialdef status-badge-card inline %}
+  {% if perms.lab.change_sample %}
+    <div 
+      id="status-badge-container-{{ item.id }}"
+      class="relative inline-block"
+      x-data="{ open: false }"
+      @click.outside="open = false"
+    >
+      <button
+        type="button"
+        @click="open = !open"
+        class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset hover:ring-{{ item.status.color|default:'gray' }}-600 dark:hover:ring-{{ item.status.color|default:'gray' }}-500 transition-all cursor-pointer gap-1"
+        title="Click to change status"
+      >
+        {{ item.status.name }}
+        <i class="fas fa-chevron-down text-xs"></i>
+      </button>
+      
+      <!-- Dropdown menu -->
+      <div
+        x-show="open"
+        x-transition:enter="transition ease-out duration-100"
+        x-transition:enter-start="transform opacity-0 scale-95"
+        x-transition:enter-end="transform opacity-100 scale-100"
+        x-transition:leave="transition ease-in duration-75"
+        x-transition:leave-start="transform opacity-100 scale-100"
+        x-transition:leave-end="transform opacity-0 scale-95"
+        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+        style="display: none;"
+      >
+        <div class="py-1 max-h-60 overflow-y-auto">
+          {% if sample_statuses %}
+            {% for status in sample_statuses %}
+              <button
+                type="button"
+                hx-post="{% url 'lab:update_status' %}"
+                hx-vals='{"model_name": "Sample", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "card", "refresh_card": "true", "card": "card"}'
+                hx-target="#status-badge-container-{{ item.id }}"
+                hx-swap="outerHTML"
+                @click="open = false"
+                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
+              >
+                <span
+                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+                >
+                  {{ status.name }}
+                </span>
+              </button>
+            {% endfor %}
+          {% else %}
+            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              No statuses available
+            </div>
+          {% endif %}
+        </div>
       </div>
     </div>
-  </div>
+  {% else %}
+    <span
+      class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset"
+    >
+      {{ item.status.name }}
+    </span>
+  {% endif %}
 {% endpartialdef %}

@@ -1,0 +1,144 @@
+{% load partials %}
+
+{% partialdef drawer %}
+  <!-- Alpine.js Right-side Drawer -->
+  <div x-show="open" x-cloak>
+    <!-- Overlay -->
+    <div x-show="open" @click= "open=false" class="fixed inset-0 bg-black bg-opacity-30 z-40 transition-opacity duration-200" x-transition.opacity></div>
+
+    <!-- Drawer -->
+    <aside
+      x-show="open"
+      x-transition:enter="transition transform duration-300"
+      x-transition:enter-start="translate-x-full"
+      x-transition:enter-end="translate-x-0"
+      x-transition:leave="transition transform duration-200"
+      x-transition:leave-start="translate-x-0"
+      x-transition:leave-end="translate-x-full"
+      class="fixed top-0 right-0 h-full w-80 bg-white dark:bg-gray-800 shadow-lg z-50 flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="filter-drawer-label"
+    >
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <h5 id="filter-drawer-label" class="text-base font-semibold text-gray-700 dark:text-gray-200">Filters</h5>
+        <button @click= "open=false" type="button" class="text-gray-400 hover:text-gray-700 dark:hover:text-white focus:outline-none">
+          <i class="fa-solid fa-circle-xmark"></i>
+        </button>
+      </div>
+      <div class="p-4 flex-1 overflow-y-auto space-y-6">
+        <!-- Individuals -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Individual' icon_class='fa-person' %}
+            {% include "lab/partials/partials.html#generic-type-filter" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Individual' %}
+            {% include "lab/partials/partials.html#generic-status-filter" %}
+          {% endwith %}
+        </h6>
+        </div>
+        <!-- Samples -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Sample' icon_class='fa-vial' %}
+            {% include "lab/partials/partials.html#generic-type-filter" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Sample' %}
+            {% include "lab/partials/partials.html#generic-status-filter" %}
+          {% endwith %}
+        </div>
+        <!-- Tests -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
+            {% include "lab/partials/partials.html#generic-type-filter" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Test' %}
+            {% include "lab/partials/partials.html#generic-status-filter" %}
+          {% endwith %}
+        </div>
+        <!-- Analyses -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
+            {% include "lab/partials/partials.html#generic-type-filter" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Analysis' %}
+            {% include "lab/partials/partials.html#generic-status-filter" %}
+          {% endwith %}
+        </div>
+        <!-- Variants -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='variant' model_name='Variant' icon_class='fa-dna' target_id='#drawer-results-sink' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+          {% with app_label='variant' model_name='Variant' icon_class='fa-dna' %}
+            {% include "lab/partials/partials.html#generic-type-filter" %}
+          {% endwith %}
+          {% with app_label='variant' model_name='Variant' %}
+            {% include "lab/partials/partials.html#generic-status-filter" %}
+          {% endwith %}
+          {% with app_label='variant' model_name='Gene' icon_class='fa-dna' name='Gene' %}
+            {% include "lab/partials/partials.html#generic-combobox" %}
+          {% endwith %}
+        </div>
+        <!-- Institutions -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+        </div>
+        <!-- Projects -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Project' %}
+            {% include "lab/partials/partials.html#generic-status-filter" %}
+          {% endwith %}
+        </div>
+        <!-- Tasks -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Task' icon_class='fa-list-check' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+        </div>
+        <!-- HPO Terms -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' %}
+            {% include "lab/partials/partials.html#generic-search" %}
+          {% endwith %}
+        </div>
+      </div>
+      </div>
+    </aside>
+    <!-- Hidden sink for HTMX requests that rely on OOB swaps -->
+    <div id="drawer-results-sink" class="hidden"></div>
+  </div>
+{% endpartialdef drawer %}

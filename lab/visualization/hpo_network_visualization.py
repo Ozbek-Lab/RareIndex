@@ -38,7 +38,7 @@ def load_hpo_ontology():
 
 def consolidate_terms(graph, terms, threshold=3):
     """
-    Consolidate rare HPO terms by finding their closest common ancestors.
+    Consolidate rare HPO terms by moving their counts to their parents.
     
     Args:
         graph: NetworkX graph of HPO terms
@@ -50,6 +50,7 @@ def consolidate_terms(graph, terms, threshold=3):
     """
     # Create a working copy of the counts
     working_counts = terms.copy()
+    root_node = "HP:0000118"  # Phenotypic abnormality
 
     # Check if all terms exist in the graph, remove those that don't
     invalid_terms = []
@@ -63,62 +64,44 @@ def consolidate_terms(graph, terms, threshold=3):
     for term in invalid_terms:
         working_counts.pop(term, None)
 
-    # Keep track of consolidation history
-    consolidated_terms = {}  # Maps original term -> ancestor that replaced it
-
     # Continue until we can't consolidate further
-    iteration = 0
     while True:
-        iteration += 1
-
         # Get all current terms that are below threshold
         rare_terms = [
             term for term, count in working_counts.items() if count < threshold
         ]
-
-        # If we have less than 2 rare terms, we can't consolidate further
-        if len(rare_terms) < 2:
+        
+        # If no rare terms, we are done
+        if not rare_terms:
             break
-
-        # Try to find a pair to consolidate
-        consolidated_pair = False
-
-        for i in range(len(rare_terms)):
-            for j in range(i + 1, len(rare_terms)):
-                term1 = rare_terms[i]
-                term2 = rare_terms[j]
-
-                # Find their closest common ancestor
-                ancestor = find_closest_ancestor(graph, term1, term2)
-
-                if ancestor:
-                    # Calculate the combined count
-                    combined_count = working_counts.get(term1, 0) + working_counts.get(
-                        term2, 0
-                    )
-
-                    # Remove the consolidated terms from working counts
-                    count1 = working_counts.pop(term1)
-                    count2 = working_counts.pop(term2)
-
-                    # Add or update the ancestor count
-                    if ancestor in working_counts:
-                        working_counts[ancestor] += combined_count
+            
+        changes_made = False
+        
+        for term in rare_terms:
+            # Don't consolidate the root itself
+            if term == root_node:
+                continue
+                
+            try:
+                # Find path to root to get the immediate parent
+                path = nx.shortest_path(graph, term, root_node)
+                if len(path) > 1:
+                    parent = path[1] # path[0] is term, path[1] is parent
+                    
+                    # Move count to parent
+                    count = working_counts.pop(term)
+                    if parent in working_counts:
+                        working_counts[parent] += count
                     else:
-                        working_counts[ancestor] = combined_count
-
-                    # Update consolidation history
-                    consolidated_terms[term1] = ancestor
-                    consolidated_terms[term2] = ancestor
-
-                    consolidated_pair = True
-                    break
-
-            if consolidated_pair:
-                break
-
-        # If we couldn't find any pair to consolidate, we're done
-        if not consolidated_pair:
+                        working_counts[parent] = count
+                        
+                    changes_made = True
+            except (nx.NetworkXNoPath, IndexError):
+                # Cannot reach root or no parent, skip
+                continue
+                
+        # If we went through all rare terms and made no changes, we are stuck
+        if not changes_made:
             break
 
     return working_counts
@@ -395,7 +378,7 @@ def plotly_hpo_network(graph, hpo, term_counts, output_file=None, min_count=1):
     return fig, subgraph
 
 
-def process_hpo_data(individuals, threshold=3):
+def process_hpo_data(individuals, threshold=12):
     """
     Process HPO data from individuals and create visualization data.
     
@@ -429,3 +412,116 @@ def process_hpo_data(individuals, threshold=3):
     consolidated_counts = consolidate_terms(graph, term_counts, threshold=threshold)
     
     return consolidated_counts, graph, hpo
+
+
+def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
+    """
+    Build Cytoscape.js elements for an HPO network from term counts.
+    
+    Args:
+        graph: NetworkX graph of HPO terms
+        hpo: Fastobo HPO object
+        term_counts: Dictionary of term_id -> count
+        min_count: Minimum count threshold for displaying terms
+        
+    Returns:
+        tuple: (elements, subgraph) where elements is a list of Cytoscape.js
+               node/edge dicts suitable for JSON serialization, and subgraph is
+               the NetworkX subgraph that was constructed.
+    """
+    # Function to extract term name from the HPO ontology
+    def get_term_name(term_id):
+        for frame in hpo:
+            if isinstance(frame, fastobo.term.TermFrame) and str(frame.id) == term_id:
+                for clause in frame:
+                    if isinstance(clause, fastobo.term.NameClause):
+                        return str(clause.name)
+        return term_id
+
+    root_node = "HP:0000118"  # Phenotypic abnormality
+
+    # Create a subgraph with terms and paths to root (same logic as Plotly pathing)
+    subgraph = nx.DiGraph()
+
+    for term_id, count in term_counts.items():
+        if term_id in graph and count >= min_count:
+            name = get_term_name(term_id)
+            name = name.replace("system", "sys.")
+            name = name.replace("morphology", "morph.")
+            name = name.replace("Abnormality of the", "")
+            name = name.replace("abnormality", "")
+            name = name.replace("Abnormality of", "")
+            name = name.replace("Abnormal", "")
+
+            if len(name) > 30:
+                name = name[:27] + "..."
+
+            subgraph.add_node(term_id, name=name, count=count, term_id=term_id)
+
+            try:
+                path = nx.shortest_path(graph, term_id, root_node)
+                for i in range(len(path) - 1):
+                    source = path[i]
+                    target = path[i + 1]
+
+                    if source not in subgraph:
+                        subgraph.add_node(
+                            source,
+                            name=get_term_name(source),
+                            count=term_counts.get(source, 0),
+                            term_id=source,
+                        )
+                    if target not in subgraph:
+                        subgraph.add_node(
+                            target,
+                            name=get_term_name(target),
+                            count=term_counts.get(target, 0),
+                            term_id=target,
+                        )
+
+                    subgraph.add_edge(source, target)
+            except nx.NetworkXNoPath:
+                print(f"No path from {term_id} to root node {root_node}")
+
+    if root_node not in subgraph:
+        subgraph.add_node(
+            root_node,
+            name=get_term_name(root_node),
+            count=term_counts.get(root_node, 0),
+            term_id=root_node,
+        )
+
+    # Build Cytoscape.js elements: nodes and edges (positions handled client-side by Cytoscape layouts)
+    elements = []
+
+    for node_id, data in subgraph.nodes(data=True):
+        elements.append(
+            {
+                "data": {
+                    "id": node_id,
+                    "label": data.get("name", node_id),
+                    "count": int(data.get("count", 0)),
+                    "term_id": data.get("term_id", node_id),
+                }
+            }
+        )
+
+    for source, target in subgraph.edges():
+        elements.append(
+            {
+                "data": {
+                    "id": f"{source}->{target}",
+                    "source": source,
+                    "target": target,
+                }
+            }
+        )
+
+    return elements, subgraph
+
+
+def cytoscape_elements_json(elements):
+    """
+    Serialize Cytoscape.js elements to a JSON string for embedding in templates.
+    """
+    return json.dumps(elements)

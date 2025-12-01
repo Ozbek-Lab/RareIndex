@@ -7,6 +7,8 @@ django-allauth
 whitenoise
 django-template-partials
 
+hpo3
+
 pronto
 
 networkx
@@ -16,6 +18,7 @@ pygraphviz
 kaleido
 django-encrypted-model-fields
 django-simple-history
+# Model versioning
 # Use the latest git version of django-notifications-hq for Python 3.12+ compatibility
 openpyxl
 numpy
@@ -31,3 +34,4 @@ requests
 django-environ
 gunicorn
 psycopg2-binary
+

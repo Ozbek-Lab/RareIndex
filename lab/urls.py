@@ -1,11 +1,11 @@
 from django.urls import path
 from . import views
-from .visualization import plots
+from variant import views as variant_views
 
 app_name = "lab"
 
 urlpatterns = [
-    path("", views.index, name="index"),
+    path("", views.index, name="home"),
     path(
         "search/",
         views.generic_search,
@@ -19,11 +19,22 @@ urlpatterns = [
         name="hpo_network_visualization",
     ),
     path("plots/", views.plots_page, name="plots"),
-    path("pie-chart/<str:model_name>/<str:attribute_name>/", plots.pie_chart_view, name="pie_chart"),
+    path("map/", views.map_view, name="map"),
+    path("pie-chart/<str:model_name>/<str:attribute_name>/", views.pie_chart_view, name="pie_chart"),
     path("get-select-options/", views.get_select_options, name="get_select_options"),
+    path("get-objects-by-content-type/", views.get_objects_by_content_type, name="get_objects_by_content_type"),
     path("individual/<int:pk>/timeline/", views.individual_timeline, name="individual_timeline"),
     path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
-    path("get-stats-counts/", plots.get_stats_counts, name="get_stats_counts"),
+    path("get-type-buttons/", views.get_type_buttons, name="get_type_buttons"),
+    path("get-stats-counts/", views.get_stats_counts, name="get_stats_counts"),
+    path("history-tab/", views.history_tab, name="history_tab"),
+    path("project/add-individuals/", views.project_add_individuals, name="project_add_individuals"),
+    path("project/remove-individuals/", views.project_remove_individuals, name="project_remove_individuals"),
+    path("individual/edit-hpo-terms/", views.edit_individual_hpo_terms, name="edit_individual_hpo_terms"),
+    path("individual/view-hpo-terms/", views.view_individual_hpo_terms, name="view_individual_hpo_terms"),
+    path("individual/update-hpo-terms/", views.update_individual_hpo_terms, name="update_individual_hpo_terms"),
+    path("individual/update-status/", views.update_individual_status, name="update_individual_status"),
+    path("update-status/", views.update_status, name="update_status"),
     
     # Natural language search routes
     path("nl-search/", views.nl_search, name="nl_search"),
@@ -122,6 +133,8 @@ urlpatterns = [
     # path("task/create/", views.task_create_standalone, name="task_create_standalone"),
     path("task/<int:pk>/complete/", views.task_complete, name="task_complete"),
     path("task/<int:pk>/reopen/", views.task_reopen, name="task_reopen"),
+    path("variant/create/", variant_views.variant_create, name="variant_create"),
+    path("variant/<int:pk>/update/", variant_views.variant_update, name="variant_update"),
     # path("task/<int:pk>/", views.task_detail, name="task_detail"),
     # path("task/search/", views.task_search, name="task_search"),
     # path("search-hpo-terms/", views.search_hpo_terms, name="search_hpo_terms"),

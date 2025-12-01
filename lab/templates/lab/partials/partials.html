@@ -1,0 +1,361 @@
+{% load partials %}
+
+{% partialdef generic-search %}
+<div class="relative w-full mb-2">
+  <i class="fa-solid {{ icon_class }} absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-300"></i>
+  <input
+    class="form-control w-full pl-10 rounded-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 border border-gray-300 dark:border-gray-700"
+    type="search" name="search" placeholder="Search {{ model_name }}"
+    x-model="filters.{{ model_name|lower }}" 
+    @input.debounce.300ms="dispatchFiltersUpdated('{{ model_name|lower }}')"
+    hx-get="{% url 'lab:generic_search' %}"
+    hx-trigger="filters-updated-{{ model_name|lower }} from:window, filters-reloaded from:window, created-{{ model_name }} from:window, load-{{ model_name|lower }} from:window, filters-updated from:window"
+    hx-target="{% if target_id %}{{ target_id }}{% else %}#index-{{ model_name|lower }}-results{% endif %}" :hx-vals="getHxVals('{{ app_label|default:'lab' }}', '{{ model_name }}', 1, null, null, '{{ icon_class }}')" />
+</div>
+{% endpartialdef %}
+
+{% partialdef generic-filter-search %}
+<div class="relative w-full mb-2">
+  <i class="fa-solid {{ icon_class }} absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-300"></i>
+  <input
+    class="form-control w-full pl-10 rounded-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 border border-gray-300 dark:border-gray-700"
+    type="search" name="filter_{{ model_name|lower }}" placeholder="Filter by {{ model_name }}"
+    x-model.debounce.300ms="filters.{{ model_name|lower }}" />
+</div>
+{% endpartialdef %}
+
+{% partialdef generic-select %}
+<div class="relative w-full mb-2">
+  <div class="flex items-stretch">
+    <!-- Left side: Icon and Buttons -->
+    <div class="flex flex-col" style="width: 2.5rem;">
+      <!-- Top 33%: Icon -->
+      <div class="flex items-center justify-center" style="height: 50%;">
+        <i class="fa-solid {{ icon_class }} text-gray-400 dark:text-gray-300"></i>
+      </div>
+      <!-- Bottom 33%: Clear Button -->
+      <div class="flex items-center justify-center" style="height: 50%;">
+        <button type="button"
+          class="bg-gray-500 hover:bg-gray-600 text-white p-1 rounded transition-colors duration-200 w-6 h-6 flex items-center justify-center"
+          @click="filters.{{ field_name }} = ''; $dispatch('filters-updated')">
+          <i class="fa-solid fa-ban text-xs"></i>
+        </button>
+      </div>
+    </div>
+    <!-- Right side: Select -->
+    <div class="flex-1 relative">
+      <select
+        class="form-control w-full rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400"
+        name="{{ field_name }}" multiple x-model.debounce.150ms="filters.{{ field_name }}"
+        hx-get="{% url 'lab:get_select_options' %}"
+        hx-trigger="load, onchange, created-{{ model_name }} from:window, {{ event_name|default:'filters-updated' }} from:window"
+        hx-target="this" hx-swap="innerHTML" :hx-vals="getSelectHxVals('{{ app_label|default:'lab' }}', '{{ model_name }}', '{{ field_name }}', 1, null, null, '{{ icon_class }}')">
+        <option>Loading...</option>
+      </select>
+    </div>
+  </div>
+</div>
+{% endpartialdef generic-select %}
+
+{% partialdef generic-type-filter %}
+<div class="relative w-full mb-2">
+  <div class="flex-1">
+    <div class="flex flex-wrap gap-1" hx-get="{% url 'lab:get_type_buttons' %}"
+      hx-trigger="load, created-{{ model_name }} from:window, filters-updated-{{ model_name|lower }} from:window, filters-reloaded from:window"
+      hx-target="this" hx-swap="innerHTML" :hx-vals="getTypeHxVals('{{ app_label|default:'lab' }}', '{{ model_name }}')">
+      <div class="text-gray-500 text-sm">Loading types...</div>
+    </div>
+  </div>
+</div>
+<hr>
+{% endpartialdef %}
+
+{% partialdef generic-status-filter %}
+<div class="relative w-full mb-2">
+  <div class="flex-1">
+    <div class="flex flex-wrap gap-1" hx-get="{% url 'lab:get_status_buttons' %}"
+      hx-trigger="load, created-{{ model_name }} from:window, filters-updated-{{ model_name|lower }} from:window, filters-reloaded from:window"
+      hx-target="this" hx-swap="innerHTML" :hx-vals="getStatusHxVals('{{ app_label|default:'lab' }}', '{{ model_name }}')">
+      <div class="text-gray-500 text-sm">Loading statuses...</div>
+    </div>
+  </div>
+</div>
+<hr>
+{% endpartialdef generic-status-filter %}
+
+{% partialdef select-options %}
+{% for option in options %}
+<option value="{{ option }}" {% if option in selected_value %}selected{% endif %}>{{ option }}</option>
+{% endfor %}
+{% endpartialdef select-options %}
+
+{% partialdef status-buttons %}
+{% for status in statuses %}
+<button type="button" class="px-2 py-1 text-xs rounded-full transition-all duration-200 border"
+  :class="triStateClasses('{{ model_name|lower }}_status', '{{ status.pk }}')"
+  @click="toggleStatus('{{ status.pk }}', '{{ model_name|lower }}')"
+  title="{{ status.description|default:status.name }}">
+  {% if status.icon %}
+  <i class="fa-solid {{ status.icon }} mr-1"></i>
+  {{ status.name }}
+  {% endif %}
+</button>
+{% endfor %}
+{% endpartialdef status-buttons %}
+
+{% partialdef type-buttons %}
+{% for type in types %}
+<button type="button" class="px-2 py-1 text-xs rounded-full transition-all duration-200 border"
+  :class="triStateClasses('{{ type.filter_field }}', '{{ type.name }}')"
+  @click="toggleType('{{ type.name }}', '{{ type.filter_field }}')" title="{{ type.description|default:type.name }}">
+  {{ type.name }}
+</button>
+{% endfor %}
+{% endpartialdef type-buttons %}
+
+{% partialdef generic-combobox %}
+<div class="relative w-full" x-data="comboboxController('{{ app_label|default:'lab' }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:'[]'|escapejs }}')" @click.outside="open=false" x-init="$watch('hiddenInputValue', (val) => { filters[hiddenInputName] = JSON.parse(val); })">
+  <div class="flex items-stretch">
+    <div class="flex items-center justify-center w-10">
+      <i class="fa-solid {{ icon_class|default:'fa-magnifying-glass' }} text-gray-400 dark:text-gray-300"></i>
+    </div>
+    <div class="flex-1 relative">
+      <input type="search"
+        class="form-control w-full rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400 pr-8"
+        placeholder="Search {{ model_name }}" x-model.debounce.250ms="query"
+        @focus="open=true; htmx.trigger($refs.opts, 'combo-query-changed')" @input="open=true" />
+      <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        @click="clearSelection()">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div x-ref="opts"
+        class="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto"
+        x-show="open" x-cloak hx-get="{% url 'lab:generic_search' %}" hx-trigger="load, combo-query-changed"
+        hx-target="this" hx-swap="innerHTML" :hx-vals="getHxVals(1)">
+      </div>
+
+      <div class="mt-2 flex flex-wrap gap-2" x-show="multiple && selected.length">
+        <template x-for="opt in selected" :key="opt.value">
+          <span
+            class="inline-flex items-center px-2 py-1 rounded-full text-sm bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
+            <span x-text="opt.label"></span>
+            <button type="button" class="ml-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-300"
+              @click="remove(opt.value)">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </span>
+        </template>
+      </div>
+
+      {% if name %}
+      <input type="hidden" x-ref="hiddenInput" name="{{ name }}" :value="hiddenInputValue">
+      {% else %}
+      <input type="hidden" x-ref="hiddenInput" :name="hiddenInputName" :value="hiddenInputValue">
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endpartialdef %}
+
+{% partialdef family-description-field %}
+<div>
+  <label for="family_description" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+    Description
+  </label>
+  <textarea name="family_description" id="family_description" rows="3"
+    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
+    placeholder="Enter family description">{{ description|default:'' }}</textarea>
+</div>
+{% endpartialdef %}
+
+
+{% partialdef single-generic-combobox %}
+<div class="relative w-full" x-data="singleGenericComboboxController('{{ app_label|default:'lab' }}', '{{ model_name }}', '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:''|escapejs }}', '{{ initial_value|default:''|escapejs }}')" @click.outside="open=false" x-init="$watch('hiddenInputValue', (val) => { filters[hiddenInputName] = val; })">
+  <div class="flex items-stretch">
+    <div class="flex items-center justify-center w-10">
+      <i class="fa-solid {{ icon_class|default:'fa-magnifying-glass' }} text-gray-400 dark:text-gray-300"></i>
+    </div>
+    <div class="flex-1 relative">
+      <input type="search"
+        class="form-control w-full rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400 pr-8"
+        placeholder="Search {{ model_name }} or type new" x-model.debounce.250ms="query"
+        @focus="open=true; htmx.trigger($refs.opts, 'combo-query-changed')" @input="open=true" />
+      <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        @click="clearSelection()">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div x-ref="opts"
+        class="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto"
+        x-show="open" x-cloak hx-get="{% url 'lab:generic_search' %}" hx-trigger="load, combo-query-changed"
+        hx-target="this" hx-swap="innerHTML" :hx-vals="getHxVals(1)">
+      </div>
+
+      <input type="hidden" x-ref="hiddenInput" :name="hiddenInputName" :value="hiddenInputValue">
+      <!-- Free-typed query (when nothing selected) to allow server-side resolution -->
+      <input type="hidden" :name="hiddenInputName + '_query'" :value="query">
+    </div>
+  </div>
+</div>
+{% endpartialdef %}
+
+{% partialdef combobox-options %}
+{% for opt in options %}
+<div class="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between"
+  @click="toggleOption('{{ opt.value }}','{{ opt.label|escapejs }}')">
+  <span class="truncate">{{ opt.label }}</span>
+  <i class="fa-solid fa-check text-green-500" x-show="isSelected('{{ opt.value }}')"></i>
+</div>
+{% endfor %}
+{% if items.has_next %}
+<div hx-get="{% url 'lab:generic_search_page' %}" hx-trigger="intersect once" hx-swap="afterend" hx-target="this"
+  :hx-vals="getHxVals('{{ app_label|default:" lab" }}', '{{ model_name }}' , {{ items.next_page_number }}, null,
+  null, '{{ icon_class }}' )"></div>
+{% endif %}
+{% endpartialdef %}
+
+{% partialdef generic-search-results %}
+  {% if view != 'page' %}
+  <div>
+    {% if items.number == 1 %}
+    <div class="" :class="{'text-green-500': {{ num_items }} > 0,
+                    'text-red-500': {{ num_items }} == 0}">
+      <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
+    </div>
+
+    <div class="h-96 overflow-y-auto">
+      {% endif %}
+
+      {% with view_mode="cards" card='compact-card' %}
+      {% include "lab/partials/_infinite_scroll_items.html" %}
+      {% endwith %}
+      {% if items.number == 1 %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if view == 'page' %}
+    {% partial generic-search-results-content %}
+  {% else %}
+    <div id="page-{{ model_name|lower }}-results" hx-swap-oob="innerHTML">
+      {% partial generic-search-results-content %}
+    </div>
+  {% endif %}
+{% endpartialdef %}
+
+{% partialdef generic-search-results-content %}
+  {% if items.number == 1 %}
+  <div class="" :class="{'text-green-500': {{ num_items }} > 0,
+                  'text-red-500': {{ num_items }} == 0}">
+    <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
+  </div>
+  {% endif %}
+
+  <!-- Card View with animated transition -->
+  <div x-show="viewMode === 'cards'" x-transition:enter="transition-all duration-500 ease-out"
+    x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+    x-transition:leave="transition-all duration-300 ease-in"
+    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+    x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 gap-4 relative h-full overflow-y-auto"
+    style="will-change: opacity, transform;">
+    {% with view_mode="cards" card='card' %}
+    {% include "lab/partials/_infinite_scroll_items.html" %}
+    {% endwith %}
+  </div>
+
+  <!-- Table View with animated transition -->
+  <div x-show="viewMode === 'table'" x-transition:enter="transition-all duration-500 ease-out"
+    x-transition:enter-start="opacity-0 scale-95 -translate-y-4"
+    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+    x-transition:leave="transition-all duration-300 ease-in"
+    x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+    x-transition:leave-end="opacity-0 scale-95 -translate-y-4" class="relative h-full overflow-y-auto"
+    style="will-change: opacity, transform;">
+    {% include app_label|add:"/"|add:model_name|lower|add:'.html#table' %}
+  </div>
+{% endpartialdef %}
+
+{% partialdef search-section %}
+<div id="{{ model_name|lower }}-section-wrapper" x-data="{ isLoading: false, viewMode: 'cards' }" @htmx:before-request="isLoading = true"
+  @htmx:after-request="isLoading = false">
+  {% if view == "page" %}
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h1>
+    <div class="flex items-center">
+      <!-- Add New button -->
+
+
+      {% if model_name != 'Individual' and model_name != 'Variant' %}
+      <button hx-get="{% url 'lab:generic_create' %}?model_name={{ model_name }}&app_label={{ app_label }}"
+        hx-target="#modal-root" hx-swap="innerHTML"
+        class="mr-3 inline-flex items-center px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+        <i class="fa-solid fa-plus mr-2"></i>
+        Add New {{ model_name }}
+      </button>
+      {% endif %}
+
+      <!-- Family Creation Button (only show for Individual model) -->
+      {% if model_name == 'Individual' %}
+      <button hx-get="{% url 'lab:family_create_segway' %}" hx-target="#modal-root" hx-swap="innerHTML"
+        class="mr-3 inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        title="Create Family with Multiple Individuals">
+        <i class="fas fa-users mr-2"></i>
+        Create Family
+      </button>
+      {% endif %}
+      <!-- Slick joined toggle buttons with animations -->
+      <!-- Slick joined toggle buttons with animations -->
+      {% partial view-mode-toggle %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Search and select fields moved to drawer #}
+
+  {# The container for results and the loading overlay #}
+  <div class="relative min-h-[24rem]">
+
+    {# Results will be loaded into this div #}
+    <div id="{{ view }}-{{ model_name|lower }}-results" class="transition" :class="{ '': isLoading }">
+      {% partial generic-search-results %}
+    </div>
+
+    {# The loading overlay with spinner #}
+
+
+  </div>
+</div>
+{% endpartialdef %}
+
+{% partialdef view-mode-toggle %}
+<div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 grid grid-cols-2">
+  <!-- Animated background slider -->
+  <div
+    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'" style="width: calc(50% - 4px);"></div>
+
+  <!-- Card button -->
+  <button @click="viewMode = 'cards'"
+    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
+    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+    <i class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"></i>
+    <span class="transition-all duration-300"
+      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'">Card</span>
+  </button>
+
+  <!-- Table button -->
+  <button @click="viewMode = 'table'"
+    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
+    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+    <i class="fa-solid fa-table mr-2 transition-transform duration-300"
+      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"></i>
+    <span class="transition-all duration-300"
+      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'">Table</span>
+  </button>
+</div>
+{% endpartialdef %}

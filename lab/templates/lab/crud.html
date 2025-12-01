@@ -1,0 +1,1966 @@
+{% extends "lab/base.html" %}
+{% load lab_filters %}
+
+{% partialdef create-form %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-[95vw] w-full mx-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Create New {{ model_name }}
+        </h2>
+        <button @click= "document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="max-h-[75vh] overflow-y-auto pr-1">
+        <form hx-post="{% url 'lab:generic_create' %}" hx-target="#modal-root" hx-swap="innerHTML">
+          {% csrf_token %}
+          <input type="hidden" name="model_name" value="{{ model_name }}">
+          <input type="hidden" name="app_label" value="{{ app_label }}">
+          
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-4">
+              {% for field in form %}
+                {% if forloop.counter0|divisibleby:2 %}
+                  <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {{ field.label }}
+                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
+                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Sample' and field.name == 'individual' %}
+                      {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' name='individual' initial=initial_individual.individual_id|default:'' initial_value=initial_individual.pk|default:'' %}
+                        {% include "lab/partials/partials.html#single-generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Sample' and field.name == 'isolation_by' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-face-smile' value_field='pk' name='isolation_by' %}
+                        {% include "lab/partials/partials.html#single-generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Institution' and field.name == 'staff' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% else %}
+                      {{ field }}
+                    {% endif %}
+                    {% if field.help_text %}
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% if field.errors %}
+                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+            <div class="space-y-4">
+              {% for field in form %}
+                {% if not forloop.counter0|divisibleby:2 %}
+                  <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {{ field.label }}
+                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
+                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Sample' and field.name == 'individual' %}
+                      {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' name='individual' initial=initial_individual.individual_id|default:'' initial_value=initial_individual.pk|default:'' %}
+                        {% include "lab/partials/partials.html#single-generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Sample' and field.name == 'isolation_by' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-face-smile' value_field='pk' name='isolation_by' %}
+                        {% include "lab/partials/partials.html#single-generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Institution' and field.name == 'staff' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% else %}
+                      {{ field }}
+                    {% endif %}
+                    {% if field.help_text %}
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% if field.errors %}
+                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+            </div>
+            {% if model_name == 'Task' %}
+            <div class="lg:col-span-1">
+              {% partial task-create %}
+            </div>
+            {% endif %}
+          </div>
+          
+          <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" @click= "document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Cancel</button>
+            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Create {{ model_name }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef task-create inline %}
+  <div class="space-y-4">
+    <div>
+      <label for="id_content_type" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Associated Type
+        <span class="text-gray-500 text-xs">(optional)</span>
+      </label>
+      {{ form.content_type }}
+      {% if form.content_type.help_text %}
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.content_type.help_text }}</p>
+      {% endif %}
+      {% if form.content_type.errors %}
+        <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+          {% for error in form.content_type.errors %}<p>{{ error }}</p>{% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    
+    <div>
+      <label for="id_object_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Associated Object
+        <span class="text-gray-500 text-xs">(optional)</span>
+      </label>
+      <select 
+        id="id_object_id" 
+        name="object_id" 
+        class="w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+        hx-get="{% url 'lab:get_objects_by_content_type' %}"
+        hx-trigger="change from:#id_content_type"
+        hx-target="this"
+        hx-swap="innerHTML"
+        hx-include="#id_content_type"
+      >
+        <option value="">---------</option>
+      </select>
+      {% if form.object_id.help_text %}
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ form.object_id.help_text }}</p>
+      {% endif %}
+      {% if form.object_id.errors %}
+        <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+          {% for error in form.object_id.errors %}<p>{{ error }}</p>{% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef edit-form %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-[95vw] w-full mx-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Edit {{ model_name }}
+        </h2>
+        <button @click= "document.getElementById('modal-root').innerHTML = ''" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="max-h-[75vh] overflow-y-auto pr-1">
+        <form hx-post="{% url 'lab:generic_edit' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit = "
+          const form = $event.target;
+          const elements = Array.from(form.elements || []);
+          elements.forEach(el => {
+            if (!el || !el.name || el.disabled) return;
+            if (['csrfmiddlewaretoken','model_name','app_label','pk'].includes(el.name)) return;
+            if (el.tagName === 'SELECT' && el.multiple) {
+              const initial = Array.from(el.options).filter(o => o.defaultSelected).map(o => String(o.value)).sort().join(',');
+              const current = Array.from(el.options).filter(o => o.selected).map(o => String(o.value)).sort().join(',');
+              if (initial === current) el.disabled = true;
+            } else if (el.type === 'checkbox' || el.type === 'radio') {
+              if (el.defaultChecked === el.checked) el.disabled = true;
+            } else {
+              const initial = el.defaultValue ?? '';
+              const current = el.value ?? '';
+              if (String(initial) === String(current)) el.disabled = true;
+            }
+          });
+        ">
+          {% csrf_token %}
+          <input type="hidden" name="model_name" value="{{ model_name }}">
+          <input type="hidden" name="app_label" value="{{ app_label }}">
+          <input type="hidden" name="pk" value="{{ object.pk }}">
+          
+          <div class="flex flex-col md:flex-row gap-6">
+            <div class="flex-1 space-y-4">
+              {% for field in form %}
+                {% if forloop.counter0|divisibleby:2 %}
+                  <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {{ field.label }}
+                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
+                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Institution' and field.name == 'staff' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% else %}
+                      {{ field }}
+                    {% endif %}
+                    {% if field.help_text %}
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% if field.errors %}
+                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+            <div class="flex-1 space-y-4">
+              {% for field in form %}
+                {% if not forloop.counter0|divisibleby:2 %}
+                  <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {{ field.label }}
+                      {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
+                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% elif model_name == 'Institution' and field.name == 'staff' %}
+                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                        {% include "lab/partials/partials.html#generic-combobox" %}
+                      {% endwith %}
+                    {% else %}
+                      {{ field }}
+                    {% endif %}
+                    {% if field.help_text %}
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                    {% endif %}
+                    {% if field.errors %}
+                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+          
+          <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" @click= "document.getElementById('modal-root').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Cancel</button>
+            <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Update {{ model_name }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef delete-confirm %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Delete {{ model_name }}
+        </h2>
+        <button 
+          @click= "document.getElementById('modal-root').innerHTML = ''" 
+          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <div class="mb-6">
+        <p class="text-gray-700 dark:text-gray-300">
+          Are you sure you want to delete <strong>{{ object }}</strong>?
+        </p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+          This action cannot be undone.
+        </p>
+      </div>
+      
+      <form hx-post="{% url 'lab:generic_delete' %}" hx-target="#modal-root" hx-swap="innerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="model_name" value="{{ model_name }}">
+        <input type="hidden" name="app_label" value="{{ app_label }}">
+        <input type="hidden" name="pk" value="{{ object.pk }}">
+        
+        <div class="flex justify-end space-x-3">
+          <button 
+            type="button" 
+            @click= "document.getElementById('modal-root').innerHTML = ''"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Cancel
+          </button>
+          <button 
+            type="submit"
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+          >
+            Delete {{ model_name }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef create-success %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Success!
+      </h2>
+      <p class="text-gray-700 dark:text-gray-300 mb-6">
+        {{ model_name }} "{{ object }}" has been created successfully.
+      </p>
+      <div class="flex justify-center space-x-3">
+        <button 
+          @click= "document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+        >
+          Back to Index
+        </button>
+        <button 
+          hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+          hx-target="#main-content"
+          hx-swap="innerHTML"
+          @click= "document.getElementById('modal-root').innerHTML = ''"
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          View Details
+        </button>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef edit-success %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Success!
+      </h2>
+      <p class="text-gray-700 dark:text-gray-300 mb-6">
+        {{ model_name }} "{{ object }}" has been updated successfully.
+      </p>
+      <div class="flex justify-center space-x-3">
+        <button 
+          @click= "document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+        >
+          Back to Index
+        </button>
+        <button 
+          hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+          hx-target="#main-content"
+          hx-swap="innerHTML"
+          @click= "document.getElementById('modal-root').innerHTML = ''"
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          View Details
+        </button>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef delete-success %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Success!
+      </h2>
+      <p class="text-gray-700 dark:text-gray-300 mb-6">
+        {{ model_name }} "{{ object_name }}" has been deleted successfully.
+      </p>
+      <div class="flex justify-center">
+        <button 
+          @click= "document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+        >
+          Back to Index
+        </button>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef family-create-form %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "handleCloseWithConfirmation()">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-[95vw] w-full mx-2 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Create New Family with Individuals
+        </h2>
+        <button @click= "handleCloseWithConfirmation()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <form id="family-create-form" hx-post="{% url 'lab:family_create_segway' %}" hx-target="#modal-root" hx-swap="innerHTML" @submit= "if (!prepareFormSubmission()) { $event.preventDefault(); return false; } debugFormSubmission($event)">
+        {% csrf_token %}
+        <div class="grid grid-cols-1 gap-6">
+          <!-- Family Information Section -->
+          <div class="mb-2 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center">
+              <i class="fas fa-home mr-2 text-blue-600"></i>
+              Family Information
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Family ID <span class="text-red-500">*</span>
+                </label>
+                {% with app_label='lab' model_name='Family' icon_class='fa-users' value_field='family_id' label_field='family_id' name='family_id' %}
+                  {% include "lab/partials/partials.html#single-generic-combobox" %}
+                {% endwith %}
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Select an existing family or type a new ID to create one.</p>
+              </div>
+              <div x-data="{ }" @combobox-selected.window= "if ($event.detail.modelName==='Family' && $event.detail.value) { htmx.ajax('GET', '{% url 'lab:generic_search' %}', { target: '#family_description_wrapper', swap: 'innerHTML', values: { app_label: 'lab', model_name: 'Family', search: $event.detail.value, render: 'family_description' } }); htmx.ajax('GET', '{% url 'lab:generic_search' %}', { target: '#individuals-container', swap: 'innerHTML', values: { app_label: 'lab', model_name: 'Family', search: $event.detail.value, render: 'family_individual_forms' } }); }">
+                <div id="family_description_wrapper">
+                  {% include "lab/partials/partials.html#family-description-field" %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Individuals Section -->
+          <div>
+            <div class="mb-4">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                  <i class="fas fa-users mr-2 text-green-600"></i>
+                  Family Members
+                </h3>
+                <button 
+                  type="button" 
+                  @click= "addIndividualForm()"
+                  class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center space-x-2"
+                >
+                  <i class="fas fa-plus"></i>
+                  <span>Add Member</span>
+                </button>
+              </div>
+              
+              <div id="individuals-container" class="space-y-6">
+                <!-- Individual forms will be added here dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex justify-between items-center pt-6 border-t border-gray-200 dark:border-gray-700">
+          <!-- Left side - Restore button -->
+          <div>
+            <button 
+              type="button" 
+              @click= "restoreFormData()" 
+              class="px-4 py-2 text-sm font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-md hover:bg-green-200 dark:hover:bg-green-800/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              title="Restore previously saved form data"
+            >
+              <i class="fas fa-undo mr-2"></i>
+              Restore Saved Data
+            </button>
+          </div>
+          
+          <!-- Right side - Action buttons -->
+          <div class="flex space-x-3">
+            <button 
+              type="button" 
+              @click= "saveFormData(); document.getElementById('modal-root').innerHTML = ''; showToast('Form data saved and popup closed', 'success')" 
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Save & Close
+            </button>
+            <button 
+              type="button" 
+              @click= "clearFormData(); document.getElementById('modal-root').innerHTML = ''" 
+              class="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-md hover:bg-red-200 dark:hover:bg-red-800/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Clear & Close
+            </button>
+            <button 
+              id="family-submit-btn"
+              type="submit" 
+              class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Create Family & Individuals
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Individual Form Template (hidden) -->
+  <template id="individual-form-template">
+    <div class="individual-form bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-6" x-data="{ showSensitive: false, taskEnabled: false }">
+      <div class="flex items-center justify-between mb-4">
+        <h4 class="text-md font-medium text-gray-900 dark:text-white flex items-center">
+          <i class="fas fa-user mr-2 text-blue-600"></i>
+          Family Member <span class="member-number"></span>
+        </h4>
+        <button 
+          type="button" 
+          @click= "removeIndividualForm($el.closest('.individual-form'))"
+          class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+          title="Remove this member"
+        >
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Column 1 -->
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mother</label>
+              {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' label_field='individual_id' name='individuals[INDEX][mother]' %}
+                {% include "lab/partials/partials.html#single-generic-combobox" %}
+              {% endwith %}
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Father</label>
+              {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' label_field='individual_id' name='individuals[INDEX][father]' %}
+                {% include "lab/partials/partials.html#single-generic-combobox" %}
+              {% endwith %}
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Full Name <span class="text-red-500">*</span>
+            </label>
+            <input 
+              type="text" 
+              name="individuals[INDEX][full_name]" 
+              required
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+              placeholder="Enter full name"
+            >
+          </div>
+
+          <!-- TC Identity -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              TC Identity
+            </label>
+            <input 
+              type="number" 
+              name="individuals[INDEX][tc_identity]" 
+              min="10000000000"
+              max="99999999999"
+              step="1"
+              pattern="[0-9]{11}"
+              title="TC Identity must be exactly 11 digits"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+              placeholder="Enter TC identity (11 digits)"
+            >
+          </div>
+
+          <!-- IDs Box (multiple rows) -->
+          <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IDs</label>
+              <button type="button" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700" @click= "addIdRow($el.closest('.individual-form'))">
+                <i class="fas fa-plus mr-1"></i> Add ID
+              </button>
+            </div>
+            <div class="space-y-2 id-rows" data-row-index="0">
+              <!-- rows injected here by JS -->
+            </div>
+            <!-- Hidden template for an ID row -->
+            <template class="id-row-template">
+              <div class="id-row grid grid-cols-7 gap-2 items-center">
+                <div class="col-span-3">
+                  <label class="sr-only">ID Type</label>
+                  <select name="individuals[INDEX][ids][ROW][type]" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    {% for idt in identifier_types %}
+                      <option value="{{ idt.id }}">{{ idt.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-span-3">
+                  <label class="sr-only">ID</label>
+                  <input type="text" name="individuals[INDEX][ids][ROW][value]" placeholder="ID" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                </div>
+                <div class="col-span-1 flex justify-end">
+                  <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click= "removeIdRow($el.closest('.id-row'))" title="Remove this ID row">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+        </div>
+
+        <!-- Column 2 -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Institution(s) <span class="text-red-500">*</span>
+            </label>
+            {% with app_label='lab' model_name='Institution' icon_class='fa-building' value_field='pk' label_field='name' multiple=True name='individuals[INDEX][institution]' %}
+              {% include "lab/partials/partials.html#generic-combobox" %}
+            {% endwith %}
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Status <span class="text-red-500">*</span>
+            </label>
+            <select 
+              name="individuals[INDEX][status]" 
+              required
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+            >
+              <option value="">Select Status</option>
+              {% for status in individual_statuses %}
+                <option value="{{ status.id }}">{{ status.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Birth Date
+            </label>
+            <input 
+              type="date" 
+              name="individuals[INDEX][birth_date]" 
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+            >
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Council Date
+            </label>
+            <input 
+              type="date" 
+              name="individuals[INDEX][council_date]" 
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+            >
+          </div>
+        </div>
+
+        <!-- Column 3 (Flags + HPO + Notes) -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Is Index Case
+            </label>
+            <div class="flex items-center space-x-3">
+              <label class="flex items-center">
+                <input 
+                  type="radio" 
+                  name="individuals[INDEX][is_index]" 
+                  value="true"
+                  class="mr-2 text-blue-600 focus:ring-blue-500"
+                >
+                <span class="text-sm text-gray-700 dark:text-gray-300">Yes</span>
+              </label>
+              <label class="flex items-center">
+                <input 
+                  type="radio" 
+                  name="individuals[INDEX][is_index]" 
+                  value="false"
+                  checked
+                  class="mr-2 text-blue-600 focus:ring-blue-500"
+                >
+                <span class="text-sm text-gray-700 dark:text-gray-300">No</span>
+              </label>
+            </div>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Is Affected
+            </label>
+            <div class="flex items-center space-x-3">
+              <label class="flex items-center">
+                <input 
+                  type="radio" 
+                  name="individuals[INDEX][is_affected]" 
+                  value="true"
+                  class="mr-2 text-blue-600 focus:ring-blue-500"
+                >
+                <span class="text-sm text-gray-700 dark:text-gray-300">Yes</span>
+              </label>
+              <label class="flex items-center">
+                <input 
+                  type="radio" 
+                  name="individuals[INDEX][is_affected]" 
+                  value="false"
+                  checked
+                  class="mr-2 text-blue-600 focus:ring-blue-500"
+                >
+                <span class="text-sm text-gray-700 dark:text-gray-300">No</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- HPO Terms (Combobox) -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              HPO Terms
+            </label>
+            {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='individuals[INDEX][hpo_term_ids]' %}
+              {% include "lab/partials/partials.html#generic-combobox" %}
+            {% endwith %}
+          </div>
+          
+          <!-- Notes Box (multiple rows) -->
+          <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+              <button type="button" class="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700" @click= "addNoteRow($el.closest('.individual-form'))">
+                <i class="fas fa-plus mr-1"></i> Add Note
+              </button>
+            </div>
+            <div class="space-y-2 note-rows" data-row-index="0">
+              <!-- rows injected here by JS -->
+            </div>
+            <!-- Hidden template for a note row -->
+            <template class="note-row-template">
+              <div class="note-row grid grid-cols-6 gap-2 items-center">
+                <div class="col-span-5">
+                  <label class="sr-only">Note Content</label>
+                  <textarea 
+                    name="individuals[INDEX][notes][ROW][content]" 
+                    rows="2"
+                    placeholder="Enter note content"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical"
+                  ></textarea>
+                </div>
+                <div class="col-span-1 flex justify-end">
+                  <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click= "removeNoteRow($el.closest('.note-row'))" title="Remove this note">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Column 4 (Per-Individual Task) -->
+        <div class="space-y-4">
+          <div class="bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-gray-900 dark:text-white flex items-center">
+                <i class="fa-solid fa-list-check mr-2 text-blue-600"></i>
+                Create Task
+              </h4>
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" name="individuals[INDEX][create_task]" value="1" class="sr-only peer" x-model="taskEnabled">
+                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all relative peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+            <div class="space-y-2" x-show="taskEnabled" x-cloak>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+                <input type="text" name="individuals[INDEX][task-title]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Task title">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                <textarea name="individuals[INDEX][task-description]" rows="2" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></textarea>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned To</label>
+                <select name="individuals[INDEX][task-assigned_to]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                  <option value="">--------</option>
+                  {% for u in users %}
+                    <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                <input type="datetime-local" name="individuals[INDEX][task-due_date]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                  <select name="individuals[INDEX][task-priority]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                  <select name="individuals[INDEX][task-status]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">--------</option>
+                    {% for s in task_statuses %}
+                      <option value="{{ s.id }}">{{ s.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Project</label>
+                <select name="individuals[INDEX][task-project]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                  <option value="">--------</option>
+                  {% for p in projects %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  {% partialdef prefilled-individual-forms %}
+  <div>
+    {% for item in prefills %}
+      <div class="individual-form bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-6" x-data="{ showSensitive: false, taskEnabled: false }">
+        <input type="hidden" name="individuals[{{ forloop.counter0 }}][id]" value="{{ item.individual.id }}" />
+        <div class="flex items-center justify-between mb-4">
+          <h4 class="text-md font-medium text-gray-900 dark:text-white flex items-center">
+            <i class="fas fa-user mr-2 text-blue-600"></i>
+            Family Member <span class="member-number">{{ forloop.counter }}</span>
+          </h4>
+          <button type="button" @click= "removeIndividualForm($el.closest('.individual-form'))" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors" title="Remove this member">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mother</label>
+                {% with mother_name='individuals['|add:forloop.counter0|add:'][mother]' %}
+                  {% include "lab/partials/partials.html#single-generic-combobox" with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' label_field='individual_id' name=mother_name initial=item.individual.mother.individual_id|default:'' %}
+                {% endwith %}
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Father</label>
+                {% with father_name='individuals['|add:forloop.counter0|add:'][father]' %}
+                  {% include "lab/partials/partials.html#single-generic-combobox" with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' label_field='individual_id' name=father_name initial=item.individual.father.individual_id|default:'' %}
+                {% endwith %}
+              </div>
+            </div>
+
+            <div x-data="{ editName: false }">
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name <span class="text-red-500">*</span></label>
+                <button type="button" @click= "editName = !editName" class="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" title="Toggle name editing">
+                  <i class="fa-solid fa-id-card"></i>
+                </button>
+              </div>
+              <!-- Editable input, initially hidden -->
+              <input 
+                x-show="editName"
+                type="text" 
+                name="individuals[{{ forloop.counter0 }}][full_name]" 
+                value="{{ item.individual.full_name }}" 
+                required
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="Enter full name"
+              >
+              <!-- Masked, read-only display shown by default -->
+              <input 
+                x-show="!editName"
+                type="text" 
+                value="{{ item.individual.full_name|mask_initials }}" 
+                readonly 
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-900/70 dark:text-gray-300"
+                title="Masked; click the id card to edit"
+              >
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">TC Identity</label>
+              <input type="number" name="individuals[{{ forloop.counter0 }}][tc_identity]" value="{{ item.individual.tc_identity|default:'' }}" min="10000000000" max="99999999999" step="1" pattern="[0-9]{11}" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Enter TC identity (11 digits)">
+            </div>
+
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IDs</label>
+                <button type="button" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700" @click= "addIdRow($el.closest('.individual-form'))">
+                  <i class="fas fa-plus mr-1"></i> Add ID
+                </button>
+              </div>
+              <div class="space-y-2 id-rows" data-row-index="{{ item.individual.cross_ids.count }}">
+                {% for xid in item.individual.cross_ids.all %}
+                  <div class="id-row grid grid-cols-7 gap-2 items-center">
+                    <div class="col-span-3">
+                      <select name="individuals[{{ forloop.parentloop.counter0 }}][ids][{{ forloop.counter0 }}][type]" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                        {% for idt in identifier_types %}
+                          <option value="{{ idt.id }}" {% if xid.id_type_id == idt.id %}selected{% endif %}>{{ idt.name }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="col-span-3">
+                      <input type="text" name="individuals[{{ forloop.parentloop.counter0 }}][ids][{{ forloop.counter0 }}][value]" value="{{ xid.id_value }}" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                    </div>
+                    <div class="col-span-1 flex justify-end">
+                      <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click= "removeIdRow($el.closest('.id-row'))" title="Remove this ID row">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+              <template class="id-row-template">
+                <div class="id-row grid grid-cols-7 gap-2 items-center">
+                  <div class="col-span-3">
+                    <select name="individuals[INDEX][ids][ROW][type]" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                      {% for idt in identifier_types %}
+                        <option value="{{ idt.id }}">{{ idt.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-span-3">
+                    <input type="text" name="individuals[INDEX][ids][ROW][value]" placeholder="ID" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                  </div>
+                  <div class="col-span-1 flex justify-end">
+                    <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click= "removeIdRow($el.closest('.id-row'))" title="Remove this ID row">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Institution(s) <span class="text-red-500">*</span></label>
+              {% with inst_name='individuals['|add:forloop.counter0|add:'][institution]' %}
+                {% include "lab/partials/partials.html#generic-combobox" with app_label='lab' model_name='Institution' icon_class='fa-building' value_field='pk' label_field='name' multiple=True name=inst_name initial=item.initial_institutions_json %}
+              {% endwith %}
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status <span class="text-red-500">*</span></label>
+              <select name="individuals[{{ forloop.counter0 }}][status]" required class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                <option value="">Select Status</option>
+                {% for status in individual_statuses %}
+                  <option value="{{ status.id }}" {% if item.individual.status_id == status.id %}selected{% endif %}>{{ status.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Birth Date</label>
+              <input type="date" name="individuals[{{ forloop.counter0 }}][birth_date]" value="{{ item.individual.birth_date|date:'Y-m-d' }}" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Council Date</label>
+              <input type="date" name="individuals[{{ forloop.counter0 }}][council_date]" value="{{ item.individual.council_date|date:'Y-m-d' }}" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Is Index Case</label>
+              <div class="flex items-center space-x-3">
+                <label class="flex items-center">
+                  <input type="radio" name="individuals[{{ forloop.counter0 }}][is_index]" value="true" class="mr-2 text-blue-600" {% if item.individual.is_index %}checked{% endif %}>
+                  <span class="text-sm text-gray-700 dark:text-gray-300">Yes</span>
+                </label>
+                <label class="flex items-center">
+                  <input type="radio" name="individuals[{{ forloop.counter0 }}][is_index]" value="false" class="mr-2 text-blue-600" {% if not item.individual.is_index %}checked{% endif %}>
+                  <span class="text-sm text-gray-700 dark:text-gray-300">No</span>
+                </label>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Is Affected</label>
+              <div class="flex items-center space-x-3">
+                <label class="flex items-center">
+                  <input type="radio" name="individuals[{{ forloop.counter0 }}][is_affected]" value="true" class="mr-2 text-blue-600" {% if item.individual.is_affected %}checked{% endif %}>
+                  <span class="text-sm text-gray-700 dark:text-gray-300">Yes</span>
+                </label>
+                <label class="flex items-center">
+                  <input type="radio" name="individuals[{{ forloop.counter0 }}][is_affected]" value="false" class="mr-2 text-blue-600" {% if not item.individual.is_affected %}checked{% endif %}>
+                  <span class="text-sm text-gray-700 dark:text-gray-300">No</span>
+                </label>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">HPO Terms</label>
+              {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='individuals['|add:forloop.counter0|add:'][hpo_term_ids]' initial=item.initial_hpo_json %}
+                {% include "lab/partials/partials.html#generic-combobox" %}
+              {% endwith %}
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                <button type="button" class="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700" @click= "addNoteRow($el.closest('.individual-form'))">
+                  <i class="fas fa-plus mr-1"></i> Add Note
+                </button>
+              </div>
+              <div class="space-y-2 note-rows" data-row-index="0">
+                {% for n in item.individual.note_set.all %}
+                <div class="note-row grid grid-cols-6 gap-2 items-center">
+                  <div class="col-span-5">
+                    <textarea name="individuals[{{ forloop.parentloop.counter0 }}][notes][{{ forloop.counter0 }}][content]" rows="2" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">{{ n.content }}</textarea>
+                  </div>
+                  <div class="col-span-1 flex justify-end">
+                    <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click= "removeNoteRow($el.closest('.note-row'))" title="Remove this note">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              <template class="note-row-template">
+                <div class="note-row grid grid-cols-6 gap-2 items-center">
+                  <div class="col-span-5">
+                    <textarea name="individuals[INDEX][notes][ROW][content]" rows="2" placeholder="Enter note content" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></textarea>
+                  </div>
+                  <div class="col-span-1 flex justify-end">
+                    <button type="button" class="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" @click= "removeNoteRow($el.closest('.note-row'))" title="Remove this note">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600 rounded-lg p-3">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white flex items-center">
+                  <i class="fa-solid fa-list-check mr-2 text-blue-600"></i>
+                  Create Task
+                </h4>
+                <label class="inline-flex items-center cursor-pointer">
+                  <input type="checkbox" name="individuals[{{ forloop.counter0 }}][create_task]" value="1" class="sr-only peer" x-model="taskEnabled">
+                  <div class="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all relative peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+              <div class="space-y-2" x-show="taskEnabled" x-cloak>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+                  <input type="text" name="individuals[{{ forloop.counter0 }}][task-title]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Task title">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                  <textarea name="individuals[{{ forloop.counter0 }}][task-description]" rows="2" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></textarea>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned To</label>
+                  <select name="individuals[{{ forloop.counter0 }}][task-assigned_to]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">--------</option>
+                    {% for u in users %}
+                      <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                  <input type="datetime-local" name="individuals[{{ forloop.counter0 }}][task-due_date]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                    <select name="individuals[{{ forloop.counter0 }}][task-priority]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                      <option value="low">Low</option>
+                      <option value="medium" selected>Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                    <select name="individuals[{{ forloop.counter0 }}][task-status]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                      <option value="">--------</option>
+                      {% for s in task_statuses %}
+                        <option value="{{ s.id }}">{{ s.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Project</label>
+                  <select name="individuals[{{ forloop.counter0 }}][task-project]" class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">--------</option>
+                    {% for p in projects %}
+                      <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  <script>
+    // Fix hidden input names for comboboxes inside prefilled forms
+    (function() {
+      try {
+        const forms = document.querySelectorAll('#individuals-container .individual-form');
+        forms.forEach(function(form) {
+          // find an index from any correctly named field
+          let idx = null;
+          const anyNamed = form.querySelector('[name^="individuals["]');
+          if (anyNamed && anyNamed.name) {
+            const m = anyNamed.name.match(/individuals\[(\d+)\]/);
+            if (m) idx = m[1];
+          }
+          if (idx === null) return;
+
+          // Fix institution (multiple combobox hidden input)
+          const instHidden = form.querySelector('input[type="hidden"][name$=\"[institution]\"], input[type="hidden"][name=\"][institution]\"]');
+          if (instHidden) {
+            instHidden.name = `individuals[${idx}][institution]`;
+          }
+
+          // Fix HPO (multiple combobox hidden input)
+          const hpoHidden = form.querySelector('input[type="hidden"][name$=\"[hpo_term_ids]\"], input[type="hidden"][name=\"][hpo_term_ids]\"]');
+          if (hpoHidden) {
+            hpoHidden.name = `individuals[${idx}][hpo_term_ids]`;
+          }
+
+          // Fix mother/father (single combobox hidden inputs)
+          const motherHidden = form.querySelector('input[type="hidden"][name$=\"[mother]\"], input[type="hidden"][name=\"][mother]\"]');
+          if (motherHidden) {
+            motherHidden.name = `individuals[${idx}][mother]`;
+            // Also fix query shadow if present
+            const motherQuery = form.querySelector('input[type="hidden"][name$=\"[mother]_query\"], input[type="hidden"][name=\"][mother]_query\"]');
+            if (motherQuery) motherQuery.name = `individuals[${idx}][mother]_query`;
+          }
+          const fatherHidden = form.querySelector('input[type="hidden"][name$=\"[father]\"], input[type="hidden"][name=\"][father]\"]');
+          if (fatherHidden) {
+            fatherHidden.name = `individuals[${idx}][father]`;
+            const fatherQuery = form.querySelector('input[type="hidden"][name$=\"[father]_query\"], input[type="hidden"][name=\"][father]_query\"]');
+            if (fatherQuery) fatherQuery.name = `individuals[${idx}][father]_query`;
+          }
+        });
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
+  {% endpartialdef %}
+  <script>
+    // Dynamic submit button label reflecting intent
+    (function() {
+      try {
+        function bind() {
+          const form = document.getElementById('family-create-form');
+          const button = document.getElementById('family-submit-btn');
+          if (!form || !button) return { refresh: () => {} };
+          function computeLabel() {
+          const famHidden = form.querySelector('input[name="family_id"]');
+          const famQuery = form.querySelector('input[name="family_id_query"]');
+          const hasTypedNewId = !!(famQuery && famQuery.value && (!famHidden || famHidden.value !== famQuery.value));
+          const existingSelected = !!(famHidden && famHidden.value && (!famQuery || famQuery.value === '' || famHidden.value === famQuery.value));
+          const individuals = Array.from(form.querySelectorAll('.individual-form'));
+          const countWithId = individuals.filter(f => f.querySelector('input[name*="[id]"]')).length;
+          const countWithoutId = Math.max(individuals.length - countWithId, 0);
+          let indivPhrase = 'Individuals';
+          if (countWithId > 0 && countWithoutId > 0) indivPhrase = 'Create & Update Individuals';
+          else if (countWithoutId > 0) indivPhrase = 'Create Individuals';
+          else if (countWithId > 0) indivPhrase = 'Update Individuals';
+          else indivPhrase = 'Individuals';
+          if (hasTypedNewId) return `Create Family & ${indivPhrase}`;
+          if (existingSelected) return `Update Family & ${indivPhrase}`;
+          return `Create Family & ${indivPhrase}`;
+          }
+          let updating = false;
+          function refresh() {
+            if (updating) return;
+            updating = true;
+            button.textContent = computeLabel();
+            requestAnimationFrame(() => { updating = false; });
+          }
+          let debounceTimer = null;
+          function scheduleRefresh() {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(refresh, 120);
+          }
+          const container = document.getElementById('individuals-container');
+          if (container) {
+            const observer = new MutationObserver(() => scheduleRefresh());
+            observer.observe(container, { childList: true });
+          }
+          form.addEventListener('input', scheduleRefresh);
+          form.addEventListener('change', scheduleRefresh);
+          // As a safety net, recompute periodically (very light work)
+          setInterval(refresh, 600);
+          refresh();
+          return { refresh };
+        }
+        // Initial bind and rebind after any HTMX swap in modal
+        let api = bind();
+        document.body.addEventListener('htmx:afterSwap', function(evt){
+          try {
+            if (evt && evt.detail && evt.detail.target && evt.detail.target.id === 'modal-root') {
+              api = bind();
+              api.refresh && api.refresh();
+            }
+          } catch(e) { /* noop */ }
+        });
+      } catch (e) { /* silent */ }
+    })();
+    // Family selection handling functions
+    function handleFamilySelection(selectElement) {
+      const newFamilyInput = document.getElementById('new_family_id');
+      if (selectElement.value) {
+        // An existing family was selected, clear the new family input
+        newFamilyInput.value = '';
+        newFamilyInput.disabled = true;
+        newFamilyInput.classList.add('opacity-50', 'cursor-not-allowed');
+      } else {
+        // No family selected, enable new family input
+        newFamilyInput.disabled = false;
+        newFamilyInput.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+    
+    function handleNewFamilyInput(inputElement) {
+      const familySelect = document.getElementById('family_id');
+      if (inputElement.value.trim()) {
+        // New family ID entered, clear the select
+        familySelect.value = '';
+        // Update the hidden input that will be submitted
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'family_id';
+        hiddenInput.value = inputElement.value.trim();
+        // Remove any existing hidden input
+        const existingHidden = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (existingHidden) {
+          existingHidden.remove();
+        }
+        // Add the new hidden input
+        inputElement.parentNode.appendChild(hiddenInput);
+      } else {
+        // Clear input, remove hidden input
+        const hiddenInput = document.querySelector('input[name="family_id"][type="hidden"]');
+        if (hiddenInput) {
+          existingHidden.remove();
+        }
+      }
+    }
+    
+    // Function to ensure form submission includes the correct family_id (single-combobox)
+    function prepareFormSubmission() {
+      const familyHidden = document.querySelector('input[name="family_id"]');
+      if (!familyHidden || !String(familyHidden.value || '').trim()) {
+        alert('Please enter or select a Family ID.');
+        return false;
+      }
+
+      // Validate that all individuals have required fields
+      const individualForms = document.querySelectorAll('.individual-form');
+      if (individualForms.length > 1) {
+        let hasMother = false;
+        let hasFather = false;
+        
+        for (let form of individualForms) {
+          const fullName = form.querySelector('input[name*="[full_name]"]')?.value || '';
+          const role = '';
+          
+          if (!fullName.trim()) {
+            alert('All individuals must have a full name.');
+            return false;
+          }
+          
+          if (!role) {
+            // role requirement removed
+            return false;
+          }
+          
+          if (role === 'mother') hasMother = true;
+          if (role === 'father') hasFather = true;
+        }
+        
+        if (!hasMother || !hasFather) {
+          alert('For families with multiple members, at least one mother and one father must be specified.');
+          return false;
+        }
+      } else {
+        // Single individual - just check required fields
+        for (let form of individualForms) {
+          const fullName = form.querySelector('input[name*="[full_name]"]')?.value || '';
+          const role = '';
+          
+          if (!fullName.trim()) {
+            alert('All individuals must have a full name.');
+            return false;
+          }
+          
+          if (!role) {
+            // role requirement removed
+            return false;
+          }
+        }
+      }
+
+      return true;
+    }
+    
+    let individualIndex = 0;
+    
+    // Form data persistence functions
+    function saveFormData() {
+      const form = document.getElementById('family-create-form');
+      if (!form) return;
+      
+      const formData = {
+        family_id: form.querySelector('input[name="family_id"]')?.value || '',
+        family_description: form.querySelector('#family_description')?.value || '',
+        individuals: []
+      };
+      
+      // Save individual form data
+      const individualForms = form.querySelectorAll('.individual-form');
+      individualForms.forEach((individualForm, index) => {
+        const individualData = {
+          full_name: individualForm.querySelector('input[name*="[full_name]"]')?.value || '',
+          tc_identity: individualForm.querySelector('input[name*="[tc_identity]"]')?.value || '',
+          birth_date: individualForm.querySelector('input[name*="[birth_date]"]')?.value || '',
+          icd11_code: individualForm.querySelector('input[name*="[icd11_code]"]')?.value || '',
+          council_date: individualForm.querySelector('input[name*="[council_date]"]')?.value || '',
+          diagnosis: individualForm.querySelector('textarea[name*="[diagnosis]"]')?.value || '',
+          diagnosis_date: individualForm.querySelector('input[name*="[diagnosis_date]"]')?.value || '',
+          institution: individualForm.querySelector('input[name*="[institution]"][type="hidden"]')?.value || '',
+          status: individualForm.querySelector('select[name*="[status]"]')?.value || '',
+          is_index: individualForm.querySelector('input[name*="[is_index]"]:checked')?.value || 'false',
+          is_affected: individualForm.querySelector('input[name*="[is_affected]"]:checked')?.value || 'false',
+
+          role: '',
+          ids: [],
+          notes: []
+        };
+        
+        // Save ID rows data
+        const idRows = individualForm.querySelectorAll('.id-row');
+        idRows.forEach(idRow => {
+          const idType = idRow.querySelector('select[name*="[type]"]')?.value || '';
+          const idValue = idRow.querySelector('input[name*="[value]"]')?.value || '';
+          if (idType && idValue) {
+            individualData.ids.push({ type: idType, value: idValue });
+          }
+        });
+        
+        // Save note rows data
+        const noteRows = individualForm.querySelectorAll('.note-row');
+        noteRows.forEach(noteRow => {
+          const noteContent = noteRow.querySelector('textarea[name*="[content]"]')?.value || '';
+          if (noteContent.trim()) {
+            individualData.notes.push({ content: noteContent });
+          }
+        });
+        
+        formData.individuals.push(individualData);
+      });
+      
+      localStorage.setItem('familyCreationFormData', JSON.stringify(formData));
+      console.log('Form data saved to localStorage:', formData);
+      showToast('Form data saved successfully!', 'success');
+    }
+    
+    function restoreFormData() {
+      const savedData = localStorage.getItem('familyCreationFormData');
+      if (!savedData) {
+        showToast('No saved data found', 'warning');
+        return;
+      }
+      
+      try {
+        const formData = JSON.parse(savedData);
+        const form = document.getElementById('family-create-form');
+        if (!form) return;
+        
+        // Restore family data
+        const familyIdField = form.querySelector('#family_id');
+        const familyDescField = form.querySelector('#family_description');
+        
+        if (familyIdField && formData.family_id) {
+          familyIdField.value = formData.family_id;
+        }
+        if (familyDescField && formData.family_description) {
+          familyDescField.value = formData.family_description;
+        }
+        
+        // Clear existing individual forms and restore saved ones
+        const container = document.getElementById('individuals-container');
+        if (container) {
+          container.innerHTML = '';
+          individualIndex = 0;
+          
+          // Restore individual forms
+          formData.individuals.forEach((individualData, index) => {
+            addIndividualForm();
+            
+            // Get the newly added form
+            const individualForms = container.querySelectorAll('.individual-form');
+            const currentForm = individualForms[index];
+            if (!currentForm) return;
+            
+            // Restore individual data
+            const fullNameField = currentForm.querySelector('input[name*="[full_name]"]');
+            const tcIdentityField = currentForm.querySelector('input[name*="[tc_identity]"]');
+            const birthDateField = currentForm.querySelector('input[name*="[birth_date]"]');
+            const icd11Field = currentForm.querySelector('input[name*="[icd11_code]"]');
+            const councilDateField = currentForm.querySelector('input[name*="[council_date]"]');
+            const diagnosisField = currentForm.querySelector('textarea[name*="[diagnosis]"]');
+            const diagnosisDateField = currentForm.querySelector('input[name*="[diagnosis_date]"]');
+            const institutionField = currentForm.querySelector('select[name*="[institution]"]');
+            const statusField = currentForm.querySelector('select[name*="[status]"]');
+            const motherField = currentForm.querySelector('select[name*="[mother]"]');
+            const fatherField = currentForm.querySelector('select[name*="[father]"]');
+            const roleField = null;
+
+            
+            // Set values
+            if (fullNameField) fullNameField.value = individualData.full_name || '';
+            if (tcIdentityField) tcIdentityField.value = individualData.tc_identity || '';
+            if (birthDateField) birthDateField.value = individualData.birth_date || '';
+            if (icd11Field) icd11Field.value = individualData.icd11_code || '';
+            if (councilDateField) councilDateField.value = individualData.council_date || '';
+            if (diagnosisField) diagnosisField.value = individualData.diagnosis || '';
+            if (diagnosisDateField) diagnosisDateField.value = individualData.diagnosis_date || '';
+            if (institutionField) institutionField.value = individualData.institution || '';
+            if (statusField) statusField.value = individualData.status || '';
+            if (motherField) motherField.value = individualData.mother || '';
+            if (fatherField) fatherField.value = individualData.father || '';
+            if (roleField) roleField.value = individualData.role || '';
+            
+            // Set radio button values
+            const isIndexRadios = currentForm.querySelectorAll('input[name*="[is_index]"]');
+            isIndexRadios.forEach(radio => {
+              radio.checked = radio.value === individualData.is_index;
+            });
+            
+            const isAffectedRadios = currentForm.querySelectorAll('input[name*="[is_affected]"]');
+            isAffectedRadios.forEach(radio => {
+              radio.checked = radio.value === individualData.is_affected;
+            });
+            
+            // Restore ID rows
+            if (individualData.ids && individualData.ids.length > 0) {
+              individualData.ids.forEach(idData => {
+                addIdRow(currentForm);
+                
+                // Get the newly added ID row
+                const idRows = currentForm.querySelectorAll('.id-row');
+                const lastIdRow = idRows[idRows.length - 1];
+                if (lastIdRow) {
+                  const typeField = lastIdRow.querySelector('select[name*="[type]"]');
+                  const valueField = lastIdRow.querySelector('input[name*="[value]"]');
+                  
+                  if (typeField) typeField.value = idData.type;
+                  if (valueField) valueField.value = idData.value;
+                }
+              });
+            }
+            
+            // Restore note rows
+            if (individualData.notes && individualData.notes.length > 0) {
+              individualData.notes.forEach(noteData => {
+                addNoteRow(currentForm);
+                
+                // Get the newly added note row
+                const noteRows = currentForm.querySelectorAll('.note-row');
+                const lastNoteRow = noteRows[noteRows.length - 1];
+                if (lastNoteRow) {
+                  const contentField = lastNoteRow.querySelector('textarea[name*="[content]"]');
+                  
+                  if (contentField) contentField.value = noteData.content;
+                }
+              });
+            }
+          });
+          
+          // Update individual index
+          individualIndex = formData.individuals.length;
+        }
+        
+        console.log('Form data restored from localStorage:', formData);
+        showToast(`Restored ${formData.individuals.length} individual(s) and family data`, 'success');
+      } catch (error) {
+        console.error('Error restoring form data:', error);
+        localStorage.removeItem('familyCreationFormData');
+        showToast('Error restoring form data', 'error');
+      }
+    }
+    
+    function clearFormData() {
+      localStorage.removeItem('familyCreationFormData');
+      console.log('Form data cleared from localStorage');
+      showToast('Form data cleared', 'info');
+    }
+    
+    function hasSavedData() {
+      return localStorage.getItem('familyCreationFormData') !== null;
+    }
+    
+    function showSavedDataIndicator() {
+      if (hasSavedData()) {
+        // Add a small indicator to the restore button
+        const restoreButton = document.querySelector('button[onclick*="restoreFormData"]');
+        if (restoreButton) {
+          restoreButton.classList.add('ring-2', 'ring-green-400', 'ring-opacity-50');
+          restoreButton.innerHTML = '<i class="fas fa-undo mr-2"></i>Restore Saved Data <span class="ml-2 px-2 py-1 text-xs bg-green-500 text-white rounded-full">Saved</span>';
+        }
+      }
+    }
+    
+    function showToast(message, type = 'info') {
+      // Create toast element
+      const toast = document.createElement('div');
+      toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 translate-x-full`;
+      
+      // Set color based on type
+      switch (type) {
+        case 'success':
+          toast.className += ' bg-green-600';
+          break;
+        case 'error':
+          toast.className += ' bg-red-600';
+          break;
+        case 'warning':
+          toast.className += ' bg-yellow-600';
+          break;
+        default:
+          toast.className += ' bg-blue-600';
+      }
+      
+      toast.innerHTML = `
+        <div class="flex items-center space-x-2">
+          <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : type === 'warning' ? 'exclamation' : 'info'}-circle"></i>
+          <span>${message}</span>
+        </div>
+      `;
+      
+      // Add to page
+      document.body.appendChild(toast);
+      
+      // Animate in
+      setTimeout(() => {
+        toast.classList.remove('translate-x-full');
+      }, 100);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => {
+          document.body.removeChild(toast);
+        }, 300);
+      }, 3000);
+    }
+    
+    function handleCloseWithConfirmation() {
+      // Check if there's any data entered
+      const form = document.getElementById('family-create-form');
+      if (!form) return;
+      
+      const familyId = form.querySelector('#family_id')?.value || '';
+      const familyDesc = form.querySelector('#family_description')?.value || '';
+      const individualForms = form.querySelectorAll('.individual-form');
+      
+      let hasData = false;
+      if (familyId.trim() || familyDesc.trim()) {
+        hasData = true;
+      } else {
+        individualForms.forEach(individualForm => {
+          const fullName = individualForm.querySelector('input[name*="[full_name]"]')?.value || '';
+          if (fullName.trim()) {
+            hasData = true;
+          }
+        });
+      }
+      
+      if (hasData) {
+        // Automatically save data and close
+        saveFormData();
+        document.getElementById('modal-root').innerHTML = '';
+        showToast('Form data saved automatically', 'success');
+      } else {
+        // No data to save, just close
+        document.getElementById('modal-root').innerHTML = '';
+      }
+    }
+    
+    function debugFormSubmission(event) {
+      console.log("=== DEBUG: Form submission started ===");
+      const form = event.target;
+      const formData = new FormData(form);
+      
+      console.log("=== DEBUG: Form data being sent ===");
+      for (let [key, value] of formData.entries()) {
+        console.log(`${key}: ${value}`);
+      }
+      console.log("=== END Form data ===");
+      
+      // Also check the DOM elements directly
+      console.log("=== DEBUG: Checking DOM elements ===");
+      const individualForms = document.querySelectorAll('.individual-form');
+      console.log(`Found ${individualForms.length} individual forms`);
+      
+      individualForms.forEach((form, index) => {
+        const fullName = form.querySelector('input[name*="[full_name]"]');
+        const institution = form.querySelector('input[name*="[institution]"][type="hidden"]');
+        const status = form.querySelector('select[name*="[status]"]');
+        const tcIdentity = form.querySelector('input[name*="[tc_identity]"]');
+        
+        console.log(`Individual ${index}:`);
+        console.log(`  Full Name: ${fullName ? fullName.value : 'NOT FOUND'}`);
+        console.log(`  Institution: ${institution ? institution.value : 'NOT FOUND'}`);
+        console.log(`  Status: ${status ? status.value : 'NOT FOUND'}`);
+        console.log(`  TC Identity: ${tcIdentity ? tcIdentity.value : 'NOT FOUND'}`);
+      });
+      console.log("=== END DOM check ===");
+      
+      // Validate required fields before submission
+      let isValid = true;
+      const errors = [];
+      
+      // Check family ID
+      const familyId = document.querySelector('input[name="family_id"]');
+      if (!familyId || !String(familyId.value || '').trim()) {
+        errors.push('Family ID is required');
+        isValid = false;
+      }
+      
+      // Check each individual form
+      individualForms.forEach((form, index) => {
+        const fullName = form.querySelector('input[name*="[full_name]"]');
+        const institution = form.querySelector('input[name*="[institution]"][type="hidden"]');
+        const status = form.querySelector('select[name*="[status]"]');
+        const tcIdentity = form.querySelector('input[name*="[tc_identity]"]');
+        
+        if (!fullName || !fullName.value.trim()) {
+          errors.push(`Individual ${index + 1}: Full name is required`);
+          isValid = false;
+        }
+        
+        if (!institution || !String(institution.value || '').trim()) {
+          errors.push(`Individual ${index + 1}: Institution is required`);
+          isValid = false;
+        }
+        
+        if (!status || !status.value) {
+          errors.push(`Individual ${index + 1}: Status is required`);
+          isValid = false;
+        }
+        
+        // Validate TC Identity if provided
+        if (tcIdentity && tcIdentity.value.trim()) {
+          const tcValue = tcIdentity.value.trim();
+          if (!/^\d{11}$/.test(tcValue)) {
+            errors.push(`Individual ${index + 1}: TC Identity must be exactly 11 digits`);
+            isValid = false;
+          }
+        }
+      });
+      
+      if (!isValid) {
+        event.preventDefault();
+        event.stopPropagation();
+        console.error("=== VALIDATION ERRORS ===");
+        errors.forEach(error => console.error(error));
+        console.error("=== END VALIDATION ERRORS ===");
+        
+        // Show error message to user
+        alert('Please fill in all required fields:\n\n' + errors.join('\n'));
+        return false;
+      }
+      
+      console.log("=== Form validation passed, proceeding with submission ===");
+    }
+    
+    function addIndividualForm() {
+      const container = document.getElementById('individuals-container');
+      const template = document.getElementById('individual-form-template');
+      const clone = template.content.cloneNode(true);
+      
+      // Update all the INDEX placeholders
+      const inputs = clone.querySelectorAll('input, select, textarea');
+      inputs.forEach(input => {
+        if (input.name) {
+          input.name = input.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+        }
+      });
+      
+      // Also update any template elements that might contain INDEX placeholders
+      const templates = clone.querySelectorAll('template');
+      templates.forEach(tmpl => {
+        const templateInputs = tmpl.content.querySelectorAll('input, select, textarea');
+        templateInputs.forEach(input => {
+          if (input.name) {
+            input.name = input.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+          }
+        });
+      });
+      
+      // Update member number
+      const memberNumber = clone.querySelector('.member-number');
+      if (memberNumber) {
+        memberNumber.textContent = individualIndex + 1;
+      }
+      
+      container.appendChild(clone);
+      // Initialize Alpine and HTMX behaviors for newly added content
+      try {
+        const lastChild = container.lastElementChild;
+        if (window.Alpine && Alpine.initTree && lastChild) {
+          Alpine.initTree(lastChild);
+        }
+        if (window.htmx && lastChild) {
+          htmx.process(lastChild);
+        }
+      } catch (e) {
+        console.warn('Init error for new individual form:', e);
+      }
+      individualIndex++;
+    }
+    
+        function addIdRow(individualFormEl) {
+          // Find the id-rows container and its template within this individual form
+          const rowsContainer = individualFormEl.querySelector('.id-rows');
+          const tmpl = individualFormEl.querySelector('template.id-row-template');
+          if (!rowsContainer || !tmpl) return;
+          const rowIndex = parseInt(rowsContainer.getAttribute('data-row-index') || '0', 10);
+
+          const fragment = tmpl.content.cloneNode(true);
+          
+          // First, find the individual index from the form's existing inputs
+          const individualIndex = individualFormEl.querySelector('input, select, textarea')?.name?.match(/individuals\[(\d+)\]/)?.[1] || '0';
+          
+          // Replace both INDEX and ROW placeholders
+          fragment.querySelectorAll('input, select').forEach(el => {
+            if (el.name) {
+              el.name = el.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+              el.name = el.name.replace(/\[ROW\]/g, `[${rowIndex}]`);
+            }
+          });
+          
+          rowsContainer.appendChild(fragment);
+          rowsContainer.setAttribute('data-row-index', String(rowIndex + 1));
+        }
+
+        function removeIdRow(rowEl) {
+          if (!rowEl) return;
+          rowEl.remove();
+        }
+
+        function addNoteRow(individualFormEl) {
+          // Find the note-rows container and its template within this individual form
+          const rowsContainer = individualFormEl.querySelector('.note-rows');
+          const tmpl = individualFormEl.querySelector('template.note-row-template');
+          if (!rowsContainer || !tmpl) return;
+          const rowIndex = parseInt(rowsContainer.getAttribute('data-row-index') || '0', 10);
+
+          const fragment = tmpl.content.cloneNode(true);
+          
+          // First, find the individual index from the form's existing inputs
+          const individualIndex = individualFormEl.querySelector('input, select, textarea')?.name?.match(/individuals\[(\d+)\]/)?.[1] || '0';
+          
+          // Replace both INDEX and ROW placeholders
+          fragment.querySelectorAll('input, textarea, select').forEach(el => {
+            if (el.name) {
+              el.name = el.name.replace(/\[INDEX\]/g, `[${individualIndex}]`);
+              el.name = el.name.replace(/\[ROW\]/g, `[${rowIndex}]`);
+            }
+          });
+          
+          rowsContainer.appendChild(fragment);
+          rowsContainer.setAttribute('data-row-index', String(rowIndex + 1));
+        }
+
+        function removeNoteRow(rowEl) {
+          if (!rowEl) return;
+          rowEl.remove();
+        }
+
+    function removeIndividualForm(formElement) {
+      const forms = document.querySelectorAll('.individual-form');
+      if (!formElement) return;
+      // Allow removing even if it's the only one
+      formElement.remove();
+      // Optionally update numbering after removal
+      const remaining = document.querySelectorAll('.individual-form .member-number');
+      remaining.forEach((el, idx) => { el.textContent = idx + 1; });
+    }
+    
+    // Add the first individual form when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+          // Only add an empty form if none exist yet (e.g., initial open or new family)
+          const container = document.getElementById('individuals-container');
+          if (container && container.children.length === 0) {
+            addIndividualForm();
+          }
+          // Restore saved form data if available
+          setTimeout(() => {
+            restoreFormData();
+            showSavedDataIndicator();
+          }, 100); // Small delay to ensure DOM is ready
+    });
+  </script>
+{% endpartialdef %}
+
+{% partialdef family-create-success %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-[80vw] w-full mx-4">
+      <div class="text-center">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
+          <i class="fas fa-check text-green-600 dark:text-green-400 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          {% if family_was_created %}
+            Family Created Successfully!
+          {% else %}
+            Family Updated Successfully!
+          {% endif %}
+        </h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
+          {% if family_was_created %}
+            Family "{{ family.family_id }}" has been created with {{ count_created }} individual{{ count_created|pluralize }}.
+          {% else %}
+            {% if count_created and count_updated %}
+              Family "{{ family.family_id }}" has new {{ count_created }} and updated {{ count_updated }} individual{{ count_created|add:count_updated|pluralize }}.
+            {% elif count_created %}
+              Family "{{ family.family_id }}" has been updated with {{ count_created }} new individual{{ count_created|pluralize }}.
+            {% elif count_updated %}
+              Family "{{ family.family_id }}" has been updated with {{ count_updated }} updated individual{{ count_updated|pluralize }}.
+            {% else %}
+              Family "{{ family.family_id }}" has no individual changes.
+            {% endif %}
+          {% endif %}
+        </p>
+        
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">
+            {% if family_was_created %}
+              Created Family:
+            {% else %}
+              Updated Family:
+            {% endif %}
+          </h4>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            <strong>ID:</strong> {{ family.family_id }}<br>
+            <strong>Description:</strong> {{ family.description|default:"No description" }}
+          </p>
+        </div>
+        
+        {% if created_individuals %}
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Created Individuals:</h4>
+          <div class="space-y-2">
+            {% for individual in created_individuals %}
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-gray-600 dark:text-gray-300">{{ individual.full_name }}</span>
+              <span class="text-gray-500 dark:text-gray-400">({{ individual.id }})</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if updated_individuals %}
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Updated Individuals:</h4>
+          <div class="space-y-2">
+            {% for individual in updated_individuals %}
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-gray-600 dark:text-gray-300">{{ individual.full_name }}</span>
+              <span class="text-gray-500 dark:text-gray-400">({{ individual.id }})</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if reassigned_individuals %}
+        <div class="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4 mb-4">
+          <h4 class="font-medium text-yellow-800 dark:text-yellow-200 mb-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Family Reassignments</h4>
+          <div class="space-y-1 text-sm text-yellow-800 dark:text-yellow-200">
+            {% for idx, individual, old_family_id in reassigned_individuals %}
+              <div>{{ individual.full_name }} ({{ individual.id }}) moved from family <strong>{{ old_family_id }}</strong> to <strong>{{ family.family_id }}</strong>.</div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        
+        <div class="flex justify-center space-x-3">
+          <button 
+            type="button" 
+            @click= "document.getElementById('modal-root').innerHTML = ''" 
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}
+
+{% partialdef family-create-error %}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self= "document.getElementById('modal-root').innerHTML = ''">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-[80vw] w-full mx-4">
+      <div class="text-center">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+          <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          Error Creating Family
+        </h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
+          {{ error }}
+        </p>
+        
+        <div class="flex justify-center space-x-3">
+          <button 
+            type="button" 
+            @click= "document.getElementById('modal-root').innerHTML = ''" 
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Close
+          </button>
+          <button 
+            type="button" 
+            @click= "document.getElementById('modal-root').innerHTML = ''; document.getElementById('modal-root').innerHTML = document.getElementById('family-create-form').innerHTML"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endpartialdef %}

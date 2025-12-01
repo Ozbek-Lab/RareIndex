@@ -28,3 +28,20 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 SECRET_KEY = "django-insecure-local-development-key-change-in-production"
 # Proper Fernet key for encrypted_model_fields (32 bytes base64 encoded)
 FIELD_ENCRYPTION_KEY = "8zAjfdUvXZcoLPvyHAYvap3YD4z3x4QFj0Y6mFODoSo="
+
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "lab.middleware.CurrentUserMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",  # For django-allauth 0.54.0+
+    "simple_history.middleware.HistoryRequestMiddleware",
+    "reversion.middleware.RevisionMiddleware",
+    "django_htmx.middleware.HtmxMiddleware",
+]

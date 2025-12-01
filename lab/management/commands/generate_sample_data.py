@@ -20,7 +20,7 @@ from lab.models import (
     Task,
     IdentifierType,
     CrossIdentifier,
-    Note  # Added Note import
+    Note
 )
 from ontologies.models import Term
 
@@ -83,7 +83,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {len(hpo_terms)} HPO terms to use")
         if not hpo_terms:
             self.stdout.write(self.style.WARNING('No HPO terms found in database!'))
-            return
+            # Continue anyway, hpo_terms will be empty
 
         # Generate families and their members
 
@@ -142,6 +142,7 @@ class Command(BaseCommand):
                 else:
                     individual_base_date = timezone.now() - timedelta(days=random.randint(1, 21))
                 self._create_tasks(individual, user, all_statuses, project, options['tasks_per_object'], individual_base_date)
+            
             for individual in [mother, father] + children:
                 self._create_samples(
                     individual,
@@ -156,24 +157,6 @@ class Command(BaseCommand):
                     all_statuses,
                     project
                 )
-
-        # Create additional projects and assign random individuals to them
-        project_names = ["Cancer Study", "Rare Disease Cohort", "Control Group"]
-        for pname in project_names:
-            project_creation_date = timezone.now() - timedelta(days=100) - timedelta(days=random.randint(30, 365))
-            proj = Project.objects.create(
-                name=pname,
-                description=f"Auto-generated project: {pname}",
-                created_by=user,
-                due_date=project_creation_date + timedelta(days=random.randint(60, 365)),
-                status=project_status,
-                priority=random.choice(["low", "medium", "high"])
-            )
-            # Assign a random subset of individuals to this project
-            num_to_add = random.randint(2, min(8, len(all_individuals)))
-            selected_inds = random.sample(all_individuals, num_to_add)
-            proj.individuals.add(*selected_inds)
-            self.stdout.write(f"Added {num_to_add} individuals to project '{pname}'")
 
         self.stdout.write(self.style.SUCCESS('Successfully generated sample data'))
 
@@ -213,222 +196,44 @@ class Command(BaseCommand):
         return all_statuses
 
     def _create_sample_types(self, user):
-        sample_type_names = ['Blood', 'Tissue', 'Saliva', 'Urine']
-        sample_types = []
-        
-        for name in sample_type_names:
-            sample_type, _ = SampleType.objects.get_or_create(
-                name=name,
-                defaults={
-                    'created_by': user
-                }
-            )
-            sample_types.append(sample_type)
-        
-        return sample_types
+        types = ['DNA', 'RNA', 'Plasma', 'Serum', 'Whole Blood']
+        created = {}
+        for t in types:
+            st, _ = SampleType.objects.get_or_create(name=t, defaults={'created_by': user})
+            created[t.lower().replace(' ', '_')] = st
+        return created
 
     def _create_test_types(self, user):
-        test_type_data = {
-            'WGS': 'Whole Genome Sequencing',
-            'WES': 'Whole Exome Sequencing',
-            'RNA-Seq': 'RNA Sequencing',
-            'Panel': 'Gene Panel Sequencing'
-        }
-        
-        test_types = []
-        for name, description in test_type_data.items():
-            test_type, _ = TestType.objects.get_or_create(
-                name=name,
-                defaults={
-                    'description': description,
-                    'created_by': user
-                }
-            )
-            test_types.append(test_type)
-        
-        return test_types
+        types = ['WGS', 'WES', 'Panel']
+        created = {}
+        for t in types:
+            tt, _ = TestType.objects.get_or_create(name=t, defaults={'created_by': user})
+            created[t.lower()] = tt
+        return created
 
     def _create_analysis_types(self, user):
-        analysis_type_data = {
-            'QC': ('Quality Control', '1.0'),
-            'Variant Calling': ('Variant Detection and Analysis', '2.1'),
-            'CNV Analysis': ('Copy Number Variation Analysis', '1.5'),
-            'RNA Expression': ('RNA Expression Analysis', '3.0')
-        }
-        
-        analysis_types = []
-        for name, (description, version) in analysis_type_data.items():
-            analysis_type, _ = AnalysisType.objects.get_or_create(
-                name=name,
-                defaults={
-                    'description': description,
-                    'version': version,
-                    'created_by': user
-                }
-            )
-            analysis_types.append(analysis_type)
-        
-        return analysis_types
+        types = ['Bioinformatics', 'Interpretation', 'Validation']
+        created = {}
+        for t in types:
+            at, _ = AnalysisType.objects.get_or_create(name=t, defaults={'created_by': user})
+            created[t.lower()] = at
+        return created
 
     def _get_or_create_institution(self, user):
-        institution, _ = Institution.objects.get_or_create(
-            name='Test Hospital',
-            defaults={
-                'created_by': user
-            }
-        )
-        return institution
+        inst, _ = Institution.objects.get_or_create(name="Rare Disease Lab", defaults={'created_by': user})
+        return inst
 
     def _create_project(self, user, status):
-        project_creation_date = timezone.now() - timedelta(days=100) - timedelta(days=random.randint(30, 365))
-        project, _ = Project.objects.get_or_create(
-            name='Sample Data Project',
+        proj, _ = Project.objects.get_or_create(
+            name="Rare Disease Pilot",
             defaults={
-                'description': 'Project created by sample data generator',
+                'description': "Pilot project for rare disease analysis",
+                'status': status,
                 'created_by': user,
-                'due_date': project_creation_date + timedelta(days=random.randint(60, 180)),
-                'status': status
+                'created_at': timezone.now()
             }
         )
-        return project
-
-    def _create_family(self, family_id, user, creation_date=None):
-        if creation_date is None:
-            creation_date = timezone.now() - timedelta(days=100)
-        family, _ = Family.objects.get_or_create(
-            family_id=family_id,
-            defaults={
-                'description': f'Test family {family_id}',
-                'created_by': user
-            }
-        )
-        return family
-
-    def _create_individual(self, role, family, user, institution, status, hpo_terms, mother=None, father=None, is_index=False, creation_date=None):
-        if creation_date is None:
-            creation_date = timezone.now() - timedelta(days=100)
-        birth_date = timezone.now() - timedelta(days=100) - timedelta(days=random.randint(365*20, 365*50))
-        individual = Individual.objects.create(
-            full_name=f"{role} {family.family_id}",
-            tc_identity=random.randint(1000000000, 9999999999),
-            birth_date=birth_date,
-            family=family,
-            mother=mother,
-            father=father,
-            created_by=user,
-            status=status,
-            institution=institution,
-            is_index=is_index
-        )
-        # Add random HPO terms (5-20 terms per individual)
-        num_terms = random.randint(5, 20)
-        selected_terms = random.sample(hpo_terms, min(num_terms, len(hpo_terms)))
-        individual.hpo_terms.add(*selected_terms)
-        # Set is_affected based on HPO terms
-        individual.is_affected = len(selected_terms) > 0
-        individual.save()
-        self.stdout.write(f"Added {len(selected_terms)} HPO terms to {individual.full_name} (is_index={is_index})")
-        return individual
-
-    def _create_tasks(self, obj, user, all_statuses, project, num_tasks, base_date=None):
-        priorities = ['low', 'medium', 'high', 'urgent']
-        if base_date is None:
-            base_date = timezone.now() - timedelta(days=100)
-        
-        for i in range(num_tasks):
-            # Tasks should be due in the future relative to the base date
-            task_due_date = base_date + timedelta(days=random.randint(7, 60))
-            task_creation_date = base_date + timedelta(days=random.randint(0, 2))
-            
-            # Randomly assign a task status (mostly pending/active, some completed)
-            status_weights = {
-                'pending': 0.4,
-                'active': 0.4,
-                'completed': 0.15,
-                'cancelled': 0.05
-            }
-            task_status = random.choices(
-                list(status_weights.keys()),
-                weights=list(status_weights.values())
-            )[0]
-            
-            task = Task.objects.create(
-                title=f'Task {i+1}',
-                description=f'Auto task {i+1}',
-                content_object=obj,
-                assigned_to=user,
-                created_by=user,
-                due_date=task_due_date,
-                priority=random.choice(priorities),
-                status=all_statuses['task'][task_status],
-                project=project
-            )
-            self._create_note(task, user, text=f"Auto note for Task {i+1}", creation_date=task_creation_date)
-
-    def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, all_statuses, project):
-        for i in range(num_samples):
-            # Start with a realistic base date for this sample (after individual creation)
-            individual_created_at = individual.get_created_at()
-            if individual_created_at:
-                base_date = individual_created_at + timedelta(days=random.randint(7, 30))
-            else:
-                base_date = timezone.now() - timedelta(days=random.randint(7, 30))
-            
-            # Sample receipt date (when sample arrives at lab)
-            sample_receipt_date = base_date
-            
-            # Sample creation date (when sample is processed/isolated) - 1-3 days after receipt
-            sample_creation_date = sample_receipt_date + timedelta(days=random.randint(1, 3))
-            
-            # Create sample with realistic creation/update dates
-            sample = Sample.objects.create(
-                individual=individual,
-                sample_type=random.choice(sample_types),
-                status=all_statuses['sample']['registered'],
-                receipt_date=sample_receipt_date,
-                isolation_by=user,
-                created_by=user
-            )
-            self._create_note(sample, user, creation_date=sample_creation_date)
-
-            # Create tasks for sample (due 1-2 weeks after sample creation)
-            self._create_tasks(sample, user, all_statuses, project, tasks_per_object, sample_creation_date)
-
-            # Create tests for sample
-            for j in range(tests_per_sample):
-                # Test performed date - 3-7 days after sample creation
-                test_performed_date = sample_creation_date + timedelta(days=random.randint(3, 7))
-                
-                test = Test.objects.create(
-                    test_type=random.choice(test_types),
-                    performed_date=test_performed_date,
-                    performed_by=user,
-                    sample=sample,
-                    created_by=user,
-                    status=all_statuses['test']['active']
-                )
-                self._create_note(test, user, creation_date=test_performed_date)
-
-                # Create tasks for test (due 1-2 weeks after test performance)
-                self._create_tasks(test, user, all_statuses, project, tasks_per_object, test_performed_date)
-
-                # Create analyses for test
-                for k in range(analyses_per_test):
-                    # Analysis performed date - 1-5 days after test performance
-                    analysis_performed_date = test_performed_date + timedelta(days=random.randint(1, 5))
-                    
-                    analysis = Analysis.objects.create(
-                        test=test,
-                        performed_date=analysis_performed_date,
-                        performed_by=user,
-                        type=random.choice(analysis_types),
-                        status=all_statuses['analysis']['active'],
-                        created_by=user
-                    )
-                    self._create_note(analysis, user, creation_date=analysis_performed_date)
-
-                    # Create tasks for analysis (due 1-2 weeks after analysis performance)
-                    self._create_tasks(analysis, user, all_statuses, project, tasks_per_object, analysis_performed_date)
+        return proj
 
     def _create_identifier_types(self, user):
         identifier_type_data = {
@@ -477,7 +282,6 @@ class Command(BaseCommand):
     def _generate_unique_family_id(self, family_number):
         """Generate a unique family ID that doesn't conflict with existing ones."""
         from lab.models import Family
-        import time
         
         # Start with the base pattern
         base_id = f"RB_2025_{family_number:02d}"
@@ -507,18 +311,173 @@ class Command(BaseCommand):
         for attempt in range(max_attempts):
             erdera_id = random.randint(1000000000, 9999999999)
             if not CrossIdentifier.objects.filter(id_type=erdera_type, id_value=str(erdera_id)).exists():
-                return erdera_id
+                return str(erdera_id)
         
-        # If we can't find a unique ID after max attempts, add a timestamp
-        return int(f"{random.randint(100000000, 999999999)}{int(time.time()) % 10000}")
+        return str(random.randint(1000000000, 9999999999))
 
     def _create_note(self, obj, user, text=None, creation_date=None):
-        """Create a note for the given object if it supports notes."""
-        if hasattr(obj, 'notes'):
-            if creation_date is None:
-                creation_date = timezone.now() - timedelta(days=100) + timedelta(days=random.randint(3, 5))
-            Note.objects.create(
+        """Create a note for a given object."""
+        # Note model does not have created_at field, it uses simple_history
+        Note.objects.create(
+            content_object=obj,
+            content=text or f"Auto-generated note for {obj}",
+            user=user
+        )
+
+    def _create_family(self, family_id, user, creation_date):
+        fam = Family.objects.create(
+            family_id=family_id,
+            created_by=user
+        )
+        return fam
+
+    def _create_individual(self, first_name, family, user, institution, status, hpo_terms, mother=None, father=None, is_index=False, creation_date=None):
+        ind = Individual.objects.create(
+            full_name=f"{first_name} {family.family_id}",
+            family=family,
+            mother=mother,
+            father=father,
+            is_index=is_index,
+            sex=random.choice(['male', 'female']),
+            birth_date=creation_date.date() - timedelta(days=random.randint(365*5, 365*50)),
+            status=status,
+            created_by=user,
+            created_at=creation_date
+        )
+        ind.institution.add(institution)
+        if hpo_terms:
+            ind.hpo_terms.add(*random.sample(hpo_terms, random.randint(1, 5)))
+        return ind
+
+    def _create_tasks(self, obj, user, all_statuses, project, num_tasks, base_date):
+        # Convert base_date to datetime if it's date
+        if hasattr(base_date, 'date'):
+            pass # it's datetime
+        else:
+            # assume it's date, convert to datetime
+            base_date = timezone.datetime.combine(base_date, timezone.datetime.min.time()).replace(tzinfo=timezone.get_current_timezone())
+
+        for i in range(num_tasks):
+            Task.objects.create(
+                title=f"Task {i+1} for {obj}",
+                description=f"Auto-generated task",
                 content_object=obj,
-                content=text or f"Auto-generated note for {obj}",
-                user=user
+                project=project,
+                status=all_statuses['task']['pending'],
+                priority=random.choice(['low', 'medium', 'high']),
+                assigned_to=user,
+                created_by=user,
+                due_date=base_date + timedelta(days=random.randint(1, 30))
+            )
+
+    def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, all_statuses, project):
+        for _ in range(num_samples):
+            sample_type = random.choice(list(sample_types.values()))
+            sample = Sample.objects.create(
+                individual=individual,
+                sample_type=sample_type,
+                status=all_statuses['sample']['active'],
+                receipt_date=timezone.now().date() - timedelta(days=random.randint(10, 100)),
+                created_by=user,
+                isolation_by=user
+            )
+            self._create_tasks(sample, user, all_statuses, project, tasks_per_object, sample.receipt_date)
+            
+            for _ in range(tests_per_sample):
+                test_type = random.choice(list(test_types.values()))
+                test = Test.objects.create(
+                    sample=sample,
+                    test_type=test_type,
+                    status=all_statuses['test']['active'],
+                    created_by=user,
+                    performed_date=sample.receipt_date + timedelta(days=random.randint(1, 10)),
+                    performed_by=user
+                )
+                self._create_tasks(test, user, all_statuses, project, tasks_per_object, test.performed_date)
+                
+                for _ in range(analyses_per_test):
+                    analysis_type = random.choice(list(analysis_types.values()))
+                    analysis = Analysis.objects.create(
+                        test=test,
+                        type=analysis_type,
+                        status=all_statuses['analysis']['active'],
+                        created_by=user,
+                        performed_date=test.performed_date + timedelta(days=random.randint(1, 5)),
+                        performed_by=user
+                    )
+                    self._create_tasks(analysis, user, all_statuses, project, tasks_per_object, analysis.performed_date)
+                    
+                    self._create_variants(individual, analysis, user, all_statuses)
+
+    def _create_variants(self, individual, analysis, user, all_statuses):
+        """Create variants for an individual's analysis"""
+        from variant.models import SNV, CNV, SV, Repeat, Classification
+        
+        # Only create variants for some analyses
+        if random.random() > 0.7:
+            return
+
+        # Specific variants list provided by user
+        specific_variants = [
+            "chr10-77984023 A>G",
+            "chr10-77982811 C>T",
+            "chr10-78009515 C>T",
+            "chr7-94053779 C>T",
+            "chr1-241959054 CAA>C",
+            "chrX-41437781 C>CCTAG",
+            "chr1-6825194 G>T",
+            "chr7-73683072 C>A",
+            "chr20-22584278 T>C",
+            "chr13-35645867 A>T",
+            "chr4-84794563 C>T",
+            "chr15-45152472 T>A",
+            "chrX-155898245 AG>C",
+            "chr8-96785174 CAA>C",
+            "chr9-841776 C>G",
+            "chr1-36091267 A>C",
+            "chr20-50892050 TTCA>T",
+            "chrX-120560586 T>C"
+        ]
+
+        # Create 1-3 variants from the list
+        num_variants = random.randint(1, 3)
+        selected_variants = random.sample(specific_variants, num_variants)
+        
+        for variant_str in selected_variants:
+            # Parse variant string: "chr10-77984023 A>G"
+            loc_part, alleles_part = variant_str.split(' ')
+            chrom_part, pos_part = loc_part.split('-')
+            ref, alt = alleles_part.split('>')
+            
+            chrom = chrom_part.replace('chr', '')
+            start = int(pos_part)
+            end = start + len(ref)
+            
+            common_args = {
+                'individual': individual,
+                'analysis': analysis,
+                'chromosome': chrom,
+                'start': start,
+                'end': end,
+                'created_by': user,
+                'zygosity': random.choice(['het', 'hom', 'het', 'het']),
+                'status': all_statuses['sample']['active']
+            }
+            
+            # Create SNV (treating all as SNV/Indel which fits SNV model)
+            variant = SNV.objects.create(
+                **common_args,
+                reference=ref,
+                alternate=alt
+            )
+            
+            # Note: Genes are linked automatically via signals
+            
+            # Add classification
+            Classification.objects.create(
+                variant=variant,
+                user=user,
+                classification=random.choice(['pathogenic', 'likely_pathogenic', 'vus', 'likely_benign', 'benign']),
+                inheritance=random.choice(['ad', 'ar', 'de_novo', 'unknown']),
+                notes="Auto-generated classification"
             )

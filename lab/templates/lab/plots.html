@@ -2,415 +2,647 @@
 {% load partials %}
 {% load lab_filters %}
 
-{% block content %}
-<div class="flex h-screen bg-gray-100 dark:bg-gray-900">
-  {% include "lab/sidebar.html" %}
-  
-  <!-- Main Content Area -->
-  <div class="flex-1 flex flex-col overflow-hidden">
-    <!-- Header -->
-    <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-      <div class="px-6 py-4">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-          <i class="fas fa-chart-line text-indigo-500 mr-3"></i>
-          Plots & Visualizations
-        </h1>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Interactive data visualizations and analytics
+{% partialdef map-content %}
+  <div class="space-y-6">
+    <!-- Map Header -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        <i class="fas fa-map-marker-alt text-indigo-500 mr-2"></i>
+        Institution Map
+      </h2>
+      <p class="text-gray-600 dark:text-gray-400">
+        Visualize the geographical distribution of institutions based on your current filters.
+      </p>
+    </div>
+
+    <!-- Map Statistics -->
+    <div class="map-stats" id="map-stats">
+      <div class="stat-card">
+        <div class="stat-value" id="institution-count">-</div>
+        <div class="stat-label">Institutions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="total-individuals">-</div>
+        <div class="stat-label">Total Individuals</div>
+      </div>
+    </div>
+
+    <!-- Map Container -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <div class="mb-4">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          Institution Distribution
+        </h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          This map shows institutions where your filtered individuals are located. 
+          The size of each marker represents the number of individuals at that institution.
         </p>
       </div>
-    </header>
-
-    <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto p-6">
-      {% partialdef plots-content %}
-        <div class="space-y-6">
-          <!-- Welcome Section -->
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              <i class="fas fa-chart-bar text-indigo-500 mr-2"></i>
-              Data Visualizations
-            </h2>
-            <!-- Quick Stats Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
-                <div class="flex items-center">
-                  <i class="fas fa-users text-2xl mr-3"></i>
-                  <div>
-                    <p class="text-sm opacity-90">Total Individuals</p>
-                    <p class="text-2xl font-bold">{{ individuals_count|default:"0" }}</p>
-                  </div>
-                </div>
-              </div>
-              <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
-                <div class="flex items-center">
-                  <i class="fas fa-vial text-2xl mr-3"></i>
-                  <div>
-                    <p class="text-sm opacity-90">Total Samples</p>
-                    <p class="text-2xl font-bold">{{ samples_count|default:"0" }}</p>
-                  </div>
-                </div>
-              </div>
-              <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
-                <div class="flex items-center">
-                  <i class="fas fa-flask-vial text-2xl mr-3"></i>
-                  <div>
-                    <p class="text-sm opacity-90">Total Tests</p>
-                    <p class="text-2xl font-bold">{{ tests_count|default:"0" }}</p>
-                  </div>
-                </div>
-              </div>
-              <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-4 text-white">
-                <div class="flex items-center">
-                  <i class="fas fa-laptop text-2xl mr-3"></i>
-                  <div>
-                    <p class="text-sm opacity-90">Total Analyses</p>
-                    <p class="text-2xl font-bold">{{ analyses_count|default:"0" }}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Interactive Pie Chart Generator -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              <i class="fas fa-chart-pie text-indigo-500 mr-2"></i>
-              Interactive Pie Chart Generator
-              </h3>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Model
-                </label>
-                <select id="model-select" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                  <option value="">Select Model</option>
-                  <option value="Individual">Individual</option>
-                  <option value="Sample">Sample</option>
-                  <option value="Test">Test</option>
-                  <option value="Analysis">Analysis</option>
-                  <option value="Project">Project</option>
-                  <option value="Task">Task</option>
-                </select>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Attribute
-                </label>
-                <select id="attribute-select" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                  <option value="">Select Attribute</option>
-                  <option value="status__name">Status</option>
-                  <option value="type__name">Type</option>
-                  <option value="institution__name">Institution</option>
-                  <option value="project__name">Project</option>
-                </select>
-            </div>
-
-              <div class="flex items-end">
-                <button 
-                  id="generate-pie-chart"
-                  class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
-                  <i class="fas fa-chart-pie mr-2"></i>
-                  Generate Chart
-                </button>
-              </div>
-            </div>
-
-            <!-- Loading Indicator -->
-            <div id="loading-indicator" class="htmx-indicator hidden">
-              <div class="flex items-center justify-center py-4">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                <span class="ml-2 text-gray-600">Generating chart...</span>
-              </div>
-            </div>
-
-            <!-- Dynamic Pie Chart Container -->  
-            <div id="dynamic-pie-chart-container" class="hidden">
-              <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <div id="dynamic-pie-chart" class="h-96"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Interactive Controls -->
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              <i class="fas fa-sliders-h text-indigo-500 mr-2"></i>
-              Chart Controls
-            </h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Date Range
-                </label>
-                <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                  <option value="7">Last 7 days</option>
-                  <option value="30" selected>Last 30 days</option>
-                  <option value="90">Last 90 days</option>
-                  <option value="365">Last year</option>
-                </select>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Chart Type
-                </label>
-                <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                  <option value="bar">Bar Chart</option>
-                  <option value="line" selected>Line Chart</option>
-                  <option value="pie">Pie Chart</option>
-                  <option value="scatter">Scatter Plot</option>
-                </select>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Data Source
-                </label>
-                <select class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                  <option value="all" selected>All Data</option>
-                  <option value="individuals">Individuals Only</option>
-                  <option value="samples">Samples Only</option>
-                  <option value="tests">Tests Only</option>
-                  <option value="analyses">Analyses Only</option>
-                </select>
-              </div>
-            </div>
-            
-            <div class="mt-4 flex space-x-3">
-              <button class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
-                <i class="fas fa-refresh mr-2"></i>
-                Refresh Charts
-              </button>
-              <button class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors">
-                <i class="fas fa-download mr-2"></i>
-                Export Data
-              </button>
-            </div>
-          </div>
+      
+      {% if error_message %}
+      <!-- Error State -->
+      <div class="map-error">
+        <div class="text-center">
+          <i class="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
+          <p>{{ error_message }}</p>
+          <button 
+            class="mt-3 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+            onclick="loadMap()"
+          >
+            <i class="fas fa-redo mr-2"></i>Retry
+          </button>
         </div>
-          <!-- Combined Distribution Plots Section -->
-          {% if distribution_plots %}
-            <div class="w-full">
-              {% for plot in distribution_plots %}
-                {% with plot_data=plot %}
-                  {% partial plot %}
-                {% endwith %}
-              {% endfor %}
-            </div>
-          {% endif %}
-
-          <!-- Dynamic Pie Chart Container (moved above generator) -->
-          <div id="dynamic-pie-chart-container" class="hidden mb-6">
-            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <div id="dynamic-pie-chart" class="h-96"></div>
-            </div>
-          </div>
-
-      {% endpartialdef %}
-
-      {% partialdef plot %}
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            <i class="fas fa-{{ plot_data.icon|default:'chart-bar' }} text-indigo-500 mr-2"></i>
-            {{ plot_data.title }}
-          </h3>
-          <div id="plot-{{ plot_data.id }}" class="h-64">
-
-            
-            <script>
-              {% if plot_data.chart_data and plot_data.chart_data.data %}
-                var plotData = {{ plot_data.chart_data|plotly_safe|safe }};
-                var plotDiv = document.getElementById('plot-{{ plot_data.id }}');
-                if (plotDiv && plotData) {
-                  // Clean up the data to remove problematic template
-                  if (plotData.layout && plotData.layout.template) {
-                    delete plotData.layout.template;
-                  }
-                  // Set textinfo to show value (count) only for all pie traces
-                  if (plotData.data) {
-                    plotData.data.forEach(function(trace) {
-                      if (trace.type === 'pie') {
-                        trace.textinfo = 'value';
-                      }
-                    });
-                  }
-                  var config = {responsive: true, displayModeBar: true};
-                  Plotly.newPlot(plotDiv, plotData.data, plotData.layout, config);
-                }
-              {% else %}
-                var plotDiv = document.getElementById('plot-{{ plot_data.id }}');
-                plotDiv.innerHTML = `
-                  <div class="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-                    <div class="text-center">
-                      <i class="fas fa-{{ plot_data.icon|default:'chart-bar' }} text-4xl mb-2"></i>
-                      <p>{{ plot_data.title }} chart will be displayed here</p>
-                    </div>
-                  </div>
-                `;
-              {% endif %}
-            </script>
-          </div>
-          
-          {# Removed stats grid below the chart #}
+      </div>
+      {% else %}
+      <!-- Map Loading State -->
+      <div class="map-loading" id="map-loading">
+        <div class="text-center">
+          <i class="fas fa-spinner fa-spin text-3xl text-indigo-500 mb-3"></i>
+          <p class="text-gray-600 dark:text-gray-400">Loading map data...</p>
         </div>
-      {% endpartialdef %}
-    </main>
+      </div>
+      
+      <!-- Map Error State -->
+      <div class="map-error hidden" id="map-error">
+        <div class="text-center">
+          <i class="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
+          <p id="error-message">Error loading map data</p>
+          <button 
+            class="mt-3 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+            onclick="loadMap()"
+          >
+            <i class="fas fa-redo mr-2"></i>Retry
+          </button>
+        </div>
+      </div>
+      
+      <!-- Map Visualization -->
+      <div class="map-container hidden" id="map-container"></div>
+      {% endif %}
+    </div>
   </div>
-</div>
 
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<script>
-  // Initialize charts when the page loads
-  document.addEventListener('DOMContentLoaded', function() {
-    console.log('Plots page loaded - initializing charts');
+  <style>
+    .map-container {
+      height: 600px;
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
     
-    // Initialize existing distribution plots
-    const plotElements = document.querySelectorAll('[id^="plot-"]');
-    plotElements.forEach(function(element) {
-      const plotId = element.id;
-      const plotData = window[plotId + '_data'];
-      if (plotData) {
-        Plotly.newPlot(plotId, plotData.data, plotData.layout, {
-          responsive: true,
-          displayModeBar: true,
-          modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
-        });
-      }
+    .map-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 600px;
+      background: #f8fafc;
+      border-radius: 8px;
+    }
+    
+    .map-error {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 600px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      color: #dc2626;
+    }
+    
+    .map-stats {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    .stat-card {
+      background: white;
+      padding: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border: 1px solid #e5e7eb;
+      min-width: 150px;
+    }
+    
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #1f2937;
+    }
+    
+    .stat-label {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+  </style>
+
+  <script>
+    // Load map data when partial loads
+    document.addEventListener('DOMContentLoaded', function() {
+      loadMap();
     });
     
-    // Interactive Pie Chart Generator
-    try {
-      console.log('Setting up pie chart generator...');
-      const generatePieChartBtn = document.getElementById('generate-pie-chart');
-      const modelSelect = document.getElementById('model-select');
-      const attributeSelect = document.getElementById('attribute-select');
-      const chartContainer = document.getElementById('dynamic-pie-chart-container');
-      const chartDiv = document.getElementById('dynamic-pie-chart');
-      
-      console.log('Button found:', generatePieChartBtn);
-      console.log('Model select found:', modelSelect);
-      console.log('Attribute select found:', attributeSelect);
-      console.log('Chart container found:', chartContainer);
-      console.log('Chart div found:', chartDiv);
-      
-      if (!generatePieChartBtn) {
-        console.error('Generate chart button not found!');
-        return;
-      }
-    
-    generatePieChartBtn.addEventListener('click', function() {
-      console.log('Generate Chart button clicked');
-      const model = modelSelect.value;
-      const attribute = attributeSelect.value;
-      
-      console.log('Selected model:', model);
-      console.log('Selected attribute:', attribute);
-      
-      if (!model || !attribute) {
-        alert('Please select both model and attribute');
-        return;
-      }
+    // Function to load map data
+    function loadMap() {
+      const loadingEl = document.getElementById('map-loading');
+      const errorEl = document.getElementById('map-error');
+      const mapContainer = document.getElementById('map-container');
+      const statsContainer = document.getElementById('map-stats');
       
       // Show loading state
-      generatePieChartBtn.disabled = true;
-      generatePieChartBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
+      loadingEl.classList.remove('hidden');
+      errorEl.classList.add('hidden');
+      mapContainer.classList.add('hidden');
+      statsContainer.classList.add('hidden');
       
-      // Make HTMX request to pie chart view
-      const url = `/pie-chart/${model}/${attribute}/`;
-      console.log('Making request to:', url);
-      
-      // Use fetch to make the request
-      fetch(url, {
-        method: 'GET',
-        headers: {
-          'HX-Request': 'true',
-          'Content-Type': 'application/json',
-        }
-      })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Failed to generate chart');
-        }
-        return response.text();
-      })
-      .then(html => {
-        // Insert the chart HTML
-        chartDiv.innerHTML = html;
-        chartContainer.classList.remove('hidden');
-        
-        // Scroll to the chart
-        chartContainer.scrollIntoView({ behavior: 'smooth' });
-        
-        // Reset button state
-        generatePieChartBtn.disabled = false;
-        generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
-      })
-      .catch(error => {
-        console.error('Error generating chart:', error);
-        alert('Error generating chart. Please try again.');
-        
-        // Reset button state
-        generatePieChartBtn.disabled = false;
-        generatePieChartBtn.innerHTML = '<i class="fas fa-chart-pie mr-2"></i>Generate Chart';
-      });
-    });
-    
-    // Dynamic attribute options based on model selection
-    modelSelect.addEventListener('change', function() {
-      const model = this.value;
-      const attributeSelect = document.getElementById('attribute-select');
-      
-      // Reset attribute selection
-      attributeSelect.innerHTML = '<option value="">Select Attribute</option>';
-      
-      if (model) {
-        // Add model-specific attributes
-        const attributes = {
-          'Individual': [
-            { value: 'status__name', label: 'Status' },
-            { value: 'institution__name', label: 'Institution' },
-            { value: 'project__name', label: 'Project' }
-          ],
-          'Sample': [
-            { value: 'status__name', label: 'Status' },
-            { value: 'type__name', label: 'Type' },
-            { value: 'individual__institution__name', label: 'Institution' }
-          ],
-          'Test': [
-            { value: 'status__name', label: 'Status' },
-            { value: 'type__name', label: 'Type' },
-            { value: 'sample__individual__institution__name', label: 'Institution' }
-          ],
-          'Analysis': [
-            { value: 'status__name', label: 'Status' },
-            { value: 'type__name', label: 'Type' },
-            { value: 'test__sample__individual__institution__name', label: 'Institution' }
-          ],
-          'Project': [
-            { value: 'status__name', label: 'Status' },
-            { value: 'institution__name', label: 'Institution' }
-          ],
-          'Task': [
-            { value: 'status__name', label: 'Status' },
-            { value: 'content_type__model', label: 'Related Model' }
-          ]
-        };
-        
-        const modelAttributes = attributes[model] || [];
-        modelAttributes.forEach(attr => {
-          const option = document.createElement('option');
-          option.value = attr.value;
-          option.textContent = attr.label;
-          attributeSelect.appendChild(option);
+      // Fetch map data
+      fetch('{% url "lab:map" %}')
+        .then(response => response.json())
+        .then(data => {
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          
+          // Hide loading, show map
+          loadingEl.classList.add('hidden');
+          mapContainer.classList.remove('hidden');
+          statsContainer.classList.remove('hidden');
+          
+          // Update statistics
+          document.getElementById('institution-count').textContent = data.institution_count;
+          document.getElementById('total-individuals').textContent = data.total_individuals;
+          
+          // Render the map
+          const chartData = JSON.parse(data.chart_json);
+          Plotly.newPlot('map-container', chartData.data, chartData.layout, {
+            responsive: true,
+            displayModeBar: true,
+            modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+          });
+        })
+        .catch(error => {
+          console.error('Error loading map:', error);
+          
+          // Hide loading, show error
+          loadingEl.classList.add('hidden');
+          errorEl.classList.remove('hidden');
+          document.getElementById('error-message').textContent = error.message || 'Failed to load map data';
         });
+    }
+    
+    // Listen for filter updates to refresh map
+    document.addEventListener('htmx:afterRequest', function(event) {
+      if (event.detail.xhr.getResponseHeader('HX-Trigger') && 
+          event.detail.xhr.getResponseHeader('HX-Trigger').includes('filters-updated')) {
+        loadMap();
       }
     });
-    } catch (error) {
-      console.error('Error setting up pie chart generator:', error);
-    }
-  });
-</script>
-{% endblock content %} 
+  </script>
+{% endpartialdef %}
+
+{% partialdef sankey-diagram %}
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <h1 class="text-2xl font-bold text-gray-900">Sankey Diagram</h1>
+    </div>
+
+    {% if error %}
+      <div class="bg-red-100 p-4 rounded-lg text-red-800">
+        <h3 class="font-medium">Error generating visualization:</h3>
+        <p>{{ error }}</p>
+      </div>
+    {% else %}
+      <!-- Controls -->
+      <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <form method="get" class="flex flex-col space-y-4">
+          <div class="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              name="indexes_only"
+              id="indexes_only"
+              value="1"
+              {% if sankey_metrics.indexes_only %}checked{% endif %}
+              class="rounded border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              onchange="this.form.submit()"
+            >
+            <label for="indexes_only" class="block text-sm font-medium text-gray-700">Indexes only</label>
+          </div>
+          <div class="flex items-center space-x-2">
+            <select
+              name="institution"
+              id="institution"
+              class="rounded border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              onchange="this.form.submit()"
+            >
+              <option value="">All Institutions</option>
+              {% for inst in institutions %}
+                <option value="{{ inst.id }}" {% if sankey_metrics.institution == inst.id %}selected{% endif %}>{{ inst.name }}</option>
+              {% endfor %}
+            </select>
+            <label for="institution" class="block text-sm font-medium text-gray-700">Institution</label>
+          </div>
+
+          <!-- Advanced Filters -->
+          <div class="mt-4 border-t pt-4">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-md font-semibold">Advanced Filters</h3>
+              <button type="button" class="text-indigo-600 text-sm font-medium focus:outline-none" onclick="document.getElementById('advanced-filters-panel').classList.toggle('hidden')">
+                <span id="advanced-filters-toggle-label">{% if filters_active %}Hide{% else %}Show{% endif %} Filters</span>
+              </button>
+            </div>
+            <div id="advanced-filters-panel" class="{% if not filters_active %}hidden{% endif %}">
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Test Types -->
+                <div>
+                  <div class="font-medium mb-1">Test Types</div>
+                  {% for tt in test_types %}
+                    <div class="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        name="test_types"
+                        id="test_type_{{ tt.id }}"
+                        value="{{ tt.id }}"
+                        {% if tt.id in sankey_metrics.test_types %}checked{% endif %}
+                        onchange="this.form.submit()"
+                      >
+                      <label for="test_type_{{ tt.id }}" class="text-sm">{{ tt.name }}</label>
+                    </div>
+                  {% endfor %}
+                </div>
+                <!-- Analysis Types -->
+                <div>
+                  <div class="font-medium mb-1">Analysis Types</div>
+                  {% for at in analysis_types %}
+                    <div class="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        name="analysis_types"
+                        id="analysis_type_{{ at.id }}"
+                        value="{{ at.id }}"
+                        {% if at.id in sankey_metrics.analysis_types %}checked{% endif %}
+                        onchange="this.form.submit()"
+                      >
+                      <label for="analysis_type_{{ at.id }}" class="text-sm">{{ at.name }}</label>
+                    </div>
+                  {% endfor %}
+                </div>
+                <!-- Sample Types -->
+                <div>
+                  <div class="font-medium mb-1">Sample Types</div>
+                  {% for st in sample_types %}
+                    <div class="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        name="sample_types"
+                        id="sample_type_{{ st.id }}"
+                        value="{{ st.id }}"
+                        {% if st.id in sankey_metrics.sample_types %}checked{% endif %}
+                        onchange="this.form.submit()"
+                      >
+                      <label for="sample_type_{{ st.id }}" class="text-sm">{{ st.name }}</label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Visualization -->
+      <div class="bg-white shadow rounded-lg p-4 overflow-hidden">
+        <div id="plotly-div" style="width: 100%; height: 800px;"></div>
+      </div>
+
+      <!-- Plotly JS -->
+      <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+      <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          var plotJson = JSON.parse('{{ plot_json|escapejs }}');
+          Plotly.newPlot('plotly-div', plotJson.data, plotJson.layout);
+        });
+      </script>
+    {% endif %}
+  </div>
+{% endpartialdef sankey-diagram %}
+
+{% partialdef hpo-network-visualization-section %}
+  <div id="hpo-section-wrapper">
+    <div class="relative min-h-[30rem]">
+
+      <div
+        id="hpo-visualization-container"
+        class="transition bg-white dark:bg-gray-800 shadow rounded-lg p-4"
+        :class="{ 'opacity-50 blur-sm': isLoading }"
+        @htmx:before-request= "isLoading = true"
+        @htmx:after-request= "isLoading = false"
+        hx-get="{% url 'lab:hpo_network_visualization' %}"
+        hx-trigger="load, filters-updated from:window"
+        hx-swap="innerHTML"
+        :hx-vals="getHpoVals()"
+      >
+        {% with text="Initializing visualization..." %}
+          {% include "lab/partials/indicator.html#indicator" %}
+        {% endwith %}
+      </div>
+
+      <div
+        x-show="isLoading"
+        x-transition
+        class="absolute inset-0 bg-gray-400/20 dark:bg-gray-700/40 flex items-center justify-center rounded-md z-10"
+        style="display: none;"
+      >
+        <div class="text-center text-gray-600 dark:text-gray-300">
+          <p class="mb-4">Updating visualization...</p>
+          <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
+        </div>
+      </div>
+
+    </div>
+  </div>
+{% endpartialdef hpo-network-visualization-section %}
+
+{% partialdef plot %}
+  {% include "lab/partials/plot_item.html" %}
+{% endpartialdef plot %}
+
+{% partialdef plots-section %}
+  <div class="space-y-6">
+    <!-- Quick Stats Cards -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <div id="stats-cards-loading" class="hidden text-center py-4"><span class="animate-spin inline-block w-6 h-6 border-4 border-blue-400 border-t-transparent rounded-full"></span> Loading stats...</div>
+      <div id="stats-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
+        <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
+          <div class="flex items-center">
+            <i class="fas fa-users text-2xl mr-3"></i>
+            <div>
+              <p class="text-sm opacity-90">Total Individuals</p>
+              <p class="text-2xl font-bold" id="stat-individuals">{{ individuals_count|default:"0" }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
+          <div class="flex items-center">
+            <i class="fas fa-vial text-2xl mr-3"></i>
+            <div>
+              <p class="text-sm opacity-90">Total Samples</p>
+              <p class="text-2xl font-bold" id="stat-samples">{{ samples_count|default:"0" }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
+          <div class="flex items-center">
+            <i class="fas fa-flask-vial text-2xl mr-3"></i>
+            <div>
+              <p class="text-sm opacity-90">Total Tests</p>
+              <p class="text-2xl font-bold" id="stat-tests">{{ tests_count|default:"0" }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-4 text-white">
+          <div class="flex items-center">
+            <i class="fas fa-laptop text-2xl mr-3"></i>
+            <div>
+              <p class="text-sm opacity-90">Total Analyses</p>
+              <p class="text-2xl font-bold" id="stat-analyses">{{ analyses_count|default:"0" }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Distribution Plots -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-y-auto">
+      {% for plot_data in distribution_plots %}
+        {% partial plot %}
+      {% endfor %}
+    </div>
+
+  </div>
+{% endpartialdef plots-section %}
+
+{% partialdef hpo-network-visualization %}
+  <div class="col-span-10 space-y-4">
+    {% if error %}
+      <div class="bg-red-100 dark:bg-red-900 p-4 rounded-lg text-red-800 dark:text-red-200">
+        <b>Error:</b> {{ error }}
+      </div>
+    {% else %}
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div class="lg:col-span-12">
+          <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4 relative">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-md font-semibold text-gray-900 dark:text-gray-100">HPO Network</h3>
+              <div class="flex items-center space-x-2">
+                <div class="inline-flex rounded-md shadow-sm" role="group">
+                <button type="button" id="btn-layout-circular" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-l-md hover:bg-gray-50 dark:hover:bg-gray-600">Circular</button>
+                <button type="button" id="btn-layout-layered" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-r-md hover:bg-gray-50 dark:hover:bg-gray-600">Layered</button>
+                </div>
+                <div class="inline-flex rounded-md shadow-sm" role="group">
+                  <button type="button" id="btn-theme-icefire" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-l-md hover:bg-gray-50 dark:hover:bg-gray-600">Icefire</button>
+                  <button type="button" id="btn-theme-rainbow" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-r-md hover:bg-gray-50 dark:hover:bg-gray-600">Rainbow</button>
+                </div>
+                <div class="inline-flex rounded-md shadow-sm" role="group">
+                  <button type="button" id="btn-export-png" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-l-md hover:bg-gray-50 dark:hover:bg-gray-600">
+                    <i class="fas fa-file-image mr-1"></i> PNG
+                  </button>
+                  <button type="button" id="btn-export-svg" class="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-r-md hover:bg-gray-50 dark:hover:bg-gray-600">
+                    <i class="fas fa-file-code mr-1"></i> SVG
+                  </button>
+                </div>
+                <!-- Threshold control -->
+                <div class="flex items-center space-x-2">
+                  <label for="threshold" class="text-sm font-medium text-gray-700 dark:text-gray-300">Threshold</label>
+                  <input
+                    type="number"
+                    id="threshold"
+                    name="threshold"
+                    placeholder="{{ threshold }}"
+                    x-model.debounce.500ms="hpoThreshold"
+                    x-ref="hpoThresholdInput"
+                    min="1"
+                    max="24"
+                    class="block w-24 rounded-md border-gray-300 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
+                  />
+                </div>
+              </div>
+              </div>
+            </div>
+            <div
+              id="hpo-cytoscape"
+              style="width: 100%; height: 800px;"
+              class="mt-4"
+            ></div>
+            <!-- Legend -->
+            <div id="hpo-legend" class="hidden md:flex flex-col items-center absolute right-2 top-14 bg-white/80 dark:bg-gray-800/80 rounded p-2 border border-gray-200 dark:border-gray-700 shadow-sm">
+              <div class="text-xs text-gray-700 dark:text-gray-200 mb-1">Count</div>
+              <div id="hpo-legend-bar" style="width: 14px; height: 180px; border-radius: 4px;"></div>
+              <div class="flex w-full justify-between text-[10px] text-gray-700 dark:text-gray-200 mt-1">
+                <span id="hpo-legend-min">0</span>
+                <span id="hpo-legend-max">100</span>
+              </div>
+            </div>
+            <p class="text-sm text-gray-900 dark:text-gray-100">
+              Plotting <span class="font-bold">{{ term_count }}</span> terms for
+              <span class="font-bold">{{ individual_count }} individuals</span>.
+            </p>
+          </div>
+        </div>
+      </div>
+      {# prettier-ignore-start #}
+      <script>
+        (function(){
+          try {
+            var elements = JSON.parse('{{ elements_json|escapejs }}');
+            var container = document.getElementById('hpo-cytoscape');
+            if (container && window.cytoscape) {
+              // Compute max count for color/size scales
+              var maxCount = 1;
+              for (var i = 0; i < elements.length; i++) {
+                var el = elements[i];
+                if (el && el.data && typeof el.data.count === 'number') {
+                  if (el.data.count > maxCount) maxCount = el.data.count;
+                }
+              }
+
+              var cy = cytoscape({
+                container: container,
+                elements: elements,
+                layout: { name: 'preset' },
+                style: [
+                  { selector: 'node', style: { 'label': 'data(label)', 'font-size': 10, 'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': 100, 'width': 'mapData(count, 0, ' + maxCount + ', 8, 48)', 'height': 'mapData(count, 0, ' + maxCount + ', 8, 48)', 'background-color': 'data(color)', 'color': '#111827' } },
+                  { selector: 'edge', style: { 'curve-style': 'bezier', 'width': 1, 'line-color': '#9CA3AF', 'opacity': 0.7 } }
+                ]
+              });
+              // Palettes and color helpers
+              var palettes = {
+                icefire: ['#000004','#090720','#140b3d','#1f0a52','#2a0a5f','#350a68','#410a6c','#4c0b6b','#570d69','#611368','#6a1a6b','#74206e','#7f2773','#8b2d78','#97357b','#a23d7b','#ad4577','#b74e70','#c15768','#c9615e','#d06c54','#d57849','#d9843f','#dd9036','#e09b2e','#e3a828','#e6b523','#e8c220','#ebd01f','#efdd22','#f3ea2a','#f8f338','#fcf951'],
+                rainbow: ['#9400D3','#4B0082','#0000FF','#00FFFF','#00FF00','#FFFF00','#FF7F00','#FF0000']
+              };
+              function lerpColor(c1, c2, t){
+                function h2i(h){return parseInt(h,16);} function i2h(i){var s=i.toString(16);return s.length===1?'0'+s:s;}
+                var r=h2i(c1.substr(1,2)), g=h2i(c1.substr(3,2)), b=h2i(c1.substr(5,2));
+                var r2=h2i(c2.substr(1,2)), g2=h2i(c2.substr(3,2)), b2=h2i(c2.substr(5,2));
+                var rn=Math.round(r+(r2-r)*t), gn=Math.round(g+(g2-g)*t), bn=Math.round(b+(b2-b)*t);
+                return '#' + i2h(rn) + i2h(gn) + i2h(bn);
+              }
+              function interpPalette(palette, t){
+                if (t<=0) return palette[0]; if (t>=1) return palette[palette.length-1];
+                var pos = t*(palette.length-1); var i=Math.floor(pos); var f=pos-i;
+                return lerpColor(palette[i], palette[i+1], f);
+              }
+              var activePalette = palettes.icefire;
+              function recolorNodes(){
+                cy.nodes().forEach(function(n){ var c = n.data('count')||0; var t = maxCount>0 ? (c/maxCount) : 0; n.data('color', interpPalette(activePalette, t)); });
+                cy.style().selector('node').style('background-color','data(color)').update();
+                var grad = 'linear-gradient(to top, ' + activePalette.slice().reverse().join(',') + ')';
+                var bar = document.getElementById('hpo-legend-bar'); if (bar) { bar.style.background = grad; }
+                var minL = document.getElementById('hpo-legend-min'); if (minL) { minL.textContent = '0'; }
+                var maxL = document.getElementById('hpo-legend-max'); if (maxL) { maxL.textContent = String(maxCount); }
+                var legend = document.getElementById('hpo-legend'); if (legend) { legend.classList.remove('hidden'); }
+              }
+              // Custom radial tree layout (root-centered, children branch outward in same direction)
+              function radialTreeLayout(options){
+                var rootId = 'HP:0000118';
+                var rStep = (options && options.rStep) || 80;
+                var fullSweep = Math.PI * 2;
+                // Build children map (edges are child -> parent in data), invert to parent -> [children]
+                var children = {};
+                cy.nodes().forEach(function(n){ children[n.id()] = []; });
+                cy.edges().forEach(function(e){ var s=e.data('source'), t=e.data('target'); if (children[t]) { children[t].push(s); } });
+                // Compute subtree sizes
+                var subtreeSize = {};
+                function dfsSize(node){
+                  var kids = children[node] || [];
+                  var size = 1;
+                  for (var i=0;i<kids.length;i++){ size += dfsSize(kids[i]); }
+                  subtreeSize[node] = size; return size;
+                }
+                dfsSize(rootId);
+                // Assign angles (sector) and positions
+                var positions = {};
+                function assign(node, depth, startA, endA){
+                  var mid = (startA + endA) / 2;
+                  positions[node] = { x: Math.cos(mid) * depth * rStep, y: Math.sin(mid) * depth * rStep };
+                  var kids = children[node] || [];
+                  if (!kids.length) return;
+                  var total = 0; for (var i=0;i<kids.length;i++){ total += (subtreeSize[kids[i]] || 1); }
+                  var cursor = startA;
+                  for (var i=0;i<kids.length;i++){
+                    var frac = (subtreeSize[kids[i]] || 1) / total;
+                    var span = frac * (endA - startA);
+                    var nextStart = cursor;
+                    var nextEnd = cursor + span;
+                    assign(kids[i], depth + 1, nextStart, nextEnd);
+                    cursor = nextEnd;
+                  }
+                }
+                assign(rootId, 0, -Math.PI, Math.PI);
+                // Apply positions with preset layout
+                cy.layout({ name: 'preset', positions: function(n){ var p = positions[n.id()]; return p ? p : n.position(); }, animate: !!(options && options.animate), fit: false }).run();
+              }
+              // Initial radial layout
+              radialTreeLayout({ animate: false });
+              recolorNodes();
+              cy.fit(undefined, 20);
+
+              // Layout switchers
+              function runLayout(name){
+                if (name === 'breadthfirst') {
+                  var opts = { name: 'breadthfirst', directed: false, roots: '[id = "HP:0000118"]', spacingFactor: 0.7, padding: 10, animate: true, nodeDimensionsIncludeLabels: false, avoidOverlap: true, fit: false };
+                  cy.layout(opts).run();
+                } else {
+                  radialTreeLayout({ animate: true });
+                }
+                cy.fit(undefined, 20);
+              }
+
+              var btnCircular = document.getElementById('btn-layout-circular');
+              var btnLayered = document.getElementById('btn-layout-layered');
+              if (btnCircular) btnCircular.addEventListener('click', function(){ runLayout('concentric'); });
+              if (btnLayered) btnLayered.addEventListener('click', function(){ runLayout('breadthfirst'); });
+
+              // Export handlers
+              function download(filename, content, mime) {
+                var a = document.createElement('a');
+                a.href = mime ? 'data:' + mime + ';charset=utf-8,' + encodeURIComponent(content) : content;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              }
+              var btnPng = document.getElementById('btn-export-png');
+              if (btnPng) btnPng.addEventListener('click', function(){
+                try {
+                  var png = cy.png({ full: true, scale: 2, bg: 'white' });
+                  // cy.png returns data URL
+                  download('hpo-network.png', png, null);
+                } catch(e) { console.error('PNG export failed', e); }
+              });
+              var btnSvg = document.getElementById('btn-export-svg');
+              if (btnSvg) btnSvg.addEventListener('click', function(){
+                try {
+                  if (typeof cy.svg !== 'function') { console.warn('cytoscape-svg not available'); return; }
+                  var svg = cy.svg({ full: true, scale: 1, bg: 'white' });
+                  download('hpo-network.svg', svg, 'image/svg+xml');
+                } catch(e) { console.error('SVG export failed', e); }
+              });
+
+              // Theme switchers
+              var btnIce = document.getElementById('btn-theme-icefire');
+              var btnRain = document.getElementById('btn-theme-rainbow');
+              if (btnIce) btnIce.addEventListener('click', function(){ activePalette = palettes.icefire; recolorNodes(); });
+              if (btnRain) btnRain.addEventListener('click', function(){ activePalette = palettes.rainbow; recolorNodes(); });
+            }
+          } catch (e) { console.error('Cytoscape init error', e); }
+        })();
+      </script>
+      {# prettier-ignore-end #}
+    {% endif %}
+  </div>
+{% endpartialdef hpo-network-visualization %}
