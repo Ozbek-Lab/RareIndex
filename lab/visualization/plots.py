@@ -223,7 +223,7 @@ def plots_page(request):
 
         def create_pie_chart(items, label_key, colors_map=None, fixed_colors=None):
             if not items:
-                return None
+                return {'empty': True}
             labels = [item[label_key] if item[label_key] is not None else 'Unknown' for item in items]
             values = [item['count'] for item in items]
             
@@ -245,7 +245,11 @@ def plots_page(request):
             fig.update_layout(height=450, showlegend=True, margin=dict(l=20, r=20, t=40, b=20))
             return fig.to_dict()
 
-        if target_chart_id == 'sample-status':
+        if target_chart_id == 'individual-status':
+            counts = individuals_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+            chart_data = create_pie_chart(counts, 'status__name', colors_map=status_colors)
+
+        elif target_chart_id == 'sample-status':
             counts = samples_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
             chart_data = create_pie_chart(counts, 'status__name', colors_map=status_colors)
             
@@ -486,6 +490,7 @@ def plots_page(request):
 
     # Define all available plots with their metadata
     distribution_plots = [
+        {'id': 'individual-status', 'title': 'Individual Status', 'icon': 'chart-pie'},
         {'id': 'sample-status', 'title': 'Sample Status', 'icon': 'chart-pie'},
         {'id': 'test-status', 'title': 'Test Status', 'icon': 'chart-pie'},
         {'id': 'analysis-status', 'title': 'Analysis Status', 'icon': 'chart-pie'},

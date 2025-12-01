@@ -193,12 +193,40 @@ def task_reopen(request, pk):
 
 @login_required
 def index(request):
+    def get_initial_json(model_class, param_name):
+        val = request.GET.get(param_name)
+        if not val:
+            return "[]"
+        ids = []
+        if val.startswith("[") and val.endswith("]"):
+            try:
+                ids = json.loads(val)
+            except:
+                pass
+        elif "," in val:
+            try:
+                ids = [int(x) for x in val.split(",") if x.strip().isdigit()]
+            except:
+                pass
+        elif val.isdigit():
+            ids = [int(val)]
+        
+        if not ids:
+            return "[]"
+            
+        objs = model_class.objects.filter(pk__in=ids)
+        return json.dumps([{"value": obj.pk, "label": str(obj)} for obj in objs])
+
     context = {
         "institutions": Institution.objects.all(),
         "individual_statuses": Status.objects.filter(
             Q(content_type=ContentType.objects.get_for_model(Individual))
             | Q(content_type__isnull=True)
         ).order_by("name"),
+        "initial_projects": get_initial_json(Project, "filter_project"),
+        "initial_tests": get_initial_json(Test, "filter_test"),
+        "initial_analyses": get_initial_json(Analysis, "filter_analysis"),
+        "initial_institutions": get_initial_json(Institution, "filter_institution"),
     }
     print("index 00")
 

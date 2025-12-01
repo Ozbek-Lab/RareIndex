@@ -59,8 +59,9 @@
         <div>
           <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
           </h6>
-          {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
-            {% include "lab/partials/partials.html#generic-search" %}
+          {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' name='test' value_field='id' initial=initial_tests %}
+            {% include "lab/partials/partials.html#generic-combobox" %}
+            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-test from:window, filters-updated from:window, filters-updated-test from:window" hx-target="#page-test-results" :hx-vals="getHxVals('lab', 'Test', 1, viewMode)"></div>
           {% endwith %}
           {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' %}
             {% include "lab/partials/partials.html#generic-type-filter" %}
@@ -73,8 +74,9 @@
         <div>
           <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
           </h6>
-          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
-            {% include "lab/partials/partials.html#generic-search" %}
+          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' name='analysis' value_field='id' initial=initial_analyses %}
+            {% include "lab/partials/partials.html#generic-combobox" %}
+            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-analysis from:window, filters-updated from:window, filters-updated-analysis from:window" hx-target="#page-analysis-results" :hx-vals="getHxVals('lab', 'Analysis', 1, viewMode)"></div>
           {% endwith %}
           {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
             {% include "lab/partials/partials.html#generic-type-filter" %}
@@ -96,7 +98,7 @@
           {% with app_label='variant' model_name='Variant' %}
             {% include "lab/partials/partials.html#generic-status-filter" %}
           {% endwith %}
-          {% with app_label='variant' model_name='Gene' icon_class='fa-dna' name='Gene' %}
+          {% with app_label='variant' model_name='Gene' icon_class='fa-dna' name='Gene' value_field='id' %}
             {% include "lab/partials/partials.html#generic-combobox" %}
           {% endwith %}
         </div>
@@ -104,16 +106,18 @@
         <div>
           <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
           </h6>
-          {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' %}
-            {% include "lab/partials/partials.html#generic-search" %}
+          {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' name='institution' value_field='id' initial=initial_institutions %}
+            {% include "lab/partials/partials.html#generic-combobox" %}
+            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-institution from:window, filters-updated from:window, filters-updated-institution from:window" hx-target="#page-institution-results" :hx-vals="getHxVals('lab', 'Institution', 1, viewMode)"></div>
           {% endwith %}
         </div>
         <!-- Projects -->
         <div>
           <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
           </h6>
-          {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' %}
-            {% include "lab/partials/partials.html#generic-search" %}
+          {% with app_label='lab' model_name='Project' icon_class='fa-diagram-project' name='project' value_field='id' initial=initial_projects %}
+            {% include "lab/partials/partials.html#generic-combobox" %}
+            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-project from:window, filters-updated from:window, filters-updated-project from:window" hx-target="#page-project-results" :hx-vals="getHxVals('lab', 'Project', 1, viewMode)"></div>
           {% endwith %}
           {% with app_label='lab' model_name='Project' %}
             {% include "lab/partials/partials.html#generic-status-filter" %}

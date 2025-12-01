@@ -465,7 +465,11 @@
         for (const key in this.filters) {
           if (this.filters[key]) {
             if (key === modelName.toLowerCase()) {
-              vals['search'] = this.filters[key];
+              if (Array.isArray(this.filters[key])) {
+                vals['search'] = this.filters[key].join(',');
+              } else {
+                vals['search'] = this.filters[key];
+              }
             } else {
               // Handle all array values as comma-separated values
               if (Array.isArray(this.filters[key])) {
@@ -612,13 +616,17 @@
       toggleStatus(statusPk, modelName) {
         const statusKey = `${modelName}_status`;
         this.toggleTriState(statusPk, statusKey);
-        this.dispatchFiltersUpdated(modelName);
+        this.$nextTick(() => {
+          this.dispatchFiltersUpdated(modelName);
+        });
       },
       toggleType(typePk, filterField) {
         this.toggleTriState(typePk, filterField);
         // Extract model name from filter field (e.g. individual_type -> individual)
         const modelName = filterField.split('_')[0];
-        this.dispatchFiltersUpdated(modelName);
+        this.$nextTick(() => {
+          this.dispatchFiltersUpdated(modelName);
+        });
       },
       getFilterState(rawValue, includeKey) {
         const value = String(rawValue);
@@ -647,7 +655,9 @@
         const statusKey = `${modelName}_status`;
         delete this.filters[statusKey];
         delete this.filters[`${statusKey}_exclude`];
-        this.dispatchFiltersUpdated(modelName);
+        this.$nextTick(() => {
+          this.dispatchFiltersUpdated(modelName);
+        });
       },
 
       // Event-scoped dispatch helper

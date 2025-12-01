@@ -114,7 +114,7 @@
 {% endpartialdef type-buttons %}
 
 {% partialdef generic-combobox %}
-<div class="relative w-full" x-data="comboboxController('{{ app_label|default:'lab' }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:'[]'|escapejs }}')" @click.outside="open=false" x-init="$watch('hiddenInputValue', (val) => { filters[hiddenInputName] = JSON.parse(val); })">
+<div class="relative w-full" x-data="comboboxController('{{ app_label|default:'lab' }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:'[]'|escapejs }}')" @click.outside="open=false" x-init="$watch('hiddenInputValue', (val) => { filters[hiddenInputName] = JSON.parse(val); window.dispatchEvent(new CustomEvent('filters-updated')); })">
   <div class="flex items-stretch">
     <div class="flex items-center justify-center w-10">
       <i class="fa-solid {{ icon_class|default:'fa-magnifying-glass' }} text-gray-400 dark:text-gray-300"></i>
