@@ -376,6 +376,13 @@
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'variants' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'variants'"
+          >
+            Variants ({{ item.variants.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click= "activeTab = 'tasks'"
           >
@@ -616,6 +623,25 @@
               No analyses available for this sample.
             </div>
           {% endif %}
+        </div>
+
+        <!-- Variants tab -->
+        <div x-show="activeTab === 'variants'" x-cloak class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Found Variants</h3>
+          </div>
+          
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+             <div class="contents">
+                {% for variant in item.variants.all %}
+                  {% with item=variant %}
+                    {% include "variant/variant.html#compact-card" %}
+                  {% endwith %}
+                {% empty %}
+                  <p class="text-gray-500 dark:text-gray-400 col-span-full text-center py-4">No variants found.</p>
+                {% endfor %}
+             </div>
+          </div>
         </div>
 
         <!-- Tasks tab -->

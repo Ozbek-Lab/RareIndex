@@ -70,20 +70,29 @@ class Command(BaseCommand):
         if not name:
             return admin_user
             
-        # Try to find user by name
-        user = User.objects.filter(username__icontains=name).first()
+        # Normalize name to create username
+        username = name.lower().replace(' ', '_')
+        
+        # Try to find user by username
+        user = User.objects.filter(username=username).first()
         if user:
             return user
             
         # Create new user if not found
-        username = name.lower().replace(' ', '_')
-        user = User.objects.create_user(
-            username=username,
-            email=f'{username}@example.com',
-            password='changeme123',
-            first_name=name.split()[0] if ' ' in name else name,
-            last_name=name.split()[1] if ' ' in name else ''
-        )
+        try:
+            user = User.objects.create_user(
+                username=username,
+                email=f'{username}@example.com',
+                password='changeme123',
+                first_name=name.split()[0] if ' ' in name else name,
+                last_name=name.split()[1] if ' ' in name else ''
+            )
+        except Exception:
+            # If creation fails (e.g. race condition), try to fetch again
+            user = User.objects.filter(username=username).first()
+            if not user:
+                return admin_user
+                
         return user
 
     def _get_or_create_institution(self, name, contact, admin_user):
@@ -602,8 +611,6 @@ class Command(BaseCommand):
         # --- OZBEK LAB SHEET ---
         ws_lab = wb[ozbek_lab_sheet]
         headers_lab = [cell.value for cell in next(ws_lab.iter_rows(min_row=1, max_row=1))]
-        # Filter out None column names (empty columns at the end)
-        headers_lab = [h for h in headers_lab if h is not None]
         
         # First pass: Collect unique values
         unique_family_ids = set()
@@ -612,9 +619,8 @@ class Command(BaseCommand):
             # Skip rows where all values are None (empty rows at the end)
             if all(cell is None for cell in row):
                 continue
-            # Truncate row to match filtered headers (remove empty columns)
-            row = row[:len(headers_lab)]
-            row_dict = dict(zip(headers_lab, row))
+            
+            row_dict = {h: v for h, v in zip(headers_lab, row) if h}
             lab_id = row_dict.get('Özbek Lab. ID')
             if not lab_id:
                 self.stdout.write(f'Skipping row - missing lab ID. Row data: {row_dict}')
@@ -659,8 +665,8 @@ class Command(BaseCommand):
                 all_contacts = existing_contacts.union(contacts)
                 institution.contact = '\n'.join(all_contacts)
                 # Backfill coordinates if available and not set (or set to defaults)
-                if name in self._institution_coords:
-                    lat_val, lon_val = self._institution_coords[name]
+                if name in self._institution_info and 'coords' in self._institution_info[name]:
+                    lat_val, lon_val = self._institution_info[name]['coords']
                     if (institution.latitude in (None, 0.0)) and lat_val is not None:
                         institution.latitude = lat_val
                     if (institution.longitude in (None, 0.0)) and lon_val is not None:
@@ -672,9 +678,8 @@ class Command(BaseCommand):
             # Skip rows where all values are None (empty rows at the end)
             if all(cell is None for cell in row):
                 continue
-            # Truncate row to match filtered headers (remove empty columns)
-            row = row[:len(headers_lab)]
-            row_dict = dict(zip(headers_lab, row))
+            
+            row_dict = {h: v for h, v in zip(headers_lab, row) if h}
             try:
                 lab_id = row_dict.get('Özbek Lab. ID')
                 if not lab_id:
@@ -799,9 +804,8 @@ class Command(BaseCommand):
             # Skip rows where all values are None (empty rows at the end)
             if all(cell is None for cell in row):
                 continue
-            # Truncate row to match filtered headers (remove empty columns)
-            row = row[:len(headers_lab)]
-            row_dict = dict(zip(headers_lab, row))
+            
+            row_dict = {h: v for h, v in zip(headers_lab, row) if h}
             lab_id = row_dict.get('Özbek Lab. ID')
             if not lab_id:
                 self.stdout.write(f'Skipping row - missing lab ID. Row data: {row_dict}')
@@ -1125,7 +1129,7 @@ class Command(BaseCommand):
                         individual=individual,
                         chromosome=chrom,
                         start=int(start),
-                        end=int(start), # SNV start=end usually, or end=start+len(ref)-1? 
+                        end=int(start) + len(ref) - 1, 
                                         # Standard VCF: POS is 1-based start. REF/ALT. 
                                         # Variant model has start/end. 
                                         # For SNV A>G, length is 1. start=end.

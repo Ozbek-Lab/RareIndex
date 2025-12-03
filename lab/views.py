@@ -193,12 +193,40 @@ def task_reopen(request, pk):
 
 @login_required
 def index(request):
+    def get_initial_json(model_class, param_name):
+        val = request.GET.get(param_name)
+        if not val:
+            return "[]"
+        ids = []
+        if val.startswith("[") and val.endswith("]"):
+            try:
+                ids = json.loads(val)
+            except:
+                pass
+        elif "," in val:
+            try:
+                ids = [int(x) for x in val.split(",") if x.strip().isdigit()]
+            except:
+                pass
+        elif val.isdigit():
+            ids = [int(val)]
+        
+        if not ids:
+            return "[]"
+            
+        objs = model_class.objects.filter(pk__in=ids)
+        return json.dumps([{"value": obj.pk, "label": str(obj)} for obj in objs])
+
     context = {
         "institutions": Institution.objects.all(),
         "individual_statuses": Status.objects.filter(
             Q(content_type=ContentType.objects.get_for_model(Individual))
             | Q(content_type__isnull=True)
         ).order_by("name"),
+        "initial_projects": get_initial_json(Project, "filter_project"),
+        "initial_tests": get_initial_json(Test, "filter_test"),
+        "initial_analyses": get_initial_json(Analysis, "filter_analysis"),
+        "initial_institutions": get_initial_json(Institution, "filter_institution"),
     }
 
     if request.headers.get("HX-Request"):
@@ -250,7 +278,19 @@ def generic_search(request):
                         base_qs = base_qs.filter(cross_ids__id_value__icontains=own_search_term).distinct()
                     else:
                         # Try direct icontains on specified label field
-                        base_qs = base_qs.filter(**{f"{label_field}__icontains": own_search_term})
+                        # BUT ALSO include cross_id search for related models if applicable
+                        q_label = _Q(**{f"{label_field}__icontains": own_search_term})
+                        
+                        if target_model_name == "Sample":
+                            q_label |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Test":
+                            q_label |= _Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Analysis":
+                            q_label |= _Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Variant":
+                            q_label |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            
+                        base_qs = base_qs.filter(q_label).distinct()
                 else:
                     # Fallback: OR over all CharField/TextField
                     from django.db.models import Q as _Q
@@ -267,7 +307,20 @@ def generic_search(request):
                         qobj = _Q()
                         for fname in text_fields:
                             qobj |= _Q(**{f"{fname}__icontains": own_search_term})
-                        base_qs = base_qs.filter(qobj)
+                        
+                        # Special handling for Individual: also search cross_ids
+                        if target_model_name == "Individual":
+                            qobj |= _Q(cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Sample":
+                            qobj |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Test":
+                            qobj |= _Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Analysis":
+                            qobj |= _Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Variant":
+                            qobj |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            
+                        base_qs = base_qs.filter(qobj).distinct()
             except Exception:
                 # If filtering fails, leave base_qs as-is
                 pass
@@ -776,6 +829,30 @@ def update_status(request):
         old_status = obj.status
         obj.status = status
         obj.save()
+
+        # Send notification if status changed
+        if old_status != status:
+            from .services import send_notification
+            
+            # Notify the creator of the object
+            if hasattr(obj, "created_by") and obj.created_by != request.user:
+                send_notification(
+                    sender=request.user,
+                    recipient=obj.created_by,
+                    verb="Status Change",
+                    description=f"Status of {model_name} '{obj}' changed from '{old_status}' to '{status}'",
+                    target=obj,
+                )
+            
+            # Notify assigned user if applicable (e.g. for Task)
+            if hasattr(obj, "assigned_to") and obj.assigned_to and obj.assigned_to != request.user:
+                send_notification(
+                    sender=request.user,
+                    recipient=obj.assigned_to,
+                    verb="Status Change",
+                    description=f"Status of {model_name} '{obj}' changed from '{old_status}' to '{status}'",
+                    target=obj,
+                )
         
         # Refresh the object from database to ensure we have latest data
         obj.refresh_from_db()
@@ -1006,23 +1083,32 @@ def get_objects_by_content_type(request):
     content_type_id = request.GET.get("content_type_id") or request.GET.get("content_type")
     
     if not content_type_id:
-        return HttpResponse("<option value=''>---------</option>")
+        return HttpResponse('<div class="text-gray-500 text-sm p-2">Select a type first</div>')
     
     try:
         content_type = ContentType.objects.get(pk=content_type_id)
         model_class = content_type.model_class()
         
-        # Get all objects of this type
-        objects = model_class.objects.all().order_by("-id")[:100]  # Limit to 100 most recent
+        # Determine app_label and model_name for the partial
+        app_label = model_class._meta.app_label
+        model_name = model_class._meta.model_name
         
-        # Build HTML options
-        options_html = "<option value=''>---------</option>\n"
-        for obj in objects:
-            options_html += f"<option value='{obj.pk}'>{str(obj)}</option>\n"
+        # Render the single generic combobox partial
+        # We need to pass the correct context for the combobox controller
+        context = {
+            "app_label": app_label,
+            "model_name": model_class.__name__, # Use class name for display/logic
+            "value_field": "pk",
+            "name": "object_id",
+            "icon_class": "fa-magnifying-glass",
+            "initial": "", # No initial value when switching types
+            "initial_value": "",
+        }
         
-        return HttpResponse(options_html)
+        return render(request, "lab/partials/partials.html#single-generic-combobox", context)
+        
     except Exception as e:
-        return HttpResponse("<option value=''>Error loading objects</option>")
+        return HttpResponse(f'<div class="text-red-500 text-sm p-2">Error loading objects: {str(e)}</div>')
 
 
 @login_required
@@ -1434,6 +1520,87 @@ def notifications_page(request):
         return render(request, "lab/notifications.html#notifications-content", context)
 
     return render(request, "lab/notifications.html", context)
+
+
+@login_required
+def profile_settings(request):
+    """View to manage user profile and notification settings"""
+    # Ensure profile exists (signal should handle this, but for safety)
+    if not hasattr(request.user, "profile"):
+        from .models import Profile
+
+        Profile.objects.create(user=request.user)
+
+    profile = request.user.profile
+
+    # Redirect to SPA if accessed directly without HTMX
+    if not request.headers.get("HX-Request") and request.method == "GET":
+        return redirect("/?page=profile_settings")
+
+    if request.method == "POST":
+        # Update email notification settings
+        email_settings = {
+            "task_assigned": request.POST.get("task_assigned") == "on",
+            "status_change": request.POST.get("status_change") == "on",
+            "group_message": request.POST.get("group_message") == "on",
+        }
+        profile.email_notifications = email_settings
+        profile.save()
+        messages.success(request, "Notification settings updated successfully.")
+        return redirect("lab:profile_settings")
+
+    # Merge with defaults for display
+    # Default to True for all keys if not present
+    current_settings = profile.email_notifications or {}
+    display_settings = {
+        "task_assigned": current_settings.get("task_assigned", True),
+        "status_change": current_settings.get("status_change", True),
+        "group_message": current_settings.get("group_message", True),
+    }
+
+    context = {
+        "profile": profile,
+        "display_settings": display_settings,
+    }
+
+    # Handle HTMX requests for partial rendering
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/profile_settings.html#profile-settings-content", context)
+
+    return render(request, "lab/profile_settings.html", context)
+
+
+@login_required
+def send_group_message(request):
+    if request.method == "POST":
+        message = request.POST.get("message")
+        if message:
+            from django.contrib.auth.models import Group
+            from .services import send_notification
+            
+            try:
+                group = Group.objects.get(name="Group Members")
+                users = group.user_set.all()
+                count = 0
+                for user in users:
+                    if user != request.user:  # Don't send to self
+                        send_notification(
+                            sender=request.user,
+                            recipient=user,
+                            verb="Group Message",
+                            description=f"Group Message from {request.user}: {message}",
+                            target=group,
+                        )
+                        count += 1
+                messages.success(request, f"Message sent to {count} group members.")
+            except Group.DoesNotExist:
+                messages.error(request, "Group 'Group Members' does not exist.")
+        else:
+            messages.error(request, "Message cannot be empty.")
+            
+        return redirect("lab:profile_settings")
+    
+    return redirect("lab:profile_settings")
 
 
 @login_required

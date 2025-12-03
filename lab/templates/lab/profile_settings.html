@@ -1,0 +1,87 @@
+{% extends "lab/base.html" %}
+
+{% partialdef profile-settings-content inline %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">Notification Settings</h1>
+
+    <form 
+        hx-post="{% url 'lab:profile_settings' %}" 
+        hx-target="#main-content"
+        class="bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4"
+    >
+        {% csrf_token %}
+        
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Email Notifications</h2>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">Select which notifications you want to receive via email.</p>
+            
+            <div class="space-y-4">
+                <div class="flex items-center">
+                    <input type="checkbox" id="task_assigned" name="task_assigned" 
+                           {% if display_settings.task_assigned %}checked{% endif %}
+                           class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    <label for="task_assigned" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                        Task Assigned
+                    </label>
+                </div>
+
+                <div class="flex items-center">
+                    <input type="checkbox" id="status_change" name="status_change" 
+                           {% if display_settings.status_change %}checked{% endif %}
+                           class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    <label for="status_change" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                        Status Change
+                    </label>
+                </div>
+
+                <div class="flex items-center">
+                    <input type="checkbox" id="group_message" name="group_message" 
+                           {% if display_settings.group_message %}checked{% endif %}
+                           class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    <label for="group_message" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                        Group Message
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between">
+            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">
+                Save Settings
+            </button>
+        </div>
+    </form>
+
+    <!-- Send Group Message Section -->
+    <div class="bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4">
+        <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Send Group Message</h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-4">Send a notification to all members of the "Group Members" group.</p>
+        
+        <form action="{% url 'lab:send_group_message' %}" method="post">
+            {% csrf_token %}
+            <div class="mb-4">
+                <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="message">
+                    Message
+                </label>
+                <textarea 
+                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                    id="message" 
+                    name="message" 
+                    rows="3" 
+                    placeholder="Enter your message here..."
+                    required
+                ></textarea>
+            </div>
+            <div class="flex items-center justify-between">
+                <button class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">
+                    Send Message
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endpartialdef %}
+
+{% block content %}
+{% partial profile-settings-content %}
+{% endblock %}

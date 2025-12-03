@@ -66,39 +66,58 @@ class AnnotationService:
 
     def fetch_vep(self, variant):
         """Fetch annotation from Ensembl VEP"""
-        # POST request for region
-        # https://rest.ensembl.org/vep/human/region
+        # GET request for region
+        # https://rest.ensembl.org/vep/human/region/:region/:allele?
         
-        url = "https://rest.ensembl.org/vep/human/region"
+        base_url = "https://rest.ensembl.org/vep/human/region"
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         
-        # Format: "{chr} {start} {end} {allele_string} {strand}"
-        # allele_string: REF/ALT
-        # strand: 1 (plus)
+        region_str = ""
+        
+        # Helper to strip 'chr' prefix if present, as Ensembl expects just the number/letter
+        chrom = variant.chromosome.replace("chr", "")
         
         if hasattr(variant, 'snv'):
             snv = variant.snv
-            allele_string = f"{snv.reference}/{snv.alternate}"
-            # VEP region: start end (inclusive)
-            # For SNV start=end
-            # But variant.start/end might be 0-based or 1-based?
-            # Assuming 1-based for now as per VCF/standard
-            
-            payload = {
-                "variants": [
-                    f"{snv.chromosome} {snv.start} {snv.end} {allele_string} 1"
-                ],
-                "assembly_name": "GRCh38"
+            # Check for insertion (start > end)
+            if snv.start > snv.end:
+                # Insertion: 9:22125503-22125502:1/C
+                # Format: {chr}:{start}-{end}:1/{alt}
+                region_str = f"{chrom}:{snv.start}-{snv.end}:1/{snv.alternate}"
+            else:
+                # SNV: 1:6524705:6524705/T
+                # Format: {chr}:{start}:{end}/{alt}
+                region_str = f"{chrom}:{snv.start}:{snv.end}/{snv.alternate}"
+                
+        elif hasattr(variant, 'sv'):
+            sv = variant.sv
+            # SV: 7:100318423-100321323:1/DUP
+            # Map types
+            type_map = {
+                "deletion": "DEL",
+                "duplication": "DUP",
+                "insertion": "INS", 
+                "inversion": "INV",
             }
+            vep_type = type_map.get(sv.sv_type, sv.sv_type.upper())
+            # Format: {chr}:{start}-{end}:1/{type}
+            region_str = f"{chrom}:{sv.start}-{sv.end}:1/{vep_type}"
             
-            try:
-                response = requests.post(url, headers=headers, json=payload)
-                if response.status_code == 200:
-                    data = response.json()
-                    self._save_annotation(variant, "vep", data)
-                    return data
-            except Exception as e:
-                print(f"Error fetching VEP: {e}")
+        if not region_str:
+            return None
+            
+        url = f"{base_url}/{region_str}"
+        
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                self._save_annotation(variant, "vep", data)
+                return data
+            else:
+                print(f"VEP Error: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"Error fetching VEP: {e}")
         return None
 
     def fetch_genebe(self, variant):

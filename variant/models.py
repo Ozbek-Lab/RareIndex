@@ -19,6 +19,7 @@ class Variant(HistoryMixin, models.Model):
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     created_at = models.DateTimeField(auto_now_add=True)
     notes = GenericRelation("lab.Note")
+    tasks = GenericRelation("lab.Task")
     genes = models.ManyToManyField("Gene", related_name="variants", blank=True)
     history = HistoricalRecords(inherit=True)
 

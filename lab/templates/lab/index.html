@@ -1,5 +1,5 @@
 {% extends "lab/base.html" %}
-{% load partials %}
+
 
 <style>
   /* Form field styling for better visibility */
@@ -169,6 +169,9 @@
         <div x-show="activeItem === 'nl-search-page'" id="nl-search-content">
           <!-- Natural language search content will be loaded here via HTMX -->
         </div>
+        <div x-show="activeItem === 'profile_settings'" id="profile-settings-content">
+          <!-- Profile settings content will be loaded here via HTMX -->
+        </div>
       </div>
     </div>
   </main>
@@ -310,6 +313,21 @@
                  this.dispatchFiltersUpdated();
              });
         }
+
+        // Trigger initial load for SPA pages that require HTMX
+        if (this.activeItem === 'profile_settings') {
+            this.$nextTick(() => {
+                htmx.ajax('GET', '{% url "lab:profile_settings" %}', '#profile-settings-content');
+            });
+        } else if (this.activeItem === 'notifications') {
+            this.$nextTick(() => {
+                htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content');
+            });
+        } else if (this.activeItem === 'nl-search-page') {
+            this.$nextTick(() => {
+                htmx.ajax('GET', '{% url "lab:nl_search_page" %}', '#nl-search-content');
+            });
+        }
       },
 
       updateURL() {
@@ -403,6 +421,19 @@
           return;
         }
 
+        // Handle profile settings navigation
+        if (pageName === 'profile_settings') {
+          this.activeItem = 'profile_settings';
+          this.detailHtml = null;
+          this.updateURL();
+
+          // Load profile settings content via HTMX
+          htmx.ajax('GET', '{% url "lab:profile_settings" %}', '#profile-settings-content').then(() => {
+            // Content loaded successfully
+          });
+          return;
+        }
+
         this.activeItem = pageName;
         this.detailHtml = null;
         this.updateURL();
@@ -465,7 +496,11 @@
         for (const key in this.filters) {
           if (this.filters[key]) {
             if (key === modelName.toLowerCase()) {
-              vals['search'] = this.filters[key];
+              if (Array.isArray(this.filters[key])) {
+                vals['search'] = this.filters[key].join(',');
+              } else {
+                vals['search'] = this.filters[key];
+              }
             } else {
               // Handle all array values as comma-separated values
               if (Array.isArray(this.filters[key])) {
@@ -612,13 +647,17 @@
       toggleStatus(statusPk, modelName) {
         const statusKey = `${modelName}_status`;
         this.toggleTriState(statusPk, statusKey);
-        this.dispatchFiltersUpdated(modelName);
+        this.$nextTick(() => {
+          this.dispatchFiltersUpdated(modelName);
+        });
       },
       toggleType(typePk, filterField) {
         this.toggleTriState(typePk, filterField);
         // Extract model name from filter field (e.g. individual_type -> individual)
         const modelName = filterField.split('_')[0];
-        this.dispatchFiltersUpdated(modelName);
+        this.$nextTick(() => {
+          this.dispatchFiltersUpdated(modelName);
+        });
       },
       getFilterState(rawValue, includeKey) {
         const value = String(rawValue);
@@ -647,7 +686,9 @@
         const statusKey = `${modelName}_status`;
         delete this.filters[statusKey];
         delete this.filters[`${statusKey}_exclude`];
-        this.dispatchFiltersUpdated(modelName);
+        this.$nextTick(() => {
+          this.dispatchFiltersUpdated(modelName);
+        });
       },
 
       // Event-scoped dispatch helper
