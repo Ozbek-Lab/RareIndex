@@ -152,6 +152,18 @@ class TaskForm(BaseForm):
 
 
 class IndividualForm(BaseForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Limit status choices strictly to Individual-specific statuses
+        try:
+            indiv_ct = ContentType.objects.get_for_model(Individual)
+            self.fields["status"].queryset = Status.objects.filter(
+                content_type=indiv_ct
+            ).order_by("name")
+        except Exception:
+            # Fallback: leave whatever default queryset BaseForm/ModelForm gave us
+            pass
+
     class Meta:
         model = Individual
         fields = [

@@ -430,22 +430,144 @@
         {% csrf_token %}
         <div class="grid grid-cols-1 gap-6">
           <!-- Family Information Section -->
-          <div class="mb-2 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <div
+            class="mb-2 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
+            x-data="{
+              familyMode: 'select',
+              manualFamilyId: '',
+              toggleFamilyMode() {
+                // Save current mode state before switching
+                if (window.saveFormData) {
+                  try { saveFormData(this.familyMode, true); } catch (e) { console.warn('Error auto-saving mode state', e); }
+                }
+
+                const formEl = document.getElementById('family-create-form');
+                const individualsContainer = document.getElementById('individuals-container');
+                const descField = document.getElementById('family_description');
+
+                // Switch from selecting existing to creating new
+                if (this.familyMode === 'select') {
+                  this.familyMode = 'create';
+                  this.manualFamilyId = '';
+                  if (individualsContainer) {
+                    individualsContainer.innerHTML = '';
+                  }
+                  // Keep the description field, just clear its value
+                  if (descField) {
+                    descField.value = '';
+                  }
+                  return;
+                }
+
+                // Switch back to selecting existing
+                this.familyMode = 'select';
+                this.manualFamilyId = '';
+
+                if (!formEl) return;
+                const famHidden = formEl.querySelector('[name=family_id]');
+                const selectedId = famHidden && famHidden.value ? famHidden.value : null;
+
+                if (selectedId && window.htmx) {
+                  htmx.ajax('GET', '{% url 'lab:generic_search' %}', {
+                    target: '#family_description_wrapper',
+                    swap: 'innerHTML',
+                    values: {
+                      app_label: 'lab',
+                      model_name: 'Family',
+                      search: selectedId,
+                      render: 'family_description'
+                    }
+                  });
+                  htmx.ajax('GET', '{% url 'lab:generic_search' %}', {
+                    target: '#individuals-container',
+                    swap: 'innerHTML',
+                    values: {
+                      app_label: 'lab',
+                      model_name: 'Family',
+                      search: selectedId,
+                      render: 'family_individual_forms'
+                    }
+                  });
+                } else {
+                  if (individualsContainer) {
+                    individualsContainer.innerHTML = '';
+                  }
+                  // When no existing family is selected, leave description as-is (likely empty partial)
+                }
+
+                // Restore any saved state for the new mode
+                if (window.restoreFormData) {
+                  try { restoreFormData(this.familyMode, true); } catch (e) { console.warn('Error auto-restoring mode state', e); }
+                }
+              }
+            }"
+          >
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center">
               <i class="fas fa-home mr-2 text-blue-600"></i>
               Family Information
             </h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Family ID <span class="text-red-500">*</span>
                 </label>
-                {% with app_label='lab' model_name='Family' icon_class='fa-users' value_field='family_id' label_field='family_id' name='family_id' %}
-                  {% include "lab/partials/partials.html#single-generic-combobox" %}
-                {% endwith %}
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Select an existing family or type a new ID to create one.</p>
+                <div class="flex items-start gap-3">
+                  <!-- Mode toggle button (left of fields) -->
+                  <button
+                    type="button"
+                    @click="toggleFamilyMode()"
+                    class="px-3 py-2 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <span x-text="familyMode === 'select' ? 'Create Family' : 'Edit Family'"></span>
+                  </button>
+
+                  <!-- Existing family selection (combobox) -->
+                  <div class="flex-1" x-show="familyMode === 'select'" x-cloak>
+                    {% with app_label='lab' model_name='Family' icon_class='fa-users' value_field='family_id' label_field='family_id' name='family_id' %}
+                      {% include "lab/partials/partials.html#single-generic-combobox" %}
+                    {% endwith %}
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Select an existing family to edit or add members.
+                    </p>
+                  </div>
+
+                  <!-- New family ID free text input -->
+                  <div class="flex-1" x-show="familyMode === 'create'" x-cloak>
+                    <input
+                      type="text"
+                      name="family_id_query"
+                      id="family_id_query"
+                      x-model="manualFamilyId"
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+                      placeholder="Enter new family ID (e.g. FAM1234)"
+                    >
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Type a new family ID to create a new family.
+                    </p>
+                  </div>
+
+                  <!-- Hidden mode field so backend / other scripts can read it -->
+                  <input type="hidden" name="family_mode" x-model="familyMode">
+                </div>
               </div>
-              <div x-data="{ }" @combobox-selected.window= "if ($event.detail.modelName==='Family' && $event.detail.value) { htmx.ajax('GET', '{% url 'lab:generic_search' %}', { target: '#family_description_wrapper', swap: 'innerHTML', values: { app_label: 'lab', model_name: 'Family', search: $event.detail.value, render: 'family_description' } }); htmx.ajax('GET', '{% url 'lab:generic_search' %}', { target: '#individuals-container', swap: 'innerHTML', values: { app_label: 'lab', model_name: 'Family', search: $event.detail.value, render: 'family_individual_forms' } }); }">
+
+              <div
+                x-data="{ }"
+                @combobox-selected.window="
+                  if ($event.detail.modelName==='Family' && $event.detail.value) {
+                    htmx.ajax('GET', '{% url 'lab:generic_search' %}', {
+                      target: '#family_description_wrapper',
+                      swap: 'innerHTML',
+                      values: { app_label: 'lab', model_name: 'Family', search: $event.detail.value, render: 'family_description' }
+                    });
+                    htmx.ajax('GET', '{% url 'lab:generic_search' %}', {
+                      target: '#individuals-container',
+                      swap: 'innerHTML',
+                      values: { app_label: 'lab', model_name: 'Family', search: $event.detail.value, render: 'family_individual_forms' }
+                    });
+                  }
+                "
+              >
                 <div id="family_description_wrapper">
                   {% include "lab/partials/partials.html#family-description-field" %}
                 </div>
@@ -497,7 +619,7 @@
           <div class="flex space-x-3">
             <button 
               type="button" 
-              @click= "saveFormData(); document.getElementById('modal-root').innerHTML = ''; showToast('Form data saved and popup closed', 'success')" 
+              @click= "saveFormData(null, true); document.getElementById('modal-root').innerHTML = ''; showToast('Form data saved and popup closed', 'success')" 
               class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
               Save & Close
@@ -543,18 +665,37 @@
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Column 1 -->
         <div class="space-y-4">
+          <!-- Within-family parent relationships (resolved after creation) -->
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mother</label>
-              {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' label_field='individual_id' name='individuals[INDEX][mother]' %}
-                {% include "lab/partials/partials.html#single-generic-combobox" %}
-              {% endwith %}
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Mother (within this family)
+              </label>
+              <select
+                name="individuals[INDEX][mother_index]"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+                data-parent-select="mother"
+              >
+                <option value="">Select mother</option>
+              </select>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Choose from other family members in this form once they are added.
+              </p>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Father</label>
-              {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' label_field='individual_id' name='individuals[INDEX][father]' %}
-                {% include "lab/partials/partials.html#single-generic-combobox" %}
-              {% endwith %}
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Father (within this family)
+              </label>
+              <select
+                name="individuals[INDEX][father_index]"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+                data-parent-select="father"
+              >
+                <option value="">Select father</option>
+              </select>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Choose from other family members in this form once they are added.
+              </p>
             </div>
           </div>
 
@@ -589,18 +730,51 @@
             >
           </div>
 
-          <!-- IDs Box (multiple rows) -->
+          <!-- IDs Box (primary required ID + optional additional IDs) -->
           <div class="bg-gray-50 dark:bg-gray-700 rounded-md p-3 border border-gray-200 dark:border-gray-600">
+            <!-- Primary (required) ID row -->
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Primary ID <span class="text-red-500">*</span>
+              </label>
+              <div class="id-row grid grid-cols-7 gap-2 items-center" data-primary-id="true">
+                <div class="col-span-3">
+                  <label class="sr-only">Primary ID Type</label>
+                  <select
+                    name="individuals[INDEX][ids][0][type]"
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  >
+                    {% for idt in identifier_types %}
+                      <option value="{{ idt.id }}">{{ idt.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-span-4">
+                  <label class="sr-only">Primary ID</label>
+                  <input
+                    type="text"
+                    name="individuals[INDEX][ids][0][value]"
+                    placeholder="ID"
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Optional additional IDs -->
             <div class="flex items-center justify-between mb-2">
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IDs</label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Additional IDs (optional)</label>
               <button type="button" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700" @click= "addIdRow($el.closest('.individual-form'))">
                 <i class="fas fa-plus mr-1"></i> Add ID
               </button>
             </div>
-            <div class="space-y-2 id-rows" data-row-index="0">
-              <!-- rows injected here by JS -->
+            <div class="space-y-2 id-rows" data-row-index="1">
+              <!-- optional rows injected here by JS -->
             </div>
-            <!-- Hidden template for an ID row -->
+
+            <!-- Hidden template for an optional ID row -->
             <template class="id-row-template">
               <div class="id-row grid grid-cols-7 gap-2 items-center">
                 <div class="col-span-3">
@@ -690,17 +864,6 @@
             </select>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Karyotype
-            </label>
-            <input 
-              type="text" 
-              name="individuals[INDEX][karyotype]" 
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-              placeholder="e.g. 46,XY"
-            >
-          </div>
         </div>
 
         <!-- Column 3 (Flags + HPO + Notes) -->
@@ -1210,8 +1373,11 @@
           function computeLabel() {
           const famHidden = form.querySelector('input[name="family_id"]');
           const famQuery = form.querySelector('input[name="family_id_query"]');
-          const hasTypedNewId = !!(famQuery && famQuery.value && (!famHidden || famHidden.value !== famQuery.value));
-          const existingSelected = !!(famHidden && famHidden.value && (!famQuery || famQuery.value === '' || famHidden.value === famQuery.value));
+          const famModeInput = form.querySelector('input[name="family_mode"]');
+          const famMode = famModeInput ? famModeInput.value || 'select' : 'select';
+
+          const hasTypedNewId = famMode === 'create' && !!(famQuery && famQuery.value);
+          const existingSelected = famMode === 'select' && !!(famHidden && famHidden.value);
           const individuals = Array.from(form.querySelectorAll('.individual-form'));
           const countWithId = individuals.filter(f => f.querySelector('input[name*="[id]"]')).length;
           const countWithoutId = Math.max(individuals.length - countWithId, 0);
@@ -1321,12 +1487,29 @@
       }
     }
     
-    // Function to ensure form submission includes the correct family_id (single-combobox)
+    // Function to ensure form submission includes the correct family_id / family_id_query
     function prepareFormSubmission() {
-      const familyHidden = document.querySelector('input[name="family_id"]');
-      if (!familyHidden || !String(familyHidden.value || '').trim()) {
-        alert('Please enter or select a Family ID.');
-        return false;
+      const form = document.getElementById('family-create-form');
+      if (!form) return false;
+
+      const modeInput = form.querySelector('input[name="family_mode"]');
+      const mode = modeInput && modeInput.value ? modeInput.value : 'select';
+
+      const familyHidden = form.querySelector('input[name="family_id"]');
+      const familyQuery = form.querySelector('#family_id_query');
+      const hasExisting = familyHidden && String(familyHidden.value || '').trim();
+      const hasNew = familyQuery && String(familyQuery.value || '').trim();
+
+      if (mode === 'create') {
+        if (!hasNew) {
+          alert('Please enter a new Family ID.');
+          return false;
+        }
+      } else {
+        if (!hasExisting) {
+          alert('Please select an existing Family ID.');
+          return false;
+        }
       }
 
       // Validate that all individuals have required fields
@@ -1379,14 +1562,75 @@
     }
     
     let individualIndex = 0;
-    
+
+    // Helper: get all individual forms in DOM order
+    function getIndividualForms() {
+      const container = document.getElementById('individuals-container');
+      if (!container) return [];
+      return Array.from(container.querySelectorAll('.individual-form'));
+    }
+
+    // Helper: refresh options for all mother/father selects based on current individuals
+    function refreshParentSelects() {
+      const forms = getIndividualForms();
+      if (!forms.length) return;
+
+      // Build option data: [{ index, label }]
+      const optionData = forms.map((form, idx) => {
+        const nameInput = form.querySelector('input[name*="[full_name]"]');
+        const rawLabel = nameInput && nameInput.value ? nameInput.value.trim() : '';
+        const label = rawLabel || `Member ${idx + 1}`;
+        return { index: idx, label };
+      });
+
+      forms.forEach((form, idx) => {
+        const parentSelects = form.querySelectorAll('select[data-parent-select]');
+        parentSelects.forEach(select => {
+          const isMother = select.dataset.parentSelect === 'mother';
+          const placeholderText = isMother ? 'Select mother' : 'Select father';
+          const currentValue = select.value;
+
+          // Rebuild options
+          select.innerHTML = '';
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = placeholderText;
+          select.appendChild(placeholder);
+
+          optionData.forEach(opt => {
+            // Do not allow self as parent
+            if (opt.index === idx) return;
+            const optionEl = document.createElement('option');
+            optionEl.value = String(opt.index);
+            optionEl.textContent = `#${opt.index + 1} – ${opt.label}`;
+            select.appendChild(optionEl);
+          });
+
+          // Restore previous selection if still valid
+          if (currentValue !== '') {
+            const hasOption = Array.from(select.options).some(o => o.value === currentValue);
+            if (hasOption) {
+              select.value = currentValue;
+            }
+          }
+        });
+      });
+    }
+
+    const FAMILY_STORAGE_KEY = 'familyCreationFormDataV2';
+
     // Form data persistence functions
-    function saveFormData() {
+    function saveFormData(modeOverride, silent) {
       const form = document.getElementById('family-create-form');
       if (!form) return;
       
+      const modeInput = form.querySelector('input[name="family_mode"]');
+      const currentMode = modeOverride || (modeInput && modeInput.value ? modeInput.value : 'select');
+
       const formData = {
+        family_mode: currentMode,
         family_id: form.querySelector('input[name="family_id"]')?.value || '',
+        family_id_query: form.querySelector('#family_id_query')?.value || '',
         family_description: form.querySelector('#family_description')?.value || '',
         individuals: []
       };
@@ -1406,7 +1650,8 @@
           status: individualForm.querySelector('select[name*="[status]"]')?.value || '',
           is_index: individualForm.querySelector('input[name*="[is_index]"]:checked')?.value || 'false',
           is_affected: individualForm.querySelector('input[name*="[is_affected]"]:checked')?.value || 'false',
-
+          mother_index: individualForm.querySelector('select[name*="[mother_index]"]')?.value || '',
+          father_index: individualForm.querySelector('select[name*="[father_index]"]')?.value || '',
           role: '',
           ids: [],
           notes: []
@@ -1433,33 +1678,81 @@
         
         formData.individuals.push(individualData);
       });
-      
-      localStorage.setItem('familyCreationFormData', JSON.stringify(formData));
-      console.log('Form data saved to localStorage:', formData);
-      showToast('Form data saved successfully!', 'success');
+
+      // Merge into per-mode storage
+      let allData = null;
+      try {
+        allData = JSON.parse(localStorage.getItem(FAMILY_STORAGE_KEY) || '{}');
+      } catch (e) {
+        allData = {};
+      }
+      if (typeof allData !== 'object' || allData === null) {
+        allData = {};
+      }
+      allData[currentMode] = formData;
+      allData.lastMode = currentMode;
+
+      localStorage.setItem(FAMILY_STORAGE_KEY, JSON.stringify(allData));
+      console.log('Form data saved to localStorage:', allData);
+      if (!silent) {
+        showToast('Form data saved successfully!', 'success');
+      }
     }
     
-    function restoreFormData() {
-      const savedData = localStorage.getItem('familyCreationFormData');
-      if (!savedData) {
-        showToast('No saved data found', 'warning');
+    function restoreFormData(preferredMode, silent) {
+      const legacy = localStorage.getItem('familyCreationFormData');
+      let raw = localStorage.getItem(FAMILY_STORAGE_KEY);
+
+      // Migrate legacy single-state data on the fly
+      if (!raw && legacy) {
+        try {
+          const legacyObj = JSON.parse(legacy);
+          const migrated = { select: legacyObj, lastMode: 'select' };
+          localStorage.setItem(FAMILY_STORAGE_KEY, JSON.stringify(migrated));
+          raw = JSON.stringify(migrated);
+        } catch (e) {
+          raw = null;
+        }
+      }
+
+      if (!raw) {
+        if (!silent) {
+          showToast('No saved data found', 'warning');
+        }
         return;
       }
-      
+
       try {
-        const formData = JSON.parse(savedData);
+        const allData = JSON.parse(raw);
         const form = document.getElementById('family-create-form');
         if (!form) return;
+
+        const modeInput = form.querySelector('input[name="family_mode"]');
+        const activeMode = preferredMode || (modeInput && modeInput.value ? modeInput.value : null) || allData.lastMode || 'select';
+        const formData = allData[activeMode];
+        if (!formData) {
+          if (!silent) {
+            showToast('No saved data found for this mode', 'warning');
+          }
+          return;
+        }
         
         // Restore family data
-        const familyIdField = form.querySelector('#family_id');
+        const familyIdHidden = form.querySelector('input[name="family_id"]');
+        const familyQueryField = form.querySelector('#family_id_query');
         const familyDescField = form.querySelector('#family_description');
-        
-        if (familyIdField && formData.family_id) {
-          familyIdField.value = formData.family_id;
+
+        if (modeInput) {
+          modeInput.value = formData.family_mode || activeMode;
         }
-        if (familyDescField && formData.family_description) {
-          familyDescField.value = formData.family_description;
+        if (familyIdHidden) {
+          familyIdHidden.value = formData.family_id || '';
+        }
+        if (familyQueryField) {
+          familyQueryField.value = formData.family_id_query || '';
+        }
+        if (familyDescField) {
+          familyDescField.value = formData.family_description || '';
         }
         
         // Clear existing individual forms and restore saved ones
@@ -1487,8 +1780,8 @@
             const diagnosisDateField = currentForm.querySelector('input[name*="[diagnosis_date]"]');
             const institutionField = currentForm.querySelector('select[name*="[institution]"]');
             const statusField = currentForm.querySelector('select[name*="[status]"]');
-            const motherField = currentForm.querySelector('select[name*="[mother]"]');
-            const fatherField = currentForm.querySelector('select[name*="[father]"]');
+            const motherIndexField = currentForm.querySelector('select[name*="[mother_index]"]');
+            const fatherIndexField = currentForm.querySelector('select[name*="[father_index]"]');
             const roleField = null;
 
             
@@ -1502,8 +1795,8 @@
             if (diagnosisDateField) diagnosisDateField.value = individualData.diagnosis_date || '';
             if (institutionField) institutionField.value = individualData.institution || '';
             if (statusField) statusField.value = individualData.status || '';
-            if (motherField) motherField.value = individualData.mother || '';
-            if (fatherField) fatherField.value = individualData.father || '';
+            if (motherIndexField) motherIndexField.value = individualData.mother_index || '';
+            if (fatherIndexField) fatherIndexField.value = individualData.father_index || '';
             if (roleField) roleField.value = individualData.role || '';
             
             // Set radio button values
@@ -1517,15 +1810,29 @@
               radio.checked = radio.value === individualData.is_affected;
             });
             
-            // Restore ID rows
+            // Restore ID rows (primary required ID + optional additional IDs)
             if (individualData.ids && individualData.ids.length > 0) {
-              individualData.ids.forEach(idData => {
+              const primaryRow = currentForm.querySelector('.id-row[data-primary-id="true"]') || currentForm.querySelector('.id-row');
+              
+              // Use the first saved ID for the primary row
+              if (primaryRow) {
+                const firstId = individualData.ids[0];
+                const primaryTypeField = primaryRow.querySelector('select[name*="[type]"]');
+                const primaryValueField = primaryRow.querySelector('input[name*="[value]"]');
+
+                if (primaryTypeField) primaryTypeField.value = firstId.type;
+                if (primaryValueField) primaryValueField.value = firstId.value;
+              }
+
+              // Remaining IDs go into optional rows
+              const remainingIds = individualData.ids.slice(1);
+              remainingIds.forEach(idData => {
                 addIdRow(currentForm);
                 
-                // Get the newly added ID row
+                // Get the newly added ID row (last non-primary row)
                 const idRows = currentForm.querySelectorAll('.id-row');
                 const lastIdRow = idRows[idRows.length - 1];
-                if (lastIdRow) {
+                if (lastIdRow && !lastIdRow.hasAttribute('data-primary-id')) {
                   const typeField = lastIdRow.querySelector('select[name*="[type]"]');
                   const valueField = lastIdRow.querySelector('input[name*="[value]"]');
                   
@@ -1556,23 +1863,25 @@
           individualIndex = formData.individuals.length;
         }
         
-        console.log('Form data restored from localStorage:', formData);
-        showToast(`Restored ${formData.individuals.length} individual(s) and family data`, 'success');
+        console.log('Form data restored from localStorage:', allData);
+        if (!silent) {
+          showToast(`Restored ${formData.individuals.length} individual(s) and family data`, 'success');
+        }
       } catch (error) {
         console.error('Error restoring form data:', error);
-        localStorage.removeItem('familyCreationFormData');
+        localStorage.removeItem(FAMILY_STORAGE_KEY);
         showToast('Error restoring form data', 'error');
       }
     }
     
     function clearFormData() {
-      localStorage.removeItem('familyCreationFormData');
+      localStorage.removeItem(FAMILY_STORAGE_KEY);
       console.log('Form data cleared from localStorage');
       showToast('Form data cleared', 'info');
     }
     
     function hasSavedData() {
-      return localStorage.getItem('familyCreationFormData') !== null;
+      return localStorage.getItem(FAMILY_STORAGE_KEY) !== null || localStorage.getItem('familyCreationFormData') !== null;
     }
     
     function showSavedDataIndicator() {
@@ -1813,13 +2122,6 @@
       if (hiddenId) hiddenId.remove();
 
       container.appendChild(clone);
-      
-      // Add an initial empty ID row
-      const newForm = container.lastElementChild;
-      if (newForm) {
-          addIdRow(newForm);
-      }
-
       // Initialize Alpine and HTMX behaviors for newly added content
       try {
         const lastChild = container.lastElementChild;
@@ -1832,6 +2134,8 @@
       } catch (e) {
         console.warn('Init error for new individual form:', e);
       }
+      // Update parent relationship dropdowns after adding a member
+      refreshParentSelects();
       individualIndex++;
     }
     
@@ -1901,20 +2205,33 @@
       // Optionally update numbering after removal
       const remaining = document.querySelectorAll('.individual-form .member-number');
       remaining.forEach((el, idx) => { el.textContent = idx + 1; });
+      // Refresh parent dropdowns to remove deleted member from options
+      refreshParentSelects();
     }
     
     // Add the first individual form when the page loads
     document.addEventListener('DOMContentLoaded', function() {
-          // Only add an empty form if none exist yet (e.g., initial open or new family)
-          const container = document.getElementById('individuals-container');
-          if (container && container.children.length === 0) {
-            addIndividualForm();
+      // Only add an empty form if none exist yet (e.g., initial open or new family)
+      const container = document.getElementById('individuals-container');
+      if (container && container.children.length === 0) {
+        addIndividualForm();
+      }
+
+      // Keep parent label options in sync with full_name edits
+      if (container) {
+        container.addEventListener('input', function (event) {
+          if (event.target && event.target.matches('input[name*="[full_name]"]')) {
+            refreshParentSelects();
           }
-          // Restore saved form data if available
-          setTimeout(() => {
-            restoreFormData();
-            showSavedDataIndicator();
-          }, 100); // Small delay to ensure DOM is ready
+        });
+      }
+
+      // Restore saved form data if available
+      setTimeout(() => {
+        restoreFormData();
+        showSavedDataIndicator();
+        refreshParentSelects();
+      }, 100); // Small delay to ensure DOM is ready
     });
   </script>
 {% endpartialdef %}

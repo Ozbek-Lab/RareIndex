@@ -2250,7 +2250,6 @@ def _create_individual(data, family, user, default_status):
         "is_index": data.get("is_index") == "true",
         "is_affected": data.get("is_affected") == "true",
         "sex": data.get("sex"),
-        "karyotype": data.get("karyotype"),
     }
 
     # Handle M2M fields (institution, hpo_terms)
@@ -2384,15 +2383,34 @@ def family_create_segway(request):
 
             # 4. Resolve Relationships (Mother/Father)
             all_individuals = created_individuals + updated_individuals
-            
+            index_to_individual = {idx: ind for idx, ind in all_individuals}
+
+            def _parent_from_index(idx_str):
+                try:
+                    if idx_str in (None, ""):
+                        return None
+                    return index_to_individual.get(int(idx_str))
+                except (TypeError, ValueError):
+                    return None
+
             for idx, individual in all_individuals:
-                data = individuals_data.get(idx, {})
-                mother_val = data.get("mother") or data.get("mother_query")
-                father_val = data.get("father") or data.get("father_query")
-                
-                m_obj = _resolve_parent(mother_val)
-                f_obj = _resolve_parent(father_val)
-                
+                data = individuals_data.get(idx, {}) or {}
+
+                # Prefer within-form index-based parents for this segway view
+                mother_index = data.get("mother_index")
+                father_index = data.get("father_index")
+
+                m_obj = _parent_from_index(mother_index)
+                f_obj = _parent_from_index(father_index)
+
+                # Fallback to legacy resolution (e.g. if values came from search fields)
+                if not m_obj:
+                    mother_val = data.get("mother") or data.get("mother_query")
+                    m_obj = _resolve_parent(mother_val)
+                if not f_obj:
+                    father_val = data.get("father") or data.get("father_query")
+                    f_obj = _resolve_parent(father_val)
+
                 changed = False
                 if m_obj and individual.mother_id != m_obj.id:
                     individual.mother = m_obj
