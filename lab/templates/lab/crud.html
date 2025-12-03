@@ -355,6 +355,16 @@
       </div>
     </div>
   </div>
+  <script>
+    // Notify generic search components that an object of this model was created
+    try {
+      if (window && '{{ model_name|escapejs }}') {
+        window.dispatchEvent(new CustomEvent('created-{{ model_name|escapejs }}'));
+      }
+    } catch (e) {
+      console.warn('Failed to dispatch created-{{ model_name }} event', e);
+    }
+  </script>
 {% endpartialdef %}
 
 {% partialdef edit-success %}
@@ -2282,13 +2292,47 @@
         
         {% if created_individuals %}
         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
-          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Created Individuals:</h4>
-          <div class="space-y-2">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Created Individuals</h4>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            These individuals were newly added to family "{{ family.family_id }}".
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {% for individual in created_individuals %}
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-gray-600 dark:text-gray-300">{{ individual.full_name }}</span>
-              <span class="text-gray-500 dark:text-gray-400">({{ individual.id }})</span>
-            </div>
+              {% with item=individual %}
+                {% include "lab/individual.html#card" %}
+              {% endwith %}
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if updated_individuals %}
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Updated Individuals</h4>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            These existing individuals had their data updated in this operation.
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for individual in updated_individuals %}
+              {% with item=individual %}
+                {% include "lab/individual.html#card" %}
+              {% endwith %}
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if unchanged_individuals %}
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Unchanged Individuals</h4>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            These individuals are part of the family but were not modified.
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[24rem] overflow-y-auto">
+            {% for individual in unchanged_individuals %}
+              {% with item=individual %}
+                {% include "lab/individual.html#card" %}
+              {% endwith %}
             {% endfor %}
           </div>
         </div>
@@ -2296,6 +2340,14 @@
       </div>
     </div>
   </div>
+  <script>
+    // Notify generic search components that Individuals were created/updated
+    try {
+      window.dispatchEvent(new CustomEvent('created-Individual'));
+    } catch (e) {
+      console.warn('Failed to dispatch created-Individual event', e);
+    }
+  </script>
 {% endpartialdef %}
 
 {% partialdef family-create-error %}

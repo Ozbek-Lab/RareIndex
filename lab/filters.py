@@ -542,8 +542,6 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
     queryset = _apply_own_search(queryset, target_model_name, request)
 
     include_filters, exclude_filters = _partition_active_filters(request, exclude_filter)
-    print(f"Include filters: {include_filters}")
-    print(f"Exclude filters: {exclude_filters}")
 
     target_config = FILTER_CONFIG.get(target_model_name, {})
 

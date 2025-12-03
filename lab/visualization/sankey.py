@@ -134,7 +134,6 @@ def generate_sankey_data(sankey_metrics):
             value=values,
         ),
     )
-    print(sankey_data)
     fig = go.Figure(data=[sankey_data])
     fig.update_layout(title_text="Sample/Test/Analysis Flow", font_size=12, height=800)
     return fig.to_dict()

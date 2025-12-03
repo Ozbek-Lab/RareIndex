@@ -200,12 +200,9 @@ def index(request):
             | Q(content_type__isnull=True)
         ).order_by("name"),
     }
-    print("index 00")
 
     if request.headers.get("HX-Request"):
-        print("index 01")
         return render(request, "lab/index.html#index", context)
-    print("index 02")
     return render(request, "lab/index.html", context)
 
 
@@ -1741,13 +1738,7 @@ def generic_create(request):
                 filtered_statuses = filtered_statuses.exclude(content_type=individual_ct)
             
             form.fields["status"].queryset = filtered_statuses
-            print(
-                f"DEBUG: Filtered statuses for {model_name}: {filtered_statuses.count()} statuses found"
-            )
-            print(f"DEBUG: Model CT: {model_ct}")
-            print(f"DEBUG: Available statuses: {[s.name for s in filtered_statuses]}")
         except Exception as e:
-            print(f"Error filtering statuses for {model_name}: {e}")
             # Fallback to all statuses if filtering fails
             form.fields["status"].queryset = Status.objects.all().order_by("name")
 
@@ -2007,13 +1998,7 @@ def generic_edit(request):
                 filtered_statuses = filtered_statuses.exclude(content_type=individual_ct)
             
             form.fields["status"].queryset = filtered_statuses
-            print(
-                f"DEBUG: Filtered statuses for {model_name}: {filtered_statuses.count()} statuses found"
-            )
-            print(f"DEBUG: Model CT: {model_ct}")
-            print(f"DEBUG: Available statuses: {[s.name for s in filtered_statuses]}")
         except Exception as e:
-            print(f"Error filtering statuses for {model_name}: {e}")
             # Fallback to all statuses if filtering fails
             form.fields["status"].queryset = Status.objects.all().order_by("name")
 
@@ -2370,8 +2355,6 @@ def family_create_segway(request):
                 
                 if error_msg:
                     print(f"Error creating individual at index {index}: {error_msg}")
-                if error_msg:
-                    print(f"Error creating individual at index {index}: {error_msg}")
                     individual_errors.append(f"Individual {index}: {error_msg}")
                     continue
 
@@ -2501,6 +2484,26 @@ def family_create_segway(request):
                     except Exception as e:
                         print(f"Error creating task for individual {index}: {e}")
 
+            # Prepare lists for success summary
+            created_only = [ind for _, ind in created_individuals]
+            updated_only = [ind for _, ind in updated_individuals]
+
+            # Individuals in this family after changes
+            all_family_individuals = list(getattr(family, "individuals").all())
+            changed_ids = {ind.id for ind in created_only + updated_only}
+            unchanged_individuals = [
+                ind for ind in all_family_individuals if ind.id not in changed_ids
+            ]
+
+            # Statuses for Individual cards/badges in the success popup
+            try:
+                indiv_ct = ContentType.objects.get_for_model(Individual)
+                individual_statuses = Status.objects.filter(
+                    Q(content_type=indiv_ct) | Q(content_type__isnull=True)
+                ).order_by("name")
+            except Exception:
+                individual_statuses = Status.objects.all().order_by("name")
+
             # Return success response
             if request.htmx:
                 return render(
@@ -2509,12 +2512,14 @@ def family_create_segway(request):
                     {
                         "family": family,
                         "family_was_created": family_created,
-                        "count_created": len(created_individuals),
-                        "count_updated": len(updated_individuals),
-                        "created_individuals": [ind for _, ind in created_individuals],
-                        "updated_individuals": [ind for _, ind in updated_individuals],
+                        "count_created": len(created_only),
+                        "count_updated": len(updated_only),
+                        "created_individuals": created_only,
+                        "updated_individuals": updated_only,
+                        "unchanged_individuals": unchanged_individuals,
                         "reassigned_individuals": reassigned_individuals,
                         "individual_errors": individual_errors,
+                        "individual_statuses": individual_statuses,
                     },
                 )
             return redirect("lab:index")
@@ -2557,7 +2562,6 @@ def family_create_segway(request):
 
 
 def plots(request):
-    print("VIEWS PLOTS")
     return render(request, "lab/index.html", {"activeItem": "plots"})
 
 
@@ -2571,8 +2575,6 @@ def map_view(request):
     """
     Generate a scatter map visualization showing institutions of filtered individuals.
     """
-    print(f"=== DEBUG: Map view request: {request} ===")
-    print(f"=== DEBUG: Map view request GET: {request.GET} ===")
     
     # Start with base queryset for individuals
     individuals_queryset = Individual.objects.all()
