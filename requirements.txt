@@ -22,7 +22,7 @@ django-simple-history
 openpyxl
 numpy
 plotly-express
-# git+https://github.com/django-notifications/django-notifications.git@master#egg=django-notifications-hq
+git+https://github.com/barslmn/django-notifications.git
 
 # LLM and LangChain dependencies
 langchain

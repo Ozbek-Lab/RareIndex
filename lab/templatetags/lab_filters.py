@@ -534,3 +534,13 @@ def get_item(dictionary, key):
         return dictionary.get(key)
         
     return None
+
+
+@register.filter
+def get_content_type_id(obj):
+    """Get the ContentType ID for a model instance."""
+    from django.contrib.contenttypes.models import ContentType
+    try:
+        return ContentType.objects.get_for_model(obj).id
+    except Exception:
+        return None

@@ -1304,7 +1304,19 @@
           <!-- Use existing task partials for consistent UI -->
           <div x-data="{ viewMode: 'cards' }" class="space-y-6">
             <!-- View toggle buttons -->
-            <div class="flex justify-end">
+            <div class="flex justify-between items-center">
+              {% with ct_id=item|get_content_type_id %}
+              <button
+                hx-get="{% url 'lab:generic_create' %}?model_name=Task&app_label=lab&content_type={{ ct_id }}&object_id={{ item.pk }}"
+                hx-target="#modal-root"
+                hx-swap="innerHTML"
+                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center"
+              >
+                <i class="fas fa-plus mr-2"></i>
+                Add Task
+              </button>
+              {% endwith %}
+
               <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center">
                 <div class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out" :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'" style="width: calc(50% - 2px);"></div>
 
