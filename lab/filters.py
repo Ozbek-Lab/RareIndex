@@ -580,6 +580,25 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
 
     include_filters, exclude_filters = _partition_active_filters(request, exclude_filter)
 
+    # Handle "Task Scope" filter for Tasks (All, Assigned to Me, Assigned by Me)
+    if target_model_name == "Task" and "task_scope" in include_filters:
+        scope = include_filters["task_scope"]
+        # Handle list or string
+        if isinstance(scope, list):
+            scope = scope[0]
+            
+        if scope == "assigned_to_me":
+            queryset = queryset.filter(assigned_to=request.user)
+        elif scope == "assigned_by_me":
+            queryset = queryset.filter(created_by=request.user)
+            
+        # Remove it from include_filters so it's not processed by generic logic
+        del include_filters["task_scope"]
+        
+    # Cleanup old filter if present
+    if "assigned_to_me" in include_filters:
+        del include_filters["assigned_to_me"]
+
     target_config = FILTER_CONFIG.get(target_model_name, {})
 
     for filter_key, filter_values in include_filters.items():

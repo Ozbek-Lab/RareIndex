@@ -288,6 +288,44 @@
       <!-- Add New button -->
 
 
+      {% if model_name == 'Task' %}
+      <div class="mr-4 relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 grid grid-cols-3 w-64">
+        <!-- Animated background slider -->
+        <div
+          class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+          :class="{
+            'translate-x-0': !filters.task_scope || filters.task_scope === 'all',
+            'translate-x-full': filters.task_scope === 'assigned_to_me',
+            'translate-x-[200%]': filters.task_scope === 'assigned_by_me'
+          }" 
+          style="width: calc(33.333% - 4px);"></div>
+
+        <!-- All Tasks button -->
+        <button type="button" @click="filters.task_scope = 'all'; $nextTick(() => dispatchFiltersUpdated('task'))"
+          class="relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
+          :class="(!filters.task_scope || filters.task_scope === 'all') ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+          <span class="transition-all duration-300"
+            :class="(!filters.task_scope || filters.task_scope === 'all') ? 'font-semibold' : 'font-medium'">All</span>
+        </button>
+
+        <!-- To Me button -->
+        <button type="button" @click="filters.task_scope = 'assigned_to_me'; $nextTick(() => dispatchFiltersUpdated('task'))"
+          class="relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
+          :class="filters.task_scope === 'assigned_to_me' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+          <span class="transition-all duration-300"
+            :class="filters.task_scope === 'assigned_to_me' ? 'font-semibold' : 'font-medium'">To Me</span>
+        </button>
+
+        <!-- By Me button -->
+        <button type="button" @click="filters.task_scope = 'assigned_by_me'; $nextTick(() => dispatchFiltersUpdated('task'))"
+          class="relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
+          :class="filters.task_scope === 'assigned_by_me' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+          <span class="transition-all duration-300"
+            :class="filters.task_scope === 'assigned_by_me' ? 'font-semibold' : 'font-medium'">By Me</span>
+        </button>
+      </div>
+      {% endif %}
+
       {% if model_name != 'Individual' and model_name != 'Variant' %}
       <button hx-get="{% url 'lab:generic_create' %}?model_name={{ model_name }}&app_label={{ app_label }}"
         hx-target="#modal-root" hx-swap="innerHTML"
