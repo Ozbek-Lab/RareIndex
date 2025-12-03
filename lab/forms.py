@@ -137,10 +137,11 @@ class TaskForm(BaseForm):
             self.fields["status"].queryset = Status.objects.all().order_by("name")
         
         # Set up content_type choices - models that can have tasks
-        taskable_models = [Individual, Sample, Test, Analysis, Project]
+        from variant.models import Variant
+        taskable_models = [Individual, Sample, Test, Analysis, Project, Variant]
         content_types = ContentType.objects.filter(
             model__in=[m._meta.model_name for m in taskable_models],
-            app_label="lab"
+            app_label__in=["lab", "variant"]
         ).order_by("model")
         self.fields["content_type"].queryset = content_types
         

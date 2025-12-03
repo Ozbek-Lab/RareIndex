@@ -63,7 +63,7 @@ FILTER_CONFIG = {
     },
     "Sample": {
         "app_label": "lab",
-        "search_fields": ["sample_type__name", "id"],
+        "search_fields": ["sample_type__name", "id", "individual__cross_ids__id_value"],
         "type_info": {
             "model": "SampleType",
             "filter_field": "sample_type",
@@ -93,7 +93,7 @@ FILTER_CONFIG = {
     },
     "Test": {
         "app_label": "lab",
-        "search_fields": ["test_type__name"],
+        "search_fields": ["test_type__name", "sample__individual__cross_ids__id_value"],
         "type_info": {
             "model": "TestType",
             "filter_field": "test_type",
@@ -132,7 +132,7 @@ FILTER_CONFIG = {
     },
     "Analysis": {
         "app_label": "lab",
-        "search_fields": ["type__name", "test__sample__individual__full_name"],
+        "search_fields": ["type__name", "test__sample__individual__full_name", "test__sample__individual__cross_ids__id_value"],
         "type_info": {
             "model": "AnalysisType",
             "filter_field": "analysis_type",
@@ -234,7 +234,7 @@ FILTER_CONFIG = {
     },
     "Variant": {
         "app_label": "variant",
-        "search_fields": ["chromosome", "snv__reference", "snv__alternate", "id"],
+        "search_fields": ["chromosome", "snv__reference", "snv__alternate", "id", "individual__cross_ids__id_value"],
         "variant_types": {
             "snv": {"name": "SNV", "query_lookup": "snv__isnull"},
             "cnv": {"name": "CNV", "query_lookup": "cnv__isnull"},
