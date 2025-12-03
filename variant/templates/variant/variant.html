@@ -359,13 +359,14 @@
     data-item-id="{{ item.id }}"
   >
     <div class="flex items-center gap-1 mb-2">
-      <button
+      <a
+        href="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ item.pk }}"
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click="openDetail('{{ item.pk }}', '{{ model_name }}', '{{ app_label }}')"
+        @click.prevent="openDetail('{{ item.pk }}', '{{ model_name }}', '{{ app_label }}')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
-      </button>
+      </a>
       <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">
         {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
       </h3>

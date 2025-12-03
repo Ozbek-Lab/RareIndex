@@ -69,9 +69,6 @@ def generate_map_data(individuals_queryset, individual_types, enable_clustering=
 
     # Add custom hover data for individuals
     df['individual_details'] = df['name']
-    print(f"Aggregated DataFrame - {len(df)} unique institutions:")
-    print(df.head())
-    print(f"Total individuals: {df['cnt'].sum()}")
 
     # Use original coordinates - clustering handled by Plotly's built-in feature
     offset_lat_series = df["lat"].tolist()
