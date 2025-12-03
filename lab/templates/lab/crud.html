@@ -674,6 +674,33 @@
               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
             >
           </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Sex
+            </label>
+            <select 
+              name="individuals[INDEX][sex]" 
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
+            >
+              <option value="">Select Sex</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Karyotype
+            </label>
+            <input 
+              type="text" 
+              name="individuals[INDEX][karyotype]" 
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
+              placeholder="e.g. 46,XY"
+            >
+          </div>
         </div>
 
         <!-- Column 3 (Flags + HPO + Notes) -->
@@ -1229,6 +1256,26 @@
               api = bind();
               api.refresh && api.refresh();
             }
+            // Update individualIndex based on existing forms to prevent overwrites
+            if (evt && evt.detail && evt.detail.target && (evt.detail.target.id === 'individuals-container' || evt.detail.target.id === 'modal-root')) {
+               const container = document.getElementById('individuals-container');
+               if (container) {
+                   const forms = container.querySelectorAll('.individual-form');
+                   let maxIndex = -1;
+                   forms.forEach(form => {
+                       const inputs = form.querySelectorAll('input[name*="individuals["]');
+                       inputs.forEach(input => {
+                           const match = input.name.match(/individuals\[(\d+)\]/);
+                           if (match) {
+                               const idx = parseInt(match[1]);
+                               if (idx > maxIndex) maxIndex = idx;
+                           }
+                       });
+                   });
+                   individualIndex = maxIndex + 1;
+                   console.log("Updated individualIndex to:", individualIndex);
+               }
+            }
           } catch(e) { /* noop */ }
         });
       } catch (e) { /* silent */ }
@@ -1686,6 +1733,32 @@
             isValid = false;
           }
         }
+
+        // Validate IDs (Mandatory)
+        const idRows = form.querySelectorAll('.id-row');
+        let hasValidId = false;
+        idRows.forEach(row => {
+            const type = row.querySelector('select[name*="[type]"]')?.value;
+            const value = row.querySelector('input[name*="[value]"]')?.value;
+            if (type && value && value.trim()) {
+                hasValidId = true;
+            }
+        });
+
+        const idContainer = form.querySelector('.id-rows').closest('.bg-gray-50');
+        if (!hasValidId) {
+            errors.push(`Individual ${index + 1}: At least one ID is required`);
+            isValid = false;
+            if (idContainer) {
+                idContainer.classList.add('ring-2', 'ring-red-500');
+                // Remove ring on interaction
+                idContainer.addEventListener('input', function() {
+                    this.classList.remove('ring-2', 'ring-red-500');
+                }, { once: true });
+            }
+        } else {
+            if (idContainer) idContainer.classList.remove('ring-2', 'ring-red-500');
+        }
       });
       
       if (!isValid) {
@@ -1733,7 +1806,20 @@
         memberNumber.textContent = individualIndex + 1;
       }
       
+      // CRITICAL: Remove any hidden ID field to ensure this is treated as a NEW individual
+      // The template shouldn't have one, but if it was cloned from an existing form (which isn't what we do here, but good practice)
+      // or if the template accidentally included one.
+      const hiddenId = clone.querySelector('input[name*="[id]"]');
+      if (hiddenId) hiddenId.remove();
+
       container.appendChild(clone);
+      
+      // Add an initial empty ID row
+      const newForm = container.lastElementChild;
+      if (newForm) {
+          addIdRow(newForm);
+      }
+
       // Initialize Alpine and HTMX behaviors for newly added content
       try {
         const lastChild = container.lastElementChild;
@@ -1890,41 +1976,6 @@
           </div>
         </div>
         {% endif %}
-
-        {% if updated_individuals %}
-        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
-          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Updated Individuals:</h4>
-          <div class="space-y-2">
-            {% for individual in updated_individuals %}
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-gray-600 dark:text-gray-300">{{ individual.full_name }}</span>
-              <span class="text-gray-500 dark:text-gray-400">({{ individual.id }})</span>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-
-        {% if reassigned_individuals %}
-        <div class="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4 mb-4">
-          <h4 class="font-medium text-yellow-800 dark:text-yellow-200 mb-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Family Reassignments</h4>
-          <div class="space-y-1 text-sm text-yellow-800 dark:text-yellow-200">
-            {% for idx, individual, old_family_id in reassigned_individuals %}
-              <div>{{ individual.full_name }} ({{ individual.id }}) moved from family <strong>{{ old_family_id }}</strong> to <strong>{{ family.family_id }}</strong>.</div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-        
-        <div class="flex justify-center space-x-3">
-          <button 
-            type="button" 
-            @click= "document.getElementById('modal-root').innerHTML = ''" 
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   </div>

@@ -169,6 +169,7 @@ class IndividualForm(BaseForm):
             "institution",
             "status",
             "hpo_terms",
+            "sex",
         ]
         widgets = {
             "birth_date": forms.DateInput(attrs={"type": "date"}),
