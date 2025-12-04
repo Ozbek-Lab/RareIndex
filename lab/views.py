@@ -1092,6 +1092,20 @@ def get_objects_by_content_type(request):
         # Determine app_label and model_name for the partial
         app_label = model_class._meta.app_label
         model_name = model_class._meta.model_name
+
+        # Optional: preselect an existing object (used when editing a Task)
+        selected_object_id = request.GET.get("object_id")
+        initial = ""
+        initial_value = ""
+        if selected_object_id:
+            try:
+                obj = model_class.objects.get(pk=selected_object_id)
+                initial = str(obj)
+                initial_value = str(obj.pk)
+            except Exception:
+                # If lookup fails, fall back to no initial
+                initial = ""
+                initial_value = ""
         
         # Render the single generic combobox partial
         # We need to pass the correct context for the combobox controller
@@ -1101,8 +1115,8 @@ def get_objects_by_content_type(request):
             "value_field": "pk",
             "name": "object_id",
             "icon_class": "fa-magnifying-glass",
-            "initial": "", # No initial value when switching types
-            "initial_value": "",
+            "initial": initial,
+            "initial_value": initial_value,
         }
         
         return render(request, "lab/partials/partials.html#single-generic-combobox", context)
@@ -2035,6 +2049,20 @@ def generic_edit(request):
             # Save the object with updated_at handled by the form
             obj = form.save()
 
+            # Special handling for Task: allow updating associated content_type/object_id
+            if model_name == "Task" and isinstance(obj, Task):
+                content_type_id = request.POST.get("content_type")
+                object_id = request.POST.get("object_id")
+                if content_type_id and object_id:
+                    try:
+                        ct = ContentType.objects.get(pk=content_type_id)
+                        obj.content_type = ct
+                        obj.object_id = int(object_id)
+                        obj.save()
+                    except (ContentType.DoesNotExist, ValueError, TypeError):
+                        # If anything goes wrong, keep the existing association
+                        pass
+
             # Generic: handle any ManyToMany fields posted as JSON lists via <field_name>_ids
             try:
                 for m2m_field in obj._meta.many_to_many:
@@ -2181,6 +2209,20 @@ def generic_edit(request):
             "app_label": app_label,
             "staff_initial_json": staff_initial_json,
         }
+        # For Task editing, provide info about the currently associated object
+        try:
+            if model_name == "Task" and getattr(obj, "content_object", None):
+                context["associated_object_label"] = str(obj.content_object)
+                ct = obj.content_type
+                if ct is not None:
+                    context["associated_app_label"] = ct.app_label
+                    # Use the concrete model class name for the combobox
+                    model_cls = ct.model_class()
+                    if model_cls is not None:
+                        context["associated_model_name"] = model_cls.__name__
+        except Exception:
+            # If anything goes wrong, we simply skip these optional hints
+            pass
         # Provide initial JSON for HPO combobox in Individual edit form
         try:
             if model_name == "Individual":

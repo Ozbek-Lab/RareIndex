@@ -124,6 +124,7 @@ class TaskForm(BaseForm):
         }
 
     def __init__(self, *args, content_object=None, **kwargs):
+        instance = kwargs.get("instance")
         super().__init__(*args, **kwargs)
         # Remove StatusLog filtering logic; just show all Status objects
         self.fields["project"].queryset = Project.objects.all().order_by("name")
@@ -146,10 +147,14 @@ class TaskForm(BaseForm):
         self.fields["content_type"].queryset = content_types
         
         # If content_object is provided, set initial values
-        if content_object:
+        if content_object is not None:
             ct = ContentType.objects.get_for_model(content_object.__class__)
             self.fields["content_type"].initial = ct.pk
             self.fields["object_id"].initial = content_object.pk
+        # When editing an existing Task, prefill the form-only fields from the instance
+        elif isinstance(instance, Task) and instance.content_type_id and instance.object_id:
+            self.fields["content_type"].initial = instance.content_type_id
+            self.fields["object_id"].initial = instance.object_id
 
 
 class IndividualForm(BaseForm):
