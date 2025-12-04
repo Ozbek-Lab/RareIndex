@@ -55,7 +55,6 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "django_htmx",
-    "template_partials",
     "lab",
     "ontologies",
     "simple_history",
@@ -103,7 +102,6 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
             ],
-            "builtins": ["template_partials.templatetags.partials"],
         },
     },
 ]

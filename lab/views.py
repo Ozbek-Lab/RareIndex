@@ -149,17 +149,18 @@ def task_complete(request, pk):
 def task_reopen(request, pk):
     """Reopen a Task by setting its status to 'Active' and return updated partial."""
     task = get_object_or_404(Task, pk=pk)
-    # Find an 'Active' status (case-insensitive)
-    active_status = Status.objects.filter(name__iexact="active").first()
-    if not active_status:
-        return HttpResponseBadRequest("No 'Active' status found in Status model.")
+    target_status = task.previous_status
+    if target_status is None:
+        target_status = Status.objects.filter(name__iexact="active").first()
+        if not target_status:
+            return HttpResponseBadRequest("No 'Active' status found in Status model.")
     # Update if different
-    if task.status_id != active_status.id:
-        task.status = active_status
+    if task.status_id != target_status.id:
+        task.status = target_status
         # Update related object's status if supported
         if hasattr(task.content_object, "update_status"):
             task.content_object.update_status(
-                active_status,
+                target_status,
                 request.user,
                 f"Status updated via task reopen: {task.title}",
             )
@@ -192,19 +193,44 @@ def task_reopen(request, pk):
 
 @login_required
 def index(request):
+    def get_initial_json(model_class, param_name):
+        val = request.GET.get(param_name)
+        if not val:
+            return "[]"
+        ids = []
+        if val.startswith("[") and val.endswith("]"):
+            try:
+                ids = json.loads(val)
+            except:
+                pass
+        elif "," in val:
+            try:
+                ids = [int(x) for x in val.split(",") if x.strip().isdigit()]
+            except:
+                pass
+        elif val.isdigit():
+            ids = [int(val)]
+        
+        if not ids:
+            return "[]"
+            
+        objs = model_class.objects.filter(pk__in=ids)
+        return json.dumps([{"value": obj.pk, "label": str(obj)} for obj in objs])
+
     context = {
         "institutions": Institution.objects.all(),
         "individual_statuses": Status.objects.filter(
             Q(content_type=ContentType.objects.get_for_model(Individual))
             | Q(content_type__isnull=True)
         ).order_by("name"),
+        "initial_projects": get_initial_json(Project, "filter_project"),
+        "initial_tests": get_initial_json(Test, "filter_test"),
+        "initial_analyses": get_initial_json(Analysis, "filter_analysis"),
+        "initial_institutions": get_initial_json(Institution, "filter_institution"),
     }
-    print("index 00")
 
     if request.headers.get("HX-Request"):
-        print("index 01")
         return render(request, "lab/index.html#index", context)
-    print("index 02")
     return render(request, "lab/index.html", context)
 
 
@@ -252,7 +278,19 @@ def generic_search(request):
                         base_qs = base_qs.filter(cross_ids__id_value__icontains=own_search_term).distinct()
                     else:
                         # Try direct icontains on specified label field
-                        base_qs = base_qs.filter(**{f"{label_field}__icontains": own_search_term})
+                        # BUT ALSO include cross_id search for related models if applicable
+                        q_label = _Q(**{f"{label_field}__icontains": own_search_term})
+                        
+                        if target_model_name == "Sample":
+                            q_label |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Test":
+                            q_label |= _Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Analysis":
+                            q_label |= _Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Variant":
+                            q_label |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            
+                        base_qs = base_qs.filter(q_label).distinct()
                 else:
                     # Fallback: OR over all CharField/TextField
                     from django.db.models import Q as _Q
@@ -269,7 +307,20 @@ def generic_search(request):
                         qobj = _Q()
                         for fname in text_fields:
                             qobj |= _Q(**{f"{fname}__icontains": own_search_term})
-                        base_qs = base_qs.filter(qobj)
+                        
+                        # Special handling for Individual: also search cross_ids
+                        if target_model_name == "Individual":
+                            qobj |= _Q(cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Sample":
+                            qobj |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Test":
+                            qobj |= _Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Analysis":
+                            qobj |= _Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                        elif target_model_name == "Variant":
+                            qobj |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            
+                        base_qs = base_qs.filter(qobj).distinct()
             except Exception:
                 # If filtering fails, leave base_qs as-is
                 pass
@@ -778,6 +829,30 @@ def update_status(request):
         old_status = obj.status
         obj.status = status
         obj.save()
+
+        # Send notification if status changed
+        if old_status != status:
+            from .services import send_notification
+            
+            # Notify the creator of the object
+            if hasattr(obj, "created_by") and obj.created_by != request.user:
+                send_notification(
+                    sender=request.user,
+                    recipient=obj.created_by,
+                    verb="Status Change",
+                    description=f"Status of {model_name} '{obj}' changed from '{old_status}' to '{status}'",
+                    target=obj,
+                )
+            
+            # Notify assigned user if applicable (e.g. for Task)
+            if hasattr(obj, "assigned_to") and obj.assigned_to and obj.assigned_to != request.user:
+                send_notification(
+                    sender=request.user,
+                    recipient=obj.assigned_to,
+                    verb="Status Change",
+                    description=f"Status of {model_name} '{obj}' changed from '{old_status}' to '{status}'",
+                    target=obj,
+                )
         
         # Refresh the object from database to ensure we have latest data
         obj.refresh_from_db()
@@ -1008,23 +1083,46 @@ def get_objects_by_content_type(request):
     content_type_id = request.GET.get("content_type_id") or request.GET.get("content_type")
     
     if not content_type_id:
-        return HttpResponse("<option value=''>---------</option>")
+        return HttpResponse('<div class="text-gray-500 text-sm p-2">Select a type first</div>')
     
     try:
         content_type = ContentType.objects.get(pk=content_type_id)
         model_class = content_type.model_class()
         
-        # Get all objects of this type
-        objects = model_class.objects.all().order_by("-id")[:100]  # Limit to 100 most recent
+        # Determine app_label and model_name for the partial
+        app_label = model_class._meta.app_label
+        model_name = model_class._meta.model_name
+
+        # Optional: preselect an existing object (used when editing a Task)
+        selected_object_id = request.GET.get("object_id")
+        initial = ""
+        initial_value = ""
+        if selected_object_id:
+            try:
+                obj = model_class.objects.get(pk=selected_object_id)
+                initial = str(obj)
+                initial_value = str(obj.pk)
+            except Exception:
+                # If lookup fails, fall back to no initial
+                initial = ""
+                initial_value = ""
         
-        # Build HTML options
-        options_html = "<option value=''>---------</option>\n"
-        for obj in objects:
-            options_html += f"<option value='{obj.pk}'>{str(obj)}</option>\n"
+        # Render the single generic combobox partial
+        # We need to pass the correct context for the combobox controller
+        context = {
+            "app_label": app_label,
+            "model_name": model_class.__name__, # Use class name for display/logic
+            "value_field": "pk",
+            "name": "object_id",
+            "icon_class": "fa-magnifying-glass",
+            "initial": initial,
+            "initial_value": initial_value,
+        }
         
-        return HttpResponse(options_html)
+        return render(request, "lab/partials/partials.html#single-generic-combobox", context)
+        
     except Exception as e:
-        return HttpResponse("<option value=''>Error loading objects</option>")
+        return HttpResponse(f'<div class="text-red-500 text-sm p-2">Error loading objects: {str(e)}</div>')
 
 
 @login_required
@@ -1439,6 +1537,87 @@ def notifications_page(request):
 
 
 @login_required
+def profile_settings(request):
+    """View to manage user profile and notification settings"""
+    # Ensure profile exists (signal should handle this, but for safety)
+    if not hasattr(request.user, "profile"):
+        from .models import Profile
+
+        Profile.objects.create(user=request.user)
+
+    profile = request.user.profile
+
+    # Redirect to SPA if accessed directly without HTMX
+    if not request.headers.get("HX-Request") and request.method == "GET":
+        return redirect("/?page=profile_settings")
+
+    if request.method == "POST":
+        # Update email notification settings
+        email_settings = {
+            "task_assigned": request.POST.get("task_assigned") == "on",
+            "status_change": request.POST.get("status_change") == "on",
+            "group_message": request.POST.get("group_message") == "on",
+        }
+        profile.email_notifications = email_settings
+        profile.save()
+        messages.success(request, "Notification settings updated successfully.")
+        return redirect("lab:profile_settings")
+
+    # Merge with defaults for display
+    # Default to True for all keys if not present
+    current_settings = profile.email_notifications or {}
+    display_settings = {
+        "task_assigned": current_settings.get("task_assigned", True),
+        "status_change": current_settings.get("status_change", True),
+        "group_message": current_settings.get("group_message", True),
+    }
+
+    context = {
+        "profile": profile,
+        "display_settings": display_settings,
+    }
+
+    # Handle HTMX requests for partial rendering
+    if request.headers.get("HX-Request"):
+        return render(request, "lab/profile_settings.html#profile-settings-content", context)
+
+    return render(request, "lab/profile_settings.html", context)
+
+
+@login_required
+def send_group_message(request):
+    if request.method == "POST":
+        message = request.POST.get("message")
+        if message:
+            from django.contrib.auth.models import Group
+            from .services import send_notification
+            
+            try:
+                group = Group.objects.get(name="Group Members")
+                users = group.user_set.all()
+                count = 0
+                for user in users:
+                    if user != request.user:  # Don't send to self
+                        send_notification(
+                            sender=request.user,
+                            recipient=user,
+                            verb="Group Message",
+                            description=f"Group Message from {request.user}: {message}",
+                            target=group,
+                        )
+                        count += 1
+                messages.success(request, f"Message sent to {count} group members.")
+            except Group.DoesNotExist:
+                messages.error(request, "Group 'Group Members' does not exist.")
+        else:
+            messages.error(request, "Message cannot be empty.")
+            
+        return redirect("lab:profile_settings")
+    
+    return redirect("lab:profile_settings")
+
+
+@login_required
 def individual_timeline(request, pk):
 
 
@@ -1740,13 +1919,7 @@ def generic_create(request):
                 filtered_statuses = filtered_statuses.exclude(content_type=individual_ct)
             
             form.fields["status"].queryset = filtered_statuses
-            print(
-                f"DEBUG: Filtered statuses for {model_name}: {filtered_statuses.count()} statuses found"
-            )
-            print(f"DEBUG: Model CT: {model_ct}")
-            print(f"DEBUG: Available statuses: {[s.name for s in filtered_statuses]}")
         except Exception as e:
-            print(f"Error filtering statuses for {model_name}: {e}")
             # Fallback to all statuses if filtering fails
             form.fields["status"].queryset = Status.objects.all().order_by("name")
 
@@ -1875,6 +2048,20 @@ def generic_edit(request):
         if form.is_valid():
             # Save the object with updated_at handled by the form
             obj = form.save()
+
+            # Special handling for Task: allow updating associated content_type/object_id
+            if model_name == "Task" and isinstance(obj, Task):
+                content_type_id = request.POST.get("content_type")
+                object_id = request.POST.get("object_id")
+                if content_type_id and object_id:
+                    try:
+                        ct = ContentType.objects.get(pk=content_type_id)
+                        obj.content_type = ct
+                        obj.object_id = int(object_id)
+                        obj.save()
+                    except (ContentType.DoesNotExist, ValueError, TypeError):
+                        # If anything goes wrong, keep the existing association
+                        pass
 
             # Generic: handle any ManyToMany fields posted as JSON lists via <field_name>_ids
             try:
@@ -2006,13 +2193,7 @@ def generic_edit(request):
                 filtered_statuses = filtered_statuses.exclude(content_type=individual_ct)
             
             form.fields["status"].queryset = filtered_statuses
-            print(
-                f"DEBUG: Filtered statuses for {model_name}: {filtered_statuses.count()} statuses found"
-            )
-            print(f"DEBUG: Model CT: {model_ct}")
-            print(f"DEBUG: Available statuses: {[s.name for s in filtered_statuses]}")
         except Exception as e:
-            print(f"Error filtering statuses for {model_name}: {e}")
             # Fallback to all statuses if filtering fails
             form.fields["status"].queryset = Status.objects.all().order_by("name")
 
@@ -2028,6 +2209,20 @@ def generic_edit(request):
             "app_label": app_label,
             "staff_initial_json": staff_initial_json,
         }
+        # For Task editing, provide info about the currently associated object
+        try:
+            if model_name == "Task" and getattr(obj, "content_object", None):
+                context["associated_object_label"] = str(obj.content_object)
+                ct = obj.content_type
+                if ct is not None:
+                    context["associated_app_label"] = ct.app_label
+                    # Use the concrete model class name for the combobox
+                    model_cls = ct.model_class()
+                    if model_cls is not None:
+                        context["associated_model_name"] = model_cls.__name__
+        except Exception:
+            # If anything goes wrong, we simply skip these optional hints
+            pass
         # Provide initial JSON for HPO combobox in Individual edit form
         try:
             if model_name == "Individual":
@@ -2154,9 +2349,179 @@ def nl_search_page(request):
         )
 
         # Return the main index page with the nl-search content injected
-        return render(
-            request, "lab/index.html", {"initial_nl_search_html": nl_search_html}
-        )
+        return render(request, "lab/index.html", {"activeItem": "nl-search", "nl_search_html": nl_search_html})
+
+
+def _get_or_create_family(request, user):
+    """
+    Helper to get or create a family from POST data.
+    Returns (family, created, error_response).
+    """
+    family_id = request.POST.get("family_id")
+    family_id_query = request.POST.get("family_id_query")
+    family_description = request.POST.get("family_description", "")
+
+    if not family_id and not (family_id_query and family_id_query.strip()):
+        return None, False, HttpResponseBadRequest("Family ID is required.")
+
+    desired_family_id = (family_id_query or "").strip() or family_id
+
+    try:
+        family = Family.objects.get(family_id=desired_family_id)
+        # Update description if provided
+        if family_description and family.description != family_description:
+            family.description = family_description
+            family.save(update_fields=["description"])
+        return family, False, None
+    except Family.DoesNotExist:
+        try:
+            family = Family.objects.create(
+                family_id=desired_family_id,
+                description=family_description,
+                created_by=user,
+            )
+            return family, True, None
+        except Exception as e:
+            error_msg = f"Error creating family: {str(e)}"
+            if request.htmx:
+                return None, False, render(
+                    request,
+                    "lab/crud.html#family-create-error",
+                    {"error": error_msg},
+                )
+            return None, False, HttpResponseBadRequest(error_msg)
+
+
+def _parse_individuals_data(post_data):
+    """
+    Parses request.POST to extract individual data indexed by integer keys.
+    Returns a dict: {index: {field: value, ...}}
+    """
+    individuals_data = {}
+    for key, value in post_data.items():
+        if key.startswith("individuals["):
+            try:
+                # key format: individuals[0][field_name]
+                parts = key.split("][")
+                if len(parts) >= 2:
+                    index_str = parts[0].replace("individuals[", "")
+                    field_name = parts[1].replace("]", "")
+                    
+                    if index_str.isdigit():
+                        index = int(index_str)
+                        if index not in individuals_data:
+                            individuals_data[index] = {}
+                        individuals_data[index][field_name] = value
+            except Exception:
+                continue
+    return individuals_data
+
+
+def _create_individual(data, family, user, default_status):
+    """
+    Creates or updates a single individual.
+    Returns (individual, created, error_message).
+    """
+    if not data.get("full_name"):
+        return None, False, "Full name is required"
+
+    # Prepare form data
+    form_data = {
+        "id": data.get("id"),
+        "full_name": data.get("full_name"),
+        "tc_identity": data.get("tc_identity"),
+        "birth_date": data.get("birth_date"),
+        "icd11_code": data.get("icd11_code"),
+        "council_date": data.get("council_date"),
+        "diagnosis": data.get("diagnosis"),
+        "diagnosis_date": data.get("diagnosis_date"),
+        "mother": data.get("mother"),
+        "father": data.get("father"),
+        "institution": data.get("institution"),
+        "hpo_terms": data.get("hpo_term_ids") or data.get("hpo_terms"),
+        "status": data.get("status"),
+        "family": family.id,
+        "is_index": data.get("is_index") == "true",
+        "is_affected": data.get("is_affected") == "true",
+        "sex": data.get("sex"),
+    }
+
+    # Handle M2M fields (institution, hpo_terms)
+    for field in ["institution", "hpo_terms"]:
+        val = form_data.get(field)
+        if isinstance(val, str):
+            try:
+                import json
+                if val.strip().startswith("["):
+                    parsed = json.loads(val)
+                    if isinstance(parsed, list):
+                        form_data[field] = parsed
+                else:
+                    if val.strip():
+                        form_data[field] = [val]
+                    else:
+                        form_data.pop(field, None)
+            except Exception:
+                if val.strip():
+                    form_data[field] = [val]
+                else:
+                    form_data.pop(field, None)
+
+    # Clean up empty values
+    form_data = {k: v for k, v in form_data.items() if v is not None and v != ""}
+    
+    # Ensure family is set
+    form_data["family"] = family.id
+    # Default status
+    if not form_data.get("status") and default_status:
+        form_data["status"] = default_status.id
+
+    # Check if updating
+    instance = None
+    if form_data.get("id"):
+        try:
+            instance = Individual.objects.get(pk=int(form_data["id"]))
+        except Exception:
+            pass
+
+    from .forms import IndividualForm
+    if instance:
+        form = IndividualForm(form_data, instance=instance)
+    else:
+        form = IndividualForm(form_data)
+
+    if form.is_valid():
+        indiv = form.save(commit=False)
+        indiv.created_by = user
+        indiv.save()
+        form.save_m2m()
+        return indiv, instance is None, None
+    else:
+        return None, False, f"Validation error: {form.errors}"
+
+
+def _resolve_parent(val):
+    """
+    Resolves a parent individual from ID or CrossIdentifier value.
+    """
+    if not val:
+        return None
+    sval = str(val).strip()
+    if not sval:
+        return None
+        
+    # Try ID first
+    if sval.isdigit():
+        ind = Individual.objects.filter(pk=int(sval)).first()
+        if ind:
+            return ind
+            
+    # Try CrossIdentifier
+    from .models import CrossIdentifier
+    ci = CrossIdentifier.objects.filter(id_value=sval).first()
+    if ci:
+        return ci.individual
+    return None
 
 
 @login_required
@@ -2167,607 +2532,218 @@ def family_create_segway(request):
     """
     if request.method == "POST":
         try:
-            # Debug: Print all POST data
-            print("=== DEBUG: All POST data ===")
-            for key, value in request.POST.items():
-                print(f"{key}: {value}")
-            print("=== END POST data ===")
+            # 1. Get or Create Family
+            family, family_created, error_response = _get_or_create_family(request, request.user)
+            if error_response:
+                return error_response
 
-            # Extract family data
-            family_id = request.POST.get("family_id")
-            family_id_query = request.POST.get("family_id_query")
-            family_description = request.POST.get("family_description", "")
+            # 2. Parse Individuals Data
+            individuals_data = _parse_individuals_data(request.POST)
 
-            print(f"=== DEBUG: Received family_id: '{family_id}' ===")
-            print(f"=== DEBUG: Received family_description: '{family_description}' ===")
-
-            if not family_id and not (family_id_query and family_id_query.strip()):
-                return HttpResponseBadRequest("Family ID is required.")
-
-            # Determine the desired family identifier (typed query has precedence when different)
-            desired_family_id = (family_id_query or "").strip() or family_id
-
-            # Check if family already exists
-            existing_family = None
-            try:
-                existing_family = Family.objects.get(family_id=desired_family_id)
-                print(f"=== DEBUG: Family with ID '{family_id}' already exists ===")
-            except Family.DoesNotExist:
-                print(
-                    f"=== DEBUG: Family with ID '{desired_family_id}' does not exist, will create new ==="
-                )
-
-            # If family exists, use it; otherwise create new one
-            if existing_family:
-                family = existing_family
-                family_was_created = False
-                print(f"=== DEBUG: Using existing family with ID: {family.id} ===")
-                # Update description if provided
-                try:
-                    if family_description is not None and family.description != family_description:
-                        family.description = family_description
-                        family.save(update_fields=["description"])
-                        print("=== DEBUG: Updated family description ===")
-                except Exception as _e:
-                    print(f"=== DEBUG: Failed to update family description: {_e}")
-            else:
-                # Create new family directly without form validation
-                # This bypasses the ChoiceField validation issue
-                try:
-                    family = Family.objects.create(
-                        family_id=desired_family_id,
-                        description=family_description,
-                        created_by=request.user,
-                    )
-                    family_was_created = True
-                    print(f"=== DEBUG: Family created with ID: {family.id} ===")
-                except Exception as e:
-                    error_msg = f"Error creating family: {str(e)}"
-                    print(f"=== DEBUG: {error_msg} ===")
-                    if request.htmx:
-                        return render(
-                            request,
-                            "lab/crud.html#family-create-error",
-                            {
-                                "error": error_msg,
-                            },
-                        )
-                    else:
-                        return HttpResponseBadRequest(error_msg)
-
-            # Extract individual data
-            individuals_data = {}
-            for key, value in request.POST.items():
-                if key.startswith("individuals[") and "]" in key:
-                    # Parse key like "individuals[0][full_name]" -> index=0, field=full_name
-                    parts = key.split("[")
-                    if len(parts) == 3:
-                        index = parts[1].rstrip("]")
-                        field = parts[2].rstrip("]")
-
-                        if index not in individuals_data:
-                            individuals_data[index] = {}
-                        individuals_data[index][field] = value
-
-            print(f"=== DEBUG: Extracted individuals data: {individuals_data} ===")
-
-            created_individuals = []  # list of tuples: (index, individual)
-            updated_individuals = []  # list of tuples: (index, individual)
-            reassigned_individuals = []  # list of tuples: (index, individual, old_family_id)
-            mother_individual = None
-            father_individual = None
-
-            # First pass: create all individuals
-            # Pre-compute a default status for Individuals if not provided
+            # 3. Create Individuals
+            created_individuals = []
+            updated_individuals = []
+            created_individuals = []
+            updated_individuals = []
+            reassigned_individuals = []
+            individual_errors = []
+            
+            # Get default status for individuals
             try:
                 indiv_ct = ContentType.objects.get_for_model(Individual)
-                default_individual_status = (
-                    Status.objects.filter(
-                        Q(content_type=indiv_ct) | Q(content_type__isnull=True)
-                    )
-                    .order_by("name")
-                    .first()
-                )
-                print(
-                    f"=== DEBUG: Default individual status: {default_individual_status} ==="
-                )
-            except Exception as e:
-                print(f"=== DEBUG: Error getting default status: {e} ===")
-                default_individual_status = None
+                default_status = Status.objects.filter(
+                    Q(content_type=indiv_ct) | Q(content_type__isnull=True)
+                ).order_by("name").first()
+            except Exception:
+                default_status = None
 
-            for index, individual_data in individuals_data.items():
-                print(
-                    f"=== DEBUG: Processing individual {index}: {individual_data} ==="
+            for index, data in individuals_data.items():
+                individual, is_created, error_msg = _create_individual(
+                    data, family, request.user, default_status
                 )
-                # If updating existing individual (id present), we don't require role
-                is_update = bool(individual_data.get("id"))
-                if not individual_data.get("full_name"):
-                    print(f"=== DEBUG: Skipping individual {index} - no full_name ===")
+                
+                if error_msg:
+                    print(f"Error creating individual at index {index}: {error_msg}")
+                    individual_errors.append(f"Individual {index}: {error_msg}")
                     continue
 
-                if not is_update and not individual_data.get("role"):
-                    print(f"=== DEBUG: Skipping individual {index} - no role for new individual ===")
-                    continue
-
-                # Get required fields (allow raw values; M2Ms handled by the form)
-                individual_form_data = {
-                    # If explicit id is provided, pass it through; otherwise omit
-                    "id": individual_data.get("id"),
-                    "full_name": individual_data.get("full_name"),
-                    "tc_identity": individual_data.get("tc_identity") or None,
-                    "birth_date": individual_data.get("birth_date") or None,
-                    "icd11_code": individual_data.get("icd11_code") or None,
-                    "council_date": individual_data.get("council_date") or None,
-                    "diagnosis": individual_data.get("diagnosis") or None,
-                    "diagnosis_date": individual_data.get("diagnosis_date") or None,
-                    # explicit mother/father relations (single combobox -> user id)
-                    "mother": individual_data.get("mother") or None,
-                    "father": individual_data.get("father") or None,
-                    # IMPORTANT: generic-combobox posts JSON list under the same field name
-                    # so we pass it as-is; Django form field will parse list values for M2M
-                    "institution": individual_data.get("institution"),
-                    # HPO terms may arrive as JSON list; pass through
-                    "hpo_terms": individual_data.get("hpo_term_ids") or individual_data.get("hpo_terms"),
-                    # FKs and scalar fields
-                    "status": individual_data.get("status"),
-                    "family": family.id,
-                    "is_index": individual_data.get("is_index") == "true",
-                    "is_affected": individual_data.get("is_affected") == "true",
-                }
-
-                # Normalize M2M payloads coming as JSON strings from comboboxes
-                try:
-                    import json as _json
-                except Exception:
-                    _json = None
-
-                # Institutions (ManyToMany) should be a list of IDs
-                inst_val = individual_form_data.get("institution")
-                if isinstance(inst_val, str):
-                    try:
-                        if _json and inst_val.strip().startswith("["):
-                            parsed = _json.loads(inst_val)
-                            if isinstance(parsed, list):
-                                individual_form_data["institution"] = parsed
-                        else:
-                            # fallback: single value string -> single-item list
-                            individual_form_data["institution"] = [inst_val]
-                    except Exception:
-                        individual_form_data["institution"] = [inst_val]
-
-                # HPO terms (ManyToMany) can also arrive as a JSON string
-                hpo_val = individual_form_data.get("hpo_terms")
-                if isinstance(hpo_val, str):
-                    try:
-                        if _json and hpo_val.strip().startswith("["):
-                            parsed = _json.loads(hpo_val)
-                            if isinstance(parsed, list):
-                                individual_form_data["hpo_terms"] = parsed
-                            else:
-                                individual_form_data.pop("hpo_terms", None)
-                        else:
-                            # if empty string or non-list, drop to avoid validation error
-                            if not hpo_val.strip():
-                                individual_form_data.pop("hpo_terms", None)
-                            else:
-                                individual_form_data["hpo_terms"] = [hpo_val]
-                    except Exception:
-                        individual_form_data.pop("hpo_terms", None)
-
-                print(
-                    f"=== DEBUG: Individual form data for {index}: {individual_form_data} ==="
-                )
-
-                # Create the individual
-                from .forms import IndividualForm
-
-                # Remove id if blank to avoid validation errors
-                if not individual_form_data.get("id"):
-                    individual_form_data.pop("id", None)
-
-                # If status not provided, inject a default one
-                if not individual_form_data.get("status") and default_individual_status:
-                    individual_form_data["status"] = default_individual_status.id
-                    print(
-                        f"=== DEBUG: Added default status {default_individual_status.id} for individual {index} ==="
-                    )
-
-                # If updating, bind to instance so save() updates instead of creating
-                individual_instance = None
-                if is_update:
-                    try:
-                        individual_instance = Individual.objects.get(pk=int(individual_form_data.get("id")))
-                    except Exception:
-                        individual_instance = None
-                if individual_instance:
-                    # Remove id from form data for binding
-                    individual_form_data.pop("id", None)
-                    individual_form = IndividualForm(individual_form_data, instance=individual_instance)
-                else:
-                    individual_form = IndividualForm(individual_form_data)
-                print(
-                    f"=== DEBUG: Individual form is_valid: {individual_form.is_valid()} ==="
-                )
-                if individual_form.is_valid():
-                    # Keep track of previous family for reassignment warnings
-                    previous_family_id = None
-                    if individual_instance:
-                        previous_family_id = getattr(individual_instance, "family_id", None)
-
-                    individual = individual_form.save(commit=False)
-                    individual.created_by = request.user
-                    individual.save()
-                    individual_form.save_m2m()
-
-                    print(
-                        f"=== DEBUG: Individual {index} created successfully with ID: {individual.id} ==="
-                    )
-                    if individual_instance:
+                if individual:
+                    if is_created:
+                        created_individuals.append((index, individual))
+                    else:
                         updated_individuals.append((index, individual))
-                        # Detect reassignment to a different family
+
+            # 4. Resolve Relationships (Mother/Father)
+            all_individuals = created_individuals + updated_individuals
+            index_to_individual = {idx: ind for idx, ind in all_individuals}
+
+            def _parent_from_index(idx_str):
+                try:
+                    if idx_str in (None, ""):
+                        return None
+                    return index_to_individual.get(int(idx_str))
+                except (TypeError, ValueError):
+                    return None
+
+            for idx, individual in all_individuals:
+                data = individuals_data.get(idx, {}) or {}
+
+                # Prefer within-form index-based parents for this segway view
+                mother_index = data.get("mother_index")
+                father_index = data.get("father_index")
+
+                m_obj = _parent_from_index(mother_index)
+                f_obj = _parent_from_index(father_index)
+
+                # Fallback to legacy resolution (e.g. if values came from search fields)
+                if not m_obj:
+                    mother_val = data.get("mother") or data.get("mother_query")
+                    m_obj = _resolve_parent(mother_val)
+                if not f_obj:
+                    father_val = data.get("father") or data.get("father_query")
+                    f_obj = _resolve_parent(father_val)
+
+                changed = False
+                if m_obj and individual.mother_id != m_obj.id:
+                    individual.mother = m_obj
+                    changed = True
+                if f_obj and individual.father_id != f_obj.id:
+                    individual.father = f_obj
+                    changed = True
+                if changed:
+                    individual.save()
+
+                # Handle CrossIdentifiers (IDs)
+                prefix = f"individuals[{idx}][ids]"
+                id_rows = {}
+                for key, value in request.POST.items():
+                    if key.startswith(prefix):
                         try:
-                            if previous_family_id and previous_family_id != getattr(individual, "family_id", None):
-                                reassigned_individuals.append((index, individual, previous_family_id))
+                            parts = key.split("][")
+                            if len(parts) >= 4:
+                                row_idx = int(parts[2])
+                                field = parts[3].replace("]", "")
+                                if row_idx not in id_rows:
+                                    id_rows[row_idx] = {}
+                                id_rows[row_idx][field] = value
+                        except Exception:
+                            continue
+                
+                # Local import removed as they are imported globally
+                for row_idx, id_data in id_rows.items():
+                    id_type_id = id_data.get("type")
+                    id_value = id_data.get("value")
+                    if id_type_id and id_value:
+                        try:
+                            id_type = IdentifierType.objects.get(pk=id_type_id)
+                            if not individual.cross_ids.filter(id_type=id_type, id_value=id_value).exists():
+                                CrossIdentifier.objects.create(
+                                    individual=individual,
+                                    id_type=id_type,
+                                    id_value=id_value,
+                                    created_by=request.user
+                                )
                         except Exception:
                             pass
-                    else:
-                        created_individuals.append((index, individual))
 
-                    # Store mother and father for later reference
-                    role = individual_data.get("role", "")
-                    if role == "mother":
-                        mother_individual = individual
-                        print(f"=== DEBUG: Individual {index} marked as mother ===")
-                    elif role == "father":
-                        father_individual = individual
-                        print(f"=== DEBUG: Individual {index} marked as father ===")
-                else:
-                    print(
-                        f"=== DEBUG: Individual form validation failed for {index}: {individual_form.errors} ==="
-                    )
-
-            print(
-                f"=== DEBUG: Total individuals created: {len(created_individuals)} ==="
-            )
-
-            # No requirement for mother/father presence across multi-member families
-
-            # Second pass: resolve mother/father from selection or free-typed query, then create/sync identifiers and notes
-            for idx, individual in (list(created_individuals) + list(updated_individuals)):
-                # Find the corresponding individual data directly by index
-                individual_data = individuals_data.get(idx, {})
-                # Resolve parent references after all individuals exist
-                try:
-                    def resolve_parent(val):
-                        if not val:
-                            return None
-                        sval = str(val).strip()
-                        if sval.isdigit():
-                            return Individual.objects.filter(pk=int(sval)).first()
-                        from .models import CrossIdentifier as _CI
-                        ci = _CI.objects.filter(id_value=sval).first()
-                        return getattr(ci, 'individual', None)
-
-                    mother_val = individual_data.get("mother") or individual_data.get("mother_query")
-                    father_val = individual_data.get("father") or individual_data.get("father_query")
-                    m_obj = resolve_parent(mother_val)
-                    f_obj = resolve_parent(father_val)
-                    changed = False
-                    if m_obj and individual.mother_id != m_obj.id:
-                        individual.mother = m_obj
-                        changed = True
-                    if f_obj and individual.father_id != f_obj.id:
-                        individual.father = f_obj
-                        changed = True
-                    if changed:
-                        individual.save()
-                except Exception:
-                    pass
-
-                # Create/Sync CrossIdentifier rows for this individual
-                try:
-                    idx_prefix = f"individuals[{idx}]"
-                    # discover all rows present for this individual's ids
-                    rows = set()
-                    for key in request.POST.keys():
-                        if key.startswith(f"{idx_prefix}[ids][") and key.endswith(
-                            "][value]"
-                        ):
-                            try:
-                                after_ids = key.split("[ids][", 1)[1]
-                                row_str = after_ids.split("]", 1)[0]
-                                rows.add(row_str)
-                            except Exception:
-                                continue
-                    submitted_pairs = set()
-                    for row in rows:
-                        value_key = f"{idx_prefix}[ids][{row}][value]"
-                        value = request.POST.get(value_key, "").strip()
-                        type_key = f"{idx_prefix}[ids][{row}][type]"
-                        type_id = request.POST.get(type_key, "").strip()
-                        if value and type_id:
-                            key = (int(type_id), value)
-                            if key in submitted_pairs:
-                                # skip duplicate within submitted payload
-                                continue
-                            try:
-                                # Try exact match first
-                                exact = CrossIdentifier.objects.filter(
-                                    individual=individual,
-                                    id_type_id=key[0],
-                                    id_value=key[1],
-                                ).first()
-                                if exact:
-                                    pass  # already correct
-                                else:
-                                    # See if there is an entry for this type with a different value → update one and remove extras
-                                    same_type_qs = CrossIdentifier.objects.filter(
-                                        individual=individual,
-                                        id_type_id=key[0],
-                                    ).order_by("id")
-                                    first_same = same_type_qs.first()
-                                    if first_same and (first_same.id_value or "").strip() != key[1]:
-                                        first_same.id_value = key[1]
-                                        first_same.save(update_fields=["id_value"])
-                                        # remove other duplicates of this type not equal to new value
-                                        same_type_qs.exclude(pk=first_same.pk).exclude(id_value=key[1]).delete()
-                                        print(f"=== DEBUG: Updated CrossIdentifier for individual {idx}: type={type_id} new={value} ===")
-                                    elif not first_same:
-                                        CrossIdentifier.objects.create(
-                                            individual=individual,
-                                            id_type_id=key[0],
-                                            id_value=key[1],
-                                            created_by=request.user,
-                                        )
-                                        print(f"=== DEBUG: Created CrossIdentifier for individual {idx}: {type_id}={value} ===")
-                                submitted_pairs.add(key)
-                            except Exception as e:
-                                print(
-                                    f"=== DEBUG: Error creating CrossIdentifier for individual {idx}: {e} ==="
-                                )
-                                # Ignore malformed IDs silently for now
-                                pass
-
-                    # Removal sync: delete any existing identifiers for this individual
-                    # that are not present in the submitted payload. If no id rows submitted, remove all.
-                    try:
-                        existing_cis = list(CrossIdentifier.objects.filter(individual=individual))
-                        for ci in existing_cis:
-                            pair = (int(ci.id_type_id), (ci.id_value or "").strip())
-                            if pair not in submitted_pairs:
-                                ci.delete()
-                                print(
-                                    f"=== DEBUG: Deleted CrossIdentifier for individual {idx}: {ci.id_type_id}={ci.id_value} ==="
-                                )
-                    except Exception as e:
-                        print(f"=== DEBUG: Error syncing CrossIdentifiers for individual {idx}: {e} ===")
-                except Exception as e:
-                    print(
-                        f"=== DEBUG: Error processing IDs for individual {idx}: {e} ==="
-                    )
-                    # If parsing fails, skip creating IDs for this individual
-                    pass
-
-                # Create Note rows for this individual
-                try:
-                    idx_prefix = f"individuals[{idx}]"
-                    print(
-                        f"=== DEBUG: Processing notes for individual {idx} with prefix: {idx_prefix} ==="
-                    )
-
-                    # discover all rows present for this individual's notes
-                    note_rows = set()
-                    print(f"=== DEBUG: All POST keys for notes processing: ===")
-                    for key in request.POST.keys():
-                        if key.startswith(f"{idx_prefix}[notes][") and key.endswith(
-                            "][content]"
-                        ):
-                            print(f"  Found note key: {key}")
-                            try:
-                                after_notes = key.split("[notes][", 1)[1]
-                                row_str = after_notes.split("]", 1)[0]
-                                note_rows.add(row_str)
-                                print(f"  Extracted row: {row_str}")
-                            except Exception as e:
-                                print(f"  Error parsing key {key}: {e}")
-                                continue
-
-                    print(
-                        f"=== DEBUG: Total note rows found for individual {idx}: {len(note_rows)} ==="
-                    )
-                    print(f"=== DEBUG: Note rows set: {note_rows} ===")
-
-                    for row in note_rows:
-                        content_key = f"{idx_prefix}[notes][{row}][content]"
-                        content = request.POST.get(content_key, "").strip()
-                        print(f"=== DEBUG: Processing note row {row}: ===")
-                        print(f"  Content key: {content_key}")
-                        print(f"  Raw content: '{content}'")
-                        print(f"  Content length: {len(content)}")
-                        print(f"  Content trimmed: '{content.strip()}'")
-
-                        if content:
-                            try:
-                                print(
-                                    f"=== DEBUG: Creating Note object for individual {idx}, row {row} ==="
-                                )
-                                print(f"  Content: {content[:100]}...")
-                                print(f"  User: {request.user}")
-                                print(
-                                    f"  Content type: {ContentType.objects.get_for_model(Individual)}"
-                                )
-                                print(f"  Object ID: {individual.id}")
-
-                                Note.objects.create(
-                                    content=content,
-                                    user=request.user,
-                                    content_type=ContentType.objects.get_for_model(
-                                        Individual
-                                    ),
-                                    object_id=individual.id,
-                                )
-                                print(
-                                    f"=== DEBUG: Successfully created Note for individual {idx}, row {row}: {content[:50]}... ==="
-                                )
-                            except Exception as e:
-                                print(
-                                    f"=== DEBUG: Error creating Note for individual {idx}, row {row}: {e} ==="
-                                )
-                                print(f"  Exception type: {type(e).__name__}")
-                                import traceback
-
-                                traceback.print_exc()
-                                # Ignore malformed notes silently for now
-                                pass
-                        else:
-                            print(
-                                f"=== DEBUG: Skipping empty note for individual {idx}, row {row} ==="
-                            )
-                except Exception as e:
-                    print(
-                        f"=== DEBUG: Error processing notes for individual {idx}: {e} ==="
-                    )
-                    print(f"  Exception type: {type(e).__name__}")
-                    import traceback
-
-                    traceback.print_exc()
-                    # If parsing fails, skip creating notes for this individual
-                    pass
-
-                # Generic: attach any ManyToMany posted as JSON lists per-individual
-                try:
-                    idx_prefix = f"individuals[{idx}]"
-                    for m2m_field in individual._meta.many_to_many:
-                        field_name = m2m_field.name
-                        candidate_params = [f"{idx_prefix}[{field_name}_ids]"]
-                        if field_name.endswith("s"):
-                            candidate_params.append(
-                                f"{idx_prefix}[{field_name[:-1]}_ids]"
-                            )
-                        json_val = None
-                        for pname in candidate_params:
-                            json_val = request.POST.get(pname)
-                            if json_val:
-                                break
-                        if not json_val:
-                            continue
+                # Handle Notes
+                note_prefix = f"individuals[{idx}][notes]"
+                note_rows = {}
+                for key, value in request.POST.items():
+                    if key.startswith(note_prefix):
                         try:
-                            id_list = json.loads(json_val)
+                            parts = key.split("][")
+                            if len(parts) >= 4:
+                                row_idx = int(parts[2])
+                                field = parts[3].replace("]", "")
+                                if row_idx not in note_rows:
+                                    note_rows[row_idx] = {}
+                                note_rows[row_idx][field] = value
                         except Exception:
-                            id_list = [v for v in (json_val or "").split(",") if v]
-                        if isinstance(id_list, list) and id_list:
-                            related_model = m2m_field.remote_field.model
-                            related_qs = related_model.objects.filter(pk__in=id_list)
-                            getattr(individual, field_name).set(related_qs)
-                except Exception:
-                    pass
+                            continue
+                            
+                for row_idx, note_data in note_rows.items():
+                    content = note_data.get("content")
+                    if content:
+                        from .models import Note
+                        Note.objects.create(
+                            content_object=individual,
+                            content=content,
+                            user=request.user
+                        )
 
-            # Per-individual optional Task creation
+                # Handle Task Creation
+                if data.get("task-assigned_to") and data.get("task-status"):
+                    try:
+                        from django.utils.dateparse import parse_datetime
+                        due_raw = data.get("task-due_date")
+                        due_dt = parse_datetime(due_raw) if due_raw else None
+                        
+                        Task.objects.create(
+                            title=data.get("task-title") or f"Follow-up for {individual.full_name}",
+                            description=data.get("task-description", ""),
+                            assigned_to_id=data.get("task-assigned_to"),
+                            created_by=request.user,
+                            due_date=due_dt,
+                            priority=data.get("task-priority") or "medium",
+                            status_id=data.get("task-status"),
+                            project_id=data.get("task-project") or None,
+                            content_object=individual
+                        )
+                    except Exception as e:
+                        print(f"Error creating task for individual {index}: {e}")
+
+            # Prepare lists for success summary
+            created_only = [ind for _, ind in created_individuals]
+            updated_only = [ind for _, ind in updated_individuals]
+
+            # Individuals in this family after changes
+            all_family_individuals = list(getattr(family, "individuals").all())
+            changed_ids = {ind.id for ind in created_only + updated_only}
+            unchanged_individuals = [
+                ind for ind in all_family_individuals if ind.id not in changed_ids
+            ]
+
+            # Statuses for Individual cards/badges in the success popup
             try:
-                from django.utils.dateparse import parse_datetime
-                task_ct = ContentType.objects.get_for_model(Individual)
-                for idx, individual in created_individuals:
-                    prefix = f"individuals[{idx}]"
-                    if not request.POST.get(f"{prefix}[create_task]"):
-                        continue
-                    title = request.POST.get(f"{prefix}[task-title]") or f"Follow-up for {individual}"
-                    description = request.POST.get(f"{prefix}[task-description]", "")
-                    assigned_to_id = request.POST.get(f"{prefix}[task-assigned_to]") or getattr(request.user, "id", None)
-                    due_raw = request.POST.get(f"{prefix}[task-due_date]")
-                    due_dt = parse_datetime(due_raw) if due_raw else None
-                    priority = request.POST.get(f"{prefix}[task-priority]") or "medium"
-                    status_id = request.POST.get(f"{prefix}[task-status]")
-                    if not status_id:
-                        active = Status.objects.filter(name__iexact="active").first()
-                        status_id = getattr(active, "id", None) or getattr(Status.objects.first(), "id", None)
-                    project_id = request.POST.get(f"{prefix}[task-project]") or None
-
-                    task_kwargs = {
-                        "title": title,
-                        "description": description,
-                        "assigned_to_id": assigned_to_id,
-                        "created_by": request.user,
-                        "due_date": due_dt,
-                        "priority": priority,
-                        "status_id": status_id,
-                        "content_type": task_ct,
-                        "object_id": individual.pk,
-                    }
-                    if project_id:
-                        task_kwargs["project_id"] = project_id
-                    if task_kwargs.get("assigned_to_id") and task_kwargs.get("status_id"):
-                        Task.objects.create(**task_kwargs)
+                indiv_ct = ContentType.objects.get_for_model(Individual)
+                individual_statuses = Status.objects.filter(
+                    Q(content_type=indiv_ct) | Q(content_type__isnull=True)
+                ).order_by("name")
             except Exception:
-                pass
+                individual_statuses = Status.objects.all().order_by("name")
 
             # Return success response
             if request.htmx:
-                response = render(
+                return render(
                     request,
                     "lab/crud.html#family-create-success",
                     {
                         "family": family,
-                        "created_individuals": [ind for _, ind in created_individuals],
-                        "updated_individuals": [ind for _, ind in updated_individuals],
-                        "count_created": len(created_individuals),
-                        "count_updated": len(updated_individuals),
+                        "family_was_created": family_created,
+                        "count_created": len(created_only),
+                        "count_updated": len(updated_only),
+                        "created_individuals": created_only,
+                        "updated_individuals": updated_only,
+                        "unchanged_individuals": unchanged_individuals,
                         "reassigned_individuals": reassigned_individuals,
-                        "family_was_created": family_was_created,
+                        "individual_errors": individual_errors,
+                        "individual_statuses": individual_statuses,
                     },
                 )
-                # Emit events so UI components listening for created Individuals refresh
-                try:
-                    created_pks = [ind.id for _, ind in created_individuals]
-                    updated_pks = [ind.id for _, ind in updated_individuals]
-                    trigger_payload = {
-                        # Created events
-                        "created-Individual": {
-                            "pks": created_pks,
-                            "count": len(created_pks),
-                            "family_pk": getattr(family, "pk", None),
-                        },
-                        "create-individual": {
-                            "pks": created_pks,
-                            "count": len(created_pks),
-                            "family_pk": getattr(family, "pk", None),
-                        },
-                        # Updated events
-                        "updated-Individual": {
-                            "pks": updated_pks,
-                            "count": len(updated_pks),
-                            "family_pk": getattr(family, "pk", None),
-                        },
-                        # Also refresh global filters-dependent UI
-                        "filters-updated": True,
-                    }
-                    # Add object-specific events per individual
-                    for pk in created_pks:
-                        trigger_payload[f"created-Individual-{pk}"] = True
-                        trigger_payload[f"create-individual-{pk}"] = True
-                    for pk in updated_pks:
-                        trigger_payload[f"updated-Individual-{pk}"] = True
-                    response["HX-Trigger"] = json.dumps(trigger_payload)
-                except Exception:
-                    response["HX-Trigger"] = "created-Individual"
-                return response
-            else:
-                # Redirect to the family detail page
-                return redirect(
-                    f"/detail/?app_label=lab&model_name=Family&pk={family.pk}"
-                )
-        except Exception as e:
-            print(f"Error in family_create_segway: {e}")
-            import traceback
+            return redirect("lab:index")
 
+        except Exception as e:
+            import traceback
             traceback.print_exc()
+            error_msg = f"Unexpected error: {str(e)}"
             if request.htmx:
                 return render(
                     request,
                     "lab/crud.html#family-create-error",
-                    {"error": str(e)},
+                    {"error": error_msg},
                 )
-            else:
-                return HttpResponseBadRequest(f"Error creating family: {str(e)}")
+            return HttpResponseBadRequest(error_msg)
 
     # GET request - show the form
     if request.htmx:
@@ -2782,7 +2758,6 @@ def family_create_segway(request):
                 ).order_by("name"),
                 "identifier_types": IdentifierType.objects.all().order_by("name"),
                 "existing_families": Family.objects.all().order_by("family_id"),
-                # For per-individual task selects
                 "users": User.objects.all().order_by("username"),
                 "task_statuses": Status.objects.filter(
                     Q(content_type=ContentType.objects.get_for_model(Task))
@@ -2796,7 +2771,6 @@ def family_create_segway(request):
 
 
 def plots(request):
-    print("VIEWS PLOTS")
     return render(request, "lab/index.html", {"activeItem": "plots"})
 
 
@@ -2810,8 +2784,6 @@ def map_view(request):
     """
     Generate a scatter map visualization showing institutions of filtered individuals.
     """
-    print(f"=== DEBUG: Map view request: {request} ===")
-    print(f"=== DEBUG: Map view request GET: {request.GET} ===")
     
     # Start with base queryset for individuals
     individuals_queryset = Individual.objects.all()

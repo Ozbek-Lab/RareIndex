@@ -1,6 +1,6 @@
 {% extends "lab/base.html" %}
 {% load static %}
-{% load partials %}
+
 
 {% block title %}Map - RareIndex{% endblock %}
 
@@ -162,10 +162,13 @@
     {% else %}
     <!-- Map Visualization -->
     <div class="h-[600px] w-full rounded-lg overflow-hidden shadow-sm" id="map-container">
+        {% if chart_json %}
         <script>
             // Render the Plotly map with the data from the server
             (function() {
-                var mapChartData = JSON.parse('{{ chart_json|escapejs }}');
+                var chartString = '{{ chart_json|escapejs }}';
+                if (!chartString) { return; }
+                var mapChartData = JSON.parse(chartString);
                 var container = document.getElementById('map-container');
                 Plotly.newPlot('map-container', mapChartData.data, mapChartData.layout, {
                     responsive: true,
@@ -244,6 +247,7 @@
                 updateButtonUI();
             })();
         </script>
+        {% endif %}
     </div>
     {% endif %}
 </div>

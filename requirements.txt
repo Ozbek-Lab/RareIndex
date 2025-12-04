@@ -1,20 +1,19 @@
-django
+django==6.0rc1
 django-htmx
 django-tailwind
 django-browser-reload
 django-compressor
 django-allauth
 whitenoise
-django-template-partials
 
-hpo3
+# hpo3
 
 pronto
 
 networkx
 plotly
 fastobo
-pygraphviz
+# pygraphviz
 kaleido
 django-encrypted-model-fields
 django-simple-history
@@ -23,7 +22,7 @@ django-simple-history
 openpyxl
 numpy
 plotly-express
-git+https://github.com/django-notifications/django-notifications.git@master#egg=django-notifications-hq
+git+https://github.com/barslmn/django-notifications.git
 
 # LLM and LangChain dependencies
 langchain

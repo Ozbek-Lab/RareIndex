@@ -115,6 +115,8 @@ urlpatterns = [
     
     path("check-notifications/", views.check_notifications, name="check_notifications"),
     path("notifications/", views.notifications_page, name="notifications"),
+    path("profile/settings/", views.profile_settings, name="profile_settings"),
+    path("profile/send-group-message/", views.send_group_message, name="send_group_message"),
     # # Project routes
     # path("projects/", views.project_index, name="projects"),
     # path("project/create/", views.project_create, name="project_create"),

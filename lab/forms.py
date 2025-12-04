@@ -124,6 +124,7 @@ class TaskForm(BaseForm):
         }
 
     def __init__(self, *args, content_object=None, **kwargs):
+        instance = kwargs.get("instance")
         super().__init__(*args, **kwargs)
         # Remove StatusLog filtering logic; just show all Status objects
         self.fields["project"].queryset = Project.objects.all().order_by("name")
@@ -137,21 +138,38 @@ class TaskForm(BaseForm):
             self.fields["status"].queryset = Status.objects.all().order_by("name")
         
         # Set up content_type choices - models that can have tasks
-        taskable_models = [Individual, Sample, Test, Analysis, Project]
+        from variant.models import Variant
+        taskable_models = [Individual, Sample, Test, Analysis, Project, Variant]
         content_types = ContentType.objects.filter(
             model__in=[m._meta.model_name for m in taskable_models],
-            app_label="lab"
+            app_label__in=["lab", "variant"]
         ).order_by("model")
         self.fields["content_type"].queryset = content_types
         
         # If content_object is provided, set initial values
-        if content_object:
+        if content_object is not None:
             ct = ContentType.objects.get_for_model(content_object.__class__)
             self.fields["content_type"].initial = ct.pk
             self.fields["object_id"].initial = content_object.pk
+        # When editing an existing Task, prefill the form-only fields from the instance
+        elif isinstance(instance, Task) and instance.content_type_id and instance.object_id:
+            self.fields["content_type"].initial = instance.content_type_id
+            self.fields["object_id"].initial = instance.object_id
 
 
 class IndividualForm(BaseForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Limit status choices strictly to Individual-specific statuses
+        try:
+            indiv_ct = ContentType.objects.get_for_model(Individual)
+            self.fields["status"].queryset = Status.objects.filter(
+                content_type=indiv_ct
+            ).order_by("name")
+        except Exception:
+            # Fallback: leave whatever default queryset BaseForm/ModelForm gave us
+            pass
+
     class Meta:
         model = Individual
         fields = [
@@ -169,6 +187,7 @@ class IndividualForm(BaseForm):
             "institution",
             "status",
             "hpo_terms",
+            "sex",
         ]
         widgets = {
             "birth_date": forms.DateInput(attrs={"type": "date"}),

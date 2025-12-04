@@ -1,7 +1,7 @@
 {% load lab_filters %}
 <div id="plot-container-{{ plot_data.id }}" 
      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
-     {% if not plot_data.chart_data %}
+     {% if not plot_data.chart_data and not plot_data.chart_data.empty %}
      hx-get="{% url 'lab:plots' %}?chart_id={{ plot_data.id }}"
      hx-trigger="load"
      hx-swap="outerHTML"
@@ -187,6 +187,16 @@
               {% endif %}
             }
           })();
+        {% elif plot_data.chart_data.empty %}
+          var plotDiv = document.getElementById('plot-{{ plot_data.id }}');
+          plotDiv.innerHTML = `
+            <div class="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+              <div class="text-center">
+                <i class="fas fa-chart-pie text-4xl mb-2 text-gray-300 dark:text-gray-600"></i>
+                <p>No data available</p>
+              </div>
+            </div>
+          `;
         {% else %}
           var plotDiv = document.getElementById('plot-{{ plot_data.id }}');
           plotDiv.innerHTML = `

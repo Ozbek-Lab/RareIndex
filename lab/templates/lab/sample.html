@@ -32,13 +32,14 @@
       <span class="inline-flex items-center text-sm text-gray-700 dark:text-gray-300">
         {% with object=item content_type='sample' %}{% include 'lab/note.html#summary' %}{% endwith %}
       </span>
-      <button
+      <a
+        href="{% url 'lab:generic_detail' %}?model_name=Sample&app_label=lab&pk={{ item.pk }}"
         class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-        @click= "openDetail({{ item.pk }}, 'Sample', 'lab')"
+        @click.prevent= "openDetail({{ item.pk }}, 'Sample', 'lab')"
         title="View Details"
       >
         <i class="fa-solid fa-eye"></i>
-      </button>
+      </a>
     </div>
   </div>
 {% endpartialdef compact-card %}
@@ -49,13 +50,14 @@
     data-item-id="{{ item.id }}" x-data="{ showFullName: false }"
   >
     <div class="flex items-center gap-1 mb-2">
-      <button
+      <a
+        href="{% url 'lab:generic_detail' %}?model_name=Sample&app_label=lab&pk={{ item.pk }}"
         class="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-        @click= "openDetail({{ item.pk }}, 'Sample', 'lab')"
+        @click.prevent= "openDetail({{ item.pk }}, 'Sample', 'lab')"
         title="View details"
       >
         <i class="fa-solid fa-eye text-lg"></i>
-      </button>
+      </a>
       <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
         Sample #{{ item.id }}
       </h2>
@@ -264,7 +266,27 @@
 {% endpartialdef table %}
 
 {% partialdef detail %}
-  <div id="sample-detail" class="space-y-6" x-data="{ activeTab: '{{ activeTab|default:"notes" }}', historyLoaded: {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }">
+  <div
+    id="sample-detail"
+    class="space-y-6"
+    x-data="{ activeTab: '{{ activeTab|default:'notes' }}', historyLoaded: {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }"
+    x-init="(() => {
+      try {
+        const url = new URL(window.location.href);
+        const tabParam = url.searchParams.get('activeTab');
+        if (tabParam) {
+          activeTab = tabParam;
+        }
+        $watch('activeTab', value => {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('activeTab', value);
+          history.replaceState({}, '', currentUrl);
+        });
+      } catch (e) {
+        console.error('Failed to sync activeTab with URL', e);
+      }
+    })()"
+  >
     <!-- Header -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
       <div class="px-6 py-4 bg-gradient-to-r from-green-600 to-green-700">
@@ -354,6 +376,13 @@
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'variants' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'variants'"
+          >
+            Variants ({{ item.variants.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click= "activeTab = 'tasks'"
           >
@@ -390,25 +419,25 @@
         <!-- Tests tab -->
         <div x-show="activeTab === 'tests'" x-cloak>
           {% with tests=item.tests.all %}
-            {% if tests %}
-              <!-- Use existing test partials for consistent UI -->
-              <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-                <!-- Toolbar: Add Test button (left) + view toggle (right) -->
-                <div class="flex items-center justify-between">
-                  <div>
-                    {% has_model_perm user 'lab' 'Test' 'add' as can_add_test %}
-                    {% if can_add_test %}
+            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+              <!-- Toolbar: Add Test button (left) + view toggle (right when tests exist) -->
+              <div class="flex items-center justify-between">
+                <div>
+                  {% has_model_perm user 'lab' 'Test' 'add' as can_add_test %}
+                  {% if can_add_test %}
                     <button
                       hx-get="{% url 'lab:generic_create' %}?model_name=Test&app_label=lab&sample={{ item.id }}"
                       hx-target="#modal-root"
                       hx-swap="innerHTML"
                       class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600 transition-colors"
                     >
-                        <i class="fa-solid fa-vial"></i>
-                        <span>Add Test to Sample</span>
-                      </button>
-                    {% endif %}
-                  </div>
+                      <i class="fa-solid fa-vial"></i>
+                      <span>Add Test to Sample</span>
+                    </button>
+                  {% endif %}
+                </div>
+
+                {% if tests %}
                   <div
                     class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
                   >
@@ -450,8 +479,11 @@
                       >
                     </button>
                   </div>
-                </div>
+                {% endif %}
+              </div>
 
+              {% if tests %}
+                <!-- Use existing test partials for consistent UI -->
                 <!-- Card View with animated transition -->
                 <div
                   x-show="viewMode === 'cards'"
@@ -487,14 +519,14 @@
                     {% include "lab/test.html#table" %}
                   {% endwith %}
                 </div>
-              </div>
-            {% else %}
-              <div
-                class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-              >
-                No tests available for this sample.
-              </div>
-            {% endif %}
+              {% else %}
+                <div
+                  class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+                >
+                  No tests available for this sample.
+                </div>
+              {% endif %}
+            </div>
           {% endwith %}
         </div>
 
@@ -593,56 +625,87 @@
           {% endif %}
         </div>
 
+        <!-- Variants tab -->
+        <div x-show="activeTab === 'variants'" x-cloak class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Found Variants</h3>
+          </div>
+          
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+             <div class="contents">
+                {% for variant in item.variants.all %}
+                  {% with item=variant %}
+                    {% include "variant/variant.html#compact-card" %}
+                  {% endwith %}
+                {% empty %}
+                  <p class="text-gray-500 dark:text-gray-400 col-span-full text-center py-4">No variants found.</p>
+                {% endfor %}
+             </div>
+          </div>
+        </div>
+
         <!-- Tasks tab -->
         <div x-show="activeTab === 'tasks'" x-cloak>
-          {% if item.tasks.exists %}
-            <!-- Use existing task partials for consistent UI -->
-            <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- View toggle buttons -->
-              <div class="flex justify-end">
+          <div x-data="{ viewMode: 'cards' }" class="space-y-4">
+            <div class="flex justify-between items-center">
+              {% with ct_id=item|get_content_type_id %}
+              <button
+                hx-get="{% url 'lab:generic_create' %}?model_name=Task&app_label=lab&content_type={{ ct_id }}&object_id={{ item.pk }}"
+                hx-target="#modal-root"
+                hx-swap="innerHTML"
+                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center"
+              >
+                <i class="fas fa-plus mr-2"></i>
+                Add Task
+              </button>
+              {% endwith %}
+
+              {% if item.tasks.exists %}
+              <div
+                class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+              >
                 <div
-                  class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
+                  class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+                  :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
+                  style="width: calc(50% - 2px);"
+                ></div>
+
+                <button
+                  @click= "viewMode = 'cards'"
+                  class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                  :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
                 >
-                  <div
-                    class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
-                    :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'"
-                    style="width: calc(50% - 2px);"
-                  ></div>
-
-                  <button
-                    @click= "viewMode = 'cards'"
-                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
-                    :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                  <i
+                    class="fa-solid fa-th-large mr-2 transition-transform duration-300"
+                    :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
+                  ></i>
+                  <span
+                    class="transition-all duration-300"
+                    :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
+                    >Card</span
                   >
-                    <i
-                      class="fa-solid fa-th-large mr-2 transition-transform duration-300"
-                      :class="viewMode === 'cards' ? 'scale-110' : 'scale-100'"
-                    ></i>
-                    <span
-                      class="transition-all duration-300"
-                      :class="viewMode === 'cards' ? 'font-semibold' : 'font-medium'"
-                      >Card</span
-                    >
-                  </button>
+                </button>
 
-                  <button
-                    @click= "viewMode = 'table'"
-                    class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
-                    :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                <button
+                  @click= "viewMode = 'table'"
+                  class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center"
+                  :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+                >
+                  <i
+                    class="fa-solid fa-table mr-2 transition-transform duration-300"
+                    :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
+                  ></i>
+                  <span
+                    class="transition-all duration-300"
+                    :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
+                    >Table</span
                   >
-                    <i
-                      class="fa-solid fa-table mr-2 transition-transform duration-300"
-                      :class="viewMode === 'table' ? 'scale-110' : 'scale-100'"
-                    ></i>
-                    <span
-                      class="transition-all duration-300"
-                      :class="viewMode === 'table' ? 'font-semibold' : 'font-medium'"
-                      >Table</span
-                    >
-                  </button>
-                </div>
+                </button>
               </div>
+              {% endif %}
+            </div>
 
+            {% if item.tasks.exists %}
               <!-- Card View with animated transition -->
               <div
                 x-show="viewMode === 'cards'"
@@ -678,14 +741,14 @@
                   {% include "lab/task.html#table" %}
                 {% endwith %}
               </div>
-            </div>
-          {% else %}
-            <div
-              class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
-            >
-              No tasks available for this sample.
-            </div>
-          {% endif %}
+            {% else %}
+              <div
+                class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
+              >
+                No tasks available for this sample.
+              </div>
+            {% endif %}
+          </div>
         </div>
 
         <!-- History tab -->

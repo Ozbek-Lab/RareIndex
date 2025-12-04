@@ -1,4 +1,4 @@
-{% load partials %}
+
 
 {% partialdef generic-search %}
 <div class="relative w-full mb-2">
@@ -114,7 +114,7 @@
 {% endpartialdef type-buttons %}
 
 {% partialdef generic-combobox %}
-<div class="relative w-full" x-data="comboboxController('{{ app_label|default:'lab' }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:'[]'|escapejs }}')" @click.outside="open=false" x-init="$watch('hiddenInputValue', (val) => { filters[hiddenInputName] = JSON.parse(val); })">
+<div class="relative w-full dark:text-gray-100" x-data="comboboxController('{{ app_label|default:'lab' }}', '{{ model_name }}', {{ multiple|default:'1'|yesno:'true,false' }}, '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:'[]'|escapejs }}')" @click.outside="open=false" x-init="{% if is_filter %}$watch('hiddenInputValue', (val) => { filters[hiddenInputName] = JSON.parse(val); window.dispatchEvent(new CustomEvent('filters-updated')); }){% endif %}">
   <div class="flex items-stretch">
     <div class="flex items-center justify-center w-10">
       <i class="fa-solid {{ icon_class|default:'fa-magnifying-glass' }} text-gray-400 dark:text-gray-300"></i>
@@ -169,9 +169,8 @@
 </div>
 {% endpartialdef %}
 
-
 {% partialdef single-generic-combobox %}
-<div class="relative w-full" x-data="singleGenericComboboxController('{{ app_label|default:'lab' }}', '{{ model_name }}', '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:''|escapejs }}', '{{ initial_value|default:''|escapejs }}')" @click.outside="open=false" x-init="$watch('hiddenInputValue', (val) => { filters[hiddenInputName] = val; })">
+<div class="relative w-full dark:text-gray-100" x-data="singleGenericComboboxController('{{ app_label|default:'lab' }}', '{{ model_name }}', '{{ value_field|default:'pk' }}', '{{ label_field|default:'' }}', '{{ name|default:'' }}', '{{ initial|default:''|escapejs }}', '{{ initial_value|default:''|escapejs }}')" @click.outside="open=false" x-init="{% if is_filter %}$watch('hiddenInputValue', (val) => { filters[hiddenInputName] = val; }){% endif %}">
   <div class="flex items-stretch">
     <div class="flex items-center justify-center w-10">
       <i class="fa-solid {{ icon_class|default:'fa-magnifying-glass' }} text-gray-400 dark:text-gray-300"></i>
@@ -202,7 +201,7 @@
 
 {% partialdef combobox-options %}
 {% for opt in options %}
-<div class="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between"
+<div class="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-100 flex items-center justify-between"
   @click="toggleOption('{{ opt.value }}','{{ opt.label|escapejs }}')">
   <span class="truncate">{{ opt.label }}</span>
   <i class="fa-solid fa-check text-green-500" x-show="isSelected('{{ opt.value }}')"></i>
@@ -288,6 +287,44 @@
     <div class="flex items-center">
       <!-- Add New button -->
 
+
+      {% if model_name == 'Task' %}
+      <div class="mr-4 relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 grid grid-cols-3 w-64">
+        <!-- Animated background slider -->
+        <div
+          class="absolute inset-1 bg-white dark:bg-gray-600 rounded-md shadow-sm transition-all duration-300 ease-out"
+          :class="{
+            'translate-x-0': !filters.task_scope || filters.task_scope === 'all',
+            'translate-x-full': filters.task_scope === 'assigned_to_me',
+            'translate-x-[200%]': filters.task_scope === 'assigned_by_me'
+          }" 
+          style="width: calc(33.333% - 4px);"></div>
+
+        <!-- All Tasks button -->
+        <button type="button" @click="filters.task_scope = 'all'; $nextTick(() => dispatchFiltersUpdated('task'))"
+          class="relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
+          :class="(!filters.task_scope || filters.task_scope === 'all') ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+          <span class="transition-all duration-300"
+            :class="(!filters.task_scope || filters.task_scope === 'all') ? 'font-semibold' : 'font-medium'">All</span>
+        </button>
+
+        <!-- To Me button -->
+        <button type="button" @click="filters.task_scope = 'assigned_to_me'; $nextTick(() => dispatchFiltersUpdated('task'))"
+          class="relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
+          :class="filters.task_scope === 'assigned_to_me' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+          <span class="transition-all duration-300"
+            :class="filters.task_scope === 'assigned_to_me' ? 'font-semibold' : 'font-medium'">To Me</span>
+        </button>
+
+        <!-- By Me button -->
+        <button type="button" @click="filters.task_scope = 'assigned_by_me'; $nextTick(() => dispatchFiltersUpdated('task'))"
+          class="relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
+          :class="filters.task_scope === 'assigned_by_me' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+          <span class="transition-all duration-300"
+            :class="filters.task_scope === 'assigned_by_me' ? 'font-semibold' : 'font-medium'">By Me</span>
+        </button>
+      </div>
+      {% endif %}
 
       {% if model_name != 'Individual' and model_name != 'Variant' %}
       <button hx-get="{% url 'lab:generic_create' %}?model_name={{ model_name }}&app_label={{ app_label }}"

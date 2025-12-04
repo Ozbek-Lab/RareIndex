@@ -1,8 +1,8 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from lab.models import Individual, Analysis, Status, Test, TestType, Sample, SampleType, AnalysisType
-from .models import SNV, Variant, Annotation, Classification
-from .services import DiagnosticService, AnnotationService
+from variant.models import SNV, Variant, Annotation, Classification
+from variant.services import DiagnosticService, AnnotationService
 
 class VariantModelTest(TestCase):
     def setUp(self):
@@ -18,8 +18,8 @@ class VariantModelTest(TestCase):
             individual=self.individual, created_by=self.user
         )
         self.assertEqual(Variant.objects.count(), 1)
-        self.assertEqual(snv.chromosome, "1")
-        self.assertEqual(str(snv), "1:100 A>T")
+        self.assertEqual(snv.chromosome, "chr1")
+        self.assertEqual(str(snv), "chr1:100 A>T")
 
     def test_classification_creation(self):
         snv = SNV.objects.create(
@@ -144,6 +144,6 @@ class VariantViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         # assertTemplateUsed might be flaky with partials or if render is called directly with fragment
         # So we check content
-        self.assertIn(b"2:200 G&gt;C", response.content)
+        self.assertIn(b"chr2:200G&gt;C", response.content)
         self.assertIn("HX-Trigger", response)
         self.assertEqual(SNV.objects.count(), 1)

@@ -33,8 +33,9 @@ def generate_map_data(individuals_queryset, individual_types, enable_clustering=
 
     if not individuals_data:
         return {
-            'error': 'No institutions with valid coordinates found for the filtered individuals',
-            'individual_types': individual_types
+            'error_message': 'No institutions with valid coordinates found for the filtered individuals',
+            'individual_types': individual_types,
+            'chart_json': None
         }
 
     # Aggregate data by institution coordinates and sum the counts
@@ -58,8 +59,9 @@ def generate_map_data(individuals_queryset, individual_types, enable_clustering=
 
     if not df_data:
         return {
-            'error': 'No valid institution data found for mapping',
-            'individual_types': individual_types
+            'error_message': 'No valid institution data found for mapping',
+            'individual_types': individual_types,
+            'chart_json': None
         }
 
     # Create DataFrame-like structure for plotly
@@ -67,9 +69,6 @@ def generate_map_data(individuals_queryset, individual_types, enable_clustering=
 
     # Add custom hover data for individuals
     df['individual_details'] = df['name']
-    print(f"Aggregated DataFrame - {len(df)} unique institutions:")
-    print(df.head())
-    print(f"Total individuals: {df['cnt'].sum()}")
 
     # Use original coordinates - clustering handled by Plotly's built-in feature
     offset_lat_series = df["lat"].tolist()
@@ -150,6 +149,7 @@ def generate_map_data(individuals_queryset, individual_types, enable_clustering=
         'proband_count': probands_count,
         'total_individuals': individuals_queryset.count(),
         'individual_types': individual_types,
+        'error_message': None,
         'applied_filters': {
             'families_only': 'families' in individual_types,
             'probands_only': 'probands' in individual_types,
