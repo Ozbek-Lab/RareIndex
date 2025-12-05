@@ -158,7 +158,11 @@
               </div>
             </div>
             {% if model_name == 'Task' %}
-              <div class="lg:col-span-1">{% partial task-create %}</div>
+              <div class="lg:col-span-1">
+                {% with is_edit=False %}
+                  {% partial task-create %}
+                {% endwith %}
+              </div>
             {% endif %}
           </div>
 
@@ -185,7 +189,7 @@
 
 {% partialdef task-create inline %}
   <div class="space-y-4">
-    <div {% if form.content_type.value %}class="hidden"{% endif %}>
+    <div {% if form.content_type.value and not is_edit %}class="hidden"{% endif %}>
       <label
         for="id_content_type"
         class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -208,7 +212,7 @@
       {% endif %}
     </div>
 
-    <div {% if form.object_id.value %}class="hidden"{% endif %}>
+    <div {% if form.object_id.value and not is_edit %}class="hidden"{% endif %}>
       <label
         for="id_object_id"
         class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -216,7 +220,7 @@
         Associated Object
         <span class="text-gray-500 text-xs">(optional)</span>
       </label>
-      {% if form.object_id.value %}
+      {% if form.object_id.value and not is_edit %}
         <input type="hidden" name="object_id" value="{{ form.object_id.value }}">
       {% else %}
         <div
@@ -227,23 +231,29 @@
           hx-swap="innerHTML"
           hx-include="#id_content_type"
         >
-          <div class="relative w-full">
-            <div class="flex items-stretch">
-              <div class="flex items-center justify-center w-10">
-                <i
-                  class="fa-solid fa-magnifying-glass text-gray-400 dark:text-gray-300"
-                ></i>
-              </div>
-              <div class="flex-1 relative">
-                <input
-                  type="text"
-                  disabled
-                  class="form-control w-full rounded-md bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-700"
-                  placeholder="Select a type first"
-                />
+          {% if is_edit and form.object_id.value and associated_object_label %}
+            {% with app_label=associated_app_label model_name=associated_model_name value_field='pk' name='object_id' icon_class='fa-magnifying-glass' initial=associated_object_label initial_value=form.object_id.value %}
+              {% include "lab/partials/partials.html#single-generic-combobox" %}
+            {% endwith %}
+          {% else %}
+            <div class="relative w-full">
+              <div class="flex items-stretch">
+                <div class="flex items-center justify-center w-10">
+                  <i
+                    class="fa-solid fa-magnifying-glass text-gray-400 dark:text-gray-300"
+                  ></i>
+                </div>
+                <div class="flex-1 relative">
+                  <input
+                    type="text"
+                    disabled
+                    class="form-control w-full rounded-md bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-700"
+                    placeholder="Select a type first"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          {% endif %}
         </div>
       {% endif %}
       {% if form.object_id.help_text %}
@@ -309,103 +319,116 @@
           <input type="hidden" name="app_label" value="{{ app_label }}" />
           <input type="hidden" name="pk" value="{{ object.pk }}" />
 
-          <div class="flex flex-col md:flex-row gap-6">
-            <div class="flex-1 space-y-4">
-              {% for field in form %}
-                {% if forloop.counter0|divisibleby:2 %}
-                  <div>
-                    <label
-                      for="{{ field.id_for_label }}"
-                      class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                    >
-                      {{ field.label }}
-                      {% if field.field.required %}<span class="text-red-500"
-                        >*</span
-                      >{% endif %}
-                    </label>
-                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
-                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
-                        {% include "lab/partials/partials.html#generic-combobox" %}
-                      {% endwith %}
-                    {% elif model_name == 'Institution' and field.name == 'staff' %}
-                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
-                        {% include "lab/partials/partials.html#generic-combobox" %}
-                      {% endwith %}
-                    {% elif model_name == 'Test' and field.name == 'sample' %}
-                      {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
-                        {% include "lab/partials/partials.html#single-generic-combobox" %}
-                      {% endwith %}
-                    {% elif model_name == 'Analysis' and field.name == 'test' %}
-                      {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
-                        {% include "lab/partials/partials.html#single-generic-combobox" %}
-                      {% endwith %}
-                    {% else %}
-                      {{ field }}
-                    {% endif %}
-                    {% if field.help_text %}
-                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {{ field.help_text }}
-                      </p>
-                    {% endif %}
-                    {% if field.errors %}
-                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
-                        {% for error in field.errors %}<p>
-                          {{ error }}
-                        </p>{% endfor %}
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
-              {% endfor %}
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="space-y-4">
+                {% for field in form %}
+                  {% if model_name == 'Task' and field.name == 'content_type' or model_name == 'Task' and field.name == 'object_id' %}
+                    {# Skip these fields as they are handled in the task-create partial #}
+                  {% elif forloop.counter0|divisibleby:2 %}
+                    <div>
+                      <label
+                        for="{{ field.id_for_label }}"
+                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                      >
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-red-500"
+                          >*</span
+                        >{% endif %}
+                      </label>
+                      {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
+                        {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
+                          {% include "lab/partials/partials.html#generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Institution' and field.name == 'staff' %}
+                        {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                          {% include "lab/partials/partials.html#generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Test' and field.name == 'sample' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                          {% include "lab/partials/partials.html#single-generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Analysis' and field.name == 'test' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                          {% include "lab/partials/partials.html#single-generic-combobox" %}
+                        {% endwith %}
+                      {% else %}
+                        {{ field }}
+                      {% endif %}
+                      {% if field.help_text %}
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {{ field.help_text }}
+                        </p>
+                      {% endif %}
+                      {% if field.errors %}
+                        <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                          {% for error in field.errors %}<p>
+                            {{ error }}
+                          </p>{% endfor %}
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+              <div class="space-y-4">
+                {% for field in form %}
+                  {% if model_name == 'Task' and field.name == 'content_type' or model_name == 'Task' and field.name == 'object_id' %}
+                    {# Skip these fields as they are handled in the task-create partial #}
+                  {% elif not forloop.counter0|divisibleby:2 %}
+                    <div>
+                      <label
+                        for="{{ field.id_for_label }}"
+                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                      >
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-red-500"
+                          >*</span
+                        >{% endif %}
+                      </label>
+                      {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
+                        {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
+                          {% include "lab/partials/partials.html#generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Institution' and field.name == 'staff' %}
+                        {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
+                          {% include "lab/partials/partials.html#generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Test' and field.name == 'sample' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                          {% include "lab/partials/partials.html#single-generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Analysis' and field.name == 'test' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                          {% include "lab/partials/partials.html#single-generic-combobox" %}
+                        {% endwith %}
+                      {% else %}
+                        {{ field }}
+                      {% endif %}
+                      {% if field.help_text %}
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {{ field.help_text }}
+                        </p>
+                      {% endif %}
+                      {% if field.errors %}
+                        <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                          {% for error in field.errors %}<p>
+                            {{ error }}
+                          </p>{% endfor %}
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
             </div>
-            <div class="flex-1 space-y-4">
-              {% for field in form %}
-                {% if not forloop.counter0|divisibleby:2 %}
-                  <div>
-                    <label
-                      for="{{ field.id_for_label }}"
-                      class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                    >
-                      {{ field.label }}
-                      {% if field.field.required %}<span class="text-red-500"
-                        >*</span
-                      >{% endif %}
-                    </label>
-                    {% if model_name == 'Individual' and field.name == 'hpo_terms' %}
-                      {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
-                        {% include "lab/partials/partials.html#generic-combobox" %}
-                      {% endwith %}
-                    {% elif model_name == 'Institution' and field.name == 'staff' %}
-                      {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
-                        {% include "lab/partials/partials.html#generic-combobox" %}
-                      {% endwith %}
-                    {% elif model_name == 'Test' and field.name == 'sample' %}
-                      {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
-                        {% include "lab/partials/partials.html#single-generic-combobox" %}
-                      {% endwith %}
-                    {% elif model_name == 'Analysis' and field.name == 'test' %}
-                      {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
-                        {% include "lab/partials/partials.html#single-generic-combobox" %}
-                      {% endwith %}
-                    {% else %}
-                      {{ field }}
-                    {% endif %}
-                    {% if field.help_text %}
-                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {{ field.help_text }}
-                      </p>
-                    {% endif %}
-                    {% if field.errors %}
-                      <div class="mt-1 text-xs text-red-600 dark:text-red-400">
-                        {% for error in field.errors %}<p>
-                          {{ error }}
-                        </p>{% endfor %}
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
-              {% endfor %}
-            </div>
+            {% if model_name == 'Task' %}
+              <div class="lg:col-span-1">
+                {% with is_edit=True %}
+                  {% partial task-create %}
+                {% endwith %}
+              </div>
+            {% endif %}
           </div>
 
           <div class="flex justify-end space-x-3 mt-6">
