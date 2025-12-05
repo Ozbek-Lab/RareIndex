@@ -392,14 +392,16 @@ class Individual(HistoryMixin, models.Model):
 
     @property
     def individual_id(self):
-        if self.cross_ids.filter(id_type__name="RareBoost").exists():
+        # If no cross IDs exist, show pk - name
+        if not self.cross_ids.exists():
+            return f"{self.id} - {self.full_name}"
+        # Otherwise, prioritize RareBoost, then Biobank, then any other cross ID
+        elif self.cross_ids.filter(id_type__name="RareBoost").exists():
             return self.cross_ids.filter(id_type__name="RareBoost").first().id_value
         elif self.cross_ids.filter(id_type__name="Biobank").exists():
             return self.cross_ids.filter(id_type__name="Biobank").first().id_value
-        elif self.cross_ids.filter(individual=self).exists():
-            return f"{self.cross_ids.filter(individual=self).first().id_value} - {self.full_name}"
         else:
-            return f"{self.id} - {self.full_name}"
+            return self.cross_ids.first().id_value
 
     @property
     def sensitive_fields(self):
