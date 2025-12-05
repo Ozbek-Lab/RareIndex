@@ -1810,14 +1810,63 @@ def generic_create(request):
 
             # Return success response for HTMX
             if request.htmx:
+                context = {
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                }
+                
+                # For Sample creation, include individual and all samples
+                if model_name == "Sample" and hasattr(obj, 'individual'):
+                    context["individual"] = obj.individual
+                    all_samples_qs = obj.individual.samples.all().order_by('-id')
+                    context["all_samples"] = all_samples_qs
+                    context["new_sample"] = obj
+                    context["other_samples"] = all_samples_qs.exclude(pk=obj.pk)
+                    context["new_sample_pk"] = obj.pk
+                
+                # For Test creation, include individual, sample, and all tests for that individual
+                elif model_name == "Test" and hasattr(obj, 'sample') and obj.sample:
+                    context["sample"] = obj.sample
+                    context["individual"] = obj.sample.individual
+                    # Get all tests for this individual (through all their samples)
+                    all_tests_qs = Test.objects.filter(sample__individual=obj.sample.individual).order_by('-id')
+                    context["all_tests"] = all_tests_qs
+                    context["new_test"] = obj
+                    context["other_tests"] = all_tests_qs.exclude(pk=obj.pk)
+                    context["new_test_pk"] = obj.pk
+                
+                # For Analysis creation, include individual, sample, test, and all analyses for that individual
+                elif model_name == "Analysis" and hasattr(obj, 'test') and obj.test:
+                    context["test"] = obj.test
+                    context["sample"] = obj.test.sample
+                    context["individual"] = obj.test.sample.individual
+                    # Get all analyses for this individual (through test -> sample -> individual)
+                    all_analyses_qs = Analysis.objects.filter(test__sample__individual=obj.test.sample.individual).order_by('-id')
+                    context["all_analyses"] = all_analyses_qs
+                    context["new_analysis"] = obj
+                    context["other_analyses"] = all_analyses_qs.exclude(pk=obj.pk)
+                    context["new_analysis_pk"] = obj.pk
+                
+                # For Task creation, include associated object and all tasks for that object
+                elif model_name == "Task" and hasattr(obj, 'content_object') and obj.content_object:
+                    context["associated_object"] = obj.content_object
+                    context["associated_model_name"] = obj.content_type.model
+                    context["associated_app_label"] = obj.content_type.app_label
+                    # Get all tasks for this same object
+                    all_tasks_qs = Task.objects.filter(
+                        content_type=obj.content_type,
+                        object_id=obj.object_id
+                    ).order_by('-id')
+                    context["all_tasks"] = all_tasks_qs
+                    context["new_task"] = obj
+                    context["other_tasks"] = all_tasks_qs.exclude(pk=obj.pk)
+                    context["new_task_pk"] = obj.pk
+                
                 response = render(
                     request,
                     "lab/crud.html#create-success",
-                    {
-                        "object": obj,
-                        "model_name": model_name,
-                        "app_label": app_label,
-                    },
+                    context,
                 )
                 # Emit object-specific and generic refresh events for listeners
                 try:

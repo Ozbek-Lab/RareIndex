@@ -516,34 +516,489 @@
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
     @click.self="document.getElementById('modal-root').innerHTML = ''"
   >
-    <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center"
-    >
-      <div class="mb-4">
+    {% if model_name == 'Sample' %}
+      {% if individual %}
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4 text-left max-h-[90vh] overflow-y-auto"
+        >
+          <div class="flex items-center gap-4 mb-4">
+      {% else %}
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+        >
+          <div class="mb-4">
+      {% endif %}
+    {% elif model_name == 'Test' %}
+      {% if individual %}
+        {% if sample %}
+          <div
+            class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4 text-left max-h-[90vh] overflow-y-auto"
+          >
+            <div class="flex items-center gap-4 mb-4">
+        {% else %}
+          <div
+            class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+          >
+            <div class="mb-4">
+        {% endif %}
+      {% else %}
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+        >
+          <div class="mb-4">
+      {% endif %}
+    {% elif model_name == 'Analysis' %}
+      {% if individual %}
+        {% if sample %}
+          {% if test %}
+            <div
+              class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4 text-left max-h-[90vh] overflow-y-auto"
+            >
+              <div class="flex items-center gap-4 mb-4">
+          {% else %}
+            <div
+              class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+            >
+              <div class="mb-4">
+          {% endif %}
+        {% else %}
+          <div
+            class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+          >
+            <div class="mb-4">
+        {% endif %}
+      {% else %}
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+        >
+          <div class="mb-4">
+      {% endif %}
+    {% elif model_name == 'Task' %}
+      {% if associated_object %}
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4 text-left max-h-[90vh] overflow-y-auto"
+        >
+          <div class="flex items-center gap-4 mb-4">
+      {% else %}
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-3xl w-full mx-4 text-left max-h-[90vh] overflow-y-auto"
+        >
+          <div class="flex items-center gap-4 mb-4">
+      {% endif %}
+    {% else %}
+      <div
+        class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+      >
+        <div class="mb-4">
+    {% endif %}
         <i class="fa-solid fa-check-circle text-5xl text-green-500"></i>
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Success!
+          </h2>
+          <p class="text-gray-700 dark:text-gray-300">
+            {{ model_name }} "{{ object }}" has been created successfully.
+          </p>
+        </div>
       </div>
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-        Success!
-      </h2>
-      <p class="text-gray-700 dark:text-gray-300 mb-6">
-        {{ model_name }} "{{ object }}" has been created successfully.
-      </p>
-      <div class="flex justify-center space-x-3">
-        <button
-          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-        >
-          Back to Index
-        </button>
-        <button
-          hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-          hx-target="#main-content"
-          hx-swap="innerHTML"
-          @click="document.getElementById('modal-root').innerHTML = ''"
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          View Details
-        </button>
+
+      {% if model_name == 'Sample' and individual %}
+        <!-- Individual Card Section -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            Connected Individual
+          </h3>
+          <div class="mb-4">
+            {% with item=individual %}
+              {% include "lab/individual.html#card" %}
+            {% endwith %}
+          </div>
+        </div>
+
+        <!-- Samples Section -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            All Samples for This Individual
+          </h3>
+          
+          <!-- Newly Created Sample -->
+          {% if new_sample %}
+            <div class="mb-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <i class="fa-solid fa-star mr-1"></i>Newly Created
+                </span>
+              </div>
+              <div class="border-2 border-green-500 dark:border-green-400 rounded-lg p-1 bg-green-50 dark:bg-green-900/20">
+                {% with item=new_sample %}
+                  {% include "lab/sample.html#card" %}
+                {% endwith %}
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Other Samples -->
+          {% if other_samples %}
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Other Samples</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for sample in other_samples %}
+                  {% with item=sample %}
+                    {% include "lab/sample.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if model_name == 'Test' and individual and sample %}
+        <!-- Individual and Sample Cards Section (side by side) -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            Connected Individual & Sample
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              {% with item=individual %}
+                {% include "lab/individual.html#card" %}
+              {% endwith %}
+            </div>
+            <div>
+              {% with item=sample %}
+                {% include "lab/sample.html#card" %}
+              {% endwith %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Tests Section -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            All Tests for This Individual
+          </h3>
+          
+          <!-- Newly Created Test -->
+          {% if new_test %}
+            <div class="mb-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <i class="fa-solid fa-star mr-1"></i>Newly Created
+                </span>
+              </div>
+              <div class="border-2 border-green-500 dark:border-green-400 rounded-lg p-1 bg-green-50 dark:bg-green-900/20">
+                {% with item=new_test %}
+                  {% include "lab/test.html#card" %}
+                {% endwith %}
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Other Tests -->
+          {% if other_tests %}
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Other Tests</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for test in other_tests %}
+                  {% with item=test %}
+                    {% include "lab/test.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if model_name == 'Analysis' and individual and sample and test %}
+        <!-- Individual, Sample, and Test Cards Section (side by side) -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            Connected Individual, Sample & Test
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div>
+              {% with item=individual %}
+                {% include "lab/individual.html#card" %}
+              {% endwith %}
+            </div>
+            <div>
+              {% with item=sample %}
+                {% include "lab/sample.html#card" %}
+              {% endwith %}
+            </div>
+            <div>
+              {% with item=test %}
+                {% include "lab/test.html#card" %}
+              {% endwith %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Analyses Section -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            All Analyses for This Individual
+          </h3>
+          
+          <!-- Newly Created Analysis -->
+          {% if new_analysis %}
+            <div class="mb-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <i class="fa-solid fa-star mr-1"></i>Newly Created
+                </span>
+              </div>
+              <div class="border-2 border-green-500 dark:border-green-400 rounded-lg p-1 bg-green-50 dark:bg-green-900/20">
+                {% with item=new_analysis %}
+                  {% include "lab/analysis.html#card" %}
+                {% endwith %}
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Other Analyses -->
+          {% if other_analyses %}
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Other Analyses</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for analysis in other_analyses %}
+                  {% with item=analysis %}
+                    {% include "lab/analysis.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if model_name == 'Task' %}
+        {% if associated_object %}
+          <!-- Associated Object Card Section -->
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              Connected {{ associated_model_name|capfirst }}
+            </h3>
+            <div class="mb-4">
+              {% if associated_model_name == 'individual' %}
+                {% with item=associated_object %}
+                  {% include "lab/individual.html#card" %}
+                {% endwith %}
+              {% elif associated_model_name == 'sample' %}
+                {% with item=associated_object %}
+                  {% include "lab/sample.html#card" %}
+                {% endwith %}
+              {% elif associated_model_name == 'test' %}
+                {% with item=associated_object %}
+                  {% include "lab/test.html#card" %}
+                {% endwith %}
+              {% elif associated_model_name == 'analysis' %}
+                {% with item=associated_object %}
+                  {% include "lab/analysis.html#card" %}
+                {% endwith %}
+              {% elif associated_model_name == 'project' %}
+                {% with item=associated_object %}
+                  {% include "lab/project.html#card" %}
+                {% endwith %}
+              {% elif associated_model_name == 'variant' %}
+                {% with item=associated_object %}
+                  {% include "variant/variant.html#card" %}
+                {% endwith %}
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Tasks Section -->
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              All Tasks for This {{ associated_model_name|capfirst }}
+            </h3>
+            
+            <!-- Newly Created Task -->
+            {% if new_task %}
+              <div class="mb-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                    <i class="fa-solid fa-star mr-1"></i>Newly Created
+                  </span>
+                </div>
+                <div class="border-2 border-green-500 dark:border-green-400 rounded-lg p-1 bg-green-50 dark:bg-green-900/20">
+                  {% with item=new_task %}
+                    {% include "lab/task.html#card" %}
+                  {% endwith %}
+                </div>
+              </div>
+            {% endif %}
+
+            <!-- Other Tasks -->
+            {% if other_tasks %}
+              <div>
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Other Tasks</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {% for task in other_tasks %}
+                    {% with item=task %}
+                      {% include "lab/task.html#card" %}
+                    {% endwith %}
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <!-- No Associated Object - Just show the task card -->
+          <div class="mb-6">
+            <div class="border-2 border-green-500 dark:border-green-400 rounded-lg p-1 bg-green-50 dark:bg-green-900/20">
+              {% with item=object %}
+                {% include "lab/task.html#card" %}
+              {% endwith %}
+            </div>
+          </div>
+        {% endif %}
+      {% endif %}
+
+      {% if model_name == 'Sample' %}
+        {% if not individual %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              @click="document.getElementById('modal-root').innerHTML = ''"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% endif %}
+      {% elif model_name == 'Test' %}
+        {% if not individual %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              @click="document.getElementById('modal-root').innerHTML = ''"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% elif not sample %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              @click="document.getElementById('modal-root').innerHTML = ''"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% endif %}
+      {% elif model_name == 'Analysis' %}
+        {% if not individual %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              @click="document.getElementById('modal-root').innerHTML = ''"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% elif not sample %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              @click="document.getElementById('modal-root').innerHTML = ''"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% elif not test %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              @click="document.getElementById('modal-root').innerHTML = ''"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% endif %}
+      {% elif model_name != 'Task' %}
+        <div class="flex justify-center space-x-3">
+          <button
+            @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Back to Index
+          </button>
+          <button
+            hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            @click="document.getElementById('modal-root').innerHTML = ''"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            View Details
+          </button>
+        </div>
+      {% endif %}
       </div>
     </div>
   </div>
