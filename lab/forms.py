@@ -15,7 +15,9 @@ from .models import (
     AnalysisType,
     Institution,
     Family,
+    AnalysisRequestForm,
 )
+from variant.models import AnalysisReport
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
@@ -403,6 +405,46 @@ class StatusForm(BaseForm):
         }
 
 
+class AnalysisRequestFormForm(BaseForm):
+    class Meta:
+        model = AnalysisRequestForm
+        fields = ["individual", "file", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class AnalysisReportForm(BaseForm):
+    class Meta:
+        model = AnalysisReport
+        fields = ["analysis", "variants", "file", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "variants": forms.SelectMultiple(attrs={"class": "h-32"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter variants based on selected analysis
+        analysis_id = None
+        
+        # Check initial data (GET request)
+        if hasattr(self, 'initial') and self.initial and 'analysis' in self.initial:
+            analysis_id = self.initial.get('analysis')
+            
+        # Check bound data (POST request)
+        if self.data and 'analysis' in self.data:
+            analysis_id = self.data.get('analysis')
+            
+        if analysis_id:
+            try:
+                analysis = Analysis.objects.get(pk=analysis_id)
+                self.fields['variants'].queryset = analysis.found_variants.all()
+            except Analysis.DoesNotExist:
+                pass
+
+
+
 # Forms mapping for generic views
 FORMS_MAPPING = {
     "Individual": IndividualForm,
@@ -418,4 +460,6 @@ FORMS_MAPPING = {
     "Institution": InstitutionForm,
     "Family": FamilyForm,
     "Status": StatusForm,
+    "AnalysisRequestForm": AnalysisRequestFormForm,
+    "AnalysisReport": AnalysisReportForm,
 }

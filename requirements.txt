@@ -34,3 +34,7 @@ django-environ
 gunicorn
 psycopg2-binary
 
+
+# Document Preview
+pypandoc-binary
+weasyprint

@@ -39,6 +39,16 @@ FILTER_CONFIG = {
             "Variant": "variants__pk",
             "Gene": "variants__genes__pk",
         },
+        "boolean_filters": {
+            "has_request_form": {
+                "field_path": "analysis_request_forms",
+                "label": "Has Request Form",
+            },
+            "has_analysis_report": {
+                "field_path": "samples__tests__analyses__reports",
+                "label": "Has Analysis Report",
+            },
+        },
         "select_fields": {
             "sample_type": {
                 "field_path": "samples__sample_type__name",
@@ -145,6 +155,16 @@ FILTER_CONFIG = {
             "Variant": "found_variants__pk",
             "Gene": "found_variants__genes__pk",
             "Project": "test__sample__individual__projects__pk",
+        },
+        "boolean_filters": {
+            "has_request_form": {
+                "field_path": "test__sample__individual__analysis_request_forms",
+                "label": "Has Request Form",
+            },
+            "has_analysis_report": {
+                "field_path": "reports",
+                "label": "Has Analysis Report",
+            },
         },
         "select_fields": {
             "sample_type": {
@@ -283,6 +303,14 @@ def _get_select_field_config(field_name, target_model_name):
     config = FILTER_CONFIG.get(target_model_name, {})
     if field_name in config.get("select_fields", {}):
         return config["select_fields"][field_name]
+    return None
+
+
+def _get_boolean_filter_config(filter_key, target_model_name):
+    """Finds the configuration for a boolean filter."""
+    config = FILTER_CONFIG.get(target_model_name, {})
+    if filter_key in config.get("boolean_filters", {}):
+        return config["boolean_filters"][filter_key]
     return None
 
 
@@ -437,6 +465,30 @@ def _apply_task_cross_model_status_filter(queryset, filter_model_name, filter_va
     
     return queryset
 
+    return queryset
+
+
+def _apply_boolean_filter(queryset, boolean_config, filter_values, exclude=False):
+    """Applies a boolean existence filter (isnull check)."""
+    field_path = boolean_config.get("field_path")
+    if not field_path or not filter_values:
+        return queryset
+    
+    # We expect 'true' or 'on' to mean "Has X" (isnull=False)
+    # 'false' or 'off' (or not present) usually means ignore or "Does not have X" depending on UI
+    # For a single checkbox "Has X", checked means filter for existence.
+    
+    # Just take the first value
+    val = str(filter_values[0]).lower()
+    
+    if val in ['true', 'on', '1', 'yes']:
+        lookup = {f"{field_path}__isnull": False}
+    elif val in ['false', 'off', '0', 'no']:
+        lookup = {f"{field_path}__isnull": True}
+    else:
+        return queryset
+        
+    return queryset.exclude(**lookup) if exclude else queryset.filter(**lookup).distinct()
 
 def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_values, exclude=False):
     """Applies a text search filter from another model."""
@@ -518,10 +570,13 @@ def _partition_active_filters(request, exclude_filter=None):
 def _apply_filter_group(queryset, target_model_name, filter_key, filter_values, target_config, exclude=False):
     select_config = _get_select_field_config(filter_key, target_model_name)
     status_config = _get_status_filter_config(target_model_name)
+    boolean_config = _get_boolean_filter_config(filter_key, target_model_name)
 
     expected_status_key = f"{target_model_name.lower()}_status"
     if filter_key == expected_status_key and status_config:
         return _apply_status_filter(queryset, status_config, filter_values, exclude=exclude)
+    if boolean_config:
+        return _apply_boolean_filter(queryset, boolean_config, filter_values, exclude=exclude)
     if filter_key.endswith("_status"):
         filter_model_name = filter_key.replace("_status", "").title()
         return _apply_cross_model_status_filter(

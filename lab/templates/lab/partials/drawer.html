@@ -39,6 +39,28 @@
           {% with app_label='lab' model_name='Individual' %}
             {% include "lab/partials/partials.html#generic-status-filter" %}
           {% endwith %}
+          
+          <div class="mt-4 space-y-2">
+            <h6 class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Files</h6>
+            <label class="flex items-center space-x-2 cursor-pointer">
+              <input type="checkbox" 
+                     name="filter_has_request_form" 
+                     value="true" 
+                     x-model="filters.has_request_form"
+                     @change="dispatchFiltersUpdated('individual')"
+                     class="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 transition duration-150 ease-in-out">
+              <span class="text-sm text-gray-700 dark:text-gray-300">Has Request Form</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer">
+              <input type="checkbox" 
+                     name="filter_has_analysis_report" 
+                     value="true" 
+                     x-model="filters.has_analysis_report"
+                     @change="dispatchFiltersUpdated('individual')"
+                     class="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 transition duration-150 ease-in-out">
+              <span class="text-sm text-gray-700 dark:text-gray-300">Has Analysis Report</span>
+            </label>
+          </div>
         </h6>
         </div>
         <!-- Samples -->
@@ -76,7 +98,7 @@
           </h6>
           {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' name='analysis' value_field='id' initial=initial_analyses is_filter='True' %}
             {% include "lab/partials/partials.html#generic-combobox" %}
-            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-analysis from:window, filters-updated from:window, filters-updated-analysis from:window" hx-target="#page-analysis-results" :hx-vals="getHxVals('lab', 'Analysis', 1, viewMode)"></div>
+            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-analysis from:window, filters-updated from:window, filters-updated-analysis from:window, filters-updated-individual from:window" hx-target="#page-analysis-results" :hx-vals="getHxVals('lab', 'Analysis', 1, viewMode)"></div>
           {% endwith %}
           {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
             {% include "lab/partials/partials.html#generic-type-filter" %}
@@ -84,6 +106,8 @@
           {% with app_label='lab' model_name='Analysis' %}
             {% include "lab/partials/partials.html#generic-status-filter" %}
           {% endwith %}
+
+          
         </div>
         <!-- Variants -->
         <div>

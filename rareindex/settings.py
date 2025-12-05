@@ -113,6 +113,10 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
+# Media files
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 # HTMX settings
 DJANGO_HTMX_REFRESH_TEMPLATES = True
 
@@ -200,3 +204,6 @@ EMAIL_PORT = env.int("EMAIL_PORT", default=587)
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+
+# Security settings
+X_FRAME_OPTIONS = "SAMEORIGIN"

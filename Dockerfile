@@ -17,7 +17,13 @@ RUN apt-get update && \
     # for git dependencies
     git \
     # for entrypoint.sh
-    netcat-openbsd && \
+    netcat-openbsd \
+    # for pdf generation
+    pandoc \
+    libpango-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf2.0-0 \
+    shared-mime-info && \
     apt-get clean
 
 # Set workdir

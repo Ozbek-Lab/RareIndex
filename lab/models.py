@@ -716,3 +716,20 @@ def notify_status_change(sender, instance, **kwargs):
     # Let's use the `tracker` if available (django-model-utils) or just skip automatic signal for status
     # and rely on explicit calls in views/methods (like Task.complete does).
     pass
+
+
+class AnalysisRequestForm(HistoryMixin, models.Model):
+    individual = models.ForeignKey(
+        Individual, on_delete=models.PROTECT, related_name="analysis_request_forms"
+    )
+    file = models.FileField(upload_to="analysis_requests/%Y/%m/%d/")
+    preview_file = models.FileField(upload_to='analysis_requests/previews/%Y/%m/%d/', null=True, blank=True, max_length=500)
+    description = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="uploaded_analysis_requests"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    history = HistoricalRecords()
+
+    def __str__(self):
+        return f"Request Form for {self.individual} - {self.created_at.strftime('%Y-%m-%d')}"

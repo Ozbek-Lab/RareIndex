@@ -435,3 +435,21 @@ class CrossIdentifierAdmin(SimpleHistoryAdmin):
 
     get_institutions.short_description = "Institutions"
 
+
+@admin.register(models.AnalysisRequestForm)
+class AnalysisRequestFormAdmin(SimpleHistoryAdmin):
+    list_display = ["individual", "created_by", "get_created_at", "get_updated_at"]
+    search_fields = ["individual__full_name", "description"]
+    list_filter = ["created_by"]
+    autocomplete_fields = ["individual", "created_by"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+

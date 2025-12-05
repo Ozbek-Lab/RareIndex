@@ -564,6 +564,13 @@
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'reports' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'reports'"
+          >
+            Reports ({{ item.reports.count }})
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'tasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click= "activeTab = 'tasks'"
           >
@@ -627,6 +634,129 @@
                 {% endfor %}
              </div>
           </div>
+        </div>
+
+        <!-- Reports tab -->
+        <div x-show="activeTab === 'reports'" x-cloak class="space-y-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Analysis Reports</h3>
+                {% has_model_perm user 'variant' 'AnalysisReport' 'add' as can_add_report %}
+                {% if can_add_report %}
+                <button
+                    hx-get="{% url 'lab:generic_create' %}?model_name=AnalysisReport&app_label=variant&analysis={{ item.id }}"
+                    hx-target="#modal-root"
+                    hx-swap="innerHTML"
+                    class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 transition-colors"
+                >
+                    <i class="fas fa-file-medical"></i>
+                    <span>Add Report</span>
+                </button>
+                {% endif %}
+            </div>
+
+            {% if item.reports.exists %}
+                <div 
+                    class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]" 
+                    x-data="{ 
+                        selectedFile: null,
+                        fileData: {
+                            {% for report in item.reports.all %}
+                                {{ report.id }}: {
+                                    url: '{% if report.preview_file %}{{ report.preview_file.url }}{% elif report.file.name|lower|slice:'-4:' == '.pdf' %}{{ report.file.url }}{% endif %}',
+                                    variants: [
+                                        {% for variant in report.variants.all %}
+                                            '{{ variant|escapejs }}',
+                                        {% endfor %}
+                                    ]
+                                },
+                            {% endfor %}
+                        },
+                        init() {
+                           // Select first file if available
+                           const firstId = {{ item.reports.first.id|default:'null' }};
+                           if (firstId) this.selectedFile = firstId;
+                        }
+                    }"
+                >
+                    <!-- File List -->
+                    <div class="lg:col-span-1 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-y-auto">
+                        <ul class="divide-y divide-gray-200 dark:divide-gray-700">
+                            {% for report in item.reports.all %}
+                                <li 
+                                    class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    :class="selectedFile === {{ report.id }} ? 'bg-blue-50 dark:bg-blue-900/30' : ''"
+                                    @click="selectedFile = {{ report.id }}"
+                                >
+                                    <div class="px-4 py-4 sm:px-6">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-center truncate">
+                                                <i class="fas fa-file-invoice text-gray-400 mr-2"></i>
+                                                <p class="text-sm font-medium truncate" :class="selectedFile === {{ report.id }} ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'">
+                                                    {{ report.file.name|default:"Unnamed Report" }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="mt-1">
+                                            <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                                {{ report.description|default:"No description" }}
+                                            </p>
+                                            <p class="text-xs text-gray-400 mt-1">
+                                                Uploaded: {{ report.created_at|date:"M d, Y" }}
+                                            </p>
+                                            {% if report.variants.exists %}
+                                                <div class="mt-2 flex flex-wrap gap-1">
+                                                    {% for variant in report.variants.all %}
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                                                            {{ variant }}
+                                                        </span>
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="mt-2 text-xs">
+                                            <a href="{{ report.file.url }}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline z-10 relative">
+                                                <i class="fas fa-download"></i> Download
+                                            </a>
+                                        </div>
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <!-- Preview Area -->
+                    <div class="lg:col-span-2 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
+                        
+
+                        <template x-if="selectedFile && fileData[selectedFile] && fileData[selectedFile].url">
+                            <iframe 
+                                :src="fileData[selectedFile].url" 
+                                class="w-full h-full" 
+                                type="application/pdf"
+                            >
+                                <p>Your browser does not support PDF iframes.</p>
+                            </iframe>
+                        </template>
+                        <template x-if="selectedFile && fileData[selectedFile] && !fileData[selectedFile].url">
+                            <div class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400 flex-col p-8 text-center">
+                                <i class="fas fa-file-contract text-4xl mb-4 text-gray-300"></i>
+                                <p class="text-lg font-medium">Preview not available</p>
+                                <p class="text-sm mt-2">This file type cannot be previewed directly.</p>
+                                <p class="text-sm">Please download the file to view.</p>
+                            </div>
+                        </template>
+                        <template x-if="!selectedFile">
+                            <div class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                                Select a report to preview
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            {% else %}
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+                    No analysis reports found.
+                </div>
+            {% endif %}
         </div>
 
         <!-- Tasks tab -->
@@ -837,8 +967,7 @@
                 </div>
               {% else %}
                 <span
-                  class="px-2 py-1 text-xs rounded-full"
-                  style="background-color: {{ history_item.new_status.color|default:'gray' }}20; color: {{ history_item.new_status.color|default:'gray' }}; border: 1px solid {{ history_item.new_status.color|default:'gray' }}"
+                  class="px-2 py-1 text-xs rounded-full bg-{{ history_item.new_status.color|default:'gray' }}-50 text-{{ history_item.new_status.color|default:'gray' }}-600 ring-1 ring-inset ring-{{ history_item.new_status.color|default:'gray' }}-500/10"
                 >
                   {{ history_item.new_status.name }}
                 </span>

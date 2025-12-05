@@ -594,6 +594,13 @@
           >
             Analyses ({{ analyses|length }})
           </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'request_forms' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'request_forms'"
+          >
+            Request Forms ({{ item.analysis_request_forms.count }})
+          </button>
           {% if item.family.individuals.count > 1 %}
             <button
               class="py-2 px-4 border-b-2 transition-colors"
@@ -1071,6 +1078,110 @@
               class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400"
             >
               No analyses available for this individual.
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Request Forms tab -->
+        <div x-show="activeTab === 'request_forms'" x-cloak>
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+              Analysis Request Forms
+            </h3>
+            <button
+                hx-get="{% url 'lab:generic_create' %}?model_name=AnalysisRequestForm&app_label=lab&individual={{ item.pk }}"
+                hx-target="#modal-root"
+                hx-swap="innerHTML"
+                class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors"
+            >
+                <i class="fas fa-file-upload"></i>
+                <span>Add Request Form</span>
+            </button>
+          </div>
+
+          {% if item.analysis_request_forms.exists %}
+            <div 
+                class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]" 
+                x-data="{ 
+                    selectedFile: null,
+                    previews: {
+                        {% for form in item.analysis_request_forms.all %}
+                            {{ form.id }}: '{% if form.preview_file %}{{ form.preview_file.url }}{% elif form.file.name|lower|slice:'-4:' == '.pdf' %}{{ form.file.url }}{% endif %}',
+                        {% endfor %}
+                    },
+                    init() {
+                       // Select first file if available
+                       const firstId = {{ item.analysis_request_forms.first.id|default:'null' }};
+                       if (firstId) this.selectedFile = firstId;
+                    }
+                }"
+            >
+                <!-- File List -->
+                <div class="lg:col-span-1 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-y-auto">
+                    <ul class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for form in item.analysis_request_forms.all %}
+                            <li 
+                                class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                                :class="selectedFile === {{ form.id }} ? 'bg-blue-50 dark:bg-blue-900/30' : ''"
+                                @click="selectedFile = {{ form.id }}"
+                            >
+                                <div class="px-4 py-4 sm:px-6">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center truncate">
+                                            <i class="fas fa-file-alt text-gray-400 mr-2"></i>
+                                            <p class="text-sm font-medium truncate" :class="selectedFile === {{ form.id }} ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'">
+                                                {{ form.file.name|default:"Unnamed File" }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-1">
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                            {{ form.description|default:"No description" }}
+                                        </p>
+                                        <p class="text-xs text-gray-400 mt-1">
+                                            Uploaded: {{ form.created_at|date:"M d, Y" }}
+                                        </p>
+                                    </div>
+                                    <div class="mt-2 text-xs">
+                                        <a href="{{ form.file.url }}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline z-10 relative">
+                                            <i class="fas fa-download"></i> Download
+                                        </a>
+                                    </div>
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <!-- Preview Area -->
+                <div class="lg:col-span-2 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
+                    <template x-if="selectedFile && previews[selectedFile]">
+                        <iframe 
+                            :src="previews[selectedFile]" 
+                            class="w-full h-full" 
+                            type="application/pdf"
+                        >
+                            <p>Your browser does not support PDF iframes.</p>
+                        </iframe>
+                    </template>
+                    <template x-if="selectedFile && !previews[selectedFile]">
+                        <div class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400 flex-col p-8 text-center">
+                            <i class="fas fa-file-word text-4xl mb-4 text-gray-300"></i>
+                            <p class="text-lg font-medium">Preview not available</p>
+                            <p class="text-sm mt-2">This file type cannot be previewed directly.</p>
+                            <p class="text-sm">Please download the file to view.</p>
+                        </div>
+                    </template>
+                    <template x-if="!selectedFile">
+                        <div class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                            Select a file to preview
+                        </div>
+                    </template>
+                </div>
+            </div>
+          {% else %}
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+                No request forms found.
             </div>
           {% endif %}
         </div>

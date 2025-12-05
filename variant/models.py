@@ -180,3 +180,21 @@ class Gene(models.Model):
     def __str__(self):
         return self.symbol
 
+
+class AnalysisReport(HistoryMixin, models.Model):
+    analysis = models.ForeignKey(
+        Analysis, on_delete=models.PROTECT, related_name="reports"
+    )
+    variants = models.ManyToManyField(Variant, related_name="reports", blank=True)
+    file = models.FileField(upload_to="analysis_reports/%Y/%m/%d/")
+    preview_file = models.FileField(upload_to="analysis_reports/previews/%Y/%m/%d/", null=True, blank=True, max_length=500)
+    description = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="uploaded_analysis_reports"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    history = HistoricalRecords()
+
+    def __str__(self):
+        return f"Analysis Report for {self.analysis} - {self.created_at.strftime('%Y-%m-%d')}"
+
