@@ -672,6 +672,21 @@ def generic_detail(request):
     history_prefetched = normalized_tab == "history"
     context["history_prefetched"] = history_prefetched
 
+    def _add_statuses_for_models(context, model_classes):
+        """Attach status querysets for each provided model class if not already present."""
+        for model_class in model_classes:
+            try:
+                key = f"{model_class.__name__.lower()}_statuses"
+                if key in context:
+                    continue
+                model_ct = ContentType.objects.get_for_model(model_class)
+                context[key] = Status.objects.filter(
+                    Q(content_type=model_ct) | Q(content_type__isnull=True)
+                ).order_by("name")
+            except Exception:
+                # If a model lacks a status relationship, skip silently.
+                continue
+
     if target_model_name == "Individual":
         context["tests"] = [
             test for sample in obj.samples.all() for test in sample.tests.all()
@@ -693,6 +708,9 @@ def generic_detail(request):
         context["individual_statuses"] = Status.objects.filter(
             Q(content_type=individual_ct) | Q(content_type__isnull=True)
         ).order_by("name")
+        _add_statuses_for_models(
+            context, [Sample, Test, Analysis, Project, Task]
+        )
     elif target_model_name == "Sample":
         context["analyses"] = [
             analysis for test in obj.tests.all() for analysis in test.analyses.all()
@@ -702,6 +720,7 @@ def generic_detail(request):
         context["sample_statuses"] = Status.objects.filter(
             Q(content_type=sample_ct) | Q(content_type__isnull=True)
         ).order_by("name")
+        _add_statuses_for_models(context, [Test, Analysis, Task])
     
     # Add statuses for any model that has a status field
     if hasattr(target_model, 'status'):
@@ -711,6 +730,143 @@ def generic_detail(request):
             context[statuses_var_name] = Status.objects.filter(
                 Q(content_type=model_ct) | Q(content_type__isnull=True)
             ).order_by("name")
+
+    # Ensure related cards rendered in detail views have status choices available
+    related_status_models = []
+    if target_model_name == "Test":
+        related_status_models = [Analysis, Task]
+    elif target_model_name == "Analysis":
+        related_status_models = [Task]
+    elif target_model_name == "Project":
+        related_status_models = [Individual, Task]
+
+    if related_status_models:
+        _add_statuses_for_models(context, related_status_models)
+
+    if request.htmx:
+        # For HTMX requests, return only the detail partial
+        return render(request, f"{template_base}#detail", context)
+    else:
+        # For direct loads, render the main index page and inject the detail content
+        detail_html = render_to_string(
+            f"{template_base}#detail", context=context, request=request
+        )
+        return render(
+            request,
+            "lab/index.html",
+            {
+                "initial_detail_html": detail_html,
+                "item": obj,
+                "model_name": target_model_name,
+                "app_label": target_app_label,
+            },
+        )
+
+@login_required
+@vary_on_headers("HX-Request")
+def generic_detail(request):
+    target_app_label = request.GET.get("app_label", "lab").strip()
+    target_model_name = request.GET.get("model_name", "").strip()
+    pk = request.GET.get("pk")
+    if not target_model_name or not pk:
+        return HttpResponseBadRequest("Model or pk not specified.")
+
+    target_model = apps.get_model(
+        app_label=target_app_label, model_name=target_model_name
+    )
+
+    obj = get_object_or_404(target_model, pk=pk)
+
+    if target_app_label == "variant":
+        template_base = "variant/variant.html"
+    else:
+        template_base = f"{target_app_label}/{target_model_name.lower()}.html"
+    context = {
+        "item": obj,
+        "model_name": target_model_name,
+        "app_label": target_app_label,
+        "user": request.user,
+    }
+
+    requested_tab = request.GET.get("activeTab")
+    normalized_tab = None
+    if requested_tab:
+        normalized_tab = "history" if requested_tab == "status" else requested_tab
+        context["activeTab"] = normalized_tab
+
+    history_prefetched = normalized_tab == "history"
+    context["history_prefetched"] = history_prefetched
+
+    def _add_statuses_for_models(context, model_classes):
+        """Attach status querysets for each provided model class if not already present."""
+        for model_class in model_classes:
+            try:
+                key = f"{model_class.__name__.lower()}_statuses"
+                if key in context:
+                    continue
+                model_ct = ContentType.objects.get_for_model(model_class)
+                context[key] = Status.objects.filter(
+                    Q(content_type=model_ct) | Q(content_type__isnull=True)
+                ).order_by("name")
+            except Exception:
+                # If a model lacks a status relationship, skip silently.
+                continue
+
+    if target_model_name == "Individual":
+        context["tests"] = [
+            test for sample in obj.samples.all() for test in sample.tests.all()
+        ]
+        context["analyses"] = [
+            analysis for test in context["tests"] for analysis in test.analyses.all()
+        ]
+        # Build initial JSON for HPO terms combobox
+        try:
+            hpo_initial = [
+                {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+                for t in getattr(obj, "hpo_terms", []).all()
+            ]
+            context["hpo_initial_json"] = json.dumps(hpo_initial)
+        except Exception:
+            context["hpo_initial_json"] = "[]"
+        # Get all available Individual statuses for status dropdown
+        individual_ct = ContentType.objects.get_for_model(Individual)
+        context["individual_statuses"] = Status.objects.filter(
+            Q(content_type=individual_ct) | Q(content_type__isnull=True)
+        ).order_by("name")
+        _add_statuses_for_models(
+            context, [Sample, Test, Analysis, Project, Task]
+        )
+    elif target_model_name == "Sample":
+        context["analyses"] = [
+            analysis for test in obj.tests.all() for analysis in test.analyses.all()
+        ]
+        # Get all available Sample statuses for status dropdown
+        sample_ct = ContentType.objects.get_for_model(Sample)
+        context["sample_statuses"] = Status.objects.filter(
+            Q(content_type=sample_ct) | Q(content_type__isnull=True)
+        ).order_by("name")
+        _add_statuses_for_models(context, [Test, Analysis, Task])
+    
+    # Add statuses for any model that has a status field
+    if hasattr(target_model, 'status'):
+        model_ct = ContentType.objects.get_for_model(target_model)
+        statuses_var_name = f"{target_model_name.lower()}_statuses"
+        if statuses_var_name not in context:  # Only add if not already added above
+            context[statuses_var_name] = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+
+    # Ensure related cards rendered in detail views have status choices available
+    related_status_models = []
+    if target_model_name == "Test":
+        related_status_models = [Analysis, Task]
+    elif target_model_name == "Analysis":
+        related_status_models = [Task]
+    elif target_model_name == "Project":
+        related_status_models = [Individual, Task]
+
+    if related_status_models:
+        _add_statuses_for_models(context, related_status_models)
 
     if request.htmx:
         # For HTMX requests, return only the detail partial
