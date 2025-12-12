@@ -53,3 +53,4 @@ lab/management/commands/link_parents.py
 lab/management/commands/create_ozbek_users.py
 lab/management/commands/add_individuals_to_project.py
 node_modules/
+vcfpaths
