@@ -21,7 +21,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Update individuals from 'Yayın_İçi_Tablo_Özbek_Lab.xlsx' sheet 'yayıniciyedek'"
+    help = "Update individuals from 'Yayın_İçi_Tablo_Özbek_Lab.xlsx' sheet 'GÜNCELyayıniciyedek'"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -210,7 +210,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Failed to open workbook: {e}"))
             return
 
-        sheet_name = "yayıniciyedek"
+        sheet_name = "GÜNCELyayıniciyedek"
         if sheet_name not in wb.sheetnames:
             self.stdout.write(self.style.ERROR(f"Sheet '{sheet_name}' not found in {file_path}"))
             return

@@ -256,7 +256,7 @@
                   title="Toggle full name visibility">
             <i class="fas fa-id-card"></i>
           </button>
-          {% if perms.lab.view_individual_sensitive_data %}
+          {% if perms.lab.view_sensitive_data %}
             {% if item.content_object.full_name %}
               <span class="ml-1 text-blue-700 dark:text-blue-300" x-show="showFullName" x-transition>
                 {{ item.content_object.full_name }}

@@ -1,5 +1,6 @@
 from django.apps import apps
-from django.db.models import Q
+from django.db.models import Q, OuterRef, Subquery, Value, CharField, Count, Case, When
+from django.db.models.functions import Coalesce
 import operator
 from functools import reduce
 from django.contrib.contenttypes.models import ContentType
@@ -571,6 +572,174 @@ def _apply_variant_type_filter(queryset, filter_values, target_model_name, exclu
     return queryset.filter(q_objects)
 
 
+def _extract_sort_params(request, target_model_name):
+    """Return list of (key, direction) tuples scoped to the target model."""
+    model_prefix = target_model_name.lower() + "_"
+    params = []
+    for key, value in request.GET.items():
+        if not key.startswith("sort_"):
+            continue
+        sort_key = key.replace("sort_", "", 1)
+        # Enforce model scoping: expect sort_<model>_<field>
+        if not sort_key.startswith(model_prefix):
+            continue
+        unprefixed = sort_key[len(model_prefix) :]
+        direction = (value or "").lower()
+        if direction not in ("asc", "desc"):
+            continue
+        params.append((unprefixed, direction))
+    return params
+
+
+def _annotate_individual_identifier(queryset):
+    """Annotate Individuals with a sortable identifier preference: RareBoost, then Biobank, then any."""
+    CrossIdentifier = apps.get_model("lab", "CrossIdentifier")
+    rare = (
+        CrossIdentifier.objects.filter(individual=OuterRef("pk"), id_type__name="RareBoost")
+        .order_by("id_value")
+        .values("id_value")[:1]
+    )
+    biobank = (
+        CrossIdentifier.objects.filter(individual=OuterRef("pk"), id_type__name="Biobank")
+        .order_by("id_value")
+        .values("id_value")[:1]
+    )
+    any_id = (
+        CrossIdentifier.objects.filter(individual=OuterRef("pk"))
+        .order_by("id_value")
+        .values("id_value")[:1]
+    )
+    return queryset.annotate(
+        individual_identifier=Coalesce(
+            Subquery(rare, output_field=CharField()),
+            Subquery(biobank, output_field=CharField()),
+            Subquery(any_id, output_field=CharField()),
+            Value(""),
+        )
+    )
+
+
+def _annotate_related_identifier(queryset, individual_lookup, annotation_name):
+    """Annotate a queryset with an individual's identifier via lookup path."""
+    CrossIdentifier = apps.get_model("lab", "CrossIdentifier")
+    rare = (
+        CrossIdentifier.objects.filter(individual=OuterRef(individual_lookup), id_type__name="RareBoost")
+        .order_by("id_value")
+        .values("id_value")[:1]
+    )
+    biobank = (
+        CrossIdentifier.objects.filter(individual=OuterRef(individual_lookup), id_type__name="Biobank")
+        .order_by("id_value")
+        .values("id_value")[:1]
+    )
+    any_id = (
+        CrossIdentifier.objects.filter(individual=OuterRef(individual_lookup))
+        .order_by("id_value")
+        .values("id_value")[:1]
+    )
+    return queryset.annotate(
+        **{
+            annotation_name: Coalesce(
+                Subquery(rare, output_field=CharField()),
+                Subquery(biobank, output_field=CharField()),
+                Subquery(any_id, output_field=CharField()),
+                Value(""),
+            )
+        }
+    )
+
+
+def _annotate_variant_type(queryset, prefix=""):
+    """Annotate queryset with a simple variant type label based on child relationships."""
+    return queryset.annotate(
+        variant_type_label=Coalesce(
+            Case(
+                When(**{f"{prefix}snv__isnull": False}, then=Value("SNV")),
+                When(**{f"{prefix}cnv__isnull": False}, then=Value("CNV")),
+                When(**{f"{prefix}sv__isnull": False}, then=Value("SV")),
+                When(**{f"{prefix}repeat__isnull": False}, then=Value("Repeat")),
+                default=Value("Variant"),
+                output_field=CharField(),
+            ),
+            Value("Variant"),
+        )
+    )
+
+
+def get_sort_options(model_name):
+    """Expose configured sort options for templates/views."""
+    return SORT_CONFIG.get(model_name, SORT_CONFIG.get(model_name.title(), []))
+
+
+def _apply_sorting(request, target_model_name, queryset):
+    """Apply configured sorting options if provided, otherwise default ordering."""
+    sort_options = {opt["key"]: opt["field"] for opt in get_sort_options(target_model_name)}
+    sort_params = _extract_sort_params(request, target_model_name)
+
+    # Special annotation for Individuals identifier sorting
+    needs_identifier = target_model_name == "Individual" and any(
+        sort_options.get(sort_key) == "individual_identifier" for sort_key, _ in sort_params
+    )
+    if needs_identifier:
+        queryset = _annotate_individual_identifier(queryset)
+
+    # Special annotation for Project size sorting
+    needs_project_size = target_model_name == "Project" and any(
+        sort_options.get(sort_key) == "project_size" for sort_key, _ in sort_params
+    )
+    if needs_project_size:
+        queryset = queryset.annotate(project_size=Count("individuals", distinct=True))
+
+    # Related identifier annotations for other models
+    if target_model_name == "Sample":
+        needs_related_identifier = any(
+            sort_options.get(sort_key) == "individual_identifier" for sort_key, _ in sort_params
+        )
+        if needs_related_identifier:
+            queryset = _annotate_related_identifier(queryset, "individual", "individual_identifier")
+    elif target_model_name == "Test":
+        needs_related_identifier = any(
+            sort_options.get(sort_key) == "individual_identifier" for sort_key, _ in sort_params
+        )
+        if needs_related_identifier:
+            queryset = _annotate_related_identifier(queryset, "sample__individual", "individual_identifier")
+    elif target_model_name == "Analysis":
+        needs_related_identifier = any(
+            sort_options.get(sort_key) == "individual_identifier" for sort_key, _ in sort_params
+        )
+        if needs_related_identifier:
+            queryset = _annotate_related_identifier(queryset, "test__sample__individual", "individual_identifier")
+    # Variant type annotations
+    if target_model_name == "Variant":
+        needs_variant_type = any(
+            sort_options.get(sort_key) == "variant_type_label" for sort_key, _ in sort_params
+        )
+        if needs_variant_type:
+            queryset = _annotate_variant_type(queryset, prefix="")
+    elif target_model_name == "Analysis":
+        needs_variant_type = any(
+            sort_options.get(sort_key) == "variant_type_label" for sort_key, _ in sort_params
+        )
+        if needs_variant_type:
+            queryset = _annotate_variant_type(queryset, prefix="found_variants__")
+
+    ordering = []
+    for sort_key, direction in sort_params:
+        field = sort_options.get(sort_key)
+        if not field:
+            continue
+        prefix = "" if direction == "asc" else "-"
+        ordering.append(f"{prefix}{field}")
+
+    if not ordering:
+        return queryset.order_by("-pk")
+
+    # Provide a deterministic secondary ordering for stable pagination
+    if "pk" not in {o.lstrip("-") for o in ordering}:
+        ordering.append("-pk")
+    return queryset.order_by(*ordering)
+
+
 def apply_filters(request, target_model_name, queryset, exclude_filter=None):
     """
     Applies search and cross-model filters to a given queryset.
@@ -619,7 +788,7 @@ def apply_filters(request, target_model_name, queryset, exclude_filter=None):
             target_config,
             exclude=True,
         )
-    queryset = queryset.order_by("-pk")
+    queryset = _apply_sorting(request, target_model_name, queryset)
     return queryset.distinct()
 
 
@@ -684,3 +853,85 @@ def get_available_types(model_name, app_label="lab"):
     except Exception as e:
         print(f"Error getting types for {model_name}: {e}")
         return []
+
+
+# Sorting configuration per model. Each option maps a stable key to an ORM field.
+SORT_CONFIG = {
+    "Individual": [
+        {"key": "created_at", "label": "Created", "field": "created_at"},
+        {"key": "updated_at", "label": "Updated", "field": "updated_at"},
+        {"key": "full_name", "label": "Full Name", "field": "full_name"},
+        {"key": "identifier", "label": "Identifier", "field": "individual_identifier"},
+        {"key": "status", "label": "Status", "field": "status__name"},
+        {"key": "birth_date", "label": "Birth Date", "field": "birth_date"},
+        {"key": "age_of_onset", "label": "Age of Onset", "field": "age_of_onset"},
+        {"key": "institution", "label": "Institution", "field": "institution__name"},
+
+    ],
+    "Sample": [
+        {"key": "receipt_date", "label": "Receipt Date", "field": "receipt_date"},
+        {"key": "created", "label": "Created", "field": "pk"},
+        {"key": "status", "label": "Status", "field": "status__name"},
+        {"key": "sample_type", "label": "Sample Type", "field": "sample_type__name"},
+        {"key": "individual", "label": "Individual", "field": "individual_identifier"},
+        {"key": "receipt_date", "label": "Receipt Date", "field": "receipt_date"},
+        {"key": "isolation_by", "label": "Isolation By", "field": "isolation_by__username"},
+        {"key": "sample_measurements", "label": "Sample Measurements", "field": "sample_measurements"},
+    ],
+    "Test": [
+        {"key": "performed_date", "label": "Performed Date", "field": "performed_date"},
+        {"key": "created", "label": "Created", "field": "pk"},
+        {"key": "status", "label": "Status", "field": "status__name"},
+        {"key": "test_type", "label": "Test Type", "field": "test_type__name"},
+        {"key": "individual", "label": "Individual", "field": "individual_identifier"},
+    ],
+    "Analysis": [
+        {"key": "performed_date", "label": "Performed Date", "field": "performed_date"},
+        {"key": "created", "label": "Created", "field": "pk"},
+        {"key": "status", "label": "Status", "field": "status__name"},
+        {"key": "analysis_type", "label": "Analysis Type", "field": "type__name"},
+        {"key": "individual", "label": "Individual", "field": "individual_identifier"},
+        {"key": "gene", "label": "Gene", "field": "found_variants__genes__symbol"},
+        {"key": "variant", "label": "Variant", "field": "found_variants__pk"},
+        {"key": "variant_type", "label": "Variant Type", "field": "variant_type_label"},
+    ],
+    "Institution": [
+        {"key": "name", "label": "Name", "field": "name"},
+        {"key": "created", "label": "Created", "field": "pk"},
+        {"key": "city", "label": "City", "field": "city"},
+        {"key": "speciality", "label": "Speciality", "field": "speciality"},
+        {"key": "official_name", "label": "Official Name", "field": "official_name"},
+    ],
+    "Project": [
+        {"key": "due_date", "label": "Due Date", "field": "due_date"},
+        {"key": "priority", "label": "Priority", "field": "priority"},
+        {"key": "created", "label": "Created", "field": "created_at"},
+        {"key": "status", "label": "Status", "field": "status__name"},
+        {"key": "size", "label": "Size", "field": "project_size"},
+    ],
+    "Task": [
+        {"key": "due_date", "label": "Due Date", "field": "due_date"},
+        {"key": "priority", "label": "Priority", "field": "priority"},
+        {"key": "created", "label": "Created", "field": "pk"},
+        {"key": "status", "label": "Status", "field": "status__name"},
+        {"key": "assigned_to", "label": "Assigned To", "field": "assigned_to__username"},
+        {"key": "created_by", "label": "Created By", "field": "created_by__username"},
+        {"key": "project", "label": "Project", "field": "project__name"},
+    ],
+    "Variant": [
+        {"key": "position", "label": "Position", "field": "start"},
+        {"key": "chromosome", "label": "Chromosome", "field": "chromosome"},
+        {"key": "created", "label": "Created", "field": "created_at"},
+        {"key": "status", "label": "Status", "field": "status__name"},
+        {"key": "start", "label": "Start", "field": "start"},
+        {"key": "reference", "label": "Reference", "field": "reference"},
+        {"key": "alternate", "label": "Alternate", "field": "alternate"},
+        {"key": "zygosity", "label": "Zygosity", "field": "zygosity"},
+        {"key": "classification", "label": "Classification", "field": "classifications__classification"},
+        {"key": "inheritance", "label": "Inheritance", "field": "classifications__inheritance"},
+        {"key": "gene", "label": "Gene", "field": "genes__symbol"},
+        {"key": "individual", "label": "Individual", "field": "individual__individual_id"},
+        {"key": "variant_type", "label": "Variant Type", "field": "variant_type_label"},
+        {"key": "analysis", "label": "Analysis", "field": "analysis__type__name"},
+    ]
+}
