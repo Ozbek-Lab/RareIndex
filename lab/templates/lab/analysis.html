@@ -142,7 +142,7 @@
             <i class="fas fa-id-card"></i>
           </button>
         </div>
-        {% if perms.lab.view_individual_sensitive_data %}
+        {% if perms.lab.view_sensitive_data %}
           {% if item.test.sample.individual.full_name %}
             <p
               class="text-sm text-blue-700 dark:text-blue-300 mt-1"
@@ -462,7 +462,7 @@
                 <i class="fas fa-id-card"></i>
               </button>
             </p>
-            {% if perms.lab.view_individual_sensitive_data %}
+            {% if perms.lab.view_sensitive_data %}
               <div class="flex items-center space-x-2">
                 <p
                   class="text-gray-600 dark:text-gray-400 text-sm"
