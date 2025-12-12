@@ -46,7 +46,13 @@ from .visualization.maps import generate_map_data
 from .visualization.timeline import timeline
 
 
-from .filters import apply_filters, FILTER_CONFIG, get_available_statuses, get_available_types
+from .filters import (
+    apply_filters,
+    FILTER_CONFIG,
+    get_available_statuses,
+    get_available_types,
+    get_sort_options,
+)
 
 # Import SQL agent for natural language search
 from .sql_agent import query_natural_language
@@ -384,6 +390,7 @@ def generic_search(request):
             "value_field": value_field,
             "label_field": label_field,
             "options": options,
+            "sort_options": get_sort_options(target_model_name),
         }
         # Try model-specific combobox-options partial first, fall back to generic
         try:
@@ -492,6 +499,7 @@ def generic_search(request):
         "view_mode": view_mode,
         "card": card_partial,
         "icon_class": icon_class,
+        "sort_options": get_sort_options(target_model_name),
     }
     
     # Add model-specific statuses to context for status badge dropdowns

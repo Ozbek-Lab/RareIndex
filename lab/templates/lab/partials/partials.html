@@ -251,6 +251,27 @@
   </div>
   {% endif %}
 
+  {% if sort_options %}
+  <div class="flex flex-wrap gap-2 mb-3 items-center">
+    <template x-if="hasSorts('{{ model_name|lower }}')">
+      <button type="button"
+        class="px-2 py-1 text-xs rounded-full border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+        @click="clearSorts('{{ model_name|lower }}', '{{ model_name|lower }}')">
+        <i class="fa-solid fa-eraser mr-1"></i> Clear sorting
+      </button>
+    </template>
+    {% for sort in sort_options %}
+    <button type="button"
+      class="px-2 py-1 text-xs rounded-full border flex items-center gap-2 transition-all duration-200"
+      :class="sortButtonClasses('{{ sort.key }}', '{{ model_name|lower }}')"
+      @click="toggleSort('{{ sort.key }}', '{{ model_name|lower }}', '{{ model_name|lower }}')">
+      <span>{{ sort.label }}</span>
+      <i class="fa-solid" :class="sortIconClass('{{ sort.key }}', '{{ model_name|lower }}')"></i>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- Card View with animated transition -->
   <div x-show="viewMode === 'cards'" x-transition:enter="transition-all duration-500 ease-out"
     x-transition:enter-start="opacity-0 scale-95 translate-y-4"
