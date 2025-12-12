@@ -680,6 +680,21 @@ def generic_detail(request):
     history_prefetched = normalized_tab == "history"
     context["history_prefetched"] = history_prefetched
 
+    def _add_statuses_for_models(context, model_classes):
+        """Attach status querysets for each provided model class if not already present."""
+        for model_class in model_classes:
+            try:
+                key = f"{model_class.__name__.lower()}_statuses"
+                if key in context:
+                    continue
+                model_ct = ContentType.objects.get_for_model(model_class)
+                context[key] = Status.objects.filter(
+                    Q(content_type=model_ct) | Q(content_type__isnull=True)
+                ).order_by("name")
+            except Exception:
+                # If a model lacks a status relationship, skip silently.
+                continue
+
     if target_model_name == "Individual":
         context["tests"] = [
             test for sample in obj.samples.all() for test in sample.tests.all()
@@ -701,6 +716,9 @@ def generic_detail(request):
         context["individual_statuses"] = Status.objects.filter(
             Q(content_type=individual_ct) | Q(content_type__isnull=True)
         ).order_by("name")
+        _add_statuses_for_models(
+            context, [Sample, Test, Analysis, Project, Task]
+        )
     elif target_model_name == "Sample":
         context["analyses"] = [
             analysis for test in obj.tests.all() for analysis in test.analyses.all()
@@ -710,6 +728,7 @@ def generic_detail(request):
         context["sample_statuses"] = Status.objects.filter(
             Q(content_type=sample_ct) | Q(content_type__isnull=True)
         ).order_by("name")
+        _add_statuses_for_models(context, [Test, Analysis, Task])
     
     # Add statuses for any model that has a status field
     if hasattr(target_model, 'status'):
@@ -719,6 +738,143 @@ def generic_detail(request):
             context[statuses_var_name] = Status.objects.filter(
                 Q(content_type=model_ct) | Q(content_type__isnull=True)
             ).order_by("name")
+
+    # Ensure related cards rendered in detail views have status choices available
+    related_status_models = []
+    if target_model_name == "Test":
+        related_status_models = [Analysis, Task]
+    elif target_model_name == "Analysis":
+        related_status_models = [Task]
+    elif target_model_name == "Project":
+        related_status_models = [Individual, Task]
+
+    if related_status_models:
+        _add_statuses_for_models(context, related_status_models)
+
+    if request.htmx:
+        # For HTMX requests, return only the detail partial
+        return render(request, f"{template_base}#detail", context)
+    else:
+        # For direct loads, render the main index page and inject the detail content
+        detail_html = render_to_string(
+            f"{template_base}#detail", context=context, request=request
+        )
+        return render(
+            request,
+            "lab/index.html",
+            {
+                "initial_detail_html": detail_html,
+                "item": obj,
+                "model_name": target_model_name,
+                "app_label": target_app_label,
+            },
+        )
+
+@login_required
+@vary_on_headers("HX-Request")
+def generic_detail(request):
+    target_app_label = request.GET.get("app_label", "lab").strip()
+    target_model_name = request.GET.get("model_name", "").strip()
+    pk = request.GET.get("pk")
+    if not target_model_name or not pk:
+        return HttpResponseBadRequest("Model or pk not specified.")
+
+    target_model = apps.get_model(
+        app_label=target_app_label, model_name=target_model_name
+    )
+
+    obj = get_object_or_404(target_model, pk=pk)
+
+    if target_app_label == "variant":
+        template_base = "variant/variant.html"
+    else:
+        template_base = f"{target_app_label}/{target_model_name.lower()}.html"
+    context = {
+        "item": obj,
+        "model_name": target_model_name,
+        "app_label": target_app_label,
+        "user": request.user,
+    }
+
+    requested_tab = request.GET.get("activeTab")
+    normalized_tab = None
+    if requested_tab:
+        normalized_tab = "history" if requested_tab == "status" else requested_tab
+        context["activeTab"] = normalized_tab
+
+    history_prefetched = normalized_tab == "history"
+    context["history_prefetched"] = history_prefetched
+
+    def _add_statuses_for_models(context, model_classes):
+        """Attach status querysets for each provided model class if not already present."""
+        for model_class in model_classes:
+            try:
+                key = f"{model_class.__name__.lower()}_statuses"
+                if key in context:
+                    continue
+                model_ct = ContentType.objects.get_for_model(model_class)
+                context[key] = Status.objects.filter(
+                    Q(content_type=model_ct) | Q(content_type__isnull=True)
+                ).order_by("name")
+            except Exception:
+                # If a model lacks a status relationship, skip silently.
+                continue
+
+    if target_model_name == "Individual":
+        context["tests"] = [
+            test for sample in obj.samples.all() for test in sample.tests.all()
+        ]
+        context["analyses"] = [
+            analysis for test in context["tests"] for analysis in test.analyses.all()
+        ]
+        # Build initial JSON for HPO terms combobox
+        try:
+            hpo_initial = [
+                {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+                for t in getattr(obj, "hpo_terms", []).all()
+            ]
+            context["hpo_initial_json"] = json.dumps(hpo_initial)
+        except Exception:
+            context["hpo_initial_json"] = "[]"
+        # Get all available Individual statuses for status dropdown
+        individual_ct = ContentType.objects.get_for_model(Individual)
+        context["individual_statuses"] = Status.objects.filter(
+            Q(content_type=individual_ct) | Q(content_type__isnull=True)
+        ).order_by("name")
+        _add_statuses_for_models(
+            context, [Sample, Test, Analysis, Project, Task]
+        )
+    elif target_model_name == "Sample":
+        context["analyses"] = [
+            analysis for test in obj.tests.all() for analysis in test.analyses.all()
+        ]
+        # Get all available Sample statuses for status dropdown
+        sample_ct = ContentType.objects.get_for_model(Sample)
+        context["sample_statuses"] = Status.objects.filter(
+            Q(content_type=sample_ct) | Q(content_type__isnull=True)
+        ).order_by("name")
+        _add_statuses_for_models(context, [Test, Analysis, Task])
+    
+    # Add statuses for any model that has a status field
+    if hasattr(target_model, 'status'):
+        model_ct = ContentType.objects.get_for_model(target_model)
+        statuses_var_name = f"{target_model_name.lower()}_statuses"
+        if statuses_var_name not in context:  # Only add if not already added above
+            context[statuses_var_name] = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+
+    # Ensure related cards rendered in detail views have status choices available
+    related_status_models = []
+    if target_model_name == "Test":
+        related_status_models = [Analysis, Task]
+    elif target_model_name == "Analysis":
+        related_status_models = [Task]
+    elif target_model_name == "Project":
+        related_status_models = [Individual, Task]
+
+    if related_status_models:
+        _add_statuses_for_models(context, related_status_models)
 
     if request.htmx:
         # For HTMX requests, return only the detail partial
@@ -1258,9 +1414,12 @@ def project_add_individuals(request, pk=None):
             {"item": individual},
         )
     if request.htmx:
-        response = HttpResponse(status=204)
-        response["HX-Refresh"] = "true"
-        return response
+        # Return refreshed project individuals fragment so the tab updates without a full reload
+        return render(
+            request,
+            "lab/project.html#project-individuals-fragment",
+            {"item": project, "user": request.user},
+        )
 
     redirect_url = request.META.get("HTTP_REFERER") or reverse("lab:home")
     return redirect(redirect_url)
@@ -1327,9 +1486,12 @@ def project_remove_individuals(request, pk=None):
             {"item": individual},
         )
     if request.htmx:
-        response = HttpResponse(status=204)
-        response["HX-Refresh"] = "true"
-        return response
+        # Return refreshed project individuals fragment so the tab updates without a full reload
+        return render(
+            request,
+            "lab/project.html#project-individuals-fragment",
+            {"item": project, "user": request.user},
+        )
 
     redirect_url = request.META.get("HTTP_REFERER") or reverse("lab:home")
     return redirect(redirect_url)
@@ -1521,24 +1683,245 @@ def notifications_page(request):
     """Display notifications page"""
     try:
         from notifications.models import Notification
+        from django.db.models import Exists, OuterRef, Q
+        from django.core.paginator import Paginator
+        from collections import defaultdict
 
-        notifications = Notification.objects.filter(recipient=request.user).order_by(
-            "-timestamp"
-        )
+        from .models import Note, Task, Project, Individual, Sample, Test, Analysis
+        from variant.models import Variant
+        from django.contrib.contenttypes.models import ContentType
 
-        # Mark notifications as read when viewed
-        unread_notifications = notifications.filter(unread=True)
-        unread_notifications.update(unread=False)
+        scope = request.GET.get("scope", "all")
+
+        notifications_qs = Notification.objects.filter(
+            recipient=request.user
+        ).order_by("-timestamp")
+
+        if scope == "associated":
+            # Collect direct notes and tasks by the user
+            notes_qs = Note.objects.filter(user=request.user)
+            tasks_qs = Task.objects.filter(
+                Q(assigned_to=request.user) | Q(created_by=request.user)
+            )
+
+            ct_map = {
+                "project": ContentType.objects.get_for_model(Project),
+                "individual": ContentType.objects.get_for_model(Individual),
+                "sample": ContentType.objects.get_for_model(Sample),
+                "test": ContentType.objects.get_for_model(Test),
+                "analysis": ContentType.objects.get_for_model(Analysis),
+                "variant": ContentType.objects.get_for_model(Variant),
+            }
+
+            # Direct note targets
+            note_targets = defaultdict(set)
+            for row in notes_qs.values("content_type_id", "object_id"):
+                note_targets[row["content_type_id"]].add(row["object_id"])
+
+            # Direct task targets
+            task_targets = defaultdict(set)
+            for row in tasks_qs.values("content_type_id", "object_id"):
+                task_targets[row["content_type_id"]].add(row["object_id"])
+
+            # Prepare sets for each model and grow them via hierarchy traversal
+            project_ids = set(task_targets[ct_map["project"].id])
+            individual_ids = set(task_targets[ct_map["individual"].id])
+            sample_ids = set(task_targets[ct_map["sample"].id])
+            test_ids = set(task_targets[ct_map["test"].id])
+            analysis_ids = set(task_targets[ct_map["analysis"].id])
+            variant_ids = set(task_targets[ct_map["variant"].id])
+
+            def add_ids(target_set, iterable):
+                before = len(target_set)
+                target_set.update([i for i in iterable if i is not None])
+                return len(target_set) != before
+
+            changed = True
+            while changed:
+                changed = False
+
+                # Project -> Individuals
+                if project_ids:
+                    changed |= add_ids(
+                        individual_ids,
+                        Project.objects.filter(id__in=project_ids)
+                        .values_list("individuals__id", flat=True)
+                    )
+
+                # Individuals -> Projects
+                if individual_ids:
+                    changed |= add_ids(
+                        project_ids,
+                        Project.objects.filter(individuals__id__in=individual_ids)
+                        .values_list("id", flat=True)
+                    )
+
+                # Individuals -> Samples / Tests / Analyses / Variants
+                if individual_ids:
+                    changed |= add_ids(
+                        sample_ids,
+                        Sample.objects.filter(individual_id__in=individual_ids)
+                        .values_list("id", flat=True)
+                    )
+                    changed |= add_ids(
+                        test_ids,
+                        Test.objects.filter(sample__individual_id__in=individual_ids)
+                        .values_list("id", flat=True)
+                    )
+                    changed |= add_ids(
+                        analysis_ids,
+                        Analysis.objects.filter(test__sample__individual_id__in=individual_ids)
+                        .values_list("id", flat=True)
+                    )
+                    changed |= add_ids(
+                        variant_ids,
+                        Variant.objects.filter(
+                            Q(individual_id__in=individual_ids)
+                            | Q(analysis__test__sample__individual_id__in=individual_ids)
+                        ).values_list("id", flat=True)
+                    )
+
+                # Samples -> Individual / Tests / Analyses / Variants
+                if sample_ids:
+                    changed |= add_ids(
+                        individual_ids,
+                        Sample.objects.filter(id__in=sample_ids)
+                        .values_list("individual_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        test_ids,
+                        Test.objects.filter(sample_id__in=sample_ids)
+                        .values_list("id", flat=True)
+                    )
+                    changed |= add_ids(
+                        analysis_ids,
+                        Analysis.objects.filter(test__sample_id__in=sample_ids)
+                        .values_list("id", flat=True)
+                    )
+                    changed |= add_ids(
+                        variant_ids,
+                        Variant.objects.filter(
+                            Q(analysis__test__sample_id__in=sample_ids)
+                            | Q(individual__samples__id__in=sample_ids)
+                        )
+                        .values_list("id", flat=True)
+                    )
+
+                # Tests -> Sample / Individual / Analyses / Variants
+                if test_ids:
+                    changed |= add_ids(
+                        sample_ids,
+                        Test.objects.filter(id__in=test_ids)
+                        .values_list("sample_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        individual_ids,
+                        Test.objects.filter(id__in=test_ids)
+                        .values_list("sample__individual_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        analysis_ids,
+                        Analysis.objects.filter(test_id__in=test_ids)
+                        .values_list("id", flat=True)
+                    )
+                    changed |= add_ids(
+                        variant_ids,
+                        Variant.objects.filter(analysis__test_id__in=test_ids)
+                        .values_list("id", flat=True)
+                    )
+
+                # Analyses -> Test / Sample / Individual / Variants
+                if analysis_ids:
+                    changed |= add_ids(
+                        test_ids,
+                        Analysis.objects.filter(id__in=analysis_ids)
+                        .values_list("test_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        sample_ids,
+                        Analysis.objects.filter(id__in=analysis_ids)
+                        .values_list("test__sample_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        individual_ids,
+                        Analysis.objects.filter(id__in=analysis_ids)
+                        .values_list("test__sample__individual_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        variant_ids,
+                        Variant.objects.filter(analysis_id__in=analysis_ids)
+                        .values_list("id", flat=True)
+                    )
+
+                # Variants -> Analysis / Test / Sample / Individual / Projects (via individual)
+                if variant_ids:
+                    changed |= add_ids(
+                        analysis_ids,
+                        Variant.objects.filter(id__in=variant_ids)
+                        .values_list("analysis_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        test_ids,
+                        Variant.objects.filter(id__in=variant_ids)
+                        .values_list("analysis__test_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        sample_ids,
+                        Variant.objects.filter(id__in=variant_ids)
+                        .values_list("analysis__test__sample_id", flat=True)
+                    )
+                    changed |= add_ids(
+                        individual_ids,
+                        Variant.objects.filter(id__in=variant_ids)
+                        .values_list("individual_id", flat=True)
+                    )
+
+            # Build allowed targets from tasks (direct + connected) and notes
+            allowed = defaultdict(set)
+            allowed[ct_map["project"].id] |= project_ids
+            allowed[ct_map["individual"].id] |= individual_ids
+            allowed[ct_map["sample"].id] |= sample_ids
+            allowed[ct_map["test"].id] |= test_ids
+            allowed[ct_map["analysis"].id] |= analysis_ids
+            allowed[ct_map["variant"].id] |= variant_ids
+
+            for ct_id, obj_ids in note_targets.items():
+                allowed[ct_id] |= obj_ids
+
+            filter_q = Q(pk__in=[])  # start false
+            for ct_id, obj_ids in allowed.items():
+                if obj_ids:
+                    filter_q |= Q(target_content_type_id=ct_id, target_object_id__in=obj_ids)
+
+            # If no matches, empty queryset
+            if any(allowed.values()):
+                notifications_qs = notifications_qs.filter(filter_q)
+            else:
+                notifications_qs = notifications_qs.none()
+
+        # Mark notifications as read when viewed (all unseen, not just current page)
+        unread_notifications = notifications_qs.filter(unread=True)
+        unread_count = unread_notifications.count()
+        if unread_count:
+            unread_notifications.update(unread=False)
+
+        paginator = Paginator(notifications_qs, 20)
+        page_number = request.GET.get("page") or 1
+        page_obj = paginator.get_page(page_number)
 
         context = {
-            "notifications": notifications,
-            "unread_count": unread_notifications.count(),
+            "notifications": page_obj.object_list,
+            "page_obj": page_obj,
+            "unread_count": unread_count,
+            "scope": scope,
         }
     except ImportError:
-        context = {"notifications": [], "unread_count": 0}
+        context = {"notifications": [], "page_obj": None, "unread_count": 0, "scope": "all"}
 
     # Handle HTMX requests for partial rendering
     if request.headers.get("HX-Request"):
+        if request.GET.get("append") == "1":
+            return render(request, "lab/notifications.html#notifications-append", context)
         return render(request, "lab/notifications.html#notifications-content", context)
 
     return render(request, "lab/notifications.html", context)
