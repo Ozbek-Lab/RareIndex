@@ -268,17 +268,19 @@ class TestForm(BaseForm):
     class Meta:
         model = Test
         fields = [
+            "sample",
             "test_type",
             "performed_date",
             "performed_by",
             "status",
             "service_send_date",
             "data_receipt_date",
-            "sample",
             "created_by",
         ]
         widgets = {
             "performed_date": forms.DateInput(attrs={"type": "date"}),
+            "service_send_date": forms.DateInput(attrs={"type": "date"}),
+            "data_receipt_date": forms.DateInput(attrs={"type": "date"}),
         }
 
 
