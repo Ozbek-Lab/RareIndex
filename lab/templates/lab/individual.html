@@ -12,7 +12,7 @@
     x-data="{ showFullName: false }"
   >
     <div class="float-right">
-      {% partial status-badge-card %}
+      {% include "lab/partials/status_badge.html#status-badge-card" %}
     </div>
 
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
@@ -93,7 +93,7 @@
         </button>
       </h2>
       <div class="ml-auto">
-        {% partial status-badge-card %}
+        {% include "lab/partials/status_badge.html#status-badge-card" %}
       </div>
     </div>
 
@@ -447,7 +447,7 @@
             <p class="text-blue-100 mt-1">{{ item.all_ids|join:' - ' }}</p>
           </div>
           <div class="flex flex-col items-start md:items-end gap-2">
-            {% partial status-badge %}
+            {% include "lab/partials/status_badge.html#status-badge" %}
             {% if perms.lab.change_individual %}
               <button
                 class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-900 bg-white/90 rounded-md shadow-sm hover:bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white transition"
@@ -2297,132 +2297,4 @@
   </div>
 {% endpartialdef %}
 
-{% partialdef status-badge inline %}
-  {% if perms.lab.change_individual %}
-    <div 
-      id="status-badge-container"
-      class="relative"
-      x-data="{ open: false }"
-      @click.outside="open = false"
-    >
-      <button
-        type="button"
-        @click="open = !open"
-        class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white hover:bg-opacity-40 transition-all cursor-pointer flex items-center gap-1"
-        title="Click to change status"
-      >
-        {{ item.status.name }}
-        <i class="fas fa-chevron-down text-xs"></i>
-      </button>
-      
-      <!-- Dropdown menu -->
-      <div
-        x-show="open"
-        x-transition:enter="transition ease-out duration-100"
-        x-transition:enter-start="transform opacity-0 scale-95"
-        x-transition:enter-end="transform opacity-100 scale-100"
-        x-transition:leave="transition ease-in duration-75"
-        x-transition:leave-start="transform opacity-100 scale-100"
-        x-transition:leave-end="transform opacity-0 scale-95"
-        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
-        style="display: none;"
-      >
-        <div class="py-1 max-h-60 overflow-y-auto">
-          {% if individual_statuses %}
-            {% for status in individual_statuses %}
-              <button
-                type="button"
-                hx-post="{% url 'lab:update_status' %}"
-                hx-vals='{"model_name": "Individual", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "detail", "refresh_detail": "true", "detail_target_id": "individual-detail"}'
-                hx-target="#status-badge-container"
-                hx-swap="outerHTML"
-                @click="open = false"
-                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
-              >
-                <span
-                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-500/20 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-300 ring-inset"
-                >
-                  {{ status.name }}
-                </span>
-              </button>
-            {% endfor %}
-          {% else %}
-            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-              No statuses available
-            </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  {% else %}
-    <span class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white">
-      {{ item.status.name }}
-    </span>
-  {% endif %}
-{% endpartialdef %}
 
-{% partialdef status-badge-card inline %}
-  {% if perms.lab.change_individual %}
-    <div 
-      id="status-badge-container-{{ item.id }}"
-      class="relative inline-block"
-      x-data="{ open: false }"
-      @click.outside="open = false"
-    >
-      <button
-        type="button"
-        @click="open = !open"
-        class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset hover:ring-{{ item.status.color|default:'gray' }}-600 dark:hover:ring-{{ item.status.color|default:'gray' }}-500 transition-all cursor-pointer gap-1"
-        title="Click to change status"
-      >
-        {{ item.status.name }}
-        <i class="fas fa-chevron-down text-xs"></i>
-      </button>
-      
-      <!-- Dropdown menu -->
-      <div
-        x-show="open"
-        x-transition:enter="transition ease-out duration-100"
-        x-transition:enter-start="transform opacity-0 scale-95"
-        x-transition:enter-end="transform opacity-100 scale-100"
-        x-transition:leave="transition ease-in duration-75"
-        x-transition:leave-start="transform opacity-100 scale-100"
-        x-transition:leave-end="transform opacity-0 scale-95"
-        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
-        style="display: none;"
-      >
-        <div class="py-1 max-h-60 overflow-y-auto">
-          {% if individual_statuses %}
-            {% for status in individual_statuses %}
-              <button
-                type="button"
-                hx-post="{% url 'lab:update_status' %}"
-                hx-vals='{"model_name": "Individual", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "card", "refresh_card": "true", "card": "card"}'
-                hx-target="#status-badge-container-{{ item.id }}"
-                hx-swap="outerHTML"
-                @click="open = false"
-                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
-              >
-                <span
-                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-500/20 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-300 ring-inset"
-                >
-                  {{ status.name }}
-                </span>
-              </button>
-            {% endfor %}
-          {% else %}
-            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-              No statuses available
-            </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  {% else %}
-    <span
-      class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset"
-    >
-      {{ item.status.name }}
-    </span>
-  {% endif %}
-{% endpartialdef %}

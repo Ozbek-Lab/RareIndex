@@ -78,6 +78,46 @@
             this.open = false;
           }
         }));
+
+        Alpine.data('dropdownPopup', (width = 224) => ({
+          open: false,
+          style: '',
+          toggle() {
+            if (this.open) {
+              this.close();
+            } else {
+              this.open = true;
+              this.updatePosition();
+              // Re-calculate position on next tick to ensure content is rendered
+              this.$nextTick(() => {
+                 this.updatePosition();
+              });
+            }
+          },
+          updatePosition() {
+            const trigger = this.$refs.trigger;
+            if (!trigger) return;
+            const rect = trigger.getBoundingClientRect();
+            
+            // Default to aligning right edge of dropdown with right edge of trigger
+            // but ensure it fits in viewport
+            let left = rect.right + window.scrollX - width;
+            let top = rect.bottom + window.scrollY + 4;
+            
+            // If it goes off the left edge, align left instead
+            if (left < 16) {
+                left = rect.left + window.scrollX;
+            }
+            
+            // If it goes off the bottom, we might want to flip nicely, but for now just let it be
+            // We can add more complex collision detection if needed
+
+            this.style = `top:${top}px; left:${left}px; width:${width}px; position: absolute; z-index: 9999;`;
+          },
+          close() {
+            this.open = false;
+          }
+        }));
       });
     </script>
     <!-- Add Font Awesome -->

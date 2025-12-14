@@ -10,7 +10,7 @@
     data-item-id="{{ item.id }}"
   >
     <div class="float-right">
-      {% partial status-badge-card %}
+      {% include "lab/partials/status_badge.html#status-badge-card" with model_name='Task' %}
     </div>
     <h3 class="font-semibold text-lg text-gray-900 dark:text-gray-100">
       {{ item.title }}
@@ -66,7 +66,7 @@
         {{ item.title }}
       </h2>
       <div class="ml-auto">
-        {% partial status-badge-card %}
+        {% include "lab/partials/status_badge.html#status-badge-card" with model_name='Task' %}
 
         <div class="flex items-center float-right">
           <i
@@ -127,9 +127,16 @@
       {% endif %}
       
       <div class="flex items-center gap-2">
-        <div x-data="{ open: false }" class="static">
+        <div
+          x-data="notesPopup"
+          @resize.window="open && updatePosition()"
+          @scroll.window.passive="open && updatePosition()"
+          @keydown.escape.window="open && close()"
+          class="static"
+        >
           <button
-            @click= "open = ! open"
+            x-ref="trigger"
+            @click="toggle()"
             type="button"
             class="inline-flex items-center gap-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
@@ -140,24 +147,41 @@
               :class="{ 'rotate-180': open }"
             ></i>
           </button>
-          <div
-            x-show="open"
-            x-transition:enter="transition ease-out duration-200"
-            x-transition:enter-start="opacity-0 transform scale-95"
-            x-transition:enter-end="opacity-100 transform scale-100"
-            x-transition:leave="transition ease-in duration-150"
-            x-transition:leave-start="opacity-100 transform scale-100"
-            x-transition:leave-end="opacity-0 transform scale-95"
-            class="absolute left-0 right-0 z-10 mt-2 w-full max-w-none"
-          >
-            <div
-              class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
-            >
-              {% with object=item content_type='task' user=user %}
-                {% include 'lab/note.html#list' %}
-              {% endwith %}
+          <template x-teleport="body">
+            <div x-show="open" class="absolute inset-0 z-[9999] pointer-events-none">
+                <!-- Backdrop -->
+                <div
+                    x-show="open"
+                    x-transition.opacity
+                    class="fixed inset-0 bg-black/10 dark:bg-black/30 pointer-events-auto"
+                    @click="close()"
+                ></div>
+
+                <!-- Popup Panel -->
+                <div
+                    x-show="open"
+                    x-cloak
+                    x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 scale-95"
+                    x-transition:enter-end="opacity-100 scale-100"
+                    x-transition:leave="transition ease-in duration-150"
+                    x-transition:leave-start="opacity-100 scale-100"
+                    x-transition:leave-end="opacity-0 scale-95"
+                    x-ref="panel"
+                    @click.outside="close()"
+                    class="absolute z-[10000] shadow-2xl pointer-events-auto origin-top overflow-y-auto"
+                    :style="style"
+                >
+                    <div
+                    class="bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-gray-900/5 dark:ring-gray-100/10 p-4"
+                    >
+                    {% with object=item content_type='task' user=user %}
+                      {% include 'lab/note.html#list' %}
+                    {% endwith %}
+                    </div>
+                </div>
             </div>
-          </div>
+          </template>
         </div>
       </div>
     </div>
@@ -391,7 +415,7 @@
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
             {{ item.title }}
-            {% partial status-badge %}
+            {% include "lab/partials/status_badge.html#status-badge" with model_name='Task' %}
           </h1>
           <div class="flex items-center gap-4 mt-1 text-sm text-gray-500 dark:text-gray-400">
             <span class="flex items-center gap-1">
@@ -590,134 +614,4 @@
   </div>
 {% endpartialdef %}
 
-{% partialdef status-badge inline %}
-  {% if perms.lab.change_task %}
-    <div 
-      id="status-badge-container"
-      class="relative inline-block"
-      x-data="{ open: false }"
-      @click.outside="open = false"
-    >
-      <button
-        type="button"
-        @click="open = !open"
-        class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset hover:ring-{{ item.status.color|default:'gray' }}-600 dark:hover:ring-{{ item.status.color|default:'gray' }}-500 transition-all cursor-pointer gap-1"
-        title="Click to change status"
-      >
-        {{ item.status.name }}
-        <i class="fas fa-chevron-down text-xs"></i>
-      </button>
-      
-      <!-- Dropdown menu -->
-      <div
-        x-show="open"
-        x-transition:enter="transition ease-out duration-100"
-        x-transition:enter-start="transform opacity-0 scale-95"
-        x-transition:enter-end="transform opacity-100 scale-100"
-        x-transition:leave="transition ease-in duration-75"
-        x-transition:leave-start="transform opacity-100 scale-100"
-        x-transition:leave-end="transform opacity-0 scale-95"
-        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
-        style="display: none;"
-      >
-        <div class="py-1 max-h-60 overflow-y-auto">
-          {% if task_statuses %}
-            {% for status in task_statuses %}
-              <button
-                type="button"
-                hx-post="{% url 'lab:update_status' %}"
-                hx-vals='{"model_name": "Task", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "detail", "refresh_detail": "true", "detail_target_id": "task-detail"}'
-                hx-target="#status-badge-container"
-                hx-swap="outerHTML"
-                @click="open = false"
-                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
-              >
-                <span
-                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
-                >
-                  {{ status.name }}
-                </span>
-              </button>
-            {% endfor %}
-          {% else %}
-            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-              No statuses available
-            </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  {% else %}
-    <span
-      class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset"
-    >
-      {{ item.status.name }}
-    </span>
-  {% endif %}
-{% endpartialdef %}
 
-{% partialdef status-badge-card inline %}
-  {% if perms.lab.change_task %}
-    <div 
-      id="status-badge-container-{{ item.id }}"
-      class="relative inline-block"
-      x-data="{ open: false }"
-      @click.outside="open = false"
-    >
-      <button
-        type="button"
-        @click="open = !open"
-        class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset hover:ring-{{ item.status.color|default:'gray' }}-600 dark:hover:ring-{{ item.status.color|default:'gray' }}-500 transition-all cursor-pointer gap-1"
-        title="Click to change status"
-      >
-        {{ item.status.name }}
-        <i class="fas fa-chevron-down text-xs"></i>
-      </button>
-      
-      <!-- Dropdown menu -->
-      <div
-        x-show="open"
-        x-transition:enter="transition ease-out duration-100"
-        x-transition:enter-start="transform opacity-0 scale-95"
-        x-transition:enter-end="transform opacity-100 scale-100"
-        x-transition:leave="transition ease-in duration-75"
-        x-transition:leave-start="transform opacity-100 scale-100"
-        x-transition:leave-end="transform opacity-0 scale-95"
-        class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
-        style="display: none;"
-      >
-        <div class="py-1 max-h-60 overflow-y-auto">
-          {% if task_statuses %}
-            {% for status in task_statuses %}
-              <button
-                type="button"
-                hx-post="{% url 'lab:update_status' %}"
-                hx-vals='{"model_name": "Task", "app_label": "lab", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "card", "refresh_card": "true", "card": "card"}'
-                hx-target="#status-badge-container-{{ item.id }}"
-                hx-swap="outerHTML"
-                @click="open = false"
-                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
-              >
-                <span
-                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
-                >
-                  {{ status.name }}
-                </span>
-              </button>
-            {% endfor %}
-          {% else %}
-            <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-              No statuses available
-            </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  {% else %}
-    <span
-      class="inline-flex items-center rounded-md bg-{{ item.status.color|default:'gray' }}-50 dark:bg-{{ item.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.status.color|default:'gray' }}-600 dark:text-{{ item.status.color|default:'gray' }}-200 ring-1 ring-{{ item.status.color|default:'gray' }}-500/10 dark:ring-{{ item.status.color|default:'gray' }}-700/40 ring-inset"
-    >
-      {{ item.status.name }}
-    </span>
-  {% endif %}
-{% endpartialdef %}
