@@ -237,15 +237,15 @@
         });
 
         // Close modal on page section changes
-        this.$watch('activeItem', (val) => { 
+        this.$watch('activeItem', (val) => {
           this.clearModal();
           if (val && val !== 'home' && val !== 'overview' && !val.startsWith('detail-')) {
-             if (!this.loadedSections.has(val)) {
-                 this.$nextTick(() => {
-                     window.dispatchEvent(new CustomEvent(`load-${val}`));
-                     this.loadedSections.add(val);
-                 });
-             }
+            if (!this.loadedSections.has(val)) {
+              this.$nextTick(() => {
+                window.dispatchEvent(new CustomEvent(`load-${val}`));
+                this.loadedSections.add(val);
+              });
+            }
           }
         });
 
@@ -256,15 +256,15 @@
 
         // Initial sync
         this.syncStateFromURL();
-        
+
         // Initial dispatch for lazy widgets
         this.$nextTick(() => {
-            if (this.activeItem && this.activeItem !== 'home' && this.activeItem !== 'overview' && !this.activeItem.startsWith('detail-')) {
-                 if (!this.loadedSections.has(this.activeItem)) {
-                     window.dispatchEvent(new CustomEvent(`load-${this.activeItem}`));
-                     this.loadedSections.add(this.activeItem);
-                 }
+          if (this.activeItem && this.activeItem !== 'home' && this.activeItem !== 'overview' && !this.activeItem.startsWith('detail-')) {
+            if (!this.loadedSections.has(this.activeItem)) {
+              window.dispatchEvent(new CustomEvent(`load-${this.activeItem}`));
+              this.loadedSections.add(this.activeItem);
             }
+          }
         });
       },
 
@@ -312,38 +312,41 @@
         const hpoTh = params.get('hpo_threshold');
         this.hpoThreshold = hpoTh ? parseInt(hpoTh) : 0;
 
+        const hpoTrimTh = params.get('hpo_trim_threshold');
+        this.hpoTrimThreshold = hpoTrimTh ? parseInt(hpoTrimTh) : 0;
+
         if (params.has('pk')) {
           // If we have pre-loaded detail HTML and it matches the requested PK/Model, use it
-          if (this.detailHtml && 
-              String(params.get('pk')) === String(this.initialPk) && 
-              params.get('model_name') === this.initialModelName) {
+          if (this.detailHtml &&
+            String(params.get('pk')) === String(this.initialPk) &&
+            params.get('model_name') === this.initialModelName) {
             this.activeItem = `detail-${this.initialModelName}-${this.initialPk}`;
           } else {
             this.activeItem = 'detail-loading';
             this.loadDetailView(params);
           }
         }
-        
+
         // Dispatch update to trigger initial searches if we have filters
         if (Object.keys(this.filters).length > 0) {
-             this.$nextTick(() => {
-                 this.dispatchFiltersUpdated();
-             });
+          this.$nextTick(() => {
+            this.dispatchFiltersUpdated();
+          });
         }
 
         // Trigger initial load for SPA pages that require HTMX
         if (this.activeItem === 'profile_settings') {
-            this.$nextTick(() => {
-                htmx.ajax('GET', '{% url "lab:profile_settings" %}', '#profile-settings-content');
-            });
+          this.$nextTick(() => {
+            htmx.ajax('GET', '{% url "lab:profile_settings" %}', '#profile-settings-content');
+          });
         } else if (this.activeItem === 'notifications') {
-            this.$nextTick(() => {
-                htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content');
-            });
+          this.$nextTick(() => {
+            htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content');
+          });
         } else if (this.activeItem === 'nl-search-page') {
-            this.$nextTick(() => {
-                htmx.ajax('GET', '{% url "lab:nl_search_page" %}', '#nl-search-content');
-            });
+          this.$nextTick(() => {
+            htmx.ajax('GET', '{% url "lab:nl_search_page" %}', '#nl-search-content');
+          });
         }
       },
 
@@ -370,6 +373,9 @@
         if (typeof this.hpoThreshold === 'number' && this.hpoThreshold > 0) {
           newParams.set('hpo_threshold', String(this.hpoThreshold));
         }
+        if (typeof this.hpoTrimThreshold === 'number' && this.hpoTrimThreshold > 0) {
+          newParams.set('hpo_trim_threshold', String(this.hpoTrimThreshold));
+        }
         for (const modelKey in this.sorts) {
           const sortArr = this.sorts[modelKey] || [];
           for (const entry of sortArr) {
@@ -395,6 +401,9 @@
         }
         if (typeof this.hpoThreshold === 'number' && this.hpoThreshold > 0 && excludeKey !== 'hpo_threshold') {
           vals['hpo_threshold'] = String(this.hpoThreshold);
+        }
+        if (typeof this.hpoTrimThreshold === 'number' && this.hpoTrimThreshold > 0 && excludeKey !== 'hpo_trim_threshold') {
+          vals['hpo_trim_threshold'] = String(this.hpoTrimThreshold);
         }
         this.addSortsToVals(vals);
         return JSON.stringify(vals);
@@ -963,22 +972,27 @@
   function hpoController() {
     return {
       hpoThreshold: 3,
+      hpoTrimThreshold: 1,
       isLoading: false,
       isThresholdValid: true,
+      isTrimThresholdValid: true,
 
       init() {
-        this.$watch("hpoThreshold", () => {
-          this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
-          if (this.isThresholdValid) {
-            window.dispatchEvent(new CustomEvent("filters-updated"));
-          }
-        });
+        // Watchers removed to prevent auto-update
+      },
+
+      updateHPO() {
+        this.isThresholdValid = this.$refs.hpoThresholdInput.checkValidity();
+        if (this.isThresholdValid && this.$refs.hpoTrimThresholdInput.checkValidity()) {
+          window.dispatchEvent(new CustomEvent("filters-updated"));
+        }
       },
 
       getHpoVals() {
         let vals = {
           model_name: "Individual",
           threshold: this.hpoThreshold,
+          trim_threshold: this.hpoTrimThreshold,
         };
         for (const key in this.filters) {
           if (this.filters[key]) {
@@ -1007,14 +1021,14 @@
     // Wait for Alpine to initialize the component
     const el = document.querySelector('[x-data="mainController()"]');
     if (el) {
-       // We need to wait for the component to be fully initialized
-       Alpine.nextTick(() => {
-         const controller = el.__x.$data;
-         if (controller) {
-            controller.detailHtml = `{{ initial_detail_html|safe }}`;
-            controller.activeItem = 'detail-{{ model_name }}-{{ item.pk }}';
-         }
-       });
+      // We need to wait for the component to be fully initialized
+      Alpine.nextTick(() => {
+        const controller = el.__x.$data;
+        if (controller) {
+          controller.detailHtml = `{{ initial_detail_html|safe }}`;
+          controller.activeItem = 'detail-{{ model_name }}-{{ item.pk }}';
+        }
+      });
     }
   });
 </script>

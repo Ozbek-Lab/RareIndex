@@ -13,18 +13,50 @@ import plotly.graph_objects as go
 import json
 
 
+import os
+from django.conf import settings
+from functools import lru_cache
+
+
+@lru_cache(maxsize=1)
 def load_hpo_ontology():
     """
     Load the HPO ontology from the OBO file and create a NetworkX graph.
+    Uses local cache if available, otherwise downloads.
+    Keeps the result in memory with lru_cache.
     
     Returns:
         tuple: (graph, hpo) where graph is a NetworkX DiGraph and hpo is the fastobo object
     """
+    # Define local path for HPO data
+    data_dir = os.path.join(settings.BASE_DIR, 'hpo_data')
+    os.makedirs(data_dir, exist_ok=True)
+    local_path = os.path.join(data_dir, 'hp.obo')
+    
     obo_url = "https://purl.obolibrary.org/obo/hp.obo"
+    
+    # Download if not exists
+    if not os.path.exists(local_path):
+        print(f"Downloading HPO ontology from {obo_url}...")
+        try:
+            with urllib.request.urlopen(obo_url) as response, open(local_path, 'wb') as out_file:
+                out_file.write(response.read())
+            print("Download complete.")
+        except Exception as e:
+            print(f"Failed to download HPO ontology: {e}")
+            # Fallback to direct download if local save fails, though unlikely
+            pass
+
     graph = nx.DiGraph()
 
-    with urllib.request.urlopen(obo_url) as response:
-        hpo = fastobo.load(response)
+    # Load from local file if exists, else from URL (fallback)
+    if os.path.exists(local_path):
+        print(f"Loading HPO ontology from {local_path}...")
+        hpo = fastobo.load(local_path)
+    else:
+        print(f"Loading HPO ontology from {obo_url} (fallback)...")
+        with urllib.request.urlopen(obo_url) as response:
+            hpo = fastobo.load(response)
 
     for frame in hpo:
         if isinstance(frame, fastobo.term.TermFrame):
@@ -38,23 +70,23 @@ def load_hpo_ontology():
 
 def consolidate_terms(graph, terms, threshold=3):
     """
-    Consolidate rare HPO terms by moving their counts to their parents.
+    Consolidate rare HPO terms by moving their individuals to their parents.
     
     Args:
         graph: NetworkX graph of HPO terms
-        terms: Dictionary of term_id -> count
+        terms: Dictionary of term_id -> set of individual_ids
         threshold: Minimum count threshold for consolidation
         
     Returns:
-        dict: Consolidated term counts
+        dict: Consolidated term dictionary (term_id -> set of individual_ids)
     """
-    # Create a working copy of the counts
-    working_counts = terms.copy()
+    # Create a working copy of the dictionary
+    working_terms = {k: v.copy() for k, v in terms.items()}
     root_node = "HP:0000118"  # Phenotypic abnormality
 
     # Check if all terms exist in the graph, remove those that don't
     invalid_terms = []
-    for term in working_counts:
+    for term in working_terms:
         if term not in graph:
             warnings.warn(
                 f"The node {term} is not in the graph. Removing from consolidation."
@@ -62,13 +94,13 @@ def consolidate_terms(graph, terms, threshold=3):
             invalid_terms.append(term)
 
     for term in invalid_terms:
-        working_counts.pop(term, None)
+        working_terms.pop(term, None)
 
     # Continue until we can't consolidate further
     while True:
         # Get all current terms that are below threshold
         rare_terms = [
-            term for term, count in working_counts.items() if count < threshold
+            term for term, individuals in working_terms.items() if len(individuals) < threshold
         ]
         
         # If no rare terms, we are done
@@ -88,12 +120,12 @@ def consolidate_terms(graph, terms, threshold=3):
                 if len(path) > 1:
                     parent = path[1] # path[0] is term, path[1] is parent
                     
-                    # Move count to parent
-                    count = working_counts.pop(term)
-                    if parent in working_counts:
-                        working_counts[parent] += count
+                    # Move individuals to parent
+                    individuals = working_terms.pop(term)
+                    if parent in working_terms:
+                        working_terms[parent].update(individuals)
                     else:
-                        working_counts[parent] = count
+                        working_terms[parent] = individuals
                         
                     changes_made = True
             except (nx.NetworkXNoPath, IndexError):
@@ -104,7 +136,7 @@ def consolidate_terms(graph, terms, threshold=3):
         if not changes_made:
             break
 
-    return working_counts
+    return working_terms
 
 
 def find_closest_ancestor(graph, term1, term2):
@@ -170,14 +202,14 @@ def find_closest_ancestor(graph, term1, term2):
         return None
 
 
-def plotly_hpo_network(graph, hpo, term_counts, output_file=None, min_count=1):
+def plotly_hpo_network(graph, hpo, term_individuals, output_file=None, min_count=1):
     """
     Create a Plotly network visualization of HPO terms.
     
     Args:
         graph: NetworkX graph of HPO terms
         hpo: Fastobo HPO object
-        term_counts: Dictionary of term_id -> count
+        term_individuals: Dictionary of term_id -> set of individual_ids
         output_file: Optional file path to save the plot
         min_count: Minimum count threshold for displaying terms
         
@@ -200,7 +232,8 @@ def plotly_hpo_network(graph, hpo, term_counts, output_file=None, min_count=1):
     subgraph = nx.DiGraph()
 
     # Add nodes with their counts
-    for term_id, count in term_counts.items():
+    for term_id, individuals in term_individuals.items():
+        count = len(individuals)
         if term_id in graph and count >= min_count:
             name = get_term_name(term_id)
             name = name.replace("system", "sys.")
@@ -212,7 +245,7 @@ def plotly_hpo_network(graph, hpo, term_counts, output_file=None, min_count=1):
 
             if len(name) > 30:
                 name = name[:27] + "..."
-            subgraph.add_node(term_id, name=name, count=count, term_id=term_id)
+            subgraph.add_node(term_id, name=name, count=count, term_id=term_id, individuals=list(individuals))
 
             # Add path from this term to the root node
             try:
@@ -222,18 +255,22 @@ def plotly_hpo_network(graph, hpo, term_counts, output_file=None, min_count=1):
                     target = path[i + 1]
 
                     if source not in subgraph:
+                        source_individuals = term_individuals.get(source, set())
                         subgraph.add_node(
                             source,
                             name=get_term_name(source),
-                            count=term_counts.get(source, 0),
+                            count=len(source_individuals),
                             term_id=source,
+                            individuals=list(source_individuals)
                         )
                     if target not in subgraph:
+                        target_individuals = term_individuals.get(target, set())
                         subgraph.add_node(
                             target,
                             name=get_term_name(target),
-                            count=term_counts.get(target, 0),
+                            count=len(target_individuals),
                             term_id=target,
+                            individuals=list(target_individuals)
                         )
 
                     subgraph.add_edge(source, target)
@@ -242,11 +279,13 @@ def plotly_hpo_network(graph, hpo, term_counts, output_file=None, min_count=1):
 
     # Add the root node if not already in the graph
     if root_node not in subgraph:
+        root_individuals = term_individuals.get(root_node, set())
         subgraph.add_node(
             root_node,
             name=get_term_name(root_node),
-            count=term_counts.get(root_node, 0),
+            count=len(root_individuals),
             term_id=root_node,
+            individuals=list(root_individuals)
         )
 
     # Use Graphviz layout - need to have graphviz installed
@@ -387,41 +426,41 @@ def process_hpo_data(individuals, threshold=12):
         threshold: Minimum count threshold for consolidation
         
     Returns:
-        tuple: (consolidated_counts, graph, hpo) for visualization
+        tuple: (consolidated_terms, graph, hpo) for visualization
+        consolidated_terms: dict of term_id -> set of individual_ids
     """
     # Load HPO ontology
     graph, hpo = load_hpo_ontology()
     
-    # Create a dictionary of sample_id -> list of HPO terms
-    sample_terms = {}
+    # Map term -> set of (pk, individual_id) tuples
+    term_individuals = {}
+    
     for individual in individuals:
         terms = [term.term for term in individual.hpo_terms.all()]
-        if terms:  # Only include if there are terms
-            sample_terms[individual.individual_id] = terms
-
-    # Count terms
-    term_counts = {}
-    for sample_id, terms in sample_terms.items():
+        # Pre-fetch individual_id to avoid N+1 if not already selected, 
+        # though individual_id property might hit DB if cross_ids not prefetched.
+        # Assuming acceptable for now or handled by view.
+        ind_data = (individual.pk, individual.individual_id)
+        
         for term in terms:
-            if term in term_counts:
-                term_counts[term] += 1
-            else:
-                term_counts[term] = 1
+            if term not in term_individuals:
+                term_individuals[term] = set()
+            term_individuals[term].add(ind_data)
 
     # Consolidate terms for better visualization
-    consolidated_counts = consolidate_terms(graph, term_counts, threshold=threshold)
+    consolidated_terms = consolidate_terms(graph, term_individuals, threshold=threshold)
     
-    return consolidated_counts, graph, hpo
+    return consolidated_terms, graph, hpo
 
 
-def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
+def cytoscape_hpo_network(graph, hpo, term_individuals, min_count=1):
     """
-    Build Cytoscape.js elements for an HPO network from term counts.
+    Build Cytoscape.js elements for an HPO network from term individuals.
     
     Args:
         graph: NetworkX graph of HPO terms
         hpo: Fastobo HPO object
-        term_counts: Dictionary of term_id -> count
+        term_individuals: Dictionary of term_id -> set of individual_ids
         min_count: Minimum count threshold for displaying terms
         
     Returns:
@@ -443,7 +482,8 @@ def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
     # Create a subgraph with terms and paths to root (same logic as Plotly pathing)
     subgraph = nx.DiGraph()
 
-    for term_id, count in term_counts.items():
+    for term_id, individuals in term_individuals.items():
+        count = len(individuals)
         if term_id in graph and count >= min_count:
             name = get_term_name(term_id)
             name = name.replace("system", "sys.")
@@ -456,7 +496,7 @@ def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
             if len(name) > 30:
                 name = name[:27] + "..."
 
-            subgraph.add_node(term_id, name=name, count=count, term_id=term_id)
+            subgraph.add_node(term_id, name=name, count=count, term_id=term_id, individuals=list(individuals))
 
             try:
                 path = nx.shortest_path(graph, term_id, root_node)
@@ -465,18 +505,22 @@ def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
                     target = path[i + 1]
 
                     if source not in subgraph:
+                        source_individuals = term_individuals.get(source, set())
                         subgraph.add_node(
                             source,
                             name=get_term_name(source),
-                            count=term_counts.get(source, 0),
+                            count=len(source_individuals),
                             term_id=source,
+                            individuals=list(source_individuals)
                         )
                     if target not in subgraph:
+                        target_individuals = term_individuals.get(target, set())
                         subgraph.add_node(
                             target,
                             name=get_term_name(target),
-                            count=term_counts.get(target, 0),
+                            count=len(target_individuals),
                             term_id=target,
+                            individuals=list(target_individuals)
                         )
 
                     subgraph.add_edge(source, target)
@@ -484,17 +528,29 @@ def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
                 print(f"No path from {term_id} to root node {root_node}")
 
     if root_node not in subgraph:
+        root_individuals = term_individuals.get(root_node, set())
         subgraph.add_node(
             root_node,
             name=get_term_name(root_node),
-            count=term_counts.get(root_node, 0),
+            count=len(root_individuals),
             term_id=root_node,
+            individuals=list(root_individuals)
         )
 
     # Build Cytoscape.js elements: nodes and edges (positions handled client-side by Cytoscape layouts)
     elements = []
 
     for node_id, data in subgraph.nodes(data=True):
+        # Convert list of (pk, id) tuples to list of dicts for JSON serialization
+        individuals_data = []
+        if "individuals" in data:
+            for ind in data["individuals"]:
+                # Check if it's a tuple (pk, id) or just pk (backward compatibility)
+                if isinstance(ind, tuple) and len(ind) == 2:
+                    individuals_data.append({"pk": ind[0], "display_id": ind[1]})
+                else:
+                     individuals_data.append({"pk": ind, "display_id": f"Individual {ind}"})
+        
         elements.append(
             {
                 "data": {
@@ -502,6 +558,7 @@ def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
                     "label": data.get("name", node_id),
                     "count": int(data.get("count", 0)),
                     "term_id": data.get("term_id", node_id),
+                    "individuals": individuals_data,
                 }
             }
         )
@@ -516,6 +573,7 @@ def cytoscape_hpo_network(graph, hpo, term_counts, min_count=1):
                 }
             }
         )
+
 
     return elements, subgraph
 

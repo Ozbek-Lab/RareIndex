@@ -1162,10 +1162,17 @@ def hpo_network_visualization(request):
         threshold = int(threshold)
     else:
         threshold = 12
+
+    trim_threshold = request.GET.get("trim_threshold", 1)
+    if trim_threshold:
+        trim_threshold = int(trim_threshold)
+    else:
+        trim_threshold = 1
+
     consolidated_counts, graph, hpo = process_hpo_data(
         filtered_individuals, threshold=threshold
     )
-    elements, _ = cytoscape_hpo_network(graph, hpo, consolidated_counts, min_count=1)
+    elements, _ = cytoscape_hpo_network(graph, hpo, consolidated_counts, min_count=trim_threshold)
     elements_json = cytoscape_elements_json(elements)
     return render(
         request,
@@ -1173,6 +1180,7 @@ def hpo_network_visualization(request):
         {
             "elements_json": elements_json,
             "threshold": threshold,
+            "trim_threshold": trim_threshold,
             "term_count": len(consolidated_counts),
             "individuals": filtered_individuals,
             "individual_count": len(filtered_individuals),

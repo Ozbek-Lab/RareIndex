@@ -433,7 +433,7 @@ def plots_page(request):
                         'value': 0
                     }
 
-                for term_id, count in consolidated_hpo_counts.items():
+                for term_id, individuals in consolidated_hpo_counts.items():
                     if term_id not in hpo_graph:
                         continue
                     
@@ -447,7 +447,7 @@ def plots_page(request):
                                 'parent': path[1] if len(path) > 1 else '',
                                 'value': 0
                             }
-                        sunburst_nodes[term_id]['value'] += count
+                        sunburst_nodes[term_id]['value'] += len(individuals)
                         
                         for i in range(1, len(path)):
                             node = path[i]
