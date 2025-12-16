@@ -245,21 +245,35 @@
 
 {% partialdef generic-search-results-content %}
   {% if items.number == 1 %}
-  <div class="" :class="{'text-green-500': {{ num_items }} > 0,
-                  'text-red-500': {{ num_items }} == 0}">
-    <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
+  {# Out-of-band update for the header count next to the title. Wrapped in a hidden div so it doesn't show twice. #}
+  <div class="hidden">
+    <span
+      id="{{ model_name|lower }}-count"
+      hx-swap-oob="innerHTML"
+      class="ml-2 text-lg font-semibold align-middle"
+    >
+      {% if total_items %}
+        <span class="{% if num_items > 0 %}text-green-600{% else %}text-red-500{% endif %}">
+          {{ num_items }}/{{ total_items }}
+        </span>
+      {% endif %}
+    </span>
   </div>
   {% endif %}
-
   {% if sort_options %}
   <div class="flex flex-wrap gap-2 mb-3 items-center">
-    <template x-if="hasSorts('{{ model_name|lower }}')">
-      <button type="button"
-        class="px-2 py-1 text-xs rounded-full border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-        @click="clearSorts('{{ model_name|lower }}', '{{ model_name|lower }}')">
-        <i class="fa-solid fa-eraser mr-1"></i> Clear sorting
-      </button>
-    </template>
+    <button
+      type="button"
+      :disabled="!hasSorts('{{ model_name|lower }}')"
+      class="px-2 py-1 text-xs rounded-full border transition-all duration-200 flex items-center gap-1"
+      :class="hasSorts('{{ model_name|lower }}')
+        ? 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'
+        : 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 opacity-60 cursor-not-allowed'"
+      @click="hasSorts('{{ model_name|lower }}') && clearSorts('{{ model_name|lower }}', '{{ model_name|lower }}')"
+    >
+      <i class="fa-solid fa-eraser mr-1"></i>
+      Clear sorting
+    </button>
     {% for sort in sort_options %}
     <button type="button"
       class="px-2 py-1 text-xs rounded-full border flex items-center gap-2 transition-all duration-200"
@@ -303,7 +317,10 @@
   @htmx:after-request="isLoading = false">
   {% if view == "page" %}
   <div class="flex justify-between items-center mb-4">
-    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h1>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-baseline">
+      <span>{{ title }}</span>
+      <span id="{{ model_name|lower }}-count" class="ml-2 text-2xl font-bold"></span>
+    </h1>
     <div class="flex items-center">
       <!-- Add New button -->
 

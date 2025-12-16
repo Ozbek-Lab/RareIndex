@@ -255,7 +255,10 @@ def generic_search(request):
         request, target_model_name, target_model.objects.all()
     )
 
+    # Number of items after applying current filters
     num_items = filtered_items.count()
+    # Total number of items without filters (for X/Y display in header)
+    total_items = target_model.objects.count()
 
     # Pagination (may be recomputed for combobox below)
     page = request.GET.get("page")
@@ -490,6 +493,7 @@ def generic_search(request):
     context = {
         "items": paged_items,
         "num_items": num_items,
+        "total_items": total_items,
         "search": own_search_term,
         "app_label": target_app_label,
         "model_name": target_model_name,
