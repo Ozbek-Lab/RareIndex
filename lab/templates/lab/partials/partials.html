@@ -262,6 +262,13 @@
   {% endif %}
   {% if sort_options %}
   <div class="flex flex-wrap gap-2 mb-3 items-center">
+    {# Page-level search bar for Individuals, mirroring the drawer search behavior #}
+    {% if model_name == 'Individual' %}
+    <div class="w-full md:w-64">
+      {% include "lab/partials/partials.html#generic-search" %}
+    </div>
+    {% endif %}
+
     <button
       type="button"
       :disabled="!hasSorts('{{ model_name|lower }}')"
