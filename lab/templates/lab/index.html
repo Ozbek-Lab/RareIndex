@@ -254,6 +254,16 @@
           if (e.key === 'Escape') this.clearModal();
         });
 
+        // Open filter drawer when pointer hits the right edge of the screen (desktop only)
+        if (window.matchMedia && window.matchMedia('(pointer:fine)').matches) {
+          document.addEventListener('mousemove', (e) => {
+            const distanceFromRight = window.innerWidth - e.clientX;
+            if (distanceFromRight >= 0 && distanceFromRight <= 5 && !this.open) {
+              this.open = true;
+            }
+          });
+        }
+
         // Initial sync
         this.syncStateFromURL();
         
