@@ -64,11 +64,11 @@
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Test' and field.name == 'sample' %}
-                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Analysis' and field.name == 'test' %}
-                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -126,11 +126,11 @@
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Test' and field.name == 'sample' %}
-                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Analysis' and field.name == 'test' %}
-                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -345,11 +345,11 @@
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Test' and field.name == 'sample' %}
-                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Analysis' and field.name == 'test' %}
-                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -395,11 +395,11 @@
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Test' and field.name == 'sample' %}
-                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Analysis' and field.name == 'test' %}
-                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}

@@ -255,7 +255,10 @@ def generic_search(request):
         request, target_model_name, target_model.objects.all()
     )
 
+    # Number of items after applying current filters
     num_items = filtered_items.count()
+    # Total number of items without filters (for X/Y display in header)
+    total_items = target_model.objects.count()
 
     # Pagination (may be recomputed for combobox below)
     page = request.GET.get("page")
@@ -490,6 +493,7 @@ def generic_search(request):
     context = {
         "items": paged_items,
         "num_items": num_items,
+        "total_items": total_items,
         "search": own_search_term,
         "app_label": target_app_label,
         "model_name": target_model_name,
@@ -2363,16 +2367,44 @@ def generic_create(request):
             # Fallback to all statuses if filtering fails
             form.fields["status"].queryset = Status.objects.all().order_by("name")
 
-    # Fetch Individual object if individual is in initial_data (for Sample form)
+    # Fetch related objects for smarter initial selections in generic create forms
     initial_individual = None
+    initial_sample = None
+    initial_test = None
+
+    # For Sample creation, pre-select the Individual when provided
     if model_name == "Sample" and "individual" in initial_data:
         try:
             from lab.models import Individual
+
             individual_id = initial_data.get("individual")
             if individual_id:
                 initial_individual = Individual.objects.filter(pk=individual_id).first()
         except Exception:
-            pass
+            # If anything goes wrong, we simply skip the prefill
+            initial_individual = None
+
+    # For Test creation, pre-select the Sample when provided
+    if model_name == "Test" and "sample" in initial_data:
+        try:
+            from lab.models import Sample
+
+            sample_id = initial_data.get("sample")
+            if sample_id:
+                initial_sample = Sample.objects.filter(pk=sample_id).first()
+        except Exception:
+            initial_sample = None
+
+    # For Analysis creation, pre-select the Test when provided
+    if model_name == "Analysis" and "test" in initial_data:
+        try:
+            from lab.models import Test
+
+            test_id = initial_data.get("test")
+            if test_id:
+                initial_test = Test.objects.filter(pk=test_id).first()
+        except Exception:
+            initial_test = None
 
     staff_initial_json = "[]"
     if model_name == "Institution":
@@ -2389,6 +2421,8 @@ def generic_create(request):
                 "model_name": model_name,
                 "app_label": app_label,
                 "initial_individual": initial_individual,
+                "initial_sample": initial_sample,
+                "initial_test": initial_test,
                 # Prefixed Task form for sidebar inputs
                 "task_form": TaskForm(prefix="task"),
                 "staff_initial_json": staff_initial_json,
@@ -2403,6 +2437,8 @@ def generic_create(request):
                 "model_name": model_name,
                 "app_label": app_label,
                 "initial_individual": initial_individual,
+                "initial_sample": initial_sample,
+                "initial_test": initial_test,
                 "staff_initial_json": staff_initial_json,
             },
         )
