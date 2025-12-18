@@ -9,6 +9,7 @@
   <div
     id="variant-detail"
     class="space-y-6"
+    data-page-title="{{ item }}"
     x-data="{ activeTab: '{{ activeTab|default:" annotations" }}', historyLoaded:
   {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }"
   >
@@ -19,11 +20,19 @@
         <div
           class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
         >
-          <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-2xl font-bold text-white">
-                {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
-              </h2>
+          <div class="flex items-center gap-3">
+            <button
+              @click="goBack()"
+              class="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              title="Go back"
+            >
+              <i class="fas fa-arrow-left text-lg"></i>
+            </button>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-2xl font-bold text-white">
+                  {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
+                </h2>
               {% if item.classifications.exists %}
                 <span
                   class="text-xs px-2 py-1 rounded
@@ -48,6 +57,7 @@
             <p class="text-purple-100 mt-1">
               {{ item.assembly_version }} | {{ item.type|default:"Variant" }}
             </p>
+            </div>
           </div>
           <div class="flex flex-col items-start md:items-end gap-2">
             {% partial status-badge %}

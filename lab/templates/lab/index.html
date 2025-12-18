@@ -203,6 +203,36 @@
         if (modalRoot) modalRoot.innerHTML = '';
       },
 
+      // Page title mappings for better browser history
+      pageTitles: {
+        'home': 'Dashboard',
+        'overview': 'Overview',
+        'individual': 'Individuals',
+        'sample': 'Samples',
+        'test': 'Tests',
+        'analysis': 'Analyses',
+        'institution': 'Institutions',
+        'project': 'Projects',
+        'task': 'Tasks',
+        'variant': 'Variants',
+        'hpo-term': 'HPO Terms',
+        'hpo-network-visualization': 'HPO Network',
+        'map': 'Map',
+        'nl-search-page': 'AI Search',
+        'profile_settings': 'Profile Settings',
+        'notifications': 'Notifications',
+      },
+
+      updatePageTitle(pageName, itemLabel = null) {
+        let title = 'RareIndex';
+        if (itemLabel) {
+          title = `${itemLabel} | RareIndex`;
+        } else if (pageName && this.pageTitles[pageName]) {
+          title = `${this.pageTitles[pageName]} | RareIndex`;
+        }
+        document.title = title;
+      },
+
       init() {
         // this.syncStateFromURL(); // Moved to end of init
         window.addEventListener('popstate', () => { this.clearModal(); this.syncStateFromURL(); });
@@ -324,14 +354,33 @@
 
         if (params.has('pk')) {
           // If we have pre-loaded detail HTML and it matches the requested PK/Model, use it
+          const modelName = params.get('model_name');
+          const pk = params.get('pk');
           if (this.detailHtml && 
-              String(params.get('pk')) === String(this.initialPk) && 
-              params.get('model_name') === this.initialModelName) {
+              String(pk) === String(this.initialPk) && 
+              modelName === this.initialModelName) {
             this.activeItem = `detail-${this.initialModelName}-${this.initialPk}`;
+            // Set title for pre-loaded detail (will be refined after DOM ready)
+            this.$nextTick(() => {
+              const detailEl = document.getElementById('detail-view');
+              const titleEl = detailEl?.querySelector('[data-page-title]') || 
+                              detailEl?.querySelector('h1, h2, .detail-title');
+              const itemLabel = titleEl?.getAttribute('data-page-title') || 
+                               titleEl?.textContent?.trim();
+              if (itemLabel) {
+                this.updatePageTitle(null, `${itemLabel} | ${modelName}`);
+              } else {
+                this.updatePageTitle(null, `${modelName} #${pk}`);
+              }
+            });
           } else {
             this.activeItem = 'detail-loading';
+            this.updatePageTitle(null, `${modelName} #${pk}`);
             this.loadDetailView(params);
           }
+        } else {
+          // Set title for non-detail pages
+          this.updatePageTitle(this.activeItem);
         }
         
         // Dispatch update to trigger initial searches if we have filters
@@ -358,6 +407,16 @@
       },
 
       updateURL() {
+        // Don't update URL when on a detail page - detail pages have their own URL format
+        // handled by openDetail() which sets /detail/?pk=...&model_name=...&app_label=...
+        // Also skip when URL already has pk param (indicates we're on a detail URL)
+        if (this.activeItem && this.activeItem.startsWith('detail')) {
+          return;
+        }
+        const currentParams = new URLSearchParams(window.location.search);
+        if (currentParams.has('pk')) {
+          return;
+        }
         const newParams = new URLSearchParams();
         if (this.activeItem && this.activeItem !== 'home') {
           newParams.set('page', this.activeItem);
@@ -417,6 +476,7 @@
           this.activeItem = 'notifications';
           this.detailHtml = null;
           this.updateURL();
+          this.updatePageTitle('notifications');
 
           // Load notifications content via HTMX
           htmx.ajax('GET', '{% url "lab:notifications" %}', '#notifications-content').then(() => {
@@ -430,6 +490,7 @@
           this.activeItem = 'home';
           this.detailHtml = null;
           this.updateURL();
+          this.updatePageTitle('home');
 
           // Ask HTMX to reload plots using bound hx-vals (current filters)
           // No need to trigger reload, plots are either already loaded or will update via filter watcher
@@ -441,6 +502,7 @@
           this.activeItem = 'map';
           this.detailHtml = null;
           this.updateURL();
+          this.updatePageTitle('map');
           return;
         }
 
@@ -449,6 +511,7 @@
           this.activeItem = 'nl-search-page';
           this.detailHtml = null;
           this.updateURL();
+          this.updatePageTitle('nl-search-page');
 
           // Load natural language search content via HTMX
           htmx.ajax('GET', '{% url "lab:nl_search_page" %}', '#nl-search-content').then(() => {
@@ -462,6 +525,7 @@
           this.activeItem = 'profile_settings';
           this.detailHtml = null;
           this.updateURL();
+          this.updatePageTitle('profile_settings');
 
           // Load profile settings content via HTMX
           htmx.ajax('GET', '{% url "lab:profile_settings" %}', '#profile-settings-content').then(() => {
@@ -473,15 +537,18 @@
         this.activeItem = pageName;
         this.detailHtml = null;
         this.updateURL();
+        this.updatePageTitle(pageName);
       },
 
-      openDetail(pk, modelName, appLabel) {
+      openDetail(pk, modelName, appLabel, itemLabel = null) {
         this.clearModal();
         const newParams = new URLSearchParams();
         newParams.set('pk', pk);
         newParams.set('model_name', modelName);
         newParams.set('app_label', appLabel);
         history.pushState({}, "", `/detail/?${newParams.toString()}`);
+        // Set temporary title while loading (will be updated when content loads)
+        this.updatePageTitle(null, itemLabel || `${modelName} #${pk}`);
         this.loadDetailView(newParams);
       },
 
@@ -494,6 +561,20 @@
           htmx.ajax('GET', detailUrl, '#detail-view').then(response => {
             this.detailHtml = response;
             this.activeItem = `detail-${modelName}-${pk}`;
+            // Try to extract item label from the loaded content for a better title
+            this.$nextTick(() => {
+              const detailEl = document.getElementById('detail-view');
+              // Look for the title element in the detail view
+              const titleEl = detailEl?.querySelector('[data-page-title]') || 
+                              detailEl?.querySelector('h1, h2, .detail-title');
+              const itemLabel = titleEl?.getAttribute('data-page-title') || 
+                               titleEl?.textContent?.trim();
+              if (itemLabel) {
+                this.updatePageTitle(null, `${itemLabel} | ${modelName}`);
+              } else {
+                this.updatePageTitle(null, `${modelName} #${pk}`);
+              }
+            });
           });
         }
       },
@@ -501,7 +582,17 @@
       closeDetail() {
         this.detailHtml = null;
         this.clearModal();
-        this.navigateTo('index');
+        this.goBack();
+      },
+
+      goBack() {
+        // Use browser history to go back properly
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          // Fallback to home if no history
+          this.navigateTo('home');
+        }
       },
 
       showNLSearch() {
