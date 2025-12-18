@@ -216,6 +216,7 @@
 
 {% partialdef detail %}
   <div
+    data-page-title="{{ item.label|default:item.term }}"
     x-init="activeItem = 'detail-term-{{ item.pk }}'"
     class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
   >
