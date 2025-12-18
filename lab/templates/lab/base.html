@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/x-icon" href="{% static 'img/fav.ico' %}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RareIndex - Laboratory Information Management System</title>
+    <title>{% block title %}RareIndex{% endblock %}</title>
     <script src="{% static 'lab/js/htmx.min.js' %}"></script>
     <script src="{% static 'lab/js/tailwind.min.js' %}"></script>
     <script>

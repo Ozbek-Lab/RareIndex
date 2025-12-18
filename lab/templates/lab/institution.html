@@ -155,6 +155,7 @@
 {% partialdef detail %}
   <div
     id="institution-detail"
+    data-page-title="{{ item.name }}"
     x-data="{ activeTab: '{{ activeTab|default:'overview' }}' }"
     x-init="activeItem = 'detail-institution-{{ item.pk }}'; (() => {
       try {
@@ -177,14 +178,23 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-yellow-200 dark:border-yellow-600/40">
       <div class="bg-gradient-to-r from-yellow-400 via-amber-400 to-amber-500 px-6 py-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-white">
-          <div>
-            <p class="uppercase text-xs tracking-widest text-white/70">Institution</p>
-            <h2 class="text-2xl font-bold">{{ item.name }}</h2>
-            {% if item.center_name or item.official_name %}
-              <p class="text-white/80 text-sm mt-1">
-                {{ item.center_name|default:item.official_name }}
-              </p>
-            {% endif %}
+          <div class="flex items-center gap-3">
+            <button
+              @click="goBack()"
+              class="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              title="Go back"
+            >
+              <i class="fas fa-arrow-left text-lg"></i>
+            </button>
+            <div>
+              <p class="uppercase text-xs tracking-widest text-white/70">Institution</p>
+              <h2 class="text-2xl font-bold">{{ item.name }}</h2>
+              {% if item.center_name or item.official_name %}
+                <p class="text-white/80 text-sm mt-1">
+                  {{ item.center_name|default:item.official_name }}
+                </p>
+              {% endif %}
+            </div>
           </div>
           <div class="flex flex-col items-start md:items-end gap-2">
             {% if perms.lab.change_institution %}
