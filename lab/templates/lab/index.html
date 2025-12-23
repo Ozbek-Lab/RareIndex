@@ -57,6 +57,7 @@
   {{ model_name|default:''|json_script:"initial-model-name" }}
   {{ app_label|default:''|json_script:"initial-app-label" }}
   {{ item.pk|default:''|json_script:"initial-pk" }}
+  {{ display_preferences|json_script:"display-preferences" }}
   {% include "lab/sidebar.html" %}
   <main class="flex-1 overflow-y-auto p-6">
     <div id="main-content">
@@ -183,6 +184,8 @@
     const initialModelName = JSON.parse(document.getElementById('initial-model-name').textContent || '""');
     const initialAppLabel = JSON.parse(document.getElementById('initial-app-label').textContent || '""');
     const initialPk = JSON.parse(document.getElementById('initial-pk').textContent || '""');
+    const displayPrefsEl = document.getElementById('display-preferences');
+    const displayPrefs = displayPrefsEl ? JSON.parse(displayPrefsEl.textContent || '{}') : {};
 
     return {
       activeItem: 'home',
@@ -190,7 +193,8 @@
       filters: {},
       sorts: {},
       detailHtml: initialDetailHtml || null,
-      viewMode: 'cards',
+      viewMode: displayPrefs.default_list_view || 'cards',
+      hoverDrawerEnabled: displayPrefs.filter_popup_on_hover ?? true,
       instituteThreshold: 0,
       hpoThreshold: 0,
       loadedSections: new Set(),
@@ -237,12 +241,6 @@
         // this.syncStateFromURL(); // Moved to end of init
         window.addEventListener('popstate', () => { this.clearModal(); this.syncStateFromURL(); });
 
-        // Load viewMode from localStorage
-        const savedViewMode = localStorage.getItem('viewMode');
-        if (savedViewMode) {
-          this.viewMode = savedViewMode;
-        }
-
         this.$watch("filters", (newFilters) => {
           this.updateURL();
           // Global dispatch removed to prevent loops. 
@@ -266,6 +264,9 @@
           localStorage.setItem('viewMode', newViewMode);
         });
 
+        // Persist the initial preference-driven view mode
+        localStorage.setItem('viewMode', this.viewMode);
+
         // Close modal on page section changes
         this.$watch('activeItem', (val) => { 
           this.clearModal();
@@ -284,8 +285,8 @@
           if (e.key === 'Escape') this.clearModal();
         });
 
-        // Open filter drawer when pointer hits the right edge of the screen (desktop only)
-        if (window.matchMedia && window.matchMedia('(pointer:fine)').matches) {
+        // Open filter drawer when pointer hits the right edge of the screen (desktop only) if enabled in preferences
+        if (this.hoverDrawerEnabled && window.matchMedia && window.matchMedia('(pointer:fine)').matches) {
           document.addEventListener('mousemove', (e) => {
             const distanceFromRight = window.innerWidth - e.clientX;
             if (distanceFromRight >= 0 && distanceFromRight <= 5 && !this.open) {

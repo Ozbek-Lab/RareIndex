@@ -320,7 +320,7 @@
 {% endpartialdef %}
 
 {% partialdef search-section %}
-<div id="{{ model_name|lower }}-section-wrapper" x-data="{ isLoading: false, viewMode: 'cards' }" @htmx:before-request="isLoading = true"
+<div id="{{ model_name|lower }}-section-wrapper" x-data="{ isLoading: false, viewMode: $root?.viewMode || 'cards' }" @htmx:before-request="isLoading = true"
   @htmx:after-request="isLoading = false">
   {% if view == "page" %}
   <div class="flex justify-between items-center mb-4">
@@ -420,7 +420,7 @@
     :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'" style="width: calc(50% - 4px);"></div>
 
   <!-- Card button -->
-  <button @click="viewMode = 'cards'"
+  <button @click="viewMode = 'cards'; if ($root?.viewMode !== undefined) { $root.viewMode = 'cards'; }"
     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
     <i class="fa-solid fa-th-large mr-2 transition-transform duration-300"
@@ -430,7 +430,7 @@
   </button>
 
   <!-- Table button -->
-  <button @click="viewMode = 'table'"
+  <button @click="viewMode = 'table'; if ($root?.viewMode !== undefined) { $root.viewMode = 'table'; }"
     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
     <i class="fa-solid fa-table mr-2 transition-transform duration-300"

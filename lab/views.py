@@ -13,6 +13,7 @@ from django.views.decorators.vary import vary_on_headers
 from django.template.loader import render_to_string
 from django.template import TemplateDoesNotExist
 from django.template.response import TemplateResponse
+from django.contrib import messages
 import json
 
 # Import models
@@ -223,6 +224,16 @@ def index(request):
         objs = model_class.objects.filter(pk__in=ids)
         return json.dumps([{"value": obj.pk, "label": str(obj)} for obj in objs])
 
+    # Display preferences with sensible defaults
+    profile = getattr(request.user, "profile", None)
+    raw_display_prefs = {}
+    if profile and hasattr(profile, "display_preferences"):
+        raw_display_prefs = profile.display_preferences or {}
+    display_preferences = {
+        "filter_popup_on_hover": raw_display_prefs.get("filter_popup_on_hover", True),
+        "default_list_view": raw_display_prefs.get("default_list_view", "cards"),
+    }
+
     context = {
         "institutions": Institution.objects.all(),
         "individual_statuses": Status.objects.filter(
@@ -233,6 +244,7 @@ def index(request):
         "initial_tests": get_initial_json(Test, "filter_test"),
         "initial_analyses": get_initial_json(Analysis, "filter_analysis"),
         "initial_institutions": get_initial_json(Institution, "filter_institution"),
+        "display_preferences": display_preferences,
     }
 
     if request.headers.get("HX-Request"):
@@ -1953,23 +1965,41 @@ def profile_settings(request):
             "status_change": request.POST.get("status_change") == "on",
             "group_message": request.POST.get("group_message") == "on",
         }
+
+        # Update display preferences
+        display_preferences = {
+            "filter_popup_on_hover": request.POST.get("filter_popup_on_hover")
+            == "on",
+            "default_list_view": request.POST.get("default_list_view", "cards"),
+        }
+
         profile.email_notifications = email_settings
+        profile.display_preferences = display_preferences
         profile.save()
-        messages.success(request, "Notification settings updated successfully.")
+        messages.success(request, "Settings updated successfully.")
         return redirect("lab:profile_settings")
 
     # Merge with defaults for display
     # Default to True for all keys if not present
-    current_settings = profile.email_notifications or {}
+    current_email_settings = profile.email_notifications or {}
     display_settings = {
-        "task_assigned": current_settings.get("task_assigned", True),
-        "status_change": current_settings.get("status_change", True),
-        "group_message": current_settings.get("group_message", True),
+        "task_assigned": current_email_settings.get("task_assigned", True),
+        "status_change": current_email_settings.get("status_change", True),
+        "group_message": current_email_settings.get("group_message", True),
+    }
+
+    current_display_prefs = profile.display_preferences or {}
+    preference_settings = {
+        "filter_popup_on_hover": current_display_prefs.get(
+            "filter_popup_on_hover", True
+        ),
+        "default_list_view": current_display_prefs.get("default_list_view", "cards"),
     }
 
     context = {
         "profile": profile,
         "display_settings": display_settings,
+        "preference_settings": preference_settings,
     }
 
     # Handle HTMX requests for partial rendering
