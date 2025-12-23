@@ -70,14 +70,11 @@ def _format_user_label(user):
     return f"User {user.pk}"
 
 
-def _staff_initial_json_from_queryset(qs):
-    if not qs:
-        return "[]"
-    data = [{"value": str(user.pk), "label": _format_user_label(user)} for user in qs]
-    return json.dumps(data)
-
-
-def _parse_staff_ids(raw_value):
+def _parse_id_list(raw_value):
+    """
+    Normalize a raw POST value into a list of string IDs.
+    Accepts JSON lists, comma-separated strings, or already iterable values.
+    """
     if not raw_value:
         return []
     if isinstance(raw_value, (list, tuple)):
@@ -91,6 +88,17 @@ def _parse_staff_ids(raw_value):
     except Exception:
         pass
     return [v.strip() for v in str(raw_value).split(",") if v.strip()]
+
+
+def _staff_initial_json_from_queryset(qs):
+    if not qs:
+        return "[]"
+    data = [{"value": str(user.pk), "label": _format_user_label(user)} for user in qs]
+    return json.dumps(data)
+
+
+def _parse_staff_ids(raw_value):
+    return _parse_id_list(raw_value)
 
 
 def _staff_initial_json_from_ids(id_list):
@@ -108,6 +116,35 @@ def _staff_initial_json_from_post(post_data):
         return "[]"
     raw = post_data.get("staff_ids") or post_data.get("staff")
     return _staff_initial_json_from_ids(_parse_staff_ids(raw))
+
+
+def _institution_initial_json_from_queryset(qs):
+    if not qs:
+        return "[]"
+    data = [
+        {"value": str(inst.pk), "label": getattr(inst, "name", str(inst))}
+        for inst in qs
+    ]
+    return json.dumps(data)
+
+
+def _institution_initial_json_from_ids(id_list):
+    ids = [str(_id) for _id in id_list if str(_id).strip()]
+    if not ids:
+        return "[]"
+    institutions = Institution.objects.filter(pk__in=ids)
+    label_map = {str(inst.pk): getattr(inst, "name", str(inst)) for inst in institutions}
+    ordered = [
+        {"value": pk, "label": label_map.get(pk, pk)} for pk in ids if pk in label_map
+    ]
+    return json.dumps(ordered)
+
+
+def _institution_initial_json_from_post(post_data):
+    if not post_data:
+        return "[]"
+    raw = post_data.get("institution_ids") or post_data.get("institution")
+    return _institution_initial_json_from_ids(_parse_id_list(raw))
 
 
 @login_required
@@ -300,22 +337,20 @@ def generic_search(request):
                     else:
                         # Try direct icontains on specified label field
                         # BUT ALSO include cross_id search for related models if applicable
-                        q_label = _Q(**{f"{label_field}__icontains": own_search_term})
+                        q_label = Q(**{f"{label_field}__icontains": own_search_term})
                         
                         if target_model_name == "Sample":
-                            q_label |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            q_label |= Q(individual__cross_ids__id_value__icontains=own_search_term)
                         elif target_model_name == "Test":
-                            q_label |= _Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            q_label |= Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
                         elif target_model_name == "Analysis":
-                            q_label |= _Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            q_label |= Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
                         elif target_model_name == "Variant":
-                            q_label |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            q_label |= Q(individual__cross_ids__id_value__icontains=own_search_term)
                             
                         base_qs = base_qs.filter(q_label).distinct()
                 else:
                     # Fallback: OR over all CharField/TextField
-                    from django.db.models import Q as _Q
-
                     text_fields = []
                     try:
                         for f in target_model._meta.get_fields():
@@ -325,21 +360,21 @@ def generic_search(request):
                     except Exception:
                         text_fields = []
                     if text_fields:
-                        qobj = _Q()
+                        qobj = Q()
                         for fname in text_fields:
-                            qobj |= _Q(**{f"{fname}__icontains": own_search_term})
+                            qobj |= Q(**{f"{fname}__icontains": own_search_term})
                         
                         # Special handling for Individual: also search cross_ids
                         if target_model_name == "Individual":
-                            qobj |= _Q(cross_ids__id_value__icontains=own_search_term)
+                            qobj |= Q(cross_ids__id_value__icontains=own_search_term)
                         elif target_model_name == "Sample":
-                            qobj |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            qobj |= Q(individual__cross_ids__id_value__icontains=own_search_term)
                         elif target_model_name == "Test":
-                            qobj |= _Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            qobj |= Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
                         elif target_model_name == "Analysis":
-                            qobj |= _Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            qobj |= Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
                         elif target_model_name == "Variant":
-                            qobj |= _Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            qobj |= Q(individual__cross_ids__id_value__icontains=own_search_term)
                             
                         base_qs = base_qs.filter(qobj).distinct()
             except Exception:
@@ -2128,7 +2163,29 @@ def generic_create(request):
         if not form_class:
             return HttpResponseBadRequest(f"No form available for {model_name}.")
 
-        form = form_class(request.POST)
+        # Normalize M2M payloads coming from comboboxes (<field>_ids) into the form data
+        data = request.POST.copy()
+        m2m_payloads = {}
+        try:
+            for m2m_field in model_class._meta.many_to_many:
+                field_name = m2m_field.name
+                candidate_params = [f"{field_name}_ids"]
+                if field_name.endswith("s"):
+                    candidate_params.append(f"{field_name[:-1]}_ids")
+                raw_val = None
+                for pname in candidate_params:
+                    raw_val = data.get(pname)
+                    if raw_val:
+                        break
+                id_list = _parse_id_list(raw_val) if raw_val else []
+                if id_list:
+                    data.setlist(field_name, id_list)
+                    m2m_payloads[field_name] = id_list
+        except Exception:
+            data = request.POST
+            m2m_payloads = {}
+
+        form = form_class(data)
         if form.is_valid():
             # Save the object with the user context for created_by field
             obj = form.save(user=request.user)
@@ -2149,24 +2206,12 @@ def generic_create(request):
             try:
                 for m2m_field in obj._meta.many_to_many:
                     field_name = m2m_field.name
-                    candidate_params = [f"{field_name}_ids"]
-                    if field_name.endswith("s"):
-                        candidate_params.append(f"{field_name[:-1]}_ids")
-                    json_val = None
-                    for pname in candidate_params:
-                        json_val = request.POST.get(pname)
-                        if json_val:
-                            break
-                    if not json_val:
+                    payload_ids = m2m_payloads.get(field_name)
+                    if not payload_ids:
                         continue
-                    try:
-                        id_list = json.loads(json_val)
-                    except Exception:
-                        id_list = [v for v in (json_val or "").split(",") if v]
-                    if isinstance(id_list, list) and id_list:
-                        related_model = m2m_field.remote_field.model
-                        related_qs = related_model.objects.filter(pk__in=id_list)
-                        getattr(obj, field_name).set(related_qs)
+                    related_model = m2m_field.remote_field.model
+                    related_qs = related_model.objects.filter(pk__in=payload_ids)
+                    getattr(obj, field_name).set(related_qs)
             except Exception:
                 pass
 
@@ -2322,6 +2367,9 @@ def generic_create(request):
         else:
             # Form validation failed
             staff_initial_json = "[]"
+            institution_initial_json = "[]"
+            if model_name == "Individual":
+                institution_initial_json = _institution_initial_json_from_post(request.POST)
             if model_name == "Institution":
                 staff_initial_json = _staff_initial_json_from_post(request.POST)
             if request.htmx:
@@ -2333,6 +2381,7 @@ def generic_create(request):
                         "model_name": model_name,
                         "app_label": app_label,
                         "staff_initial_json": staff_initial_json,
+                        "institution_initial_json": institution_initial_json,
                     },
                 )
             else:
@@ -2344,6 +2393,7 @@ def generic_create(request):
                         "model_name": model_name,
                         "app_label": app_label,
                         "staff_initial_json": staff_initial_json,
+                        "institution_initial_json": institution_initial_json,
                     },
                 )
 
@@ -2437,9 +2487,14 @@ def generic_create(request):
             initial_test = None
 
     staff_initial_json = "[]"
+    institution_initial_json = "[]"
     if model_name == "Institution":
         staff_initial_json = _staff_initial_json_from_ids(
             _parse_staff_ids(initial_data.get("staff"))
+        )
+    if model_name == "Individual":
+        institution_initial_json = _institution_initial_json_from_ids(
+            _parse_id_list(initial_data.get("institution"))
         )
 
     if request.htmx:
@@ -2456,6 +2511,7 @@ def generic_create(request):
                 # Prefixed Task form for sidebar inputs
                 "task_form": TaskForm(prefix="task"),
                 "staff_initial_json": staff_initial_json,
+                "institution_initial_json": institution_initial_json,
             },
         )
     else:
@@ -2470,6 +2526,7 @@ def generic_create(request):
                 "initial_sample": initial_sample,
                 "initial_test": initial_test,
                 "staff_initial_json": staff_initial_json,
+                "institution_initial_json": institution_initial_json,
             },
         )
 
@@ -2514,6 +2571,8 @@ def generic_edit(request):
         except Exception:
             original_m2m_map = {}
 
+        m2m_payloads = {}
+
         # Build a complete data dict by merging provided fields with instance defaults
         try:
             baseline_form = form_class(instance=obj)
@@ -2550,6 +2609,29 @@ def generic_edit(request):
         except Exception:
             data = request.POST
 
+        # Normalize M2M payloads coming from comboboxes (<field>_ids) into the form data
+        try:
+            for m2m_field in obj._meta.many_to_many:
+                field_name = m2m_field.name
+                candidate_params = [f"{field_name}_ids"]
+                if field_name.endswith("s"):
+                    candidate_params.append(f"{field_name[:-1]}_ids")
+                raw_val = None
+                for pname in candidate_params:
+                    raw_val = request.POST.get(pname)
+                    if raw_val:
+                        break
+                id_list = _parse_id_list(raw_val) if raw_val else []
+                if id_list:
+                    data.setlist(field_name, id_list)
+                    m2m_payloads[field_name] = id_list
+                elif field_name not in data and original_m2m_map.get(field_name) is not None:
+                    original_ids = [str(pk) for pk in original_m2m_map[field_name]]
+                    if original_ids:
+                        data.setlist(field_name, original_ids)
+        except Exception:
+            pass
+
         form = form_class(data, instance=obj)
         if form.is_valid():
             # Save the object with updated_at handled by the form
@@ -2573,35 +2655,26 @@ def generic_edit(request):
             try:
                 for m2m_field in obj._meta.many_to_many:
                     field_name = m2m_field.name
-                    candidate_params = [f"{field_name}_ids"]
-                    if field_name.endswith("s"):
-                        candidate_params.append(f"{field_name[:-1]}_ids")
-                    json_val = None
-                    for pname in candidate_params:
-                        json_val = request.POST.get(pname)
-                        if json_val:
-                            break
-                    if not json_val:
-                        # No payload provided for this M2M; restore original values to avoid clearing
-                        try:
-                            original_ids = original_m2m_map.get(field_name, None)
-                            if original_ids is not None:
-                                related_model = m2m_field.remote_field.model
-                                related_qs = related_model.objects.filter(
-                                    pk__in=original_ids
-                                )
-                                getattr(obj, field_name).set(related_qs)
-                        except Exception:
-                            pass
-                        continue
-                    try:
-                        id_list = json.loads(json_val)
-                    except Exception:
-                        id_list = [v for v in (json_val or "").split(",") if v]
-                    if isinstance(id_list, list):
+                    payload_ids = m2m_payloads.get(field_name)
+                    if payload_ids:
                         related_model = m2m_field.remote_field.model
-                        related_qs = related_model.objects.filter(pk__in=id_list)
+                        related_qs = related_model.objects.filter(pk__in=payload_ids)
                         getattr(obj, field_name).set(related_qs)
+                        continue
+
+                    # If the field data was submitted normally, trust the form's handling
+                    if data.getlist(field_name):
+                        continue
+
+                    # No payload provided for this M2M; restore original values to avoid clearing
+                    try:
+                        original_ids = original_m2m_map.get(field_name, None)
+                        if original_ids is not None:
+                            related_model = m2m_field.remote_field.model
+                            related_qs = related_model.objects.filter(pk__in=original_ids)
+                            getattr(obj, field_name).set(related_qs)
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
@@ -2626,8 +2699,11 @@ def generic_edit(request):
         else:
             # Form validation failed
             staff_initial_json = "[]"
+            institution_initial_json = "[]"
             if model_name == "Institution":
                 staff_initial_json = _staff_initial_json_from_post(request.POST)
+            if model_name == "Individual":
+                institution_initial_json = _institution_initial_json_from_post(request.POST)
             if request.htmx:
                 context = {
                     "form": form,
@@ -2635,6 +2711,7 @@ def generic_edit(request):
                     "model_name": model_name,
                     "app_label": app_label,
                     "staff_initial_json": staff_initial_json,
+                    "institution_initial_json": institution_initial_json,
                 }
                 try:
                     if model_name == "Individual":
@@ -2656,6 +2733,7 @@ def generic_edit(request):
                         "model_name": model_name,
                         "app_label": app_label,
                         "staff_initial_json": staff_initial_json,
+                        "institution_initial_json": institution_initial_json,
                     },
                 )
 
@@ -2714,6 +2792,7 @@ def generic_edit(request):
             "model_name": model_name,
             "app_label": app_label,
             "staff_initial_json": staff_initial_json,
+                "institution_initial_json": "[]",
         }
         # For Task editing, provide info about the currently associated object
         try:
@@ -2737,8 +2816,12 @@ def generic_edit(request):
                     for t in getattr(obj, "hpo_terms", []).all()
                 ]
                 context["hpo_initial_json"] = json.dumps(initial)
+                context["institution_initial_json"] = _institution_initial_json_from_queryset(
+                    getattr(obj, "institution", []).all()
+                )
         except Exception:
             context["hpo_initial_json"] = "[]"
+            context["institution_initial_json"] = "[]"
 
         return render(request, "lab/crud.html#edit-form", context)
     else:
@@ -3036,6 +3119,47 @@ def family_create_segway(request):
     Segway view that handles family creation with multiple individuals.
     Parses the form data and calls generic_create for the family and individuals.
     """
+    # GET: render the family create/edit modal
+    if request.method == "GET":
+        individual_id = request.GET.get("individual_id")
+        lock_family = request.GET.get("lock_family") == "true"
+
+        initial_family = None
+        initial_individual = None
+        if individual_id:
+            try:
+                initial_individual = Individual.objects.select_related("family").get(
+                    pk=int(individual_id)
+                )
+                initial_family = initial_individual.family
+            except (Individual.DoesNotExist, ValueError, TypeError):
+                initial_individual = None
+                initial_family = None
+
+        family_initial_label = ""
+        family_initial_value = ""
+        if initial_family is not None:
+            try:
+                family_initial_label = getattr(initial_family, "family_id", "") or str(
+                    initial_family
+                )
+                family_initial_value = str(initial_family.pk)
+            except Exception:
+                family_initial_label = ""
+                family_initial_value = ""
+
+        return render(
+            request,
+            "lab/crud.html#family-create-form",
+            {
+                "initial_family": initial_family,
+                "initial_individual": initial_individual,
+                "lock_family": lock_family,
+                "family_initial_label": family_initial_label,
+                "family_initial_value": family_initial_value,
+            },
+        )
+
     if request.method == "POST":
         try:
             # 1. Get or Create Family

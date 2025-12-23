@@ -465,12 +465,12 @@
             {% if perms.lab.change_individual %}
               <button
                 class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-900 bg-white/90 rounded-md shadow-sm hover:bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white transition"
-                hx-get="{% url 'lab:generic_edit' %}?model_name=Individual&app_label=lab&pk={{ item.pk }}"
+                hx-get="{% url 'lab:family_create_segway' %}?individual_id={{ item.pk }}&lock_family=true"
                 hx-target="#modal-root"
                 hx-swap="innerHTML"
               >
                 <i class="fas fa-edit"></i>
-                <span>Edit Individual</span>
+                <span>Edit Family &amp; Individual</span>
               </button>
             {% endif %}
           </div>

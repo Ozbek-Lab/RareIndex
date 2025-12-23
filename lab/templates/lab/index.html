@@ -410,14 +410,10 @@
       updateURL() {
         // Don't update URL when on a detail page - detail pages have their own URL format
         // handled by openDetail() which sets /detail/?pk=...&model_name=...&app_label=...
-        // Also skip when URL already has pk param (indicates we're on a detail URL)
         if (this.activeItem && this.activeItem.startsWith('detail')) {
           return;
         }
         const currentParams = new URLSearchParams(window.location.search);
-        if (currentParams.has('pk')) {
-          return;
-        }
         const newParams = new URLSearchParams();
         if (this.activeItem && this.activeItem !== 'home') {
           newParams.set('page', this.activeItem);
@@ -1006,11 +1002,15 @@
       query: initialValue || '',
       options: [],
       loading: false,
-      selected: initialSelectedValue && initialValue ? { value: initialSelectedValue, label: initialValue } : null, // {value, label}
+      selected: null, // {value, label}
       init() {
-        // If we have an initial selected value, set it
-        if (initialSelectedValue && initialValue) {
-          this.selected = { value: initialSelectedValue, label: initialValue };
+        // If we have initial data, preselect an option
+        if (initialSelectedValue || initialValue) {
+          const value = initialSelectedValue || initialValue;
+          const label = initialValue || initialSelectedValue || '';
+          if (value && label) {
+            this.selected = { value, label };
+          }
         }
         this.$nextTick(() => { if (this.$refs.hiddenInput) { this.$refs.hiddenInput.defaultValue = this.hiddenInputValue; } });
         this.$watch('query', () => {
