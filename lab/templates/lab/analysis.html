@@ -624,10 +624,10 @@
                   class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
                 >
                   <div class="py-1">
-                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=snv" hx-target="#modal-root" hx-swap="innerHTML" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">SNV</button>
-                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=cnv" hx-target="#modal-root" hx-swap="innerHTML" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">CNV</button>
-                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=sv" hx-target="#modal-root" hx-swap="innerHTML" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">SV</button>
-                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=repeat" hx-target="#modal-root" hx-swap="innerHTML" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Repeat</button>
+                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=snv" hx-target="#modal-root" hx-swap="innerHTML" hx-select="#variant-modal" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">SNV</button>
+                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=cnv" hx-target="#modal-root" hx-swap="innerHTML" hx-select="#variant-modal" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">CNV</button>
+                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=sv" hx-target="#modal-root" hx-swap="innerHTML" hx-select="#variant-modal" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">SV</button>
+                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=repeat" hx-target="#modal-root" hx-swap="innerHTML" hx-select="#variant-modal" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Repeat</button>
                   </div>
                 </div>
               </div>
