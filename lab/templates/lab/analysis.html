@@ -153,6 +153,20 @@
             </p>
           {% endif %}
         {% endif %}
+        <div class="mt-2 space-y-1">
+          {% with institutions=item.test.sample.individual.institution.all %}
+            {% if institutions %}
+              {% for inst in institutions %}
+                <div class="flex items-center text-sm text-blue-900 dark:text-blue-100">
+                  <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
+                  <span>{{ inst.name }}</span>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-sm text-blue-900 dark:text-blue-100">—</p>
+            {% endif %}
+          {% endwith %}
+        </div>
       </div>
 
       <div x-data="{ open: false }" class="static">
@@ -253,6 +267,13 @@
     {{ item.test.sample.individual.individual_id }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with institutions=item.test.sample.individual.institution.all %}
+      {% if institutions %}
+        {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     {{ item.performed_date|date:"M d, Y"|default:"-" }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
@@ -329,6 +350,11 @@
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
             Individual ID
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Institution
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
@@ -483,6 +509,20 @@
                 </p>
               </div>
             {% endif %}
+            <div class="mt-2 space-y-1">
+              {% with institutions=item.test.sample.individual.institution.all %}
+                {% if institutions %}
+                  {% for inst in institutions %}
+                    <div class="flex items-center text-sm text-blue-900 dark:text-blue-100">
+                      <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
+                      <span>{{ inst.name }}</span>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <p class="text-sm text-blue-900 dark:text-blue-100">—</p>
+                {% endif %}
+              {% endwith %}
+            </div>
           </div>
         </div>
 
@@ -634,10 +674,10 @@
                   class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
                 >
                   <div class="py-1">
-                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=snv" hx-target="#modal-root" hx-swap="innerHTML" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">SNV</button>
-                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=cnv" hx-target="#modal-root" hx-swap="innerHTML" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">CNV</button>
-                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=sv" hx-target="#modal-root" hx-swap="innerHTML" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">SV</button>
-                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=repeat" hx-target="#modal-root" hx-swap="innerHTML" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Repeat</button>
+                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=snv" hx-target="#modal-root" hx-swap="innerHTML" hx-select="#variant-modal" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">SNV</button>
+                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=cnv" hx-target="#modal-root" hx-swap="innerHTML" hx-select="#variant-modal" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">CNV</button>
+                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=sv" hx-target="#modal-root" hx-swap="innerHTML" hx-select="#variant-modal" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">SV</button>
+                    <button hx-get="{% url 'lab:variant_create' %}?analysis_id={{ item.id }}&type=repeat" hx-target="#modal-root" hx-swap="innerHTML" hx-select="#variant-modal" @click="openAdd = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Repeat</button>
                   </div>
                 </div>
               </div>

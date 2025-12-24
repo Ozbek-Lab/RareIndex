@@ -2,16 +2,94 @@
 
 {% partialdef profile-settings-content inline %}
 <div class="container mx-auto px-4 py-8">
-    <h1 class="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">Notification Settings</h1>
+    <h1 class="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">User Settings</h1>
 
     <form 
         hx-post="{% url 'lab:profile_settings' %}" 
-        hx-target="#main-content"
-        class="bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4"
+        hx-target="#profile-settings-content"
+        class="space-y-6"
     >
         {% csrf_token %}
-        
-        <div class="mb-6">
+
+        <!-- Display Preferences -->
+        <div
+            class="bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8"
+            x-data="{
+                filterOn: {{ preference_settings.filter_popup_on_hover|yesno:'true,false' }},
+                defaultView: '{{ preference_settings.default_list_view }}'
+            }"
+        >
+            <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Display Preferences</h2>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">Control how information is displayed in the app. More options will be added here over time.</p>
+
+            <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                <!-- Filter popup on hover -->
+                <div class="flex items-center justify-between py-4">
+                    <div>
+                        <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Filter popup on hover</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Show filter popup when hovering over the filter icon instead of requiring a click.</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            id="filter_popup_on_hover"
+                            name="filter_popup_on_hover"
+                            class="sr-only peer"
+                            x-model="filterOn"
+                            {% if preference_settings.filter_popup_on_hover %}checked{% endif %}
+                        >
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:bg-blue-600
+                                    after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all
+                                    peer-checked:after:translate-x-full peer-checked:after:border-white">
+                        </div>
+                        <span class="ml-3 text-sm font-medium text-gray-900 dark:text-gray-300">
+                            <span x-text="filterOn ? 'On' : 'Off'"></span>
+                        </span>
+                    </label>
+                </div>
+
+                <!-- Default list view -->
+                <div class="flex flex-col gap-3 py-4">
+                    <div>
+                        <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Default list view</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Choose how lists like Individuals and Samples are shown by default.</p>
+                    </div>
+                    <div class="inline-flex rounded-md shadow-sm bg-gray-100 dark:bg-gray-700 p-1">
+                        <label class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-l-md cursor-pointer transition
+                                       text-gray-700 dark:text-gray-300"
+                               :class="defaultView === 'cards' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow' : ''">
+                            <input
+                                type="radio"
+                                name="default_list_view"
+                                value="cards"
+                                class="sr-only"
+                                x-model="defaultView"
+                                {% if preference_settings.default_list_view == 'cards' %}checked{% endif %}
+                            >
+                            <i class="fa-solid fa-border-all mr-2"></i>
+                            Cards
+                        </label>
+                        <label class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-r-md cursor-pointer transition
+                                       text-gray-700 dark:text-gray-300"
+                               :class="defaultView === 'table' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow' : ''">
+                            <input
+                                type="radio"
+                                name="default_list_view"
+                                value="table"
+                                class="sr-only"
+                                x-model="defaultView"
+                                {% if preference_settings.default_list_view == 'table' %}checked{% endif %}
+                            >
+                            <i class="fa-solid fa-table mr-2"></i>
+                            Table
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Notifications -->
+        <div class="bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8">
             <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Email Notifications</h2>
             <p class="text-gray-600 dark:text-gray-400 mb-4">Select which notifications you want to receive via email.</p>
             
@@ -53,7 +131,7 @@
     </form>
 
     <!-- Send Group Message Section -->
-    <div class="bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4">
+    <div class="bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mt-6">
         <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Send Group Message</h2>
         <p class="text-gray-600 dark:text-gray-400 mb-4">Send a notification to all members of the "Group Members" group.</p>
         

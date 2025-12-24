@@ -652,6 +652,9 @@ class Profile(models.Model):
     email_notifications = models.JSONField(
         default=dict, help_text="Email notification settings"
     )
+    display_preferences = models.JSONField(
+        default=dict, help_text="UI and display preference settings"
+    )
 
     def __str__(self):
         return f"{self.user.username}'s Profile"

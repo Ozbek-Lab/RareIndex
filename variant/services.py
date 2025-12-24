@@ -107,9 +107,10 @@ class AnnotationService:
             return None
             
         url = f"{base_url}/{region_str}"
+        params = {"hgvs": 1}
         
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, params=params)
             if response.status_code == 200:
                 data = response.json()
                 self._save_annotation(variant, "vep", data)
