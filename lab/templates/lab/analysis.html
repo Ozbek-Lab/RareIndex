@@ -153,6 +153,20 @@
             </p>
           {% endif %}
         {% endif %}
+        <div class="mt-2 space-y-1">
+          {% with institutions=item.test.sample.individual.institution.all %}
+            {% if institutions %}
+              {% for inst in institutions %}
+                <div class="flex items-center text-sm text-blue-900 dark:text-blue-100">
+                  <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
+                  <span>{{ inst.name }}</span>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-sm text-blue-900 dark:text-blue-100">—</p>
+            {% endif %}
+          {% endwith %}
+        </div>
       </div>
 
       <div x-data="{ open: false }" class="static">
@@ -253,6 +267,13 @@
     {{ item.test.sample.individual.individual_id }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with institutions=item.test.sample.individual.institution.all %}
+      {% if institutions %}
+        {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     {{ item.performed_date|date:"M d, Y"|default:"-" }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
@@ -329,6 +350,11 @@
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
             Individual ID
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            Institution
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
@@ -483,6 +509,20 @@
                 </p>
               </div>
             {% endif %}
+            <div class="mt-2 space-y-1">
+              {% with institutions=item.test.sample.individual.institution.all %}
+                {% if institutions %}
+                  {% for inst in institutions %}
+                    <div class="flex items-center text-sm text-blue-900 dark:text-blue-100">
+                      <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
+                      <span>{{ inst.name }}</span>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <p class="text-sm text-blue-900 dark:text-blue-100">—</p>
+                {% endif %}
+              {% endwith %}
+            </div>
           </div>
         </div>
 

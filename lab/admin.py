@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.contrib.admin.sites import NotRegistered
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from simple_history.admin import SimpleHistoryAdmin
 from . import models
@@ -434,4 +437,76 @@ class CrossIdentifierAdmin(SimpleHistoryAdmin):
         return ", ".join(obj.institution.values_list("name", flat=True))
 
     get_institutions.short_description = "Institutions"
+
+
+class ProfileInline(admin.StackedInline):
+    model = models.Profile
+    can_delete = False
+    fk_name = "user"
+    verbose_name_plural = "Profile"
+    fields = ("email_notifications", "display_preferences")
+
+
+class CustomUserAdmin(BaseUserAdmin):
+    inlines = (ProfileInline,)
+    list_display = BaseUserAdmin.list_display + (
+        "get_filter_popup_on_hover",
+        "get_default_list_view",
+        "get_task_assigned_notifications",
+        "get_status_change_notifications",
+        "get_group_message_notifications",
+    )
+
+    def _get_profile(self, obj):
+        return getattr(obj, "profile", None)
+
+    def get_filter_popup_on_hover(self, obj):
+        profile = self._get_profile(obj)
+        if not profile or not profile.display_preferences:
+            return True
+        return profile.display_preferences.get("filter_popup_on_hover", True)
+
+    get_filter_popup_on_hover.short_description = "Filter popup on hover"
+    get_filter_popup_on_hover.boolean = True
+
+    def get_default_list_view(self, obj):
+        profile = self._get_profile(obj)
+        if not profile or not profile.display_preferences:
+            return "cards"
+        return profile.display_preferences.get("default_list_view", "cards")
+
+    get_default_list_view.short_description = "Default list view"
+
+    def _get_email_setting(self, obj, key):
+        profile = self._get_profile(obj)
+        if not profile or not profile.email_notifications:
+            return True
+        return profile.email_notifications.get(key, True)
+
+    def get_task_assigned_notifications(self, obj):
+        return self._get_email_setting(obj, "task_assigned")
+
+    get_task_assigned_notifications.short_description = "Task assigned email"
+    get_task_assigned_notifications.boolean = True
+
+    def get_status_change_notifications(self, obj):
+        return self._get_email_setting(obj, "status_change")
+
+    get_status_change_notifications.short_description = "Status change email"
+    get_status_change_notifications.boolean = True
+
+    def get_group_message_notifications(self, obj):
+        return self._get_email_setting(obj, "group_message")
+
+    get_group_message_notifications.short_description = "Group message email"
+    get_group_message_notifications.boolean = True
+
+
+# Ensure default User admin is replaced with our customized version
+try:
+    admin.site.unregister(User)
+except NotRegistered:
+    pass
+
+admin.site.register(User, CustomUserAdmin)
 
