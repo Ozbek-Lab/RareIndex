@@ -245,21 +245,42 @@
 
 {% partialdef generic-search-results-content %}
   {% if items.number == 1 %}
-  <div class="" :class="{'text-green-500': {{ num_items }} > 0,
-                  'text-red-500': {{ num_items }} == 0}">
-    <i class="fa-solid {{ icon_class }} mr-2"></i> Found {{ num_items }} {{ model_name|lower }}{{ num_items|pluralize }}.
+  {# Out-of-band update for the header count next to the title. Wrapped in a hidden div so it doesn't show twice. #}
+  <div class="hidden">
+    <span
+      id="{{ model_name|lower }}-count"
+      hx-swap-oob="innerHTML"
+      class="ml-2 text-lg font-semibold align-middle"
+    >
+      {% if total_items %}
+        <span class="{% if num_items > 0 %}text-green-600{% else %}text-red-500{% endif %}">
+          {{ num_items }}/{{ total_items }}
+        </span>
+      {% endif %}
+    </span>
   </div>
   {% endif %}
-
   {% if sort_options %}
   <div class="flex flex-wrap gap-2 mb-3 items-center">
-    <template x-if="hasSorts('{{ model_name|lower }}')">
-      <button type="button"
-        class="px-2 py-1 text-xs rounded-full border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-        @click="clearSorts('{{ model_name|lower }}', '{{ model_name|lower }}')">
-        <i class="fa-solid fa-eraser mr-1"></i> Clear sorting
-      </button>
-    </template>
+    {# Page-level search bar for Individuals, mirroring the drawer search behavior #}
+    {% if model_name == 'Individual' %}
+    <div class="w-full md:w-64">
+      {% include "lab/partials/partials.html#generic-search" %}
+    </div>
+    {% endif %}
+
+    <button
+      type="button"
+      :disabled="!hasSorts('{{ model_name|lower }}')"
+      class="px-2 py-1 text-xs rounded-full border transition-all duration-200 flex items-center gap-1"
+      :class="hasSorts('{{ model_name|lower }}')
+        ? 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'
+        : 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 opacity-60 cursor-not-allowed'"
+      @click="hasSorts('{{ model_name|lower }}') && clearSorts('{{ model_name|lower }}', '{{ model_name|lower }}')"
+    >
+      <i class="fa-solid fa-eraser mr-1"></i>
+      Clear sorting
+    </button>
     {% for sort in sort_options %}
     <button type="button"
       class="px-2 py-1 text-xs rounded-full border flex items-center gap-2 transition-all duration-200"
@@ -299,11 +320,14 @@
 {% endpartialdef %}
 
 {% partialdef search-section %}
-<div id="{{ model_name|lower }}-section-wrapper" x-data="{ isLoading: false, viewMode: 'cards' }" @htmx:before-request="isLoading = true"
+<div id="{{ model_name|lower }}-section-wrapper" x-data="{ isLoading: false, viewMode: $root?.viewMode || 'cards' }" @htmx:before-request="isLoading = true"
   @htmx:after-request="isLoading = false">
   {% if view == "page" %}
   <div class="flex justify-between items-center mb-4">
-    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h1>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-baseline">
+      <span>{{ title }}</span>
+      <span id="{{ model_name|lower }}-count" class="ml-2 text-2xl font-bold"></span>
+    </h1>
     <div class="flex items-center">
       <!-- Add New button -->
 
@@ -396,7 +420,7 @@
     :class="viewMode === 'cards' ? 'translate-x-0' : 'translate-x-full'" style="width: calc(50% - 4px);"></div>
 
   <!-- Card button -->
-  <button @click="viewMode = 'cards'"
+  <button @click="viewMode = 'cards'; if ($root?.viewMode !== undefined) { $root.viewMode = 'cards'; }"
     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
     :class="viewMode === 'cards' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
     <i class="fa-solid fa-th-large mr-2 transition-transform duration-300"
@@ -406,7 +430,7 @@
   </button>
 
   <!-- Table button -->
-  <button @click="viewMode = 'table'"
+  <button @click="viewMode = 'table'; if ($root?.viewMode !== undefined) { $root.viewMode = 'table'; }"
     class="relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-out flex items-center justify-center"
     :class="viewMode === 'table' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
     <i class="fa-solid fa-table mr-2 transition-transform duration-300"

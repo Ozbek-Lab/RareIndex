@@ -110,6 +110,20 @@
             </p>
           {% endif %}
         {% endif %}
+        <div class="mt-2 space-y-1">
+          {% with institutions=item.sample.individual.institution.all %}
+            {% if institutions %}
+              {% for inst in institutions %}
+                <div class="flex items-center text-sm text-blue-900 dark:text-blue-100">
+                  <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
+                  <span>{{ inst.name }}</span>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-sm text-blue-900 dark:text-blue-100">—</p>
+            {% endif %}
+          {% endwith %}
+        </div>
       </div>
       
       <div x-data="{ open: false }" class="static">
@@ -223,6 +237,13 @@
     {{ item.sample.individual.individual_id }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with institutions=item.sample.individual.institution.all %}
+      {% if institutions %}
+        {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% else %}-{% endif %}
+    {% endwith %}
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     {{ item.performed_date|date:"M d, Y"|default:"-" }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
@@ -303,6 +324,11 @@
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
+            Institution
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
             Performed Date
           </th>
           <th
@@ -340,6 +366,7 @@
   <div
     id="test-detail"
     class="space-y-6"
+    data-page-title="{{ item }}"
     x-data="{ activeTab: '{{ activeTab|default:'notes' }}', historyLoaded: {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }"
     x-init="(() => {
       try {
@@ -363,16 +390,18 @@
       <!-- Header with test info -->
       <div class="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div class="flex items-center space-x-4">
-              <span class="cursor-pointer hover:text-blue-200 transition-colors" 
-                @click= "openDetail({{ item.id }}, 'Test', 'lab')"
-              >
-                <i class="fas fa-arrow-left"></i>
-              </span>
+          <div class="flex items-center gap-3">
+            <button
+              @click="goBack()"
+              class="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              title="Go back"
+            >
+              <i class="fas fa-arrow-left text-lg"></i>
+            </button>
+            <div>
               <h1 class="text-2xl font-bold text-white">{{ item.test_type.name }}</h1>
+              <p class="text-blue-100 mt-1">{{ item.sample.sample_type.name }} Test</p>
             </div>
-            <p class="text-blue-100 mt-1">{{ item.sample.sample_type.name }} Test</p>
           </div>
           <div class="flex flex-col items-start md:items-end gap-2 text-white">
             {% partial status-badge %}
@@ -396,14 +425,19 @@
         <!-- Sample Information -->
         <div class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Sample Type</h3>
-            <p class="text-gray-900 dark:text-gray-100">{{ item.sample.sample_type.name }}</p>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Sample</h3>
+            <p
+              class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+              @click= "openDetail({{ item.sample.id }}, 'Sample', 'lab')"
+            >
+              {{ item.sample.sample_type.name }}
+            </p>
           </div>
           <div class="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg" x-data="{ showFullName: false }">
             <div class="flex items-center">
               <i class="fa-solid fa-user mr-2 text-blue-600 dark:text-blue-400"></i>
               <span class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors mr-2"
-                @click= "openDetail({{ item.individual.id }}, 'Individual', 'lab')"
+                @click= "openDetail({{ item.sample.individual.id }}, 'Individual', 'lab')"
               >
                 {{ item.sample.individual.individual_id }}
               </span>
@@ -423,6 +457,20 @@
                 </p>
               {% endif %}
             {% endif %}
+            <div class="mt-2 space-y-1">
+              {% with institutions=item.sample.individual.institution.all %}
+                {% if institutions %}
+                  {% for inst in institutions %}
+                    <div class="flex items-center text-sm text-blue-900 dark:text-blue-100">
+                      <i class="fa-solid fa-building-columns mr-2 text-blue-600 dark:text-blue-400"></i>
+                      <span>{{ inst.name }}</span>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <p class="text-sm text-blue-900 dark:text-blue-100">—</p>
+                {% endif %}
+              {% endwith %}
+            </div>
           </div>
           <div>
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Sample Receipt Date</h3>

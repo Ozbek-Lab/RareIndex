@@ -51,6 +51,10 @@
                         {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' %}
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
+                      {% elif model_name == 'Individual' and field.name == 'institution' %}
+                        {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' value_field='pk' label_field='name' multiple=True name='institution_ids' initial=institution_initial_json|default:'[]' %}
+                          {% include "lab/partials/partials.html#generic-combobox" %}
+                        {% endwith %}
                       {% elif model_name == 'Sample' and field.name == 'individual' %}
                         {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' name='individual' initial=initial_individual.individual_id|default:'' initial_value=initial_individual.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
@@ -64,11 +68,11 @@
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Test' and field.name == 'sample' %}
-                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Analysis' and field.name == 'test' %}
-                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -113,6 +117,10 @@
                         {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' %}
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
+                      {% elif model_name == 'Individual' and field.name == 'institution' %}
+                        {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' value_field='pk' label_field='name' multiple=True name='institution_ids' initial=institution_initial_json|default:'[]' %}
+                          {% include "lab/partials/partials.html#generic-combobox" %}
+                        {% endwith %}
                       {% elif model_name == 'Sample' and field.name == 'individual' %}
                         {% with app_label='lab' model_name='Individual' icon_class='fa-user' value_field='pk' name='individual' initial=initial_individual.individual_id|default:'' initial_value=initial_individual.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
@@ -126,11 +134,11 @@
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Test' and field.name == 'sample' %}
-                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Analysis' and field.name == 'test' %}
-                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -340,16 +348,20 @@
                         {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
+                      {% elif model_name == 'Individual' and field.name == 'institution' %}
+                        {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' value_field='pk' label_field='name' multiple=True name='institution_ids' initial=institution_initial_json|default:'[]' %}
+                          {% include "lab/partials/partials.html#generic-combobox" %}
+                        {% endwith %}
                       {% elif model_name == 'Institution' and field.name == 'staff' %}
                         {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Test' and field.name == 'sample' %}
-                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Analysis' and field.name == 'test' %}
-                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -390,16 +402,20 @@
                         {% with app_label='ontologies' model_name='Term' icon_class='fa-stethoscope' value_field='pk' label_field='label' multiple=True name='hpo_term_ids' initial=hpo_initial_json|default:'[]' %}
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
+                      {% elif model_name == 'Individual' and field.name == 'institution' %}
+                        {% with app_label='lab' model_name='Institution' icon_class='fa-building-columns' value_field='pk' label_field='name' multiple=True name='institution_ids' initial=institution_initial_json|default:'[]' %}
+                          {% include "lab/partials/partials.html#generic-combobox" %}
+                        {% endwith %}
                       {% elif model_name == 'Institution' and field.name == 'staff' %}
                         {% with app_label='auth' model_name='User' icon_class='fa-user-doctor' value_field='pk' label_field='username' multiple=True name='staff_ids' initial=staff_initial_json|default:'[]' %}
                           {% include "lab/partials/partials.html#generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Test' and field.name == 'sample' %}
-                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample.sample_id|default:'' initial_value=initial_sample.pk|default:'' %}
+                        {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% elif model_name == 'Analysis' and field.name == 'test' %}
-                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test.test_id|default:'' initial_value=initial_test.pk|default:'' %}
+                        {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -870,16 +886,13 @@
         {% if not individual %}
           <div class="flex justify-center space-x-3">
             <button
-              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
               class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
               Back to Index
             </button>
             <button
-              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-              hx-target="#main-content"
-              hx-swap="innerHTML"
-              @click="document.getElementById('modal-root').innerHTML = ''"
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               View Details
@@ -890,16 +903,13 @@
         {% if not individual %}
           <div class="flex justify-center space-x-3">
             <button
-              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
               class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
               Back to Index
             </button>
             <button
-              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-              hx-target="#main-content"
-              hx-swap="innerHTML"
-              @click="document.getElementById('modal-root').innerHTML = ''"
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               View Details
@@ -908,16 +918,13 @@
         {% elif not sample %}
           <div class="flex justify-center space-x-3">
             <button
-              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
               class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
               Back to Index
             </button>
             <button
-              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-              hx-target="#main-content"
-              hx-swap="innerHTML"
-              @click="document.getElementById('modal-root').innerHTML = ''"
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               View Details
@@ -928,16 +935,13 @@
         {% if not individual %}
           <div class="flex justify-center space-x-3">
             <button
-              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
               class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
               Back to Index
             </button>
             <button
-              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-              hx-target="#main-content"
-              hx-swap="innerHTML"
-              @click="document.getElementById('modal-root').innerHTML = ''"
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               View Details
@@ -946,16 +950,13 @@
         {% elif not sample %}
           <div class="flex justify-center space-x-3">
             <button
-              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
               class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
               Back to Index
             </button>
             <button
-              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-              hx-target="#main-content"
-              hx-swap="innerHTML"
-              @click="document.getElementById('modal-root').innerHTML = ''"
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               View Details
@@ -964,16 +965,13 @@
         {% elif not test %}
           <div class="flex justify-center space-x-3">
             <button
-              @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
               class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
               Back to Index
             </button>
             <button
-              hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-              hx-target="#main-content"
-              hx-swap="innerHTML"
-              @click="document.getElementById('modal-root').innerHTML = ''"
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               View Details
@@ -983,16 +981,13 @@
       {% elif model_name != 'Task' %}
         <div class="flex justify-center space-x-3">
           <button
-            @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+            @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
             class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
           >
             Back to Index
           </button>
           <button
-            hx-get="{% url 'lab:generic_detail' %}?app_label={{ app_label }}&model_name={{ model_name }}&pk={{ object.pk }}"
-            hx-target="#main-content"
-            hx-swap="innerHTML"
-            @click="document.getElementById('modal-root').innerHTML = ''"
+            @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
             class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             View Details
@@ -1033,7 +1028,7 @@
       </p>
       <div class="flex justify-center space-x-3">
         <button
-          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+          @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
           class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
         >
           Back to Index
@@ -1071,7 +1066,7 @@
       </p>
       <div class="flex justify-center">
         <button
-          @click="document.getElementById('modal-root').innerHTML = '' ; activeItem = 'home'"
+          @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
           class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
         >
           Back to Index
@@ -1116,7 +1111,9 @@
             x-data="{
               familyMode: 'select',
               manualFamilyId: '',
+              lockFamily: {{ lock_family|default:False|yesno:'true,false' }},
               toggleFamilyMode() {
+                if (this.lockFamily) { return; }
                 // Save current mode state before switching
                 if (window.saveFormData) {
                   try { saveFormData(this.familyMode, true); } catch (e) { console.warn('Error auto-saving mode state', e); }
@@ -1200,13 +1197,15 @@
                     type="button"
                     @click="toggleFamilyMode()"
                     class="px-3 py-2 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    :disabled="lockFamily"
+                    :class="lockFamily ? 'opacity-50 cursor-not-allowed' : ''"
                   >
                     <span x-text="familyMode === 'select' ? 'Create Family' : 'Edit Family'"></span>
                   </button>
 
                   <!-- Existing family selection (combobox) -->
                   <div class="flex-1" x-show="familyMode === 'select'" x-cloak>
-                    {% with app_label='lab' model_name='Family' icon_class='fa-users' value_field='family_id' label_field='family_id' name='family_id' %}
+                    {% with app_label='lab' model_name='Family' icon_class='fa-users' value_field='family_id' label_field='family_id' name='family_id' initial=family_initial_label initial_value=family_initial_value %}
                       {% include "lab/partials/partials.html#single-generic-combobox" %}
                     {% endwith %}
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -1236,6 +1235,21 @@
 
               <div
                 x-data="{ }"
+                x-init="
+                  // If a family is preselected (e.g. editing from Individual detail), load its description and members
+                  {% if family_initial_value %}
+                  htmx.ajax('GET', '{% url 'lab:generic_search' %}', {
+                    target: '#family_description_wrapper',
+                    swap: 'innerHTML',
+                    values: { app_label: 'lab', model_name: 'Family', search: '{{ family_initial_value }}', render: 'family_description' }
+                  });
+                  htmx.ajax('GET', '{% url 'lab:generic_search' %}', {
+                    target: '#individuals-container',
+                    swap: 'innerHTML',
+                    values: { app_label: 'lab', model_name: 'Family', search: '{{ family_initial_value }}', render: 'family_individual_forms' }
+                  });
+                  {% endif %}
+                "
                 @combobox-selected.window="
                   if ($event.detail.modelName==='Family' && $event.detail.value) {
                     htmx.ajax('GET', '{% url 'lab:generic_search' %}', {

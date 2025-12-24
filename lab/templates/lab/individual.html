@@ -421,6 +421,7 @@
   <div
     id="individual-detail"
     class="space-y-6"
+    data-page-title="{{ item.individual_id }}"
     x-data="{ activeTab: '{{ activeTab|default:'notes' }}', historyLoaded: {{ history_prefetched|default:False|yesno:'true,false' }}, historyLoading: false }"
     x-init="(() => {
       try {
@@ -444,23 +445,32 @@
       <!-- Header with individual info -->
       <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
+          <div class="flex items-center gap-3">
+            <button
+              @click="goBack()"
+              class="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              title="Go back"
+            >
+              <i class="fas fa-arrow-left text-lg"></i>
+            </button>
+            <div>
             <h2 class="text-2xl font-bold text-white">
               {{ item.individual_id }}
             </h2>
-            <p class="text-blue-100 mt-1">{{ item.all_ids|join:' - ' }}</p>
+              <p class="text-blue-100 mt-1">{{ item.all_ids|join:' - ' }}</p>
+            </div>
           </div>
           <div class="flex flex-col items-start md:items-end gap-2">
             {% partial status-badge %}
             {% if perms.lab.change_individual %}
               <button
                 class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-900 bg-white/90 rounded-md shadow-sm hover:bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white transition"
-                hx-get="{% url 'lab:generic_edit' %}?model_name=Individual&app_label=lab&pk={{ item.pk }}"
+                hx-get="{% url 'lab:family_create_segway' %}?individual_id={{ item.pk }}&lock_family=true"
                 hx-target="#modal-root"
                 hx-swap="innerHTML"
               >
                 <i class="fas fa-edit"></i>
-                <span>Edit Individual</span>
+                <span>Edit Family &amp; Individual</span>
               </button>
             {% endif %}
           </div>
@@ -528,6 +538,27 @@
             <p class="text-gray-900 dark:text-gray-100">
               {{ item.family.family_id|default:"—" }}
             </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Institutions
+            </h3>
+            <div class="space-y-1">
+              {% with institutions=item.institution.all %}
+                {% if institutions %}
+                  {% for inst in institutions %}
+                    <div class="flex items-center gap-2">
+                      <i class="fa-solid fa-building-columns text-blue-600 dark:text-blue-400"></i>
+                      <span class="text-gray-900 dark:text-gray-100">
+                        {{ inst.name }}
+                      </span>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <p class="text-gray-900 dark:text-gray-100">—</p>
+                {% endif %}
+              {% endwith %}
+            </div>
           </div>
         </div>
 

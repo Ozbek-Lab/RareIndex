@@ -294,12 +294,27 @@ def _get_status_filter_config(target_model_name):
 
 
 def _apply_own_search(queryset, target_model_name, request):
-    """Handles the component's own text search (from generic-search partial)."""
+    """Handles the component's own text search (from generic-search partial).
+    
+    Search syntax:
+    - Space-separated terms: OR logic with fuzzy match (icontains)
+    - "quoted term": exact match (iexact)
+    - -term: exclude fuzzy match
+    - -"quoted term": exclude exact match
+    
+    Examples:
+    - "02 03" → contains "02" OR contains "03"
+    - '"RB_2025"' → exactly "RB_2025"
+    - "02 -04" → contains "02", excluding contains "04"
+    - '-"RB_2025"' → exclude exactly "RB_2025"
+    """
+    import re
     target_config = FILTER_CONFIG.get(target_model_name, {})
     own_search_term = request.GET.get("search") or request.GET.get(f"filter_{target_model_name.lower()}")
     
     if own_search_term:
         # Check if the search term is a list of IDs (from autocomplete/combobox)
+        # Only JSON array format is treated as ID selection
         ids_to_filter = []
         if own_search_term.startswith("[") and own_search_term.endswith("]"):
             try:
@@ -307,27 +322,73 @@ def _apply_own_search(queryset, target_model_name, request):
                 ids_to_filter = json.loads(own_search_term)
             except Exception:
                 pass
-        elif "," in own_search_term:
-             # Try to parse as comma separated list of ints
-            try:
-                ids_to_filter = [int(x) for x in own_search_term.split(",") if x.strip().isdigit()]
-            except Exception:
-                pass
-        elif own_search_term.isdigit():
-            # Single ID
-            ids_to_filter = [int(own_search_term)]
         
-        # If we found IDs, filter by PK
+        # If we found IDs from JSON array, filter by PK
         if ids_to_filter:
             return queryset.filter(pk__in=ids_to_filter)
 
-        # Otherwise, perform text search
         own_search_fields = target_config.get("search_fields", [])
         if own_search_fields:
-            q_objects = Q()
-            for field in own_search_fields:
-                q_objects |= Q(**{f"{field}__icontains": own_search_term})
-            queryset = queryset.filter(q_objects)
+            # Parse all tokens: -"quoted", "quoted", -term, term
+            # Pattern matches: -"...", "...", or non-whitespace sequences
+            tokens = re.findall(r'-"[^"]+"|"[^"]+"|[^\s]+', own_search_term)
+            
+            include_exact = []
+            include_fuzzy = []
+            exclude_exact = []
+            exclude_fuzzy = []
+            
+            for token in tokens:
+                if token.startswith('-"') and token.endswith('"'):
+                    # Exclude exact: -"term"
+                    exclude_exact.append(token[2:-1])
+                elif token.startswith('"') and token.endswith('"'):
+                    # Include exact: "term"
+                    include_exact.append(token[1:-1])
+                elif token.startswith('-'):
+                    # Exclude fuzzy: -term
+                    term = token[1:]
+                    if term:
+                        exclude_fuzzy.append(term)
+                else:
+                    # Include fuzzy: term
+                    if token:
+                        include_fuzzy.append(token)
+            
+            # Build include Q (OR logic)
+            include_q = Q()
+            for term in include_exact:
+                term_q = Q()
+                for field in own_search_fields:
+                    term_q |= Q(**{f"{field}__iexact": term})
+                include_q |= term_q
+            
+            for term in include_fuzzy:
+                term_q = Q()
+                for field in own_search_fields:
+                    term_q |= Q(**{f"{field}__icontains": term})
+                include_q |= term_q
+            
+            # Build exclude Q (OR logic - exclude if matches any)
+            exclude_q = Q()
+            for term in exclude_exact:
+                term_q = Q()
+                for field in own_search_fields:
+                    term_q |= Q(**{f"{field}__iexact": term})
+                exclude_q |= term_q
+            
+            for term in exclude_fuzzy:
+                term_q = Q()
+                for field in own_search_fields:
+                    term_q |= Q(**{f"{field}__icontains": term})
+                exclude_q |= term_q
+            
+            # Apply filters
+            if include_q:
+                queryset = queryset.filter(include_q)
+            if exclude_q:
+                queryset = queryset.exclude(exclude_q)
+    
     return queryset
 
 

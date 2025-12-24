@@ -378,6 +378,7 @@
 {% partialdef detail %}
   <div
     id="task-detail"
+    data-page-title="{{ item.title }}"
     x-data="{ activeTab: 'overview' }"
     x-init="activeItem = 'detail-task-{{ item.pk }}'"
     class="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 flex flex-col h-full"
@@ -385,6 +386,13 @@
     <!-- Header Section -->
     <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start">
       <div class="flex items-center gap-4">
+        <button
+          @click="goBack()"
+          class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          title="Go back"
+        >
+          <i class="fas fa-arrow-left text-lg"></i>
+        </button>
         <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
           <i class="fa-solid fa-list-check text-2xl text-blue-600 dark:text-blue-400"></i>
         </div>
