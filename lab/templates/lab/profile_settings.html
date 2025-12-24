@@ -6,7 +6,7 @@
 
     <form 
         hx-post="{% url 'lab:profile_settings' %}" 
-        hx-target="#main-content"
+        hx-target="#profile-settings-content"
         class="space-y-6"
     >
         {% csrf_token %}

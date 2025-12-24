@@ -2012,7 +2012,11 @@ def profile_settings(request):
         profile.display_preferences = display_preferences
         profile.save()
         messages.success(request, "Settings updated successfully.")
-        return redirect("lab:profile_settings")
+        # For HTMX requests, fall through to the partial rendering below so that
+        # we only refresh the settings panel instead of re-embedding the entire SPA.
+        # For normal form POSTs, redirect back to the page.
+        if not request.headers.get("HX-Request"):
+            return redirect("lab:profile_settings")
 
     # Merge with defaults for display
     # Default to True for all keys if not present
