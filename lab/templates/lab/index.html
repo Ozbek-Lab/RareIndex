@@ -897,8 +897,17 @@
 
       // Event-scoped dispatch helper
       dispatchFiltersUpdated(scope = null) {
-        const name = scope ? `filters-updated-${scope}` : 'filters-updated';
-        window.dispatchEvent(new CustomEvent(name, { detail: { filters: this.filters } }));
+        // Always fire a global filters-updated event so list views & plots can react
+        window.dispatchEvent(
+          new CustomEvent('filters-updated', { detail: { filters: this.filters } })
+        );
+        // Additionally, fire a scoped event if provided (e.g., filters-updated-individual)
+        if (scope) {
+          const scopedName = `filters-updated-${scope}`;
+          window.dispatchEvent(
+            new CustomEvent(scopedName, { detail: { filters: this.filters } })
+          );
+        }
       },
     };
   }
