@@ -409,11 +409,17 @@ def plots_page(request):
                     hovermode='x unified',
                 )
                 chart_data = fig.to_dict()
+            else:
+                # No data available - set empty flag to prevent repeated requests
+                chart_data = {'empty': True}
 
         elif target_chart_id == 'hpo-terms':
             consolidated_hpo_counts, hpo_graph, hpo_object = process_hpo_data(individuals_queryset, threshold=hpo_threshold)
             
-            if consolidated_hpo_counts:
+            if not consolidated_hpo_counts:
+                # No data available - set empty flag to prevent repeated requests
+                chart_data = {'empty': True}
+            else:
                 def get_term_name(term_id):
                     for frame in hpo_object:
                         if isinstance(frame, fastobo.term.TermFrame) and str(frame.id) == term_id:
