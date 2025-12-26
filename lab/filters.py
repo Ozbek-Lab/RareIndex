@@ -293,6 +293,101 @@ def _get_status_filter_config(target_model_name):
     return config.get("status_filter")
 
 
+def _is_encrypted_field(model, field_name):
+    """Check if a field is an encrypted field."""
+    try:
+        field = model._meta.get_field(field_name.split('__')[0])
+        # Try using EncryptedFieldMixin first
+        try:
+            from encrypted_model_fields.fields import EncryptedFieldMixin
+            if isinstance(field, EncryptedFieldMixin):
+                return True
+        except ImportError:
+            pass
+        
+        # Fallback: check if 'Encrypted' is in the class name
+        field_class_name = field.__class__.__name__
+        if 'Encrypted' in field_class_name:
+            return True
+        
+        return False
+    except (AttributeError, Exception):
+        return False
+
+
+def _separate_encrypted_fields(model, search_fields):
+    """Separate encrypted fields from regular fields."""
+    encrypted_fields = []
+    regular_fields = []
+    
+    for field in search_fields:
+        if _is_encrypted_field(model, field):
+            encrypted_fields.append(field)
+        else:
+            regular_fields.append(field)
+    
+    return encrypted_fields, regular_fields
+
+
+def _filter_encrypted_fields(queryset, encrypted_fields, terms, exact_match=False, exclude=False):
+    """Filter queryset by encrypted fields in Python.
+    
+    Uses OR logic: matches if ANY term matches ANY encrypted field.
+    """
+    if not encrypted_fields or not terms:
+        return queryset
+    
+    matching_pks = []
+    search_terms_lower = [term.lower() for term in terms]
+    
+    # Load all records to decrypt and filter
+    # Evaluate queryset to list to ensure we get all records
+    try:
+        all_objects = list(queryset)
+    except Exception:
+        # If that fails, try iterating
+        all_objects = [obj for obj in queryset]
+    
+    for obj in all_objects:
+        match_found = False
+        for field_name in encrypted_fields:
+            field_path_parts = field_name.split('__')
+            field_name_only = field_path_parts[0]
+            
+            try:
+                field_value = getattr(obj, field_name_only)
+                if field_value:
+                    field_value_str = str(field_value).lower()
+                    
+                    # Check if any term matches this field (OR logic)
+                    for search_term_lower in search_terms_lower:
+                        if exact_match:
+                            if field_value_str == search_term_lower:
+                                match_found = True
+                                break
+                        else:
+                            if search_term_lower in field_value_str:
+                                match_found = True
+                                break
+                    
+                    if match_found:
+                        break
+            except (AttributeError, Exception):
+                continue
+        
+        if match_found:
+            matching_pks.append(obj.pk)
+    
+    if exclude:
+        if matching_pks:
+            return queryset.exclude(pk__in=matching_pks)
+        return queryset
+    else:
+        if matching_pks:
+            return queryset.filter(pk__in=matching_pks)
+        return queryset.none()
+
+
 def _apply_own_search(queryset, target_model_name, request):
     """Handles the component's own text search (from generic-search partial).
     
@@ -329,6 +424,13 @@ def _apply_own_search(queryset, target_model_name, request):
 
         own_search_fields = target_config.get("search_fields", [])
         if own_search_fields:
+            # Get the model to check for encrypted fields
+            target_app_label = target_config.get("app_label", "lab")
+            target_model = apps.get_model(app_label=target_app_label, model_name=target_model_name)
+            
+            # Separate encrypted and regular fields
+            encrypted_fields, regular_fields = _separate_encrypted_fields(target_model, own_search_fields)
+            
             # Parse all tokens: -"quoted", "quoted", -term, term
             # Pattern matches: -"...", "...", or non-whitespace sequences
             tokens = re.findall(r'-"[^"]+"|"[^"]+"|[^\s]+', own_search_term)
@@ -355,39 +457,83 @@ def _apply_own_search(queryset, target_model_name, request):
                     if token:
                         include_fuzzy.append(token)
             
-            # Build include Q (OR logic)
+            # Build include Q for regular fields (OR logic)
             include_q = Q()
             for term in include_exact:
                 term_q = Q()
-                for field in own_search_fields:
+                for field in regular_fields:
                     term_q |= Q(**{f"{field}__iexact": term})
                 include_q |= term_q
             
             for term in include_fuzzy:
                 term_q = Q()
-                for field in own_search_fields:
+                for field in regular_fields:
                     term_q |= Q(**{f"{field}__icontains": term})
                 include_q |= term_q
             
-            # Build exclude Q (OR logic - exclude if matches any)
+            # Build exclude Q for regular fields (OR logic - exclude if matches any)
             exclude_q = Q()
             for term in exclude_exact:
                 term_q = Q()
-                for field in own_search_fields:
+                for field in regular_fields:
                     term_q |= Q(**{f"{field}__iexact": term})
                 exclude_q |= term_q
             
             for term in exclude_fuzzy:
                 term_q = Q()
-                for field in own_search_fields:
+                for field in regular_fields:
                     term_q |= Q(**{f"{field}__icontains": term})
                 exclude_q |= term_q
             
-            # Apply filters
+            # Collect matching PKs from regular fields
+            include_regular_pks = set()
             if include_q:
-                queryset = queryset.filter(include_q)
+                include_regular_pks.update(queryset.filter(include_q).values_list("pk", flat=True))
+            
+            # Collect matching PKs from encrypted fields (OR logic with regular fields)
+            include_encrypted_pks = set()
+            if encrypted_fields:
+                if include_exact:
+                    exact_queryset = _filter_encrypted_fields(queryset, encrypted_fields, include_exact, exact_match=True, exclude=False)
+                    exact_pks = list(exact_queryset.values_list("pk", flat=True))
+                    include_encrypted_pks.update(exact_pks)
+                if include_fuzzy:
+                    fuzzy_queryset = _filter_encrypted_fields(queryset, encrypted_fields, include_fuzzy, exact_match=False, exclude=False)
+                    fuzzy_pks = list(fuzzy_queryset.values_list("pk", flat=True))
+                    include_encrypted_pks.update(fuzzy_pks)
+            
+            # Combine regular and encrypted PKs with OR logic
+            all_include_pks = include_regular_pks | include_encrypted_pks
+            
+            # Apply include filter
+            if all_include_pks:
+                queryset = queryset.filter(pk__in=list(all_include_pks))
+            elif (include_exact or include_fuzzy or include_q):
+                # If we had search terms but no matches, return empty
+                queryset = queryset.none()
+            
+            # Handle exclude filters
+            exclude_regular_pks = set()
             if exclude_q:
-                queryset = queryset.exclude(exclude_q)
+                exclude_regular_pks.update(queryset.filter(exclude_q).values_list("pk", flat=True))
+            
+            exclude_encrypted_pks = set()
+            if encrypted_fields:
+                if exclude_exact:
+                    exact_exclude_queryset = _filter_encrypted_fields(queryset, encrypted_fields, exclude_exact, exact_match=True, exclude=False)
+                    exact_exclude_pks = list(exact_exclude_queryset.values_list("pk", flat=True))
+                    exclude_encrypted_pks.update(exact_exclude_pks)
+                if exclude_fuzzy:
+                    fuzzy_exclude_queryset = _filter_encrypted_fields(queryset, encrypted_fields, exclude_fuzzy, exact_match=False, exclude=False)
+                    fuzzy_exclude_pks = list(fuzzy_exclude_queryset.values_list("pk", flat=True))
+                    exclude_encrypted_pks.update(fuzzy_exclude_pks)
+            
+            # Combine exclude PKs with OR logic
+            all_exclude_pks = exclude_regular_pks | exclude_encrypted_pks
+            
+            # Apply exclude filter
+            if all_exclude_pks:
+                queryset = queryset.exclude(pk__in=list(all_exclude_pks))
     
     return queryset
 
@@ -522,21 +668,67 @@ def _apply_cross_model_text_filter(queryset, target_config, filter_key, filter_v
     filter_app_label = filter_model_config.get("app_label", "lab")
     filter_model = apps.get_model(app_label=filter_app_label, model_name=filter_model_name)
 
+    # Separate encrypted and regular fields
+    encrypted_fields, regular_fields = _separate_encrypted_fields(filter_model, search_fields)
+
+    # Build Q objects for regular fields
     q_objects = Q()
     for filter_value in filter_values:
         # If the value is a digit, it might be a PK (from a combobox selection)
         if filter_value.isdigit():
             q_objects |= Q(pk=filter_value)
         
-        # Also search by text fields
-        for field in search_fields:
+        # Also search by regular text fields
+        for field in regular_fields:
             q_objects |= Q(**{f"{field}__icontains": filter_value})
 
-    pks_to_filter_by = list(filter_model.objects.filter(q_objects).values_list("pk", flat=True).distinct())
+    # Get PKs from regular field search
+    pks_to_filter_by = set()
+    if q_objects:
+        pks_from_regular = list(filter_model.objects.filter(q_objects).values_list("pk", flat=True).distinct())
+        pks_to_filter_by.update(pks_from_regular)
+    
+    # Handle encrypted fields separately
+    if encrypted_fields:
+        # Get all objects to search encrypted fields
+        base_queryset = filter_model.objects.all()
+        if q_objects:
+            # If we already have results from regular fields, use those
+            base_queryset = base_queryset.filter(q_objects)
+        
+        for filter_value in filter_values:
+            if not filter_value.isdigit():  # Skip numeric values (already handled)
+                # Filter by encrypted fields
+                encrypted_pks = []
+                for obj in base_queryset:
+                    match_found = False
+                    for field_name in encrypted_fields:
+                        field_path_parts = field_name.split('__')
+                        field_name_only = field_path_parts[0]
+                        
+                        try:
+                            field_value = getattr(obj, field_name_only)
+                            if field_value:
+                                field_value_str = str(field_value).lower()
+                                if filter_value.lower() in field_value_str:
+                                    match_found = True
+                                    break
+                        except (AttributeError, Exception):
+                            continue
+                    
+                    if match_found:
+                        encrypted_pks.append(obj.pk)
+                
+                if encrypted_pks:
+                    pks_to_filter_by.update(encrypted_pks)
+                elif not q_objects:
+                    # If no regular fields matched and no encrypted fields matched, return empty
+                    return queryset.none()
+
     if not pks_to_filter_by:
         return queryset.none()
 
-    lookup = {f"{orm_path}__in": pks_to_filter_by}
+    lookup = {f"{orm_path}__in": list(pks_to_filter_by)}
     return queryset.exclude(**lookup) if exclude else queryset.filter(**lookup)
 
 
