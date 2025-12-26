@@ -16,6 +16,9 @@ from django.template.response import TemplateResponse
 from django.contrib import messages
 import json
 
+# Import encrypted field filtering functions
+from .filters import _is_encrypted_field, _separate_encrypted_fields, _filter_encrypted_fields
+
 # Import models
 from .models import (
     Individual,
@@ -333,22 +336,61 @@ def generic_search(request):
                     # individual_id is a property, so we search on cross_ids__id_value instead
                     if target_model_name == "Individual" and label_field == "individual_id":
                         # Search on cross_ids__id_value (the actual database field containing ID values)
-                        base_qs = base_qs.filter(cross_ids__id_value__icontains=own_search_term).distinct()
+                        # Also search by full_name (encrypted field)
+                        q_label = Q(cross_ids__id_value__icontains=own_search_term)
+                        
+                        # Search by full_name using encrypted field filtering
+                        encrypted_queryset = _filter_encrypted_fields(
+                            base_qs, 
+                            ["full_name"], 
+                            [own_search_term], 
+                            exact_match=False, 
+                            exclude=False
+                        )
+                        encrypted_pks = set(encrypted_queryset.values_list("pk", flat=True))
+                        
+                        # Get PKs from cross_ids search
+                        cross_ids_pks = set(base_qs.filter(q_label).values_list("pk", flat=True))
+                        
+                        # Combine both searches with OR logic
+                        all_pks = cross_ids_pks | encrypted_pks
+                        
+                        if all_pks:
+                            base_qs = base_qs.filter(pk__in=list(all_pks)).distinct()
+                        else:
+                            base_qs = base_qs.none()
                     else:
                         # Try direct icontains on specified label field
                         # BUT ALSO include cross_id search for related models if applicable
                         q_label = Q(**{f"{label_field}__icontains": own_search_term})
                         
-                        if target_model_name == "Sample":
-                            q_label |= Q(individual__cross_ids__id_value__icontains=own_search_term)
-                        elif target_model_name == "Test":
-                            q_label |= Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
-                        elif target_model_name == "Analysis":
-                            q_label |= Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
-                        elif target_model_name == "Variant":
-                            q_label |= Q(individual__cross_ids__id_value__icontains=own_search_term)
-                            
-                        base_qs = base_qs.filter(q_label).distinct()
+                        # For Individual model, also search by full_name (encrypted field)
+                        if target_model_name == "Individual":
+                            encrypted_queryset = _filter_encrypted_fields(
+                                base_qs,
+                                ["full_name"],
+                                [own_search_term],
+                                exact_match=False,
+                                exclude=False
+                            )
+                            encrypted_pks = set(encrypted_queryset.values_list("pk", flat=True))
+                            label_pks = set(base_qs.filter(q_label).values_list("pk", flat=True))
+                            all_pks = label_pks | encrypted_pks
+                            if all_pks:
+                                base_qs = base_qs.filter(pk__in=list(all_pks)).distinct()
+                            else:
+                                base_qs = base_qs.none()
+                        else:
+                            if target_model_name == "Sample":
+                                q_label |= Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            elif target_model_name == "Test":
+                                q_label |= Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            elif target_model_name == "Analysis":
+                                q_label |= Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            elif target_model_name == "Variant":
+                                q_label |= Q(individual__cross_ids__id_value__icontains=own_search_term)
+                                
+                            base_qs = base_qs.filter(q_label).distinct()
                 else:
                     # Fallback: OR over all CharField/TextField
                     text_fields = []
@@ -359,26 +401,61 @@ def generic_search(request):
                                 text_fields.append(f.name)
                     except Exception:
                         text_fields = []
-                    if text_fields:
-                        qobj = Q()
-                        for fname in text_fields:
-                            qobj |= Q(**{f"{fname}__icontains": own_search_term})
+                    
+                    # For Individual model, use encrypted field filtering for full_name
+                    if target_model_name == "Individual":
+                        # Separate encrypted and regular fields
+                        encrypted_fields, regular_fields = _separate_encrypted_fields(target_model, text_fields)
                         
-                        # Special handling for Individual: also search cross_ids
-                        if target_model_name == "Individual":
+                        # Search regular fields
+                        regular_pks = set()
+                        if regular_fields:
+                            qobj = Q()
+                            for fname in regular_fields:
+                                qobj |= Q(**{f"{fname}__icontains": own_search_term})
                             qobj |= Q(cross_ids__id_value__icontains=own_search_term)
-                        elif target_model_name == "Sample":
-                            qobj |= Q(individual__cross_ids__id_value__icontains=own_search_term)
-                        elif target_model_name == "Test":
-                            qobj |= Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
-                        elif target_model_name == "Analysis":
-                            qobj |= Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
-                        elif target_model_name == "Variant":
-                            qobj |= Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            regular_pks = set(base_qs.filter(qobj).values_list("pk", flat=True))
+                        
+                        # Search encrypted fields
+                        encrypted_pks = set()
+                        if encrypted_fields:
+                            encrypted_queryset = _filter_encrypted_fields(
+                                base_qs,
+                                encrypted_fields,
+                                [own_search_term],
+                                exact_match=False,
+                                exclude=False
+                            )
+                            encrypted_pks = set(encrypted_queryset.values_list("pk", flat=True))
+                        
+                        # Combine results
+                        all_pks = regular_pks | encrypted_pks
+                        if all_pks:
+                            base_qs = base_qs.filter(pk__in=list(all_pks)).distinct()
+                        else:
+                            base_qs = base_qs.none()
+                    else:
+                        if text_fields:
+                            qobj = Q()
+                            for fname in text_fields:
+                                qobj |= Q(**{f"{fname}__icontains": own_search_term})
                             
-                        base_qs = base_qs.filter(qobj).distinct()
-            except Exception:
+                            # Special handling for Individual: also search cross_ids
+                            if target_model_name == "Sample":
+                                qobj |= Q(individual__cross_ids__id_value__icontains=own_search_term)
+                            elif target_model_name == "Test":
+                                qobj |= Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            elif target_model_name == "Analysis":
+                                qobj |= Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            elif target_model_name == "Variant":
+                                qobj |= Q(individual__cross_ids__id_value__icontains=own_search_term)
+                                
+                            base_qs = base_qs.filter(qobj).distinct()
+            except Exception as e:
                 # If filtering fails, leave base_qs as-is
+                import traceback
+                print(f"Error in combobox search: {e}")
+                print(traceback.format_exc())
                 pass
 
         # Rebuild pagination after search filtering
