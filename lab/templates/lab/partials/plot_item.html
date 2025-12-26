@@ -1,7 +1,7 @@
 {% load lab_filters %}
 <div id="plot-container-{{ plot_data.id }}" 
      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
-     {% if not plot_data.chart_data and not plot_data.chart_data.empty %}
+     {% if not plot_data.chart_data %}
      hx-get="{% url 'lab:plots' %}?chart_id={{ plot_data.id }}"
      hx-trigger="load"
      hx-swap="outerHTML"
