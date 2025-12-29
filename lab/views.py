@@ -3229,6 +3229,15 @@ def family_create_segway(request):
                 family_initial_label = ""
                 family_initial_value = ""
 
+        # Get individual statuses for the Status dropdown
+        individual_statuses = Status.objects.filter(
+            Q(content_type=ContentType.objects.get_for_model(Individual))
+            | Q(content_type__isnull=True)
+        ).order_by("name")
+        
+        # Get identifier types for the Primary ID dropdown
+        identifier_types = IdentifierType.objects.all().order_by("name")
+        
         return render(
             request,
             "lab/crud.html#family-create-form",
@@ -3238,6 +3247,8 @@ def family_create_segway(request):
                 "lock_family": lock_family,
                 "family_initial_label": family_initial_label,
                 "family_initial_value": family_initial_value,
+                "individual_statuses": individual_statuses,
+                "identifier_types": identifier_types,
             },
         )
 
