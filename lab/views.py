@@ -3093,7 +3093,29 @@ def _create_individual(data, family, user, default_status):
     Returns (individual, created, error_message).
     """
     if not data.get("full_name"):
+        print(f"[DEBUG] Individual creation ABORTED: Missing full_name. Data: {data.get('id', 'new')}")
         return None, False, "Full name is required"
+
+    # Resolve mother and father from cross identifiers or PKs
+    mother_val = data.get("mother") or data.get("mother_query")
+    father_val = data.get("father") or data.get("father_query")
+    
+    mother_pk = None
+    father_pk = None
+    
+    if mother_val:
+        mother_obj = _resolve_parent(mother_val)
+        if mother_obj:
+            mother_pk = mother_obj.pk
+        else:
+            print(f"[DEBUG] Individual {data.get('id', 'new')}: Failed to resolve mother '{mother_val}' - parent relationship will be None")
+    
+    if father_val:
+        father_obj = _resolve_parent(father_val)
+        if father_obj:
+            father_pk = father_obj.pk
+        else:
+            print(f"[DEBUG] Individual {data.get('id', 'new')}: Failed to resolve father '{father_val}' - parent relationship will be None")
 
     # Prepare form data
     form_data = {
@@ -3105,8 +3127,8 @@ def _create_individual(data, family, user, default_status):
         "council_date": data.get("council_date"),
         "diagnosis": data.get("diagnosis"),
         "diagnosis_date": data.get("diagnosis_date"),
-        "mother": data.get("mother"),
-        "father": data.get("father"),
+        "mother": mother_pk,
+        "father": father_pk,
         "institution": data.get("institution"),
         "hpo_terms": data.get("hpo_term_ids") or data.get("hpo_terms"),
         "status": data.get("status"),
@@ -3151,8 +3173,10 @@ def _create_individual(data, family, user, default_status):
     if form_data.get("id"):
         try:
             instance = Individual.objects.get(pk=int(form_data["id"]))
-        except Exception:
-            pass
+        except Individual.DoesNotExist:
+            print(f"[DEBUG] Individual creation ABORTED: Instance with id={form_data['id']} not found - treating as new individual")
+        except Exception as e:
+            print(f"[DEBUG] Individual creation ABORTED: Error looking up instance id={form_data.get('id')}: {e}")
 
     from .forms import IndividualForm
     if instance:
@@ -3165,14 +3189,26 @@ def _create_individual(data, family, user, default_status):
         indiv.created_by = user
         indiv.save()
         form.save_m2m()
+        action = "CREATED" if instance is None else "UPDATED"
+        print(f"[DEBUG] Individual {action} successfully: id={indiv.pk}, name={indiv.full_name}")
         return indiv, instance is None, None
     else:
+        individual_id = data.get("id", "new")
+        full_name = data.get("full_name", "unknown")
+        print(f"[DEBUG] Individual creation/update ABORTED: Validation failed for id={individual_id}, name={full_name}. Errors: {form.errors}")
         return None, False, f"Validation error: {form.errors}"
 
 
 def _resolve_parent(val):
     """
-    Resolves a parent individual from ID or CrossIdentifier value.
+    Resolves a parent individual from ID or CrossIdentifier value (individual_id).
+    
+    This function handles:
+    - Numeric primary keys (e.g., "8", "9")
+    - Cross identifier values (individual_ids) like "RB_2025_03.2", "RD3.F03.2"
+      These are stored in CrossIdentifier.id_value and can be looked up directly.
+    
+    Returns the Individual object if found, None otherwise.
     """
     if not val:
         return None
@@ -3180,17 +3216,24 @@ def _resolve_parent(val):
     if not sval:
         return None
         
-    # Try ID first
+    # Try numeric primary key first
     if sval.isdigit():
         ind = Individual.objects.filter(pk=int(sval)).first()
         if ind:
             return ind
             
-    # Try CrossIdentifier
+    # Try CrossIdentifier lookup by id_value (individual_id)
+    # This handles cross identifiers like "RB_2025_03.2", "RD3.F03.2", etc.
     from .models import CrossIdentifier
     ci = CrossIdentifier.objects.filter(id_value=sval).first()
     if ci:
         return ci.individual
+    
+    # Also try case-insensitive match in case of variations
+    ci_case_insensitive = CrossIdentifier.objects.filter(id_value__iexact=sval).first()
+    if ci_case_insensitive:
+        return ci_case_insensitive.individual
+    
     return None
 
 
