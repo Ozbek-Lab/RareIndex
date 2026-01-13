@@ -11,6 +11,17 @@ services:
     depends_on:
       - db
 
+  caddy:
+    image: docker.io/library/caddy:2
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - .:/app:z
+    ports:
+      - "8080:80"
+      - "8443:443"
+    depends_on:
+      - web
+
   db:
     image: postgres:18
     volumes:
