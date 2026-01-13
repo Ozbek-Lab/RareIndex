@@ -1,7 +1,14 @@
-{$DOMAIN_NAME}:80 {
-    # Set this path to be the same as the STATIC_ROOT in settings.py
+10.100.12.79:443 {
+    # Local HTTPS using Caddy's internal
+    tls internal
+
+    # Serve static files (must match STATIC_ROOT in settings.py)
     root * /app/staticfiles
     file_server
 
-    reverse_proxy web:8000
+    # Reverse proxy Django app
+    reverse_proxy web:8000 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up Host rare
+    }
 }
