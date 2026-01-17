@@ -159,9 +159,9 @@ FILTER_CONFIG = {
                 "select_filter_path": "type__name",
             },
             "test_type": {
-                "field_path": "test_type__name",
+                "field_path": "test__test_type__name",
                 "label": "Test Type",
-                "select_filter_path": "test_type__name",
+                "select_filter_path": "test__test_type__name",
             },
         },
         "status_filter": {
