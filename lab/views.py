@@ -1158,7 +1158,11 @@ def update_status(request):
             
             # Determine which partial to return based on view parameter
             view_type = request.POST.get("view", "card")  # Default to card for list views
-            template_name = f"{app_label}/{model_name.lower()}.html"
+            # Handle variant template path
+            if app_label == "variant":
+                template_name = "variant/variant.html"
+            else:
+                template_name = f"{app_label}/{model_name.lower()}.html"
             
             if view_type == "detail":
                 partial_name = "status-badge"

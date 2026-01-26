@@ -344,9 +344,7 @@
     </div>
   </td>
   <td class="px-4 py-3 text-sm">
-    {% with float="" color=item.status.color text=item.status.name %}
-      {% include 'lab/partials/badge.html#badge' %}
-    {% endwith %}
+    {% partial status-badge-card %}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     <button
