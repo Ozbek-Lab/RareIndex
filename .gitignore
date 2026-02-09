@@ -43,6 +43,7 @@ staticfiles/
 *.xlsx
 *.tsv
 *.csv
+*.dump
 
 # User-specific files
 create_ozbek_users.py
