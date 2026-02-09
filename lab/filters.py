@@ -23,7 +23,8 @@ FILTER_CONFIG = {
             "Individual": "variants__individual__pk",
             "Sample": "variants__individual__samples__pk",
             "Test": "variants__individual__samples__tests__pk",
-            "Analysis": "variants__individual__samples__tests__analyses__pk",
+            "Pipeline": "variants__individual__samples__tests__pipelines__pk",
+            "Analysis": "variants__analysis__pk",
             "Project": "variants__individual__projects__pk",
         },
     },
@@ -35,7 +36,8 @@ FILTER_CONFIG = {
             "Term": "hpo_terms__pk",
             "Sample": "samples__pk",
             "Test": "samples__tests__pk",
-            "Analysis": "samples__tests__analyses__pk",
+            "Pipeline": "samples__tests__pipelines__pk",
+            "Analysis": "samples__tests__pipelines__analyses__pk",
             "Project": "projects__pk",
             "Variant": "variants__pk",
             "Gene": "variants__genes__pk",
@@ -51,10 +53,15 @@ FILTER_CONFIG = {
                 "label": "Test Type",
                 "select_filter_path": "samples__tests__test_type__name",
             },
+            "pipeline_type": {
+                "field_path": "samples__tests__pipelines__type__name",
+                "label": "Pipeline Type",
+                "select_filter_path": "samples__tests__pipelines__type__name",
+            },
             "analysis_type": {
-                "field_path": "samples__tests__analyses__type__name",
+                "field_path": "samples__tests__pipelines__analyses__type__name",
                 "label": "Analysis Type",
-                "select_filter_path": "samples__tests__analyses__type__name",
+                "select_filter_path": "samples__tests__pipelines__analyses__type__name",
             },
         },
         "status_filter": {
@@ -75,7 +82,8 @@ FILTER_CONFIG = {
             "Institution": "individual__institution__pk",
             "Term": "individual__hpo_terms__pk",
             "Test": "tests__pk",
-            "Analysis": "tests__analyses__pk",
+            "Pipeline": "tests__pipelines__pk",
+            "Analysis": "tests__pipelines__analyses__pk",
             "Variant": "individual__variants__pk",
             "Gene": "individual__variants__genes__pk",
             "Project": "individual__projects__pk",
@@ -104,7 +112,7 @@ FILTER_CONFIG = {
             "Individual": "sample__individual__pk",
             "Sample": "sample__pk",
             "Institution": "sample__individual__institution__pk",
-            "Analysis": "analyses__pk",
+            "Pipeline": "pipelines__pk",
             "Variant": "analyses__found_variants__pk",
             "Gene": "analyses__found_variants__genes__pk",
             "Project": "sample__individual__projects__pk",
@@ -115,10 +123,15 @@ FILTER_CONFIG = {
                 "label": "Sample Type",
                 "select_filter_path": "sample__sample_type__name",
             },
+            "pipeline_type": {
+                "field_path": "pipelines__type__name",
+                "label": "Pipeline Type",
+                "select_filter_path": "pipelines__type__name",
+            },
             "analysis_type": {
-                "field_path": "analyses__type__name",
+                "field_path": "pipelines__analyses__type__name",
                 "label": "Analysis Type",
-                "select_filter_path": "analyses__type__name",
+                "select_filter_path": "pipelines__analyses__type__name",
             },
             "test_type": {
                 "field_path": "test_type__name",
@@ -131,20 +144,21 @@ FILTER_CONFIG = {
             "label": "Status",
         },
     },
-    "Analysis": {
+    "Pipeline": {
         "app_label": "lab",
         "search_fields": ["type__name", "test__sample__individual__full_name", "test__sample__individual__cross_ids__id_value"],
         "type_info": {
-            "model": "AnalysisType",
-            "filter_field": "analysis_type",
+            "model": "PipelineType",
+            "filter_field": "pipeline_type",
             "pk_field": "pk",
         },
         "filters": {
             "Test": "test__pk",
             "Sample": "test__sample__pk",
             "Individual": "test__sample__individual__pk",
-            "Variant": "found_variants__pk",
-            "Gene": "found_variants__genes__pk",
+            "Analysis": "analyses__pk",
+            "Variant": "analyses__found_variants__pk",
+            "Gene": "analyses__found_variants__genes__pk",
             "Project": "test__sample__individual__projects__pk",
         },
         "select_fields": {
@@ -153,15 +167,74 @@ FILTER_CONFIG = {
                 "label": "Sample Type",
                 "select_filter_path": "test__sample__sample_type__name",
             },
-            "analysis_type": {
+            "pipeline_type": {
                 "field_path": "type__name",
-                "label": "Analysis Type",
+                "label": "Pipeline Type",
                 "select_filter_path": "type__name",
+            },
+            "analysis_type": {
+                "field_path": "analyses__type__name",
+                "label": "Analysis Type",
+                "select_filter_path": "analyses__type__name",
             },
             "test_type": {
                 "field_path": "test__test_type__name",
                 "label": "Test Type",
                 "select_filter_path": "test__test_type__name",
+            },
+        },
+        "status_filter": {
+            "field_path": "status__pk",
+            "label": "Status",
+        },
+    },
+    "Analysis": {
+        "app_label": "lab",
+        "search_fields": ["type__name", "pipeline__test__sample__individual__full_name", "pipeline__test__sample__individual__cross_ids__id_value"],
+        "type_info": {
+            "model": "AnalysisType",
+            "filter_field": "analysis_type",
+            "pk_field": "pk",
+        },
+        "filters": {
+            "Pipeline": "pipeline__pk",
+            "Test": "pipeline__test__pk",
+            "Sample": "pipeline__test__sample__pk",
+            "Individual": "pipeline__test__sample__individual__pk",
+            "Variant": "found_variants__pk",
+            "Gene": "found_variants__genes__pk",
+            "Project": "pipeline__test__sample__individual__projects__pk",
+        },
+        "select_fields": {
+            "sample_type": {
+                "field_path": "pipeline__test__sample__sample_type__name",
+                "label": "Sample Type",
+                "select_filter_path": "pipeline__test__sample__sample_type__name",
+            },
+            "analysis_type": {
+                "field_path": "type__name",
+                "label": "Analysis Type",
+                "select_filter_path": "type__name",
+            },
+            "pipeline_type": {
+                "field_path": "pipeline__type__name",
+                "label": "Pipeline Type",
+                "select_filter_path": "pipeline__type__name",
+            },
+            "test_type": {
+                "field_path": "analysis__pipeline__test__test_type__name",
+                "label": "Test Type",
+                "select_filter_path": "analysis__pipeline__test__test_type__name",
+            },
+            "analysis_type": {
+                "field_path": "analysis__type__name",
+                "label": "Analysis Type",
+                "select_filter_path": "analysis__type__name",
+            },
+            "pipeline_type": {
+                "field_path": "analysis__pipeline__type__name",
+                "label": "Pipeline Type",
+                "select_filter_path": "analysis__pipeline__type__name",
             },
         },
         "status_filter": {
@@ -178,8 +251,10 @@ FILTER_CONFIG = {
             "SampleType": "individuals__samples__sample_type__pk",
             "Test": "individuals__samples__tests__pk",
             "TestType": "individuals__samples__tests__test_type__pk",
-            "Analysis": "individuals__samples__tests__analyses__pk",
-            "AnalysisType": "individuals__samples__tests__analyses__type__pk",
+            "Pipeline": "individuals__samples__tests__pipelines__pk",
+            "PipelineType": "individuals__samples__tests__pipelines__type__pk",
+            "Analysis": "individuals__samples__tests__pipelines__analyses__pk",
+            "AnalysisType": "individuals__samples__tests__pipelines__analyses__type__pk",
             "Project": "individuals__projects__pk",
         },
         "select_fields": {
@@ -193,10 +268,15 @@ FILTER_CONFIG = {
                 "label": "Test Type",
                 "select_filter_path": "individuals__samples__tests__test_type__name",
             },
+            "pipeline_type": {
+                "field_path": "individuals__samples__tests__pipelines__type__name",
+                "label": "Pipeline Type",
+                "select_filter_path": "individuals__samples__tests__pipelines__type__name",
+            },
             "analysis_type": {
-                "field_path": "individuals__samples__tests__analyses__type__name",
+                "field_path": "individuals__samples__tests__pipelines__analyses__type__name",
                 "label": "Analysis Type",
-                "select_filter_path": "individuals__samples__tests__analyses__type__name",
+                "select_filter_path": "individuals__samples__tests__pipelines__analyses__type__name",
             },
         },
     },
@@ -244,8 +324,8 @@ FILTER_CONFIG = {
         },
         "filters": {
             "Individual": "individual__pk",
-            "Analysis": "analysis__pk",
-            "Test": "analysis__test__pk",
+            "Pipeline": "pipeline__pk",
+            "Test": "pipeline__test__pk",
             "Gene": "genes__pk",
             "Project": "individual__projects__pk",
         },
@@ -261,14 +341,14 @@ FILTER_CONFIG = {
                 "select_filter_path": "classifications__inheritance",
             },
             "test_type": {
-                "field_path": "analysis__test__test_type__name",
+                "field_path": "pipeline__test__test_type__name",
                 "label": "Test Type",
-                "select_filter_path": "analysis__test__test_type__name",
+                "select_filter_path": "pipeline__test__test_type__name",
             },
-            "analysis_type": {
-                "field_path": "analysis__type__name",
-                "label": "Analysis Type",
-                "select_filter_path": "analysis__type__name",
+            "pipeline_type": {
+                "field_path": "pipeline__type__name",
+                "label": "Pipeline Type",
+                "select_filter_path": "pipeline__type__name",
             },
         },
         "status_filter": {
@@ -956,12 +1036,18 @@ def _apply_sorting(request, target_model_name, queryset):
         )
         if needs_related_identifier:
             queryset = _annotate_related_identifier(queryset, "sample__individual", "individual_identifier")
-    elif target_model_name == "Analysis":
+    elif target_model_name == "Pipeline":
         needs_related_identifier = any(
             sort_options.get(sort_key) == "individual_identifier" for sort_key, _ in sort_params
         )
         if needs_related_identifier:
             queryset = _annotate_related_identifier(queryset, "test__sample__individual", "individual_identifier")
+    elif target_model_name == "Analysis":
+        needs_related_identifier = any(
+            sort_options.get(sort_key) == "individual_identifier" for sort_key, _ in sort_params
+        )
+        if needs_related_identifier:
+            queryset = _annotate_related_identifier(queryset, "pipeline__test__sample__individual", "individual_identifier")
     # Variant type annotations
     if target_model_name == "Variant":
         needs_variant_type = any(
@@ -969,6 +1055,12 @@ def _apply_sorting(request, target_model_name, queryset):
         )
         if needs_variant_type:
             queryset = _annotate_variant_type(queryset, prefix="")
+    elif target_model_name == "Pipeline":
+        needs_variant_type = any(
+            sort_options.get(sort_key) == "variant_type_label" for sort_key, _ in sort_params
+        )
+        if needs_variant_type:
+            queryset = _annotate_variant_type(queryset, prefix="found_variants__")
     elif target_model_name == "Analysis":
         needs_variant_type = any(
             sort_options.get(sort_key) == "variant_type_label" for sort_key, _ in sort_params
@@ -1138,11 +1230,11 @@ SORT_CONFIG = {
         {"key": "test_type", "label": "Test Type", "field": "test_type__name"},
         {"key": "individual", "label": "Individual", "field": "individual_identifier"},
     ],
-    "Analysis": [
+    "Pipeline": [
         {"key": "performed_date", "label": "Performed Date", "field": "performed_date"},
         {"key": "created", "label": "Created", "field": "pk"},
         {"key": "status", "label": "Status", "field": "status__name"},
-        {"key": "analysis_type", "label": "Analysis Type", "field": "type__name"},
+        {"key": "pipeline_type", "label": "Pipeline Type", "field": "type__name"},
         {"key": "individual", "label": "Individual", "field": "individual_identifier"},
         {"key": "gene", "label": "Gene", "field": "found_variants__genes__symbol"},
         {"key": "variant", "label": "Variant", "field": "found_variants__pk"},
@@ -1186,5 +1278,16 @@ SORT_CONFIG = {
         {"key": "individual", "label": "Individual", "field": "individual__individual_id"},
         {"key": "variant_type", "label": "Variant Type", "field": "variant_type_label"},
         {"key": "analysis", "label": "Analysis", "field": "analysis__type__name"},
+        {"key": "pipeline", "label": "Pipeline", "field": "analysis__pipeline__type__name"},
+    ],
+    "Analysis": [
+        {"key": "performed_date", "label": "Performed Date", "field": "performed_date"},
+        {"key": "created", "label": "Created", "field": "pk"},
+        {"key": "status", "label": "Status", "field": "status__name"},
+        {"key": "analysis_type", "label": "Analysis Type", "field": "type__name"},
+        {"key": "individual", "label": "Individual", "field": "individual_identifier"},
+        {"key": "gene", "label": "Gene", "field": "found_variants__genes__symbol"},
+        {"key": "variant", "label": "Variant", "field": "found_variants__pk"},
+        {"key": "variant_type", "label": "Variant Type", "field": "variant_type_label"},
     ]
 }

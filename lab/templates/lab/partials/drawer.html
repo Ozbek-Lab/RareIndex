@@ -70,15 +70,30 @@
             {% include "lab/partials/partials.html#generic-status-filter" %}
           {% endwith %}
         </div>
+        <!-- Pipelines -->
+        <div>
+          <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          </h6>
+          {% with app_label='lab' model_name='Pipeline' icon_class='fa-laptop' name='pipeline' value_field='id' initial=initial_pipelines is_filter='True' %}
+            {% include "lab/partials/partials.html#generic-combobox" %}
+            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-pipeline from:window, filters-updated from:window, filters-updated-pipeline from:window" hx-target="#page-pipeline-results" :hx-vals="getHxVals('lab', 'Pipeline', 1, viewMode)"></div>
+          {% endwith %}
+          {% with app_label='lab' model_name='Pipeline' icon_class='fa-laptop' %}
+            {% include "lab/partials/partials.html#generic-type-filter" %}
+          {% endwith %}
+          {% with app_label='lab' model_name='Pipeline' %}
+            {% include "lab/partials/partials.html#generic-status-filter" %}
+          {% endwith %}
+        </div>
         <!-- Analyses -->
         <div>
           <h6 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">
           </h6>
-          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' name='analysis' value_field='id' initial=initial_analyses is_filter='True' %}
+          {% with app_label='lab' model_name='Analysis' icon_class='fa-chart-line' name='analysis' value_field='id' initial=initial_analyses is_filter='True' %}
             {% include "lab/partials/partials.html#generic-combobox" %}
-            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-analysis from:window, filters-updated from:window, filters-updated-analysis from:window" hx-target="#page-analysis-results" :hx-vals="getHxVals('lab', 'Analysis', 1, viewMode)"></div>
+            <div class="hidden" hx-get="{% url 'lab:generic_search' %}" hx-trigger="load-analysis from:window, filters-updated from:window, filters-updated-analysis from:window" hx-target="#page-analysis-results" :hx-vals="getHxVals('lab', 'Analysis', 1, viewMode, null, null, 'page')"></div>
           {% endwith %}
-          {% with app_label='lab' model_name='Analysis' icon_class='fa-laptop' %}
+          {% with app_label='lab' model_name='Analysis' icon_class='fa-chart-line' %}
             {% include "lab/partials/partials.html#generic-type-filter" %}
           {% endwith %}
           {% with app_label='lab' model_name='Analysis' %}

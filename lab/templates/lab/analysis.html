@@ -16,23 +16,26 @@
       {{ item.type.name }}
     </h3>
     <p class="text-gray-600 dark:text-gray-400">
-      Test: {{ item.test.test_type.name }}
+      Test: {{ item.pipeline.test.test_type.name }}
     </p>
     <p class="text-gray-600 dark:text-gray-400">
-      Sample: #{{ item.test.sample.sample_type.name }}
+      Sample: {{ item.pipeline.test.sample.sample_type.name }}
     </p>
     <p class="text-sm text-gray-500 dark:text-gray-400">
-      Individual: {{ item.test.sample.individual.individual_id }}
+      Individual: {{ item.pipeline.test.sample.individual.individual_id }}
+    </p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">
+      Pipeline: {{ item.pipeline.type.name }}
     </p>
 
     {% if item.performed_date %}
       <p class="text-sm text-gray-500 dark:text-gray-400">
-        Performed: {{ item.performed_date }}
+        Performed: {{ item.performed_date|date:"M d, Y" }}
       </p>
     {% endif %}
     {% if item.performed_by %}
       <p class="text-sm text-gray-500 dark:text-gray-400">
-        Performed by: {{ item.performed_by.username }}
+        Performed by: {{ item.performed_by.get_full_name|default:item.performed_by.username }}
       </p>
     {% endif %}
     {% if item.type.source_url %}
@@ -96,7 +99,7 @@
         <i class="fa-solid fa-eye text-lg"></i>
       </a>
       <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        {{ item.type.name }}
+        {{ item.pipeline.test.test_type.name }} - {{ item.type.name }}
       </h2>
       <div class="ml-auto">
         {% partial status-badge-card %}
@@ -107,10 +110,10 @@
       <div class="grid grid-cols-2 gap-2 mb-2">
         <div class="flex items-center">
           <i
-            class="fa-solid fa-microscope mr-2 text-gray-500 dark:text-gray-400"
+            class="fa-solid fa-laptop mr-2 text-gray-500 dark:text-gray-400"
           ></i>
           <span class="text-lg text-gray-700 dark:text-gray-300 font-medium">
-            {{ item.test.test_type.name }}
+            {{ item.pipeline.type.name }}
           </span>
         </div>
         <div class="flex items-center">
@@ -118,7 +121,7 @@
             class="fa-solid fa-flask mr-2 text-gray-500 dark:text-gray-400"
           ></i>
           <span class="text-lg text-gray-700 dark:text-gray-300 font-medium">
-            {{ item.test.sample.sample_type.name }}
+            {{ item.pipeline.test.sample.sample_type.name }}
           </span>
         </div>
       </div>
@@ -131,7 +134,7 @@
           <span
             class="text-lg text-blue-900 dark:text-blue-100 font-medium mr-2"
           >
-            {{ item.test.sample.individual.individual_id }}
+            {{ item.pipeline.test.sample.individual.individual_id }}
           </span>
           <button
             type="button"
@@ -143,18 +146,18 @@
           </button>
         </div>
         {% if perms.lab.view_sensitive_data %}
-          {% if item.test.sample.individual.full_name %}
+          {% if item.pipeline.test.sample.individual.full_name %}
             <p
               class="text-sm text-blue-700 dark:text-blue-300 mt-1"
               x-show="showFullName"
               x-transition
             >
-              {{ item.test.sample.individual.full_name }}
+              {{ item.pipeline.test.sample.individual.full_name }}
             </p>
           {% endif %}
         {% endif %}
         <div class="mt-2 space-y-1">
-          {% with institutions=item.test.sample.individual.institution.all %}
+          {% with institutions=item.pipeline.test.sample.individual.institution.all %}
             {% if institutions %}
               {% for inst in institutions %}
                 <div class="flex items-center text-sm text-blue-900 dark:text-blue-100">
@@ -211,7 +214,7 @@
               class="fa-solid fa-calendar-check mr-2 text-green-600 dark:text-green-400"
             ></i>
             <span class="text-green-900 dark:text-green-100 font-medium">
-              {{ item.performed_date }}
+              {{ item.performed_date|date:"M d, Y" }}
             </span>
           </div>
         </div>
@@ -229,6 +232,23 @@
           </div>
         </div>
       {% endif %}
+    </div>
+
+    <div class="mb-2">
+      <div class="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        <div class="flex items-center">
+          <i class="fa-solid fa-diagram-project mr-2 text-blue-600 dark:text-blue-400"></i>
+          <span class="text-blue-900 dark:text-blue-100 font-medium">
+            Pipeline: 
+            <span
+              class="cursor-pointer hover:text-blue-700 dark:hover:text-blue-300"
+              @click= "openDetail({{ item.pipeline.id }}, 'Pipeline', 'lab')"
+            >
+              {{ item.pipeline.type.name }}
+            </span>
+          </span>
+        </div>
+      </div>
     </div>
 
     {% if item.type.source_url or item.type.results_url %}
@@ -261,13 +281,28 @@
     {{ item.type.name }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {{ item.test.sample.sample_type.name }}
+    <span
+      class="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+      @click= "openDetail({{ item.pipeline.id }}, 'Pipeline', 'lab')"
+      title="View Pipeline"
+    >
+      {{ item.pipeline.type.name }}
+    </span>
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {{ item.test.sample.individual.individual_id }}
+    {{ item.pipeline.test.sample.sample_type.name }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {% with institutions=item.test.sample.individual.institution.all %}
+    <span
+      class="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+      @click= "openDetail({{ item.pipeline.test.sample.individual.id }}, 'Individual', 'lab')"
+      title="View Individual"
+    >
+      {{ item.pipeline.test.sample.individual.individual_id }}
+    </span>
+  </td>
+  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+    {% with institutions=item.pipeline.test.sample.individual.institution.all %}
       {% if institutions %}
         {% for inst in institutions %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
       {% else %}-{% endif %}
@@ -277,7 +312,7 @@
     {{ item.performed_date|date:"M d, Y"|default:"-" }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-    {{ item.performed_by.username|default:"-" }}
+    {{ item.performed_by.get_full_name|default:item.performed_by.username|default:"-" }}
   </td>
   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
     <div x-data="{ open: false }" class="relative inline-block text-left">
@@ -337,47 +372,52 @@
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Analysis Type
+            ANALYSIS TYPE
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Sample ID
+            PIPELINE TYPE
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Individual ID
+            SAMPLE ID
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Institution
+            INDIVIDUAL ID
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Performed Date
+            INSTITUTION
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Performed By
+            PERFORMED DATE
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Notes
+            PERFORMED BY
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Status
+            NOTES
           </th>
           <th
             class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
           >
-            Actions
+            STATUS
+          </th>
+          <th
+            class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+          >
+            ACTIONS
           </th>
         </tr>
       </thead>
@@ -416,7 +456,7 @@
     <!-- Analysis card -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
       <!-- Header with analysis info -->
-      <div class="bg-gradient-to-r from-red-600 to-red-800 px-6 py-4">
+      <div class="bg-gradient-to-r from-teal-600 to-teal-800 px-6 py-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="flex items-center gap-3">
             <button
@@ -429,7 +469,7 @@
             <div>
               <h2 class="text-2xl font-bold text-white">{{ item.type.name }}</h2>
               <p class="text-blue-100 mt-1">
-                {{ item.test.test_type.name }} Analysis
+                {{ item.pipeline.test.test_type.name }} Analysis
               </p>
             </div>
           </div>
@@ -460,9 +500,9 @@
             </h3>
             <p
               class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-              @click= "openDetail({{ item.test.id }}, 'Test', 'lab')"
+              @click= "openDetail({{ item.pipeline.test.id }}, 'Test', 'lab')"
             >
-              {{ item.test.test_type.name }}
+              {{ item.pipeline.test.test_type.name }}
             </p>
           </div>
           <div>
@@ -471,9 +511,9 @@
             </h3>
             <p
               class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-              @click= "openDetail({{ item.test.sample.id }}, 'Sample', 'lab')"
+              @click= "openDetail({{ item.pipeline.test.sample.id }}, 'Sample', 'lab')"
             >
-              {{ item.test.sample.sample_type.name }}
+              {{ item.pipeline.test.sample.sample_type.name }}
             </p>
           </div>
           <div>
@@ -483,9 +523,9 @@
             <p class="text-gray-900 dark:text-gray-100">
               <span
                 class="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                @click= "openDetail({{ item.test.sample.individual.id }}, 'Individual', 'lab')"
+                @click= "openDetail({{ item.pipeline.test.sample.individual.id }}, 'Individual', 'lab')"
               >
-                {{ item.test.sample.individual.individual_id }}
+                {{ item.pipeline.test.sample.individual.individual_id }}
               </span>
               <button
                 type="button"
@@ -503,12 +543,12 @@
                   x-show="showFullName"
                   x-transition
                 >
-                  {{ item.test.sample.individual.full_name }}
+                  {{ item.pipeline.test.sample.individual.full_name }}
                 </p>
               </div>
             {% endif %}
             <div class="mt-2 space-y-1">
-              {% with institutions=item.test.sample.individual.institution.all %}
+              {% with institutions=item.pipeline.test.sample.individual.institution.all %}
                 {% if institutions %}
                   {% for inst in institutions %}
                     <div class="flex items-center text-sm text-blue-900 dark:text-blue-100">
@@ -554,6 +594,20 @@
 
         <!-- Third column -->
         <div class="space-y-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Pipeline
+            </h3>
+            <p
+              class="text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+              @click= "openDetail({{ item.pipeline.id }}, 'Pipeline', 'lab')"
+            >
+              {{ item.pipeline.type.name }}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Performed: {{ item.pipeline.performed_date|date:"d M Y" }}
+            </p>
+          </div>
           <div>
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
               Version
@@ -605,6 +659,13 @@
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
+            :class="activeTab === 'pipeline' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'pipeline'"
+          >
+            Pipeline
+          </button>
+          <button
+            class="py-2 px-4 border-b-2 transition-colors"
             :class="activeTab === 'variants' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
             @click= "activeTab = 'variants'"
           >
@@ -643,6 +704,108 @@
           {% with object=item content_type="analysis" user=user %}
             {% include "lab/note.html#list" %}
           {% endwith %}
+        </div>
+
+        <!-- Pipeline tab -->
+        <div x-show="activeTab === 'pipeline'" x-cloak>
+          <div class="space-y-4">
+            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                  Parent Pipeline
+                </h3>
+                <button
+                  @click= "openDetail({{ item.pipeline.id }}, 'Pipeline', 'lab')"
+                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
+                >
+                  <i class="fas fa-external-link-alt mr-2"></i>
+                  View Pipeline Details
+                </button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Pipeline Type
+                  </h4>
+                  <p class="text-gray-900 dark:text-gray-100">
+                    {{ item.pipeline.type.name }}
+                  </p>
+                </div>
+                <div>
+                  <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Performed Date
+                  </h4>
+                  <p class="text-gray-900 dark:text-gray-100">
+                    {{ item.pipeline.performed_date|date:"d M Y" }}
+                  </p>
+                </div>
+                <div>
+                  <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Performed By
+                  </h4>
+                  <p class="text-gray-900 dark:text-gray-100">
+                    {{ item.pipeline.performed_by.get_full_name|default:item.pipeline.performed_by.username }}
+                  </p>
+                </div>
+                <div>
+                  <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Status
+                  </h4>
+                  <span
+                    class="inline-flex items-center rounded-md bg-{{ item.pipeline.status.color|default:'gray' }}-50 dark:bg-{{ item.pipeline.status.color|default:'gray' }}-900 px-2 py-1 text-xs font-medium text-{{ item.pipeline.status.color|default:'gray' }}-600 dark:text-{{ item.pipeline.status.color|default:'gray' }}-200 ring-1 ring-{{ item.pipeline.status.color|default:'gray' }}-500/10 dark:ring-{{ item.pipeline.status.color|default:'gray' }}-700/40 ring-inset"
+                  >
+                    {{ item.pipeline.status.name }}
+                  </span>
+                </div>
+              </div>
+              {% if item.pipeline.type.version %}
+              <div class="mt-4">
+                <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Pipeline Version
+                </h4>
+                <p class="text-gray-900 dark:text-gray-100">
+                  {{ item.pipeline.type.version }}
+                </p>
+              </div>
+              {% endif %}
+            </div>
+            
+            {% if item.pipeline.analyses.count > 1 %}
+            <div>
+              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">
+                Other Analyses in This Pipeline ({{ item.pipeline.analyses.count|add:"-1" }})
+              </h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for analysis in item.pipeline.analyses.all %}
+                  {% if analysis.id != item.id %}
+                    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 hover:shadow-md transition-shadow">
+                      <div class="flex items-center justify-between mb-2">
+                        <h4 class="font-medium text-gray-900 dark:text-gray-100">
+                          {{ analysis.type.name }}
+                        </h4>
+                        <button
+                          @click= "openDetail({{ analysis.id }}, 'Analysis', 'lab')"
+                          class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                          title="View Analysis"
+                        >
+                          <i class="fa-solid fa-eye"></i>
+                        </button>
+                      </div>
+                      <p class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ analysis.performed_date|date:"d M Y" }}
+                      </p>
+                      <span
+                        class="inline-flex items-center rounded-md bg-{{ analysis.status.color|default:'gray' }}-50 dark:bg-{{ analysis.status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ analysis.status.color|default:'gray' }}-600 dark:text-{{ analysis.status.color|default:'gray' }}-200 ring-1 ring-{{ analysis.status.color|default:'gray' }}-500/10 dark:ring-{{ analysis.status.color|default:'gray' }}-700/40 ring-inset mt-2"
+                      >
+                        {{ analysis.status.name }}
+                      </span>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+          </div>
         </div>
 
         <!-- Variants tab -->

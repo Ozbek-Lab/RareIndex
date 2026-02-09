@@ -278,9 +278,9 @@
           {{ item.content_object.test_type.name }}
           <span class="text-gray-500 dark:text-gray-400">- {{ item.content_object.sample.individual.individual_id }}</span>
         </span>
-      {% elif item.content_type.model == 'analysis' %}
+      {% elif item.content_type.model == 'pipeline' %}
         <i class="fa-solid fa-chart-line text-orange-600 dark:text-orange-400 text-lg"></i>
-        <span class="px-2 py-1 rounded bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-200 text-xs font-semibold">Analysis</span>
+        <span class="px-2 py-1 rounded bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-200 text-xs font-semibold">Pipeline</span>
         <span class="font-medium">
           {{ item.content_object.type.name }}
           <span class="text-gray-500 dark:text-gray-400">- {{ item.content_object.test.sample.individual.individual_id }}</span>

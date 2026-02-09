@@ -247,6 +247,56 @@ class FamilyAdmin(SimpleHistoryAdmin):
     get_updated_at.admin_order_field = "id"
 
 
+@admin.register(models.PipelineType)
+class PipelineTypeAdmin(SimpleHistoryAdmin):
+    list_display = ("name", "version", "created_by", "get_created_at", "get_updated_at")
+    search_fields = ("name", "description", "version")
+    filter_horizontal = ("parent_types",)
+    readonly_fields = ("created_by",)
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
+    def save_model(self, request, obj, form, change):
+        if not change:  # Only set created_by on creation
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(models.Pipeline)
+class PipelineAdmin(SimpleHistoryAdmin):
+    list_display = ["test", "type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
+    list_filter = ["type", "status", "performed_date"]
+    search_fields = ["test__sample__individual__lab_id", "type__name"]
+    date_hierarchy = "performed_date"
+    autocomplete_fields = ["test", "type", "performed_by"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "status":
+            ct = ContentType.objects.get_for_model(self.model)
+            kwargs["queryset"] = models.Status.objects.filter(
+                content_type=ct
+            ) | models.Status.objects.filter(content_type__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 @admin.register(models.AnalysisType)
 class AnalysisTypeAdmin(SimpleHistoryAdmin):
     list_display = ("name", "version", "created_by", "get_created_at", "get_updated_at")
@@ -272,11 +322,11 @@ class AnalysisTypeAdmin(SimpleHistoryAdmin):
 
 @admin.register(models.Analysis)
 class AnalysisAdmin(SimpleHistoryAdmin):
-    list_display = ["test", "type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
+    list_display = ["pipeline", "type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
     list_filter = ["type", "status", "performed_date"]
-    search_fields = ["test__sample__individual__lab_id", "type__name"]
+    search_fields = ["pipeline__test__sample__individual__lab_id", "type__name"]
     date_hierarchy = "performed_date"
-    autocomplete_fields = ["test", "type", "performed_by"]
+    autocomplete_fields = ["pipeline", "type", "performed_by"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()

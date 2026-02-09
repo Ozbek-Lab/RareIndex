@@ -23,6 +23,7 @@ from .filters import _is_encrypted_field, _separate_encrypted_fields, _filter_en
 from .models import (
     Individual,
     Test,
+    Pipeline,
     Analysis,
     Sample,
     Task,
@@ -282,6 +283,7 @@ def index(request):
         ).order_by("name"),
         "initial_projects": get_initial_json(Project, "filter_project"),
         "initial_tests": get_initial_json(Test, "filter_test"),
+        "initial_pipelines": get_initial_json(Pipeline, "filter_pipeline"),
         "initial_analyses": get_initial_json(Analysis, "filter_analysis"),
         "initial_institutions": get_initial_json(Institution, "filter_institution"),
         "display_preferences": display_preferences,
@@ -322,6 +324,7 @@ def generic_search(request):
     card_partial = request.GET.get("card", "card")
     view_mode = request.GET.get("view_mode", "cards")
     icon_class = request.GET.get("icon_class", "fa-magnifying-glass")
+    view = request.GET.get("view", "")  # Get view parameter (should be "page" for main list pages)
     # Combobox render mode (for Select2-like behavior)
     render_mode = request.GET.get("render")
     if render_mode == "combobox":
@@ -385,8 +388,10 @@ def generic_search(request):
                                 q_label |= Q(individual__cross_ids__id_value__icontains=own_search_term)
                             elif target_model_name == "Test":
                                 q_label |= Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
-                            elif target_model_name == "Analysis":
+                            elif target_model_name == "Pipeline":
                                 q_label |= Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            elif target_model_name == "Analysis":
+                                q_label |= Q(pipeline__test__sample__individual__cross_ids__id_value__icontains=own_search_term)
                             elif target_model_name == "Variant":
                                 q_label |= Q(individual__cross_ids__id_value__icontains=own_search_term)
                                 
@@ -445,8 +450,10 @@ def generic_search(request):
                                 qobj |= Q(individual__cross_ids__id_value__icontains=own_search_term)
                             elif target_model_name == "Test":
                                 qobj |= Q(sample__individual__cross_ids__id_value__icontains=own_search_term)
-                            elif target_model_name == "Analysis":
+                            elif target_model_name == "Pipeline":
                                 qobj |= Q(test__sample__individual__cross_ids__id_value__icontains=own_search_term)
+                            elif target_model_name == "Analysis":
+                                qobj |= Q(pipeline__test__sample__individual__cross_ids__id_value__icontains=own_search_term)
                             elif target_model_name == "Variant":
                                 qobj |= Q(individual__cross_ids__id_value__icontains=own_search_term)
                                 
@@ -627,6 +634,7 @@ def generic_search(request):
         "view_mode": view_mode,
         "card": card_partial,
         "icon_class": icon_class,
+        "view": view,  # Pass view parameter to template
         "sort_options": get_sort_options(target_model_name),
     }
     
@@ -676,6 +684,7 @@ def generic_search_page(request):
 
     card_partial = request.GET.get("card", "card")
     view_mode = request.GET.get("view_mode", "cards")
+    view = request.GET.get("view", "")  # Get view parameter for template context
     # Combobox render mode (for Select2-like behavior)
     render_mode = request.GET.get("render")
     if render_mode == "combobox":
@@ -756,6 +765,7 @@ def generic_search_page(request):
         },
         "view_mode": view_mode,
         "card": card_partial,
+        "view": view,  # Pass view parameter to template
     }
     
     # Add model-specific statuses to context for status badge dropdowns
@@ -827,8 +837,8 @@ def generic_detail(request):
         context["tests"] = [
             test for sample in obj.samples.all() for test in sample.tests.all()
         ]
-        context["analyses"] = [
-            analysis for test in context["tests"] for analysis in test.analyses.all()
+        context["pipelines"] = [
+            pipeline for test in context["tests"] for pipeline in test.pipelines.all()
         ]
         # Build initial JSON for HPO terms combobox
         try:
@@ -845,18 +855,18 @@ def generic_detail(request):
             Q(content_type=individual_ct) | Q(content_type__isnull=True)
         ).order_by("name")
         _add_statuses_for_models(
-            context, [Sample, Test, Analysis, Project, Task]
+            context, [Sample, Test, Pipeline, Analysis, Project, Task]
         )
     elif target_model_name == "Sample":
-        context["analyses"] = [
-            analysis for test in obj.tests.all() for analysis in test.analyses.all()
+        context["pipelines"] = [
+            pipeline for test in obj.tests.all() for pipeline in test.pipelines.all()
         ]
         # Get all available Sample statuses for status dropdown
         sample_ct = ContentType.objects.get_for_model(Sample)
         context["sample_statuses"] = Status.objects.filter(
             Q(content_type=sample_ct) | Q(content_type__isnull=True)
         ).order_by("name")
-        _add_statuses_for_models(context, [Test, Analysis, Task])
+        _add_statuses_for_models(context, [Test, Pipeline, Task])
     
     # Add statuses for any model that has a status field
     if hasattr(target_model, 'status'):
@@ -870,6 +880,8 @@ def generic_detail(request):
     # Ensure related cards rendered in detail views have status choices available
     related_status_models = []
     if target_model_name == "Test":
+        related_status_models = [Pipeline, Task]
+    elif target_model_name == "Pipeline":
         related_status_models = [Analysis, Task]
     elif target_model_name == "Analysis":
         related_status_models = [Task]
@@ -952,8 +964,8 @@ def generic_detail(request):
         context["tests"] = [
             test for sample in obj.samples.all() for test in sample.tests.all()
         ]
-        context["analyses"] = [
-            analysis for test in context["tests"] for analysis in test.analyses.all()
+        context["pipelines"] = [
+            pipeline for test in context["tests"] for pipeline in test.pipelines.all()
         ]
         # Build initial JSON for HPO terms combobox
         try:
@@ -970,18 +982,18 @@ def generic_detail(request):
             Q(content_type=individual_ct) | Q(content_type__isnull=True)
         ).order_by("name")
         _add_statuses_for_models(
-            context, [Sample, Test, Analysis, Project, Task]
+            context, [Sample, Test, Pipeline, Analysis, Project, Task]
         )
     elif target_model_name == "Sample":
-        context["analyses"] = [
-            analysis for test in obj.tests.all() for analysis in test.analyses.all()
+        context["pipelines"] = [
+            pipeline for test in obj.tests.all() for pipeline in test.pipelines.all()
         ]
         # Get all available Sample statuses for status dropdown
         sample_ct = ContentType.objects.get_for_model(Sample)
         context["sample_statuses"] = Status.objects.filter(
             Q(content_type=sample_ct) | Q(content_type__isnull=True)
         ).order_by("name")
-        _add_statuses_for_models(context, [Test, Analysis, Task])
+        _add_statuses_for_models(context, [Test, Pipeline, Task])
     
     # Add statuses for any model that has a status field
     if hasattr(target_model, 'status'):
@@ -995,6 +1007,8 @@ def generic_detail(request):
     # Ensure related cards rendered in detail views have status choices available
     related_status_models = []
     if target_model_name == "Test":
+        related_status_models = [Pipeline, Task]
+    elif target_model_name == "Pipeline":
         related_status_models = [Analysis, Task]
     elif target_model_name == "Analysis":
         related_status_models = [Task]
@@ -1186,8 +1200,11 @@ def update_status(request):
                 context["tests"] = [
                     test for sample in obj.samples.all() for test in sample.tests.all()
                 ]
+                context["pipelines"] = [
+                    pipeline for test in context["tests"] for pipeline in test.pipelines.all()
+                ]
                 context["analyses"] = [
-                    analysis for test in context["tests"] for analysis in test.analyses.all()
+                    analysis for pipeline in context["pipelines"] for analysis in pipeline.analyses.all()
                 ]
                 # Build initial JSON for HPO terms combobox
                 try:
@@ -1200,7 +1217,9 @@ def update_status(request):
                     context["hpo_initial_json"] = "[]"
             elif model_name == "Sample":
                 context["analyses"] = [
-                    analysis for test in obj.tests.all() for analysis in test.analyses.all()
+                    analysis for test in obj.tests.all() 
+                    for pipeline in test.pipelines.all() 
+                    for analysis in pipeline.analyses.all()
                 ]
             
             # Get the target element ID from the request
@@ -1819,7 +1838,7 @@ def notifications_page(request):
         from django.core.paginator import Paginator
         from collections import defaultdict
 
-        from .models import Note, Task, Project, Individual, Sample, Test, Analysis
+        from .models import Note, Task, Project, Individual, Sample, Test, Pipeline, Analysis
         from variant.models import Variant
         from django.contrib.contenttypes.models import ContentType
 
@@ -1841,7 +1860,7 @@ def notifications_page(request):
                 "individual": ContentType.objects.get_for_model(Individual),
                 "sample": ContentType.objects.get_for_model(Sample),
                 "test": ContentType.objects.get_for_model(Test),
-                "analysis": ContentType.objects.get_for_model(Analysis),
+                "pipeline": ContentType.objects.get_for_model(Pipeline),
                 "variant": ContentType.objects.get_for_model(Variant),
             }
 
@@ -1860,7 +1879,7 @@ def notifications_page(request):
             individual_ids = set(task_targets[ct_map["individual"].id])
             sample_ids = set(task_targets[ct_map["sample"].id])
             test_ids = set(task_targets[ct_map["test"].id])
-            analysis_ids = set(task_targets[ct_map["analysis"].id])
+            pipeline_ids = set(task_targets[ct_map["pipeline"].id])
             variant_ids = set(task_targets[ct_map["variant"].id])
 
             def add_ids(target_set, iterable):
@@ -1888,7 +1907,7 @@ def notifications_page(request):
                         .values_list("id", flat=True)
                     )
 
-                # Individuals -> Samples / Tests / Analyses / Variants
+                # Individuals -> Samples / Tests / Pipelines / Variants
                 if individual_ids:
                     changed |= add_ids(
                         sample_ids,
@@ -1901,19 +1920,19 @@ def notifications_page(request):
                         .values_list("id", flat=True)
                     )
                     changed |= add_ids(
-                        analysis_ids,
-                        Analysis.objects.filter(test__sample__individual_id__in=individual_ids)
+                        pipeline_ids,
+                        Pipeline.objects.filter(test__sample__individual_id__in=individual_ids)
                         .values_list("id", flat=True)
                     )
                     changed |= add_ids(
                         variant_ids,
                         Variant.objects.filter(
                             Q(individual_id__in=individual_ids)
-                            | Q(analysis__test__sample__individual_id__in=individual_ids)
+                            | Q(pipeline__test__sample__individual_id__in=individual_ids)
                         ).values_list("id", flat=True)
                     )
 
-                # Samples -> Individual / Tests / Analyses / Variants
+                # Samples -> Individual / Tests / Pipelines / Variants
                 if sample_ids:
                     changed |= add_ids(
                         individual_ids,
@@ -1926,20 +1945,20 @@ def notifications_page(request):
                         .values_list("id", flat=True)
                     )
                     changed |= add_ids(
-                        analysis_ids,
-                        Analysis.objects.filter(test__sample_id__in=sample_ids)
+                        pipeline_ids,
+                        Pipeline.objects.filter(test__sample_id__in=sample_ids)
                         .values_list("id", flat=True)
                     )
                     changed |= add_ids(
                         variant_ids,
                         Variant.objects.filter(
-                            Q(analysis__test__sample_id__in=sample_ids)
+                            Q(pipeline__test__sample_id__in=sample_ids)
                             | Q(individual__samples__id__in=sample_ids)
                         )
                         .values_list("id", flat=True)
                     )
 
-                # Tests -> Sample / Individual / Analyses / Variants
+                # Tests -> Sample / Individual / Pipelines / Variants
                 if test_ids:
                     changed |= add_ids(
                         sample_ids,
@@ -1952,55 +1971,55 @@ def notifications_page(request):
                         .values_list("sample__individual_id", flat=True)
                     )
                     changed |= add_ids(
-                        analysis_ids,
-                        Analysis.objects.filter(test_id__in=test_ids)
+                        pipeline_ids,
+                        Pipeline.objects.filter(test_id__in=test_ids)
                         .values_list("id", flat=True)
                     )
                     changed |= add_ids(
                         variant_ids,
-                        Variant.objects.filter(analysis__test_id__in=test_ids)
+                        Variant.objects.filter(analysis__pipeline__test_id__in=test_ids)
                         .values_list("id", flat=True)
                     )
 
-                # Analyses -> Test / Sample / Individual / Variants
-                if analysis_ids:
+                # Pipelines -> Test / Sample / Individual / Variants
+                if pipeline_ids:
                     changed |= add_ids(
                         test_ids,
-                        Analysis.objects.filter(id__in=analysis_ids)
+                        Pipeline.objects.filter(id__in=pipeline_ids)
                         .values_list("test_id", flat=True)
                     )
                     changed |= add_ids(
                         sample_ids,
-                        Analysis.objects.filter(id__in=analysis_ids)
+                        Pipeline.objects.filter(id__in=pipeline_ids)
                         .values_list("test__sample_id", flat=True)
                     )
                     changed |= add_ids(
                         individual_ids,
-                        Analysis.objects.filter(id__in=analysis_ids)
+                        Pipeline.objects.filter(id__in=pipeline_ids)
                         .values_list("test__sample__individual_id", flat=True)
                     )
                     changed |= add_ids(
                         variant_ids,
-                        Variant.objects.filter(analysis_id__in=analysis_ids)
+                        Variant.objects.filter(analysis__pipeline_id__in=pipeline_ids)
                         .values_list("id", flat=True)
                     )
 
-                # Variants -> Analysis / Test / Sample / Individual / Projects (via individual)
+                # Variants -> Pipeline / Test / Sample / Individual / Projects (via individual)
                 if variant_ids:
                     changed |= add_ids(
-                        analysis_ids,
+                        pipeline_ids,
                         Variant.objects.filter(id__in=variant_ids)
-                        .values_list("analysis_id", flat=True)
+                        .values_list("pipeline_id", flat=True)
                     )
                     changed |= add_ids(
                         test_ids,
                         Variant.objects.filter(id__in=variant_ids)
-                        .values_list("analysis__test_id", flat=True)
+                        .values_list("pipeline__test_id", flat=True)
                     )
                     changed |= add_ids(
                         sample_ids,
                         Variant.objects.filter(id__in=variant_ids)
-                        .values_list("analysis__test__sample_id", flat=True)
+                        .values_list("pipeline__test__sample_id", flat=True)
                     )
                     changed |= add_ids(
                         individual_ids,
@@ -2014,7 +2033,7 @@ def notifications_page(request):
             allowed[ct_map["individual"].id] |= individual_ids
             allowed[ct_map["sample"].id] |= sample_ids
             allowed[ct_map["test"].id] |= test_ids
-            allowed[ct_map["analysis"].id] |= analysis_ids
+            allowed[ct_map["pipeline"].id] |= pipeline_ids
             allowed[ct_map["variant"].id] |= variant_ids
 
             for ct_id, obj_ids in note_targets.items():
@@ -2391,13 +2410,26 @@ def generic_create(request):
                     context["other_tests"] = all_tests_qs.exclude(pk=obj.pk)
                     context["new_test_pk"] = obj.pk
                 
-                # For Analysis creation, include individual, sample, test, and all analyses for that individual
-                elif model_name == "Analysis" and hasattr(obj, 'test') and obj.test:
+                # For Pipeline creation, include individual, sample, test, and all pipelines for that individual
+                elif model_name == "Pipeline" and hasattr(obj, 'test') and obj.test:
                     context["test"] = obj.test
                     context["sample"] = obj.test.sample
                     context["individual"] = obj.test.sample.individual
-                    # Get all analyses for this individual (through test -> sample -> individual)
-                    all_analyses_qs = Analysis.objects.filter(test__sample__individual=obj.test.sample.individual).order_by('-id')
+                    # Get all pipelines for this individual (through test -> sample -> individual)
+                    all_pipelines_qs = Pipeline.objects.filter(test__sample__individual=obj.test.sample.individual).order_by('-id')
+                    context["all_pipelines"] = all_pipelines_qs
+                    context["new_pipeline"] = obj
+                    context["other_pipelines"] = all_pipelines_qs.exclude(pk=obj.pk)
+                    context["new_pipeline_pk"] = obj.pk
+                
+                # For Analysis creation, include individual, sample, test, pipeline, and all analyses for that individual
+                elif model_name == "Analysis" and hasattr(obj, 'pipeline') and obj.pipeline:
+                    context["pipeline"] = obj.pipeline
+                    context["test"] = obj.pipeline.test
+                    context["sample"] = obj.pipeline.test.sample
+                    context["individual"] = obj.pipeline.test.sample.individual
+                    # Get all analyses for this individual (through pipeline -> test -> sample -> individual)
+                    all_analyses_qs = Analysis.objects.filter(pipeline__test__sample__individual=obj.pipeline.test.sample.individual).order_by('-id')
                     context["all_analyses"] = all_analyses_qs
                     context["new_analysis"] = obj
                     context["other_analyses"] = all_analyses_qs.exclude(pk=obj.pk)
@@ -2536,6 +2568,7 @@ def generic_create(request):
     initial_individual = None
     initial_sample = None
     initial_test = None
+    initial_pipeline = None
 
     # For Sample creation, pre-select the Individual when provided
     if model_name == "Sample" and "individual" in initial_data:
@@ -2560,16 +2593,29 @@ def generic_create(request):
         except Exception:
             initial_sample = None
 
-    # For Analysis creation, pre-select the Test when provided
-    if model_name == "Analysis" and "test" in initial_data:
+    # For Pipeline creation, pre-select the Test when provided
+    if model_name == "Pipeline" and "test" in initial_data:
         try:
             from lab.models import Test
 
             test_id = initial_data.get("test")
             if test_id:
                 initial_test = Test.objects.filter(pk=test_id).first()
+                if initial_test:
+                    form.fields["test"].initial = initial_test
         except Exception:
-            initial_test = None
+            pass
+    
+    # For Analysis creation, pre-select the Pipeline when provided
+    if model_name == "Analysis" and "pipeline" in initial_data:
+        try:
+            pipeline_id = initial_data.get("pipeline")
+            if pipeline_id:
+                initial_pipeline = Pipeline.objects.filter(pk=pipeline_id).first()
+                if initial_pipeline:
+                    form.fields["pipeline"].initial = initial_pipeline
+        except Exception:
+            pass
 
     staff_initial_json = "[]"
     institution_initial_json = "[]"
@@ -2593,6 +2639,7 @@ def generic_create(request):
                 "initial_individual": initial_individual,
                 "initial_sample": initial_sample,
                 "initial_test": initial_test,
+                "initial_pipeline": initial_pipeline if model_name == "Analysis" else None,
                 # Prefixed Task form for sidebar inputs
                 "task_form": TaskForm(prefix="task"),
                 "staff_initial_json": staff_initial_json,
@@ -2610,6 +2657,7 @@ def generic_create(request):
                 "initial_individual": initial_individual,
                 "initial_sample": initial_sample,
                 "initial_test": initial_test,
+                "initial_pipeline": initial_pipeline if model_name == "Analysis" else None,
                 "staff_initial_json": staff_initial_json,
                 "institution_initial_json": institution_initial_json,
             },
@@ -3743,17 +3791,17 @@ def get_stats_counts(request):
     individuals_queryset = Individual.objects.all()
     samples_queryset = Sample.objects.all().exclude(sample_type__name="Placeholder")
     tests_queryset = Test.objects.all().exclude(sample__sample_type__name="Placeholder")
-    analyses_queryset = Analysis.objects.all()
+    pipelines_queryset = Pipeline.objects.all()
     if filter_conditions:
         individuals_queryset = individuals_queryset.filter(filter_conditions)
         samples_queryset = samples_queryset.filter(filter_conditions)
         tests_queryset = tests_queryset.filter(filter_conditions)
-        analyses_queryset = analyses_queryset.filter(filter_conditions)
+        pipelines_queryset = pipelines_queryset.filter(filter_conditions)
     data = {
         'individuals': individuals_queryset.count(),
         'samples': samples_queryset.count(),
         'tests': tests_queryset.count(),
-        'analyses': analyses_queryset.count(),
+        'pipelines': pipelines_queryset.count(),
     }
     return JsonResponse(data)
 

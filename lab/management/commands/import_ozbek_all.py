@@ -17,8 +17,8 @@ from lab.models import (
     SampleType,
     Institution,
     TestType,
-    Analysis,
-    AnalysisType,
+    Pipeline,
+    PipelineType,
     Note,
     IdentifierType,
     CrossIdentifier,
@@ -230,7 +230,7 @@ class Command(BaseCommand):
                     # If anything goes wrong, skip adjusting history date
                     pass
 
-    def analysis_add_arguments(self, parser):
+    def pipeline_add_arguments(self, parser):
         parser.add_argument('file_path', type=str, help='Path to the TSV file')
         parser.add_argument(
             '--admin-user',
@@ -239,7 +239,7 @@ class Command(BaseCommand):
             required=True
         )
 
-    def __analysis_parse_date(self, date_str):
+    def __pipeline_parse_date(self, date_str):
         if not date_str or date_str.lower() == 'na':
             return None
         try:
@@ -275,17 +275,17 @@ class Command(BaseCommand):
         )
         return test_type
 
-    def _get_or_create_analysis_type(self, name, description, admin_user):
+    def _get_or_create_pipeline_type(self, name, description, admin_user):
         if not name:
             return None
-        analysis_type, created = AnalysisType.objects.get_or_create(
+        pipeline_type, created = PipelineType.objects.get_or_create(
             name=name,
             defaults={
                 'description': description or '',
                 'created_by': admin_user
             }
         )
-        return analysis_type
+        return pipeline_type
 
     def _get_or_create_placeholder_sample(self, individual, admin_user):
         # Create a placeholder sample type if it doesn't exist
@@ -442,31 +442,31 @@ class Command(BaseCommand):
             icon='fa-flag-checkered'
         )
 
-        # Analysis statuses
+        # Pipeline statuses
         completed_status = self._get_or_create_status(
             'Completed',
-            'Analysis completed',
+            'Pipeline completed',
             'green',
             admin_user,
-            ContentType.objects.get_for_model(Analysis),
+            ContentType.objects.get_for_model(Pipeline),
             icon='fa-circle-check'
         )
 
         self._get_or_create_status(
             'In Progress',
-            'Analysis is in progress',
+            'Pipeline is in progress',
             'yellow',
             admin_user,
-            ContentType.objects.get_for_model(Analysis),
+            ContentType.objects.get_for_model(Pipeline),
             icon='fa-spinner'
         )
 
         self._get_or_create_status(
             'Pending Data',
-            'Analysis is pending data',
+            'Pipeline is pending data',
             'red',
             admin_user,
-            ContentType.objects.get_for_model(Analysis),
+            ContentType.objects.get_for_model(Pipeline),
             icon='fa-hourglass-half'
         )
 
@@ -942,7 +942,7 @@ class Command(BaseCommand):
         headers_analiz = [h for h in headers_analiz if h is not None]
         self.stdout.write(f'Analiz Takip sheet headers: {headers_analiz}')
         
-        gennext_type = self._get_or_create_analysis_type(
+        gennext_type = self._get_or_create_pipeline_type(
             'Gennext',
             '',
             admin_user
@@ -1011,13 +1011,13 @@ class Command(BaseCommand):
                 created_tests_for_row.append(test)
                 # Track touched/created test for this individual's lab id
                 tests_touched_by_lab_id.setdefault(lab_id, []).append(test)
-            # Create Analysis records for each created test, if upload date provided
+            # Create Pipeline records for each created test, if upload date provided
             data_upload_date = self._parse_date(row_dict.get('Data yüklenme tarihi/emre'))
             if data_upload_date and created_tests_for_row:
                 for t in created_tests_for_row:
-                    Analysis.objects.create(
+                    Pipeline.objects.create(
                         type=gennext_type,
-                        status=Status.objects.get(name='In Progress', content_type=ContentType.objects.get(app_label='lab', model='analysis')),
+                        status=Status.objects.get(name='In Progress', content_type=ContentType.objects.get(app_label='lab', model='pipeline')),
                         performed_date=data_upload_date,
                         performed_by=admin_user,
                         test=t,
@@ -1034,7 +1034,7 @@ class Command(BaseCommand):
                 writer.writeheader()
                 writer.writerows(leftover_rows)
             self.stdout.write(self.style.SUCCESS(f'Saved {len(leftover_rows)} rows to {leftovers_path}'))
-        self.stdout.write(self.style.SUCCESS('Successfully imported analysis tracking data'))
+        self.stdout.write(self.style.SUCCESS('Successfully imported pipeline tracking data'))
 
         # --- SET PARENTS (mother/father) BASED ON RAREBOOST ID SUFFIXES ---
         # Convention: familyId.1 = proband, .2 = mother, .3 = father,

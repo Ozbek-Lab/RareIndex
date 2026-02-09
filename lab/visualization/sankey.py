@@ -1,13 +1,13 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
-from lab.models import Individual, Sample, Test, Analysis, TestType, AnalysisType, SampleType, Institution
+from lab.models import Individual, Sample, Test, Pipeline, Analysis, TestType, PipelineType, AnalysisType, SampleType, Institution
 import json
 
 def generate_sankey_data(sankey_metrics):
     """
     Generate data for a Sankey diagram showing the flow:
-    Individual → Sample → Test → AnalysisType
-    Filters are applied for indexes_only, institution, sample_types, test_types, analysis_types.
+    Individual → Sample → Test → PipelineType
+    Filters are applied for indexes_only, institution, sample_types, test_types, pipeline_types.
     Returns a dict suitable for plotly.graph_objects.Figure().to_dict()
     """
     from collections import defaultdict
@@ -21,10 +21,10 @@ def generate_sankey_data(sankey_metrics):
     if sankey_metrics['institution']:
         individuals = [ind for ind in individuals if ind.sending_institution_id == sankey_metrics['institution']]
 
-    # Start with all samples, tests, analyses
+    # Start with all samples, tests, pipelines
     samples = list(Sample.objects.select_related('individual').all())
     tests = list(Test.objects.select_related('sample', 'test_type').all())
-    analyses = list(Analysis.objects.select_related('test', 'type').all())
+    pipelines = list(Pipeline.objects.select_related('test', 'type').all())
 
     # Apply sample_types filter
     if sankey_metrics['sample_types']:
@@ -43,16 +43,16 @@ def generate_sankey_data(sankey_metrics):
         sample_individual_ids = set(s.individual_id for s in samples if s.individual_id)
         individuals = [ind for ind in individuals if ind.id in sample_individual_ids]
 
-    # Apply analysis_types filter
-    if sankey_metrics['analysis_types']:
-        analyses = [a for a in analyses if a.type_id in sankey_metrics['analysis_types']]
-        # Only keep tests that have at least one analysis
-        analysis_test_ids = set(a.test_id for a in analyses if a.test_id)
-        tests = [t for t in tests if t.id in analysis_test_ids]
-        # Only keep samples that have at least one test (after analysis filter)
+    # Apply pipeline_types filter
+    if sankey_metrics['pipeline_types']:
+        pipelines = [p for p in pipelines if p.type_id in sankey_metrics['pipeline_types']]
+        # Only keep tests that have at least one pipeline
+        pipeline_test_ids = set(p.test_id for p in pipelines if p.test_id)
+        tests = [t for t in tests if t.id in pipeline_test_ids]
+        # Only keep samples that have at least one test (after pipeline filter)
         test_sample_ids = set(t.sample_id for t in tests if t.sample_id)
         samples = [s for s in samples if s.id in test_sample_ids]
-        # Only keep individuals that have at least one sample (after analysis filter)
+        # Only keep individuals that have at least one sample (after pipeline filter)
         sample_individual_ids = set(s.individual_id for s in samples if s.individual_id)
         individuals = [ind for ind in individuals if ind.id in sample_individual_ids]
 
@@ -78,9 +78,9 @@ def generate_sankey_data(sankey_metrics):
         if label not in node_index:
             node_index[label] = len(node_labels)
             node_labels.append(label)
-    # Analysis Types
-    for a in analyses:
-        label = f"Analysis: {a.type.name}" if a.type else f"Analysis {a.id}"
+    # Pipeline Types
+    for p in pipelines:
+        label = f"Pipeline: {p.type.name}" if p.type else f"Pipeline {p.id}"
         if label not in node_index:
             node_index[label] = len(node_labels)
             node_labels.append(label)
@@ -103,12 +103,12 @@ def generate_sankey_data(sankey_metrics):
             )
             test_label = f"Test: {t.test_type.name}" if t.test_type else f"Test {t.id}"
             link_counts[(sample_label, test_label)] += 1
-    # Test → AnalysisType
-    for a in analyses:
-        if a.test and a.type:
-            test_label = f"Test: {a.test.test_type.name}" if a.test.test_type else f"Test {a.test.id}"
-            analysis_label = f"Analysis: {a.type.name}" if a.type else f"Analysis {a.id}"
-            link_counts[(test_label, analysis_label)] += 1
+    # Test → PipelineType
+    for p in pipelines:
+        if p.test and p.type:
+            test_label = f"Test: {p.test.test_type.name}" if p.test.test_type else f"Test {p.test.id}"
+            pipeline_label = f"Pipeline: {p.type.name}" if p.type else f"Pipeline {p.id}"
+            link_counts[(test_label, pipeline_label)] += 1
 
     # Prepare source, target, value lists
     sources = []
@@ -135,7 +135,7 @@ def generate_sankey_data(sankey_metrics):
         ),
     )
     fig = go.Figure(data=[sankey_data])
-    fig.update_layout(title_text="Sample/Test/Analysis Flow", font_size=12, height=800)
+    fig.update_layout(title_text="Sample/Test/Pipeline Flow", font_size=12, height=800)
     return fig.to_dict()
 
 def generate_sankey_data_tests(sankey_metrics):
@@ -143,7 +143,7 @@ def generate_sankey_data_tests(sankey_metrics):
     Sankey with 3 columns:
     1. Individuals: 'Index', 'Family'
     2. Test Types (all unique in filtered data)
-    3. Analysis Types (all unique in filtered data)
+    3. Pipeline Types (all unique in filtered data)
     """
     import plotly.graph_objects as go
     from collections import Counter, defaultdict
@@ -171,9 +171,9 @@ def generate_sankey_data_tests(sankey_metrics):
         sample_individual_ids = set(s.individual_id for s in samples if s.individual_id)
         individuals = individuals.filter(id__in=sample_individual_ids)
 
-    analyses = Analysis.objects.select_related('test', 'type').filter(test__in=tests)
-    if sankey_metrics['analysis_types']:
-        analyses = analyses.filter(type_id__in=sankey_metrics['analysis_types'])
+    pipelines = Pipeline.objects.select_related('test', 'type').filter(test__in=tests)
+    if sankey_metrics['pipeline_types']:
+        pipelines = pipelines.filter(type_id__in=sankey_metrics['pipeline_types'])
 
     # --- Build node lists ---
     # 1. Individuals: "Index", "Family"
@@ -181,11 +181,11 @@ def generate_sankey_data_tests(sankey_metrics):
 
     # 2. Test Types
     test_type_names = sorted(set(t.test_type.name for t in tests if t.test_type))
-    # 3. Analysis Types
-    analysis_type_names = sorted(set(a.type.name for a in analyses if a.type))
+    # 3. Pipeline Types
+    pipeline_type_names = sorted(set(p.type.name for p in pipelines if p.type))
 
     # Build node_labels and index mapping
-    node_labels = individual_nodes + test_type_names + analysis_type_names
+    node_labels = individual_nodes + test_type_names + pipeline_type_names
     node_index = {label: idx for idx, label in enumerate(node_labels)}
 
     # --- Build links ---
@@ -200,15 +200,15 @@ def generate_sankey_data_tests(sankey_metrics):
         if test_node in test_type_names:
             link_counts_1[(ind_node, test_node)] += 1
 
-    # 2. Test Type → Analysis Type
+    # 2. Test Type → Pipeline Type
     link_counts_2 = Counter()
-    for analysis in analyses:
-        if not analysis.test or not analysis.type or not analysis.test.test_type:
+    for pipeline in pipelines:
+        if not pipeline.test or not pipeline.type or not pipeline.test.test_type:
             continue
-        test_node = analysis.test.test_type.name
-        analysis_node = analysis.type.name
-        if test_node in test_type_names and analysis_node in analysis_type_names:
-            link_counts_2[(test_node, analysis_node)] += 1
+        test_node = pipeline.test.test_type.name
+        pipeline_node = pipeline.type.name
+        if test_node in test_type_names and pipeline_node in pipeline_type_names:
+            link_counts_2[(test_node, pipeline_node)] += 1
 
     # --- Build Sankey source, target, value lists ---
     sources = []
@@ -220,7 +220,7 @@ def generate_sankey_data_tests(sankey_metrics):
         sources.append(node_index[src])
         targets.append(node_index[tgt])
         values.append(count)
-    # Test Type → Analysis Type
+    # Test Type → Pipeline Type
     for (src, tgt), count in link_counts_2.items():
         sources.append(node_index[src])
         targets.append(node_index[tgt])
@@ -248,7 +248,7 @@ def generate_sankey_data_tests(sankey_metrics):
         ),
     )
     fig = go.Figure(data=[sankey_data])
-    fig.update_layout(title_text="Individual → Test Type → Analysis Type", font_size=12, height=800)
+    fig.update_layout(title_text="Individual → Test Type → Pipeline Type", font_size=12, height=800)
     return fig.to_dict()
 
 @login_required
@@ -257,28 +257,33 @@ def sankey_visualization(request):
     institution_id = request.GET.get('institution')
     # Get all type IDs
     all_test_type_ids = [tt.id for tt in TestType.objects.all()]
+    all_pipeline_type_ids = [pt.id for pt in PipelineType.objects.all()]
     all_analysis_type_ids = [at.id for at in AnalysisType.objects.all()]
     all_sample_type_ids = [st.id for st in SampleType.objects.all()]
     # Parse advanced filter values as lists
     selected_test_types = request.GET.getlist('test_types')
+    selected_pipeline_types = request.GET.getlist('pipeline_types')
     selected_analysis_types = request.GET.getlist('analysis_types')
     selected_sample_types = request.GET.getlist('sample_types')
     # If no filter is set, default to all checked
     test_types_checked = [int(x) for x in selected_test_types] if selected_test_types else all_test_type_ids
+    pipeline_types_checked = [int(x) for x in selected_pipeline_types] if selected_pipeline_types else all_pipeline_type_ids
     analysis_types_checked = [int(x) for x in selected_analysis_types] if selected_analysis_types else all_analysis_type_ids
     sample_types_checked = [int(x) for x in selected_sample_types] if selected_sample_types else all_sample_type_ids
     sankey_metrics = {
         'indexes_only': indexes_only,
         'institution': int(institution_id) if institution_id else None,
         'test_types': test_types_checked,
+        'pipeline_types': pipeline_types_checked,
         'analysis_types': analysis_types_checked,
         'sample_types': sample_types_checked,
     }
     # Determine if any filter is active
-    filters_active = bool(selected_test_types or selected_analysis_types or selected_sample_types)
+    filters_active = bool(selected_test_types or selected_pipeline_types or selected_analysis_types or selected_sample_types)
     plot_json = generate_sankey_data_tests(sankey_metrics)
     institutions = Institution.objects.all()
     test_types = TestType.objects.all()
+    pipeline_types = PipelineType.objects.all()
     analysis_types = AnalysisType.objects.all()
     sample_types = SampleType.objects.all()
     
@@ -293,6 +298,7 @@ def sankey_visualization(request):
             "sankey_metrics": sankey_metrics,
             "institutions": institutions,
             "test_types": test_types,
+            "pipeline_types": pipeline_types,
             "analysis_types": analysis_types,
             "sample_types": sample_types,
             "filters_active": filters_active,

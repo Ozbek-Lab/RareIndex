@@ -122,7 +122,7 @@ def pie_chart_view(request, model_name, attribute_name):
     
 @login_required
 def get_stats_counts(request):
-    from lab.models import Individual, Sample, Test, Analysis
+    from lab.models import Individual, Sample, Test, Pipeline, Analysis
     from django.db.models import Q
     active_filters = request.session.get('active_filters', {})
     filter_conditions = Q()
@@ -137,16 +137,19 @@ def get_stats_counts(request):
     individuals_queryset = Individual.objects.all()
     samples_queryset = Sample.objects.all().exclude(sample_type__name="Placeholder")
     tests_queryset = Test.objects.all().exclude(sample__sample_type__name="Placeholder")
+    pipelines_queryset = Pipeline.objects.all()
     analyses_queryset = Analysis.objects.all()
     if filter_conditions:
         individuals_queryset = individuals_queryset.filter(filter_conditions)
         samples_queryset = samples_queryset.filter(filter_conditions)
         tests_queryset = tests_queryset.filter(filter_conditions)
+        pipelines_queryset = pipelines_queryset.filter(filter_conditions)
         analyses_queryset = analyses_queryset.filter(filter_conditions)
     data = {
         'individuals': individuals_queryset.count(),
         'samples': samples_queryset.count(),
         'tests': tests_queryset.count(),
+        'pipelines': pipelines_queryset.count(),
         'analyses': analyses_queryset.count(),
     }
     return JsonResponse(data)
@@ -155,7 +158,7 @@ def get_stats_counts(request):
 def plots_page(request):
     """View for the plots page showing various data visualizations."""
     from django.db.models import Count, Q
-    from ..models import Individual, Sample, Test, Analysis, Status, SampleType, TestType, AnalysisType, Institution
+    from ..models import Individual, Sample, Test, Pipeline, Analysis, Status, SampleType, TestType, PipelineType, AnalysisType, Institution
     from variant.models import Variant, Classification
     from .hpo_network_visualization import process_hpo_data
     from ..filters import apply_filters
@@ -193,12 +196,14 @@ def plots_page(request):
     individuals_queryset = Individual.objects.all()
     samples_queryset = Sample.objects.all().exclude(sample_type__name="Placeholder")
     tests_queryset = Test.objects.all().exclude(sample__sample_type__name="Placeholder")
+    pipelines_queryset = Pipeline.objects.all()
     analyses_queryset = Analysis.objects.all()
 
     # Apply URL-based global filters per model using the shared engine
     individuals_queryset = apply_filters(request, "Individual", individuals_queryset)
     samples_queryset = apply_filters(request, "Sample", samples_queryset)
     tests_queryset = apply_filters(request, "Test", tests_queryset)
+    pipelines_queryset = apply_filters(request, "Pipeline", pipelines_queryset)
     analyses_queryset = apply_filters(request, "Analysis", analyses_queryset)
     
     variants_queryset = Variant.objects.all()
@@ -257,6 +262,10 @@ def plots_page(request):
             counts = tests_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
             chart_data = create_pie_chart(counts, 'status__name', colors_map=status_colors)
             
+        elif target_chart_id == 'pipeline-status':
+            counts = pipelines_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+            chart_data = create_pie_chart(counts, 'status__name', colors_map=status_colors)
+            
         elif target_chart_id == 'analysis-status':
             counts = analyses_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
             chart_data = create_pie_chart(counts, 'status__name', colors_map=status_colors)
@@ -269,9 +278,13 @@ def plots_page(request):
             counts = tests_queryset.values('test_type__name').annotate(count=Count('id', distinct=True)).order_by('-count')
             chart_data = create_pie_chart(counts, 'test_type__name', fixed_colors=['#ab63fa', '#FF6692', '#B6E880', '#FF97FF', '#FECB52', '#636EFA'])
             
+        elif target_chart_id == 'pipeline-type':
+            counts = pipelines_queryset.values('type__name').annotate(count=Count('id', distinct=True)).order_by('-count')
+            chart_data = create_pie_chart(counts, 'type__name', fixed_colors=['#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'])
+            
         elif target_chart_id == 'analysis-type':
             counts = analyses_queryset.values('type__name').annotate(count=Count('id', distinct=True)).order_by('-count')
-            chart_data = create_pie_chart(counts, 'type__name', fixed_colors=['#FFA15A', '#19d3f3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'])
+            chart_data = create_pie_chart(counts, 'type__name', fixed_colors=['#ab63fa', '#FF6692', '#B6E880', '#FF97FF', '#FECB52', '#636EFA'])
             
         elif target_chart_id == 'variant-status':
             counts = variants_queryset.values('status__name').annotate(count=Count('id', distinct=True)).order_by('-count')
@@ -499,9 +512,11 @@ def plots_page(request):
         {'id': 'individual-status', 'title': 'Individual Status', 'icon': 'chart-pie'},
         {'id': 'sample-status', 'title': 'Sample Status', 'icon': 'chart-pie'},
         {'id': 'test-status', 'title': 'Test Status', 'icon': 'chart-pie'},
+        {'id': 'pipeline-status', 'title': 'Pipeline Status', 'icon': 'chart-pie'},
         {'id': 'analysis-status', 'title': 'Analysis Status', 'icon': 'chart-pie'},
         {'id': 'sample-type', 'title': 'Sample Type', 'icon': 'chart-pie'},
         {'id': 'test-type', 'title': 'Test Type', 'icon': 'chart-pie'},
+        {'id': 'pipeline-type', 'title': 'Pipeline Type', 'icon': 'chart-pie'},
         {'id': 'analysis-type', 'title': 'Analysis Type', 'icon': 'chart-pie'},
         {'id': 'hpo-terms', 'title': 'HPO Term Distribution', 'icon': 'dna'},
         {'id': 'variant-status', 'title': 'Variant Status', 'icon': 'dna'},
@@ -535,12 +550,14 @@ def plots_page(request):
     individuals_count = individuals_queryset.count()
     samples_count = samples_queryset.count()
     tests_count = tests_queryset.count()
+    pipelines_count = pipelines_queryset.count()
     analyses_count = analyses_queryset.count()
 
     context = {
         'individuals_count': individuals_count,
         'samples_count': samples_count,
         'tests_count': tests_count,
+        'pipelines_count': pipelines_count,
         'analyses_count': analyses_count,
         'distribution_plots': distribution_plots, # Contains only metadata, no 'chart_data'
         'all_filters': all_filters,

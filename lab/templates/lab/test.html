@@ -524,10 +524,10 @@
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
-            :class="activeTab === 'analyses' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
-            @click= "activeTab = 'analyses'"
+            :class="activeTab === 'pipelines' ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-medium' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'"
+            @click= "activeTab = 'pipelines'"
           >
-            Analyses ({{ item.analyses.count }})
+            Pipelines ({{ item.pipelines.count }})
           </button>
           <button
             class="py-2 px-4 border-b-2 transition-colors"
@@ -567,28 +567,28 @@
           {% endwith %}
         </div>
 
-        <!-- Analyses tab -->
-        <div x-show="activeTab === 'analyses'" x-cloak>
-          {% with analyses=item.analyses.all %}
-            <!-- Use existing analysis partials for consistent UI -->
+        <!-- Pipelines tab -->
+        <div x-show="activeTab === 'pipelines'" x-cloak>
+          {% with pipelines=item.pipelines.all %}
+            <!-- Use existing pipeline partials for consistent UI -->
             <div x-data="{ viewMode: 'cards' }" class="space-y-4">
-              <!-- Toolbar: Add Analysis button (left) + view toggle (right when analyses exist) -->
+              <!-- Toolbar: Add Pipeline button (left) + view toggle (right when pipelines exist) -->
               <div class="flex items-center justify-between">
                 <div>
-                  {% has_model_perm user 'lab' 'Analysis' 'add' as can_add_analysis %}
-                  {% if can_add_analysis %}
+                  {% has_model_perm user 'lab' 'Pipeline' 'add' as can_add_pipeline %}
+                  {% if can_add_pipeline %}
                     <button
-                      hx-get="{% url 'lab:generic_create' %}?model_name=Analysis&app_label=lab&test={{ item.id }}"
+                      hx-get="{% url 'lab:generic_create' %}?model_name=Pipeline&app_label=lab&test={{ item.id }}"
                       hx-target="#modal-root"
                       hx-swap="innerHTML"
                       class="inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 transition-colors"
                     >
                       <i class="fa-solid fa-chart-line"></i>
-                      <span>Add Analysis to Test</span>
+                      <span>Add Pipeline to Test</span>
                     </button>
                   {% endif %}
                 </div>
-                {% if analyses %}
+                {% if pipelines %}
                   <div
                     class="relative bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex items-center"
                   >
@@ -633,7 +633,7 @@
                 {% endif %}
               </div>
 
-              {% if analyses %}
+              {% if pipelines %}
                 <!-- Card View with animated transition -->
                 <div
                   x-show="viewMode === 'cards'"
@@ -646,9 +646,9 @@
                   class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
                   style="will-change: opacity, transform;"
                 >
-                  {% for analysis in analyses %}
-                    {% with item=analysis %}
-                      {% include "lab/analysis.html#card" %}
+                  {% for pipeline in pipelines %}
+                    {% with item=pipeline %}
+                      {% include "lab/pipeline.html#card" %}
                     {% endwith %}
                   {% endfor %}
                 </div>
@@ -665,13 +665,13 @@
                   class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
                   style="will-change: opacity, transform;"
                 >
-                  {% with items=analyses view_mode='table' model_name='Analysis' app_label='lab' card='card' %}
-                    {% include "lab/analysis.html#table" %}
+                  {% with items=pipelines view_mode='table' model_name='Pipeline' app_label='lab' card='card' %}
+                    {% include "lab/pipeline.html#table" %}
                   {% endwith %}
                 </div>
               {% else %}
                 <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
-                  No analyses available for this test.
+                  No pipelines available for this test.
                 </div>
               {% endif %}
             </div>

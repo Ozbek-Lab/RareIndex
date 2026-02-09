@@ -1,6 +1,6 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
-from lab.models import Individual, Analysis, Status, Test, TestType, Sample, SampleType, AnalysisType
+from lab.models import Individual, Pipeline, Status, Test, TestType, Sample, SampleType, PipelineType
 from variant.models import SNV, Variant, Annotation, Classification
 from variant.services import DiagnosticService, AnnotationService
 
@@ -51,16 +51,16 @@ class ServiceTest(TestCase):
             sample=self.sample, test_type=self.test_type, 
             status=self.status_neg, created_by=self.user
         )
-        self.analysis_type = AnalysisType.objects.create(name="WGS Analysis", created_by=self.user)
+        self.pipeline_type = PipelineType.objects.create(name="WGS Pipeline", created_by=self.user)
 
     def test_diagnostic_yield(self):
         # Create 1 solved, 1 negative
-        Analysis.objects.create(
-            test=self.test, type=self.analysis_type, status=self.status_solved, 
+        Pipeline.objects.create(
+            test=self.test, type=self.pipeline_type, status=self.status_solved, 
             performed_date="2023-01-01", performed_by=self.user, created_by=self.user
         )
-        Analysis.objects.create(
-            test=self.test, type=self.analysis_type, status=self.status_neg, 
+        Pipeline.objects.create(
+            test=self.test, type=self.pipeline_type, status=self.status_neg, 
             performed_date="2023-01-01", performed_by=self.user, created_by=self.user
         )
         
@@ -94,16 +94,16 @@ class VariantViewTest(TestCase):
             sample=self.sample, test_type=self.test_type, 
             status=self.status, created_by=self.user
         )
-        self.analysis_type = AnalysisType.objects.create(name="WGS Analysis", created_by=self.user)
-        self.analysis = Analysis.objects.create(
-            test=self.test, type=self.analysis_type, status=self.status, 
+        self.pipeline_type = PipelineType.objects.create(name="WGS Pipeline", created_by=self.user)
+        self.pipeline = Pipeline.objects.create(
+            test=self.test, type=self.pipeline_type, status=self.status, 
             performed_date="2023-01-01", performed_by=self.user, created_by=self.user
         )
 
     def test_variant_create_view_get(self):
         response = self.client.get(
             "/variant/create/", 
-            {"analysis_id": self.analysis.id, "type": "snv"}
+            {"pipeline_id": self.pipeline.id, "type": "snv"}
         )
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "variant/variant_form.html")
@@ -118,13 +118,13 @@ class VariantViewTest(TestCase):
             "alternate": "T"
         }
         response = self.client.post(
-            f"/variant/create/?analysis_id={self.analysis.id}&type=snv",
+            f"/variant/create/?pipeline_id={self.pipeline.id}&type=snv",
             data
         )
         self.assertEqual(response.status_code, 302) # Redirect
         self.assertEqual(SNV.objects.count(), 1)
         snv = SNV.objects.first()
-        self.assertEqual(snv.analysis, self.analysis)
+        self.assertEqual(snv.pipeline, self.pipeline)
         self.assertEqual(snv.individual, self.individual)
 
     def test_variant_create_view_post_htmx(self):
@@ -137,7 +137,7 @@ class VariantViewTest(TestCase):
             "alternate": "C"
         }
         response = self.client.post(
-            f"/variant/create/?analysis_id={self.analysis.id}&type=snv",
+            f"/variant/create/?pipeline_id={self.pipeline.id}&type=snv",
             data,
             headers={"HX-Request": "true"}
         )

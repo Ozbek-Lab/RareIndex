@@ -186,48 +186,48 @@ def timeline(request, pk):
                     'details': f"Test Type: {test.test_type.name}, Data Receipt Date: {test.data_receipt_date}"
                 })
     
-    # Get analysis history and important dates
+    # Get pipeline history and important dates
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
+            for pipeline in test.pipelines.all():
                 # Add the actual created_at date
-                analysis_created_at = analysis.get_created_at()
-                if analysis_created_at:
+                pipeline_created_at = pipeline.get_created_at()
+                if pipeline_created_at:
                     timeline_events.append({
-                        'date': analysis_created_at,
-                        'type': 'analysis',
+                        'date': pipeline_created_at,
+                        'type': 'pipeline',
                         'action': 'Created',
-                        'description': f"Analysis {analysis.id} created",
+                        'description': f"Pipeline {pipeline.id} created",
                         'user': 'System',
-                        'object_name': 'Analysis',
-                        'object_id': f"Analysis {analysis.id}",
-                        'details': f"Type: {analysis.type.name}, Created: {analysis_created_at.date()}"
+                        'object_name': 'Pipeline',
+                        'object_id': f"Pipeline {pipeline.id}",
+                        'details': f"Type: {pipeline.type.name}, Created: {pipeline_created_at.date()}"
                     })
                 
-                for record in analysis.history.all():
+                for record in pipeline.history.all():
                     if 'created' not in record.get_history_type_display().lower():
                         timeline_events.append({
                             'date': record.history_date,
-                            'type': 'analysis',
+                            'type': 'pipeline',
                             'action': record.get_history_type_display(),
-                            'description': f"Analysis {record.get_history_type_display().lower()}",
+                            'description': f"Pipeline {record.get_history_type_display().lower()}",
                             'user': record.history_user.username if record.history_user else 'System',
-                            'object_name': 'Analysis',
-                            'object_id': f"Analysis {analysis.id}",
-                            'details': f"Type: {analysis.type.name}, Status: {record.status.name if record.status else 'N/A'}"
+                            'object_name': 'Pipeline',
+                            'object_id': f"Pipeline {pipeline.id}",
+                            'details': f"Type: {pipeline.type.name}, Status: {record.status.name if record.status else 'N/A'}"
                         })
                 
-                # Add analysis's important dates
-                if analysis.performed_date:
+                # Add pipeline's important dates
+                if pipeline.performed_date:
                     timeline_events.append({
-                        'date': analysis.performed_date,
-                        'type': 'analysis',
+                        'date': pipeline.performed_date,
+                        'type': 'pipeline',
                         'action': 'Performed Date',
-                        'description': 'Analysis Performed',
-                        'user': analysis.performed_by.username,
-                        'object_name': 'Analysis',
-                        'object_id': f"Analysis {analysis.id}",
-                        'details': f"Analysis Type: {analysis.type.name}, Performed Date: {analysis.performed_date}"
+                        'description': 'Pipeline Performed',
+                        'user': pipeline.performed_by.username,
+                        'object_name': 'Pipeline',
+                        'object_id': f"Pipeline {pipeline.id}",
+                        'details': f"Pipeline Type: {pipeline.type.name}, Performed Date: {pipeline.performed_date}"
                     })
     
     # Get task history and important dates
@@ -446,12 +446,12 @@ def timeline(request, pk):
                         'details': f"Test: {test.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
                     })
     
-    # Get analysis tasks and notes
+    # Get pipeline tasks and notes
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                # Analysis tasks
-                for task in analysis.tasks.all():
+            for pipeline in test.pipelines.all():
+                # Pipeline tasks
+                for task in pipeline.tasks.all():
                     task_created_at = task.get_created_at()
                     if task_created_at:
                         timeline_events.append({
@@ -462,7 +462,7 @@ def timeline(request, pk):
                             'user': 'System',
                             'object_name': 'Task',
                             'object_id': f"Task {task.id}",
-                            'details': f"Analysis: {analysis.id}, Title: {task.title}, Created: {task_created_at.date()}"
+                            'details': f"Pipeline: {pipeline.id}, Title: {task.title}, Created: {task_created_at.date()}"
                         })
                     
                     for record in task.history.all():
@@ -475,7 +475,7 @@ def timeline(request, pk):
                                 'user': record.history_user.username if record.history_user else 'System',
                                 'object_name': 'Task',
                                 'object_id': f"Task {task.id}",
-                                'details': f"Analysis: {analysis.id}, Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
+                                'details': f"Pipeline: {pipeline.id}, Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
                             })
                     
                     # Add task's important dates
@@ -488,11 +488,11 @@ def timeline(request, pk):
                             'user': 'System',
                             'object_name': 'Task',
                             'object_id': f"Task {task.id}",
-                            'details': f"Analysis: {analysis.id}, Task: {task.title}, Due Date: {task.due_date}, Priority: {task.priority}"
+                            'details': f"Pipeline: {pipeline.id}, Task: {task.title}, Due Date: {task.due_date}, Priority: {task.priority}"
                         })
                 
-                # Analysis notes
-                for note in analysis.notes.all():
+                # Pipeline notes
+                for note in pipeline.notes.all():
                     note_created_at = note.get_created_at()
                     if note_created_at:
                         timeline_events.append({
@@ -503,7 +503,7 @@ def timeline(request, pk):
                             'user': note.user.username,
                             'object_name': 'Note',
                             'object_id': f"Note {note.id}",
-                            'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                            'details': f"Pipeline: {pipeline.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
                         })
                     
                     # Add note update if it was modified
@@ -517,8 +517,125 @@ def timeline(request, pk):
                             'user': note.user.username,
                             'object_name': 'Note',
                             'object_id': f"Note {note.id}",
-                            'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                            'details': f"Pipeline: {pipeline.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
                         })
+                
+                # Get analysis history and important dates
+                for analysis in pipeline.analyses.all():
+                    # Add the actual created_at date
+                    analysis_created_at = analysis.get_created_at()
+                    if analysis_created_at:
+                        timeline_events.append({
+                            'date': analysis_created_at,
+                            'type': 'analysis',
+                            'action': 'Created',
+                            'description': f"Analysis {analysis.id} created",
+                            'user': 'System',
+                            'object_name': 'Analysis',
+                            'object_id': f"Analysis {analysis.id}",
+                            'details': f"Type: {analysis.type.name}, Created: {analysis_created_at.date()}"
+                        })
+                    
+                    for record in analysis.history.all():
+                        if 'created' not in record.get_history_type_display().lower():
+                            timeline_events.append({
+                                'date': record.history_date,
+                                'type': 'analysis',
+                                'action': record.get_history_type_display(),
+                                'description': f"Analysis {record.get_history_type_display().lower()}",
+                                'user': record.history_user.username if record.history_user else 'System',
+                                'object_name': 'Analysis',
+                                'object_id': f"Analysis {analysis.id}",
+                                'details': f"Type: {analysis.type.name}, Status: {record.status.name if record.status else 'N/A'}"
+                            })
+                    
+                    # Add analysis's important dates
+                    if analysis.performed_date:
+                        timeline_events.append({
+                            'date': analysis.performed_date,
+                            'type': 'analysis',
+                            'action': 'Performed Date',
+                            'description': 'Analysis Performed',
+                            'user': analysis.performed_by.username,
+                            'object_name': 'Analysis',
+                            'object_id': f"Analysis {analysis.id}",
+                            'details': f"Analysis Type: {analysis.type.name}, Performed Date: {analysis.performed_date}"
+                        })
+    
+    # Get analysis tasks and notes
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for pipeline in test.pipelines.all():
+                for analysis in pipeline.analyses.all():
+                    # Analysis tasks
+                    for task in analysis.tasks.all():
+                        task_created_at = task.get_created_at()
+                        if task_created_at:
+                            timeline_events.append({
+                                'date': task_created_at,
+                                'type': 'task',
+                                'action': 'Created',
+                                'description': f"Task {task.id} created",
+                                'user': 'System',
+                                'object_name': 'Task',
+                                'object_id': f"Task {task.id}",
+                                'details': f"Analysis: {analysis.id}, Title: {task.title}, Created: {task_created_at.date()}"
+                            })
+                        
+                        for record in task.history.all():
+                            if 'created' not in record.get_history_type_display().lower():
+                                timeline_events.append({
+                                    'date': record.history_date,
+                                    'type': 'task',
+                                    'action': record.get_history_type_display(),
+                                    'description': f"Task {record.get_history_type_display().lower()}",
+                                    'user': record.history_user.username if record.history_user else 'System',
+                                    'object_name': 'Task',
+                                    'object_id': f"Task {task.id}",
+                                    'details': f"Analysis: {analysis.id}, Priority: {record.priority}, Status: {record.status.name if record.status else 'N/A'}"
+                                })
+                        
+                        # Add task's important dates
+                        if task.due_date:
+                            timeline_events.append({
+                                'date': task.due_date,
+                                'type': 'task',
+                                'action': 'Due Date',
+                                'description': 'Task Due Date',
+                                'user': 'System',
+                                'object_name': 'Task',
+                                'object_id': f"Task {task.id}",
+                                'details': f"Analysis: {analysis.id}, Task: {task.title}, Due Date: {task.due_date}, Priority: {task.priority}"
+                            })
+                    
+                    # Analysis notes
+                    for note in analysis.notes.all():
+                        note_created_at = note.get_created_at()
+                        if note_created_at:
+                            timeline_events.append({
+                                'date': note_created_at,
+                                'type': 'note',
+                                'action': 'Created',
+                                'description': 'Note added',
+                                'user': note.user.username,
+                                'object_name': 'Note',
+                                'object_id': f"Note {note.id}",
+                                'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                            })
+                        
+                        # Add note update if it was modified
+                        note_updated_at = note.get_updated_at()
+                        if note_updated_at and note_updated_at != note_created_at:
+                            timeline_events.append({
+                                'date': note_updated_at,
+                                'type': 'note',
+                                'action': 'Updated',
+                                'description': 'Note updated',
+                                'user': note.user.username,
+                                'object_name': 'Note',
+                                'object_id': f"Note {note.id}",
+                                'details': f"Analysis: {analysis.id}, Content: {note.content[:100]}{'...' if len(note.content) > 100 else ''}"
+                            })
     # Convert all dates to timezone-aware datetime.datetime objects and sort timeline events by date
     from datetime import datetime, time, date
     from django.utils import timezone
@@ -545,6 +662,7 @@ def timeline(request, pk):
     # Pre-calculate y-positions using depth-first search
     sample_positions = {}
     test_positions = {}
+    pipeline_positions = {}
     analysis_positions = {}
     task_positions = {}
     note_positions = {}
@@ -552,7 +670,8 @@ def timeline(request, pk):
     # Configuration
     sample_offset = 1
     test_offset = 0.5
-    analysis_offset = 0.25
+    pipeline_offset = 0.25
+    analysis_offset = 0.125
     
     # Assign y-positions using depth-first search with chronological ordering within each level
     current_y = 0  # Individual is at 0
@@ -575,14 +694,23 @@ def timeline(request, pk):
             test_positions[test.id] = current_y + test_offset
             current_y = test_positions[test.id]
             
-            # Process analyses for this test in chronological order
-            all_analyses = list(test.analyses.all())
-            all_analyses.sort(key=lambda a: a.get_created_at().date() if a.get_created_at() else date(2025, 1, 1))
+            # Process pipelines for this test in chronological order
+            all_pipelines = list(test.pipelines.all())
+            all_pipelines.sort(key=lambda p: p.get_created_at().date() if p.get_created_at() else date(2025, 1, 1))
             
-            for analysis in all_analyses:
-                # Assign analysis position
-                analysis_positions[analysis.id] = current_y + analysis_offset
-                current_y = analysis_positions[analysis.id]
+            for pipeline in all_pipelines:
+                # Assign pipeline position
+                pipeline_positions[pipeline.id] = current_y + pipeline_offset
+                current_y = pipeline_positions[pipeline.id]
+                
+                # Process analyses for this pipeline in chronological order
+                all_analyses = list(pipeline.analyses.all())
+                all_analyses.sort(key=lambda a: a.get_created_at().date() if a.get_created_at() else date(2025, 1, 1))
+                
+                for analysis in all_analyses:
+                    # Assign analysis position
+                    analysis_positions[analysis.id] = current_y + analysis_offset
+                    current_y = analysis_positions[analysis.id]
     
     # Process individual tasks and notes in chronological order (mixed together)
     current_y = -0.25  # Start at -0.25 for individual tasks and notes
@@ -627,6 +755,9 @@ def timeline(request, pk):
         elif event['type'] == 'test':
             test_id = int(event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id'])
             y_positions.append(test_positions.get(test_id, 0))
+        elif event['type'] == 'pipeline':
+            pipeline_id = int(event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id'])
+            y_positions.append(pipeline_positions.get(pipeline_id, 0))
         elif event['type'] == 'analysis':
             analysis_id = int(event['object_id'].split()[-1] if ' ' in event['object_id'] else event['object_id'])
             y_positions.append(analysis_positions.get(analysis_id, 0))
@@ -645,7 +776,8 @@ def timeline(request, pk):
         'individual': '#1f77b4',
         'sample': '#ff7f0e', 
         'test': '#2ca02c',
-        'analysis': '#d62728',
+        'pipeline': '#d62728',
+        'analysis': '#ff7f0e',
         'task': '#9467bd',
         'note': '#8c564b'
     }
@@ -655,6 +787,7 @@ def timeline(request, pk):
         'individual': 3,
         'sample': 2, 
         'test': 2,
+        'pipeline': 2,
         'analysis': 2,
         'task': 2,
         'note': 2
@@ -734,6 +867,7 @@ def timeline(request, pk):
     # Get actual creation dates from models
     sample_creation_dates = {}
     test_creation_dates = {}
+    pipeline_creation_dates = {}
     analysis_creation_dates = {}
     
     # Get sample creation dates
@@ -749,13 +883,22 @@ def timeline(request, pk):
             if test_created_at:
                 test_creation_dates[test.id] = test_created_at.date().isoformat()
     
+    # Get pipeline creation dates
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for pipeline in test.pipelines.all():
+                pipeline_created_at = pipeline.get_created_at()
+                if pipeline_created_at:
+                    pipeline_creation_dates[pipeline.id] = pipeline_created_at.date().isoformat()
+    
     # Get analysis creation dates
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                analysis_created_at = analysis.get_created_at()
-                if analysis_created_at:
-                    analysis_creation_dates[analysis.id] = analysis_created_at.date().isoformat()
+            for pipeline in test.pipelines.all():
+                for analysis in pipeline.analyses.all():
+                    analysis_created_at = analysis.get_created_at()
+                    if analysis_created_at:
+                        analysis_creation_dates[analysis.id] = analysis_created_at.date().isoformat()
     
 
     
@@ -788,21 +931,38 @@ def timeline(request, pk):
                     line=dict(color=color_map['test'], width=width_map['test'])
                 )
     
+    # Pipeline lines - from created_at to now
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for pipeline in test.pipelines.all():
+                if pipeline.id in pipeline_positions:
+                    pipeline_created_at = pipeline.get_created_at()
+                    pipeline_created = pipeline_created_at.date().isoformat() if pipeline_created_at else '2025-01-01'
+                    fig.add_shape(
+                        type='line',
+                        x0=pipeline_created,
+                        x1=date.today().isoformat(),
+                        y0=pipeline_positions[pipeline.id],
+                        y1=pipeline_positions[pipeline.id],
+                        line=dict(color=color_map['pipeline'], width=width_map['pipeline'])
+                    )
+    
     # Analysis lines - from created_at to now
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                if analysis.id in analysis_positions:
-                    analysis_created_at = analysis.get_created_at()
-                    analysis_created = analysis_created_at.date().isoformat() if analysis_created_at else '2025-01-01'
-                    fig.add_shape(
-                        type='line',
-                        x0=analysis_created,
-                        x1=date.today().isoformat(),
-                        y0=analysis_positions[analysis.id],
-                        y1=analysis_positions[analysis.id],
-                        line=dict(color=color_map['analysis'], width=width_map['analysis'])
-                    )
+            for pipeline in test.pipelines.all():
+                for analysis in pipeline.analyses.all():
+                    if analysis.id in analysis_positions:
+                        analysis_created_at = analysis.get_created_at()
+                        analysis_created = analysis_created_at.date().isoformat() if analysis_created_at else '2025-01-01'
+                        fig.add_shape(
+                            type='line',
+                            x0=analysis_created,
+                            x1=date.today().isoformat(),
+                            y0=analysis_positions[analysis.id],
+                            y1=analysis_positions[analysis.id],
+                            line=dict(color=color_map['analysis'], width=width_map['analysis'])
+                        )
     
     # Task lines - from created_at to due_date (or now if no due_date)
     for task in individual.tasks.all():
@@ -897,11 +1057,11 @@ def timeline(request, pk):
                         line=dict(color=color_map['note'], width=width_map['note'])
                     )
     
-    # Analysis task lines - from created_at to due_date (or now if no due_date)
+    # Pipeline task lines - from created_at to due_date (or now if no due_date)
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                for task in analysis.tasks.all():
+            for pipeline in test.pipelines.all():
+                for task in pipeline.tasks.all():
                     if task.id in task_positions:
                         task_created_at = task.get_created_at()
                         task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
@@ -915,11 +1075,11 @@ def timeline(request, pk):
                             line=dict(color=color_map['task'], width=width_map['task'])
                         )
     
-    # Analysis note lines - from created_at to now
+    # Pipeline note lines - from created_at to now
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                for note in analysis.notes.all():
+            for pipeline in test.pipelines.all():
+                for note in pipeline.notes.all():
                     if note.id in note_positions:
                         note_created_at = note.get_created_at()
                         note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
@@ -964,21 +1124,38 @@ def timeline(request, pk):
                     line=dict(color=color_map['test'], width=width_map['test'], dash='dot')
                 )
     
-    # Analysis creation vertical lines - connect to their test
+    # Pipeline creation vertical lines - connect to their test
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                if analysis.id in analysis_positions and test.id in test_positions:
-                    analysis_created_at = analysis.get_created_at()
-                    analysis_created = analysis_created_at.date().isoformat() if analysis_created_at else '2025-01-01'
+            for pipeline in test.pipelines.all():
+                if pipeline.id in pipeline_positions and test.id in test_positions:
+                    pipeline_created_at = pipeline.get_created_at()
+                    pipeline_created = pipeline_created_at.date().isoformat() if pipeline_created_at else '2025-01-01'
                     fig.add_shape(
                         type='line',
-                        x0=analysis_created,
-                        x1=analysis_created,
+                        x0=pipeline_created,
+                        x1=pipeline_created,
                         y0=test_positions[test.id],  # Test position
-                        y1=analysis_positions[analysis.id],  # Analysis position
-                        line=dict(color=color_map['analysis'], width=width_map['analysis'], dash='dot')
+                        y1=pipeline_positions[pipeline.id],  # Pipeline position
+                        line=dict(color=color_map['pipeline'], width=width_map['pipeline'], dash='dot')
                     )
+    
+    # Analysis creation vertical lines - connect to their pipeline
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for pipeline in test.pipelines.all():
+                for analysis in pipeline.analyses.all():
+                    if analysis.id in analysis_positions and pipeline.id in pipeline_positions:
+                        analysis_created_at = analysis.get_created_at()
+                        analysis_created = analysis_created_at.date().isoformat() if analysis_created_at else '2025-01-01'
+                        fig.add_shape(
+                            type='line',
+                            x0=analysis_created,
+                            x1=analysis_created,
+                            y0=pipeline_positions[pipeline.id],  # Pipeline position
+                            y1=analysis_positions[analysis.id],  # Analysis position
+                            line=dict(color=color_map['analysis'], width=width_map['analysis'], dash='dot')
+                        )
     
     # Task creation vertical lines - connect to individual
     for task in individual.tasks.all():
@@ -1070,39 +1247,75 @@ def timeline(request, pk):
                         line=dict(color=color_map['note'], width=width_map['note'], dash='dot')
                     )
     
-    # Analysis task creation vertical lines - connect to analysis
+    # Pipeline task creation vertical lines - connect to pipeline
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                for task in analysis.tasks.all():
-                    if task.id in task_positions and analysis.id in analysis_positions:
+            for pipeline in test.pipelines.all():
+                for task in pipeline.tasks.all():
+                    if task.id in task_positions and pipeline.id in pipeline_positions:
                         task_created_at = task.get_created_at()
                         task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
                         fig.add_shape(
                             type='line',
                             x0=task_created,
                             x1=task_created,
-                            y0=analysis_positions[analysis.id],  # Analysis position
+                            y0=pipeline_positions[pipeline.id],  # Pipeline position
                             y1=task_positions[task.id],  # Task position
                             line=dict(color=color_map['task'], width=width_map['task'], dash='dot')
                         )
     
-    # Analysis note creation vertical lines - connect to analysis
+    # Pipeline note creation vertical lines - connect to pipeline
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                for note in analysis.notes.all():
-                    if note.id in note_positions and analysis.id in analysis_positions:
+            for pipeline in test.pipelines.all():
+                for note in pipeline.notes.all():
+                    if note.id in note_positions and pipeline.id in pipeline_positions:
                         note_created_at = note.get_created_at()
                         note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
                         fig.add_shape(
                             type='line',
                             x0=note_created,
                             x1=note_created,
-                            y0=analysis_positions[analysis.id],  # Analysis position
+                            y0=pipeline_positions[pipeline.id],  # Pipeline position
                             y1=note_positions[note.id],  # Note position
                             line=dict(color=color_map['note'], width=width_map['note'], dash='dot')
                         )
+    
+    # Analysis task creation vertical lines - connect to analysis
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for pipeline in test.pipelines.all():
+                for analysis in pipeline.analyses.all():
+                    for task in analysis.tasks.all():
+                        if task.id in task_positions and analysis.id in analysis_positions:
+                            task_created_at = task.get_created_at()
+                            task_created = task_created_at.date().isoformat() if task_created_at else '2025-01-01'
+                            fig.add_shape(
+                                type='line',
+                                x0=task_created,
+                                x1=task_created,
+                                y0=analysis_positions[analysis.id],  # Analysis position
+                                y1=task_positions[task.id],  # Task position
+                                line=dict(color=color_map['task'], width=width_map['task'], dash='dot')
+                            )
+    
+    # Analysis note creation vertical lines - connect to analysis
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for pipeline in test.pipelines.all():
+                for analysis in pipeline.analyses.all():
+                    for note in analysis.notes.all():
+                        if note.id in note_positions and analysis.id in analysis_positions:
+                            note_created_at = note.get_created_at()
+                            note_created = note_created_at.date().isoformat() if note_created_at else '2025-01-01'
+                            fig.add_shape(
+                                type='line',
+                                x0=note_created,
+                                x1=note_created,
+                                y0=analysis_positions[analysis.id],  # Analysis position
+                                y1=note_positions[note.id],  # Note position
+                                line=dict(color=color_map['note'], width=width_map['note'], dash='dot')
+                            )
     
 
     

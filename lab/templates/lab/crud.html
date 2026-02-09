@@ -71,8 +71,12 @@
                         {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
-                      {% elif model_name == 'Analysis' and field.name == 'test' %}
+                      {% elif model_name == 'Pipeline' and field.name == 'test' %}
                         {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
+                          {% include "lab/partials/partials.html#single-generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Analysis' and field.name == 'pipeline' %}
+                        {% with app_label='lab' model_name='Pipeline' icon_class='fa-chart-line' value_field='pk' name='pipeline' initial=initial_pipeline|default:'' initial_value=initial_pipeline.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -137,8 +141,12 @@
                         {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
-                      {% elif model_name == 'Analysis' and field.name == 'test' %}
+                      {% elif model_name == 'Pipeline' and field.name == 'test' %}
                         {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
+                          {% include "lab/partials/partials.html#single-generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Analysis' and field.name == 'pipeline' %}
+                        {% with app_label='lab' model_name='Pipeline' icon_class='fa-chart-line' value_field='pk' name='pipeline' initial=initial_pipeline|default:'' initial_value=initial_pipeline.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -360,8 +368,12 @@
                         {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
-                      {% elif model_name == 'Analysis' and field.name == 'test' %}
+                      {% elif model_name == 'Pipeline' and field.name == 'test' %}
                         {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
+                          {% include "lab/partials/partials.html#single-generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Analysis' and field.name == 'pipeline' %}
+                        {% with app_label='lab' model_name='Pipeline' icon_class='fa-chart-line' value_field='pk' name='pipeline' initial=initial_pipeline|default:'' initial_value=initial_pipeline.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -414,8 +426,12 @@
                         {% with app_label='lab' model_name='Sample' icon_class='fa-vial' value_field='pk' name='sample' initial=initial_sample|default:'' initial_value=initial_sample.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
-                      {% elif model_name == 'Analysis' and field.name == 'test' %}
+                      {% elif model_name == 'Pipeline' and field.name == 'test' %}
                         {% with app_label='lab' model_name='Test' icon_class='fa-flask-vial' value_field='pk' name='test' initial=initial_test|default:'' initial_value=initial_test.pk|default:'' %}
+                          {% include "lab/partials/partials.html#single-generic-combobox" %}
+                        {% endwith %}
+                      {% elif model_name == 'Analysis' and field.name == 'pipeline' %}
+                        {% with app_label='lab' model_name='Pipeline' icon_class='fa-chart-line' value_field='pk' name='pipeline' initial=initial_pipeline|default:'' initial_value=initial_pipeline.pk|default:'' %}
                           {% include "lab/partials/partials.html#single-generic-combobox" %}
                         {% endwith %}
                       {% else %}
@@ -564,6 +580,39 @@
           <div class="mb-4">
       {% endif %}
     {% elif model_name == 'Analysis' %}
+      {% if individual %}
+        {% if sample %}
+          {% if test %}
+            {% if pipeline %}
+              <div
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-6xl w-full mx-4 text-left max-h-[90vh] overflow-y-auto"
+              >
+                <div class="flex items-center gap-4 mb-4">
+            {% else %}
+              <div
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+              >
+                <div class="mb-4">
+            {% endif %}
+          {% else %}
+            <div
+              class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+            >
+              <div class="mb-4">
+          {% endif %}
+        {% else %}
+          <div
+            class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+          >
+            <div class="mb-4">
+        {% endif %}
+      {% else %}
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 text-center max-h-[90vh] overflow-y-auto"
+        >
+          <div class="mb-4">
+      {% endif %}
+    {% elif model_name == 'Pipeline' %}
       {% if individual %}
         {% if sample %}
           {% if test %}
@@ -731,7 +780,7 @@
         </div>
       {% endif %}
 
-      {% if model_name == 'Analysis' and individual and sample and test %}
+      {% if model_name == 'Pipeline' and individual and sample and test %}
         <!-- Individual, Sample, and Test Cards Section (side by side) -->
         <div class="mb-6">
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
@@ -751,6 +800,76 @@
             <div>
               {% with item=test %}
                 {% include "lab/test.html#card" %}
+              {% endwith %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipelines Section -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            All Pipelines for This Individual
+          </h3>
+          
+          <!-- Newly Created Pipeline -->
+          {% if new_pipeline %}
+            <div class="mb-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <i class="fa-solid fa-star mr-1"></i>Newly Created
+                </span>
+              </div>
+              <div class="border-2 border-green-500 dark:border-green-400 rounded-lg p-1 bg-green-50 dark:bg-green-900/20">
+                {% with item=new_pipeline %}
+                  {% include "lab/pipeline.html#card" %}
+                {% endwith %}
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Other Pipelines -->
+          {% if other_pipelines %}
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Other Pipelines</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for pipeline in other_pipelines %}
+                  {% with item=pipeline %}
+                    {% include "lab/pipeline.html#card" %}
+                  {% endwith %}
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if model_name == 'Analysis' and individual and sample and test and pipeline %}
+        <!-- Individual, Sample, Test, and Pipeline Cards Section (side by side) -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            Connected Individual, Sample, Test & Pipeline
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div>
+              {% with item=individual %}
+                {% include "lab/individual.html#card" %}
+              {% endwith %}
+            </div>
+            <div>
+              {% with item=sample %}
+                {% include "lab/sample.html#card" %}
+              {% endwith %}
+            </div>
+            <div>
+              {% with item=test %}
+                {% include "lab/test.html#card" %}
+              {% endwith %}
+            </div>
+            <div>
+              {% with item=pipeline %}
+                {% include "lab/pipeline.html#card" %}
               {% endwith %}
             </div>
           </div>
@@ -815,6 +934,10 @@
               {% elif associated_model_name == 'test' %}
                 {% with item=associated_object %}
                   {% include "lab/test.html#card" %}
+                {% endwith %}
+              {% elif associated_model_name == 'pipeline' %}
+                {% with item=associated_object %}
+                  {% include "lab/pipeline.html#card" %}
                 {% endwith %}
               {% elif associated_model_name == 'analysis' %}
                 {% with item=associated_object %}
@@ -916,6 +1039,53 @@
             </button>
           </div>
         {% elif not sample %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% endif %}
+      {% elif model_name == 'Pipeline' %}
+        {% if not individual %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% elif not sample %}
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="document.getElementById('modal-root').innerHTML = ''; goBack()"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Back to Index
+            </button>
+            <button
+              @click="document.getElementById('modal-root').innerHTML = ''; openDetail({{ object.pk }}, '{{ model_name }}', '{{ app_label }}')"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View Details
+            </button>
+          </div>
+        {% elif not test %}
           <div class="flex justify-center space-x-3">
             <button
               @click="document.getElementById('modal-root').innerHTML = ''; goBack()"

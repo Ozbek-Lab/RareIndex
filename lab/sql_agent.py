@@ -154,13 +154,13 @@ def get_schema_description() -> str:
         - lab_individual (individuals/patients)
         - lab_sample (biological samples)
         - lab_test (tests performed on samples)
-        - lab_analysis (analysis results)
+        - lab_pipeline (pipeline results)
         - lab_project (research projects)
         - lab_task (tasks)
         - lab_institution (healthcare institutions)
         - lab_sampletype (sample types)
         - lab_testtype (test types)
-        - lab_analysistype (analysis types)
+        - lab_pipelinetype (pipeline types)
         - lab_status (status tracking)
         """
 

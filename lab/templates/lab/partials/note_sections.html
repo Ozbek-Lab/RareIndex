@@ -48,19 +48,19 @@
           {% endwith %}
         </div>
         <div>
-          <h4 class="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Analyses</h4>
-          {% with analyses=individual|get_all_analyses %}
-            {% if analyses %}
-              {% for analysis in analyses %}
+          <h4 class="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Pipelines</h4>
+          {% with pipelines=individual|get_all_pipelines %}
+            {% if pipelines %}
+              {% for pipeline in pipelines %}
                 <div class="mb-3 last:mb-0">
-                  <p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{{ analysis }}</p>
-                  {% with object=analysis content_type='analysis' user=user %}
+                  <p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{{ pipeline }}</p>
+                  {% with object=pipeline content_type='pipeline' user=user %}
                     {% include 'lab/note.html#list' %}
                   {% endwith %}
                 </div>
               {% endfor %}
             {% else %}
-              <p class="text-xs text-gray-500 dark:text-gray-500">No analyses.</p>
+              <p class="text-xs text-gray-500 dark:text-gray-500">No pipelines.</p>
             {% endif %}
           {% endwith %}
         </div>

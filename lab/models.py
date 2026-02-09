@@ -453,7 +453,7 @@ class Sample(HistoryMixin, models.Model):
     def variants(self):
         from django.apps import apps
         Variant = apps.get_model("variant", "Variant")
-        return Variant.objects.filter(analysis__test__sample=self).distinct()
+        return Variant.objects.filter(analysis__pipeline__test__sample=self).distinct()
 
     class Meta:
         ordering = ["-receipt_date"]
@@ -514,7 +514,7 @@ class Test(HistoryMixin, models.Model):
     def variants(self):
         from django.apps import apps
         Variant = apps.get_model("variant", "Variant")
-        return Variant.objects.filter(analysis__test=self).distinct()
+        return Variant.objects.filter(analysis__pipeline__test=self).distinct()
 
     def __str__(self):
         return f"{self.test_type} - {self.sample}"
@@ -542,8 +542,83 @@ class Test(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+class PipelineType(HistoryMixin, models.Model):
+    """Model for defining types of pipelines that can be performed"""
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    version = models.CharField(max_length=50, null=True, blank=True)
+    parent_types = models.ManyToManyField(
+        "self", blank=True, symmetrical=False, related_name="subtypes"
+    )
+    source_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="URL to the pipeline source code or documentation",
+    )
+    results_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="URL to view pipeline results",
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="created_pipeline_types"
+    )
+    history = HistoricalRecords()
+
+    class Meta:
+        ordering = ["name", "-version"]
+
+    def __str__(self):
+        return f"{self.name} v{self.version}"
+
+
+class Pipeline(HistoryMixin, models.Model):
+    """Model for tracking insilico pipelines performed on sample tests"""
+
+    test = models.ForeignKey(Test, on_delete=models.PROTECT, related_name="pipelines")
+    performed_date = models.DateField()
+    performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    type = models.ForeignKey(PipelineType, on_delete=models.PROTECT)
+    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    notes = GenericRelation("Note")
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="created_pipelines"
+    )
+    tasks = GenericRelation("Task")
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name_plural = "pipelines"
+        ordering = ["-id"]
+
+    def __str__(self):
+        return f"{self.test} - {self.type} - {self.performed_date}"
+
+    def save(self, *args, **kwargs):
+        """Ensure `created_by` is set from the current request user if available.
+
+        Uses thread-local storage populated by `CurrentUserMiddleware`.
+        """
+        if not getattr(self, "created_by_id", None):
+            try:
+
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(
+                current_user, "is_authenticated", False
+            ):
+                self.created_by = current_user
+
+        super().save(*args, **kwargs)
+
+
 class AnalysisType(HistoryMixin, models.Model):
-    """Model for defining types of analyses that can be performed"""
+    """Model for defining types of analyses (mainly variant analyses) that can be performed on pipeline results"""
 
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
@@ -576,9 +651,9 @@ class AnalysisType(HistoryMixin, models.Model):
 
 
 class Analysis(HistoryMixin, models.Model):
-    """Model for tracking analyses performed on sample tests"""
+    """Model for tracking analyses (mainly variant analyses) performed on pipeline results"""
 
-    test = models.ForeignKey(Test, on_delete=models.PROTECT, related_name="analyses")
+    pipeline = models.ForeignKey(Pipeline, on_delete=models.PROTECT, related_name="analyses")
     performed_date = models.DateField()
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
     type = models.ForeignKey(AnalysisType, on_delete=models.PROTECT)
@@ -595,7 +670,7 @@ class Analysis(HistoryMixin, models.Model):
         ordering = ["-id"]
 
     def __str__(self):
-        return f"{self.test} - {self.type} - {self.performed_date}"
+        return f"{self.pipeline} - {self.type} - {self.performed_date}"
 
     def save(self, *args, **kwargs):
         """Ensure `created_by` is set from the current request user if available.
@@ -604,7 +679,6 @@ class Analysis(HistoryMixin, models.Model):
         """
         if not getattr(self, "created_by_id", None):
             try:
-
                 current_user = get_current_user()
             except Exception:
                 current_user = None
@@ -705,7 +779,7 @@ def notify_status_change(sender, instance, **kwargs):
     """Generic signal to notify on status change for models with status field"""
     # This is a bit broad, so we should limit it to specific models or use a mixin.
     # Let's limit to Sample, Test, Analysis for now.
-    if sender.__name__ not in ["Sample", "Test", "Analysis"]:
+    if sender.__name__ not in ["Sample", "Test", "Pipeline", "Analysis"]:
         return
 
     # We need to check if status changed.

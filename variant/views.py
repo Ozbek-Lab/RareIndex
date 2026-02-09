@@ -11,8 +11,29 @@ from urllib.parse import urlencode
 @login_required
 @require_http_methods(["GET", "POST"])
 def variant_create(request):
+    # Prioritize analysis_id, fallback to pipeline_id for backward compatibility
     analysis_id = request.GET.get("analysis_id") or request.GET.get("analysis")
+    pipeline_id = request.GET.get("pipeline_id") or request.GET.get("pipeline")
     variant_type = request.GET.get("type") or request.GET.get("variant_type")
+    
+    # If pipeline_id is provided but not analysis_id, try to get the first analysis for that pipeline
+    if pipeline_id and not analysis_id:
+        from lab.models import Pipeline
+        try:
+            pipeline = Pipeline.objects.get(pk=pipeline_id)
+            # Get the first analysis for this pipeline, or None if none exist
+            analysis = pipeline.analyses.first()
+            if analysis:
+                analysis_id = analysis.id
+            else:
+                # No analysis exists for this pipeline - redirect to create one
+                from django.urls import reverse
+                from urllib.parse import urlencode
+                url = reverse("lab:generic_create")
+                params = urlencode({"app_label": "lab", "model_name": "Analysis", "pipeline": pipeline_id})
+                return redirect(f"{url}?{params}")
+        except (Pipeline.DoesNotExist, ValueError):
+            pass
     
     # If we don't have analysis_id or variant_type, show the selection form
     # We also check if this is NOT a specific variant form submission (POST)
@@ -52,7 +73,7 @@ def variant_create(request):
         if form.is_valid():
             variant = form.save(commit=False)
             variant.analysis = analysis
-            variant.individual = analysis.test.sample.individual
+            variant.individual = analysis.pipeline.test.sample.individual
             variant.created_by = request.user
             variant.save()
             

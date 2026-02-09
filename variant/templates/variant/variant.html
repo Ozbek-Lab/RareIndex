@@ -467,11 +467,12 @@
           </a>
         </div>
         <div class="col-span-2 sm:col-span-1">
-          <p class="text-xs text-gray-500">Analysis / Test</p>
+          <p class="text-xs text-gray-500">Analysis / Pipeline / Test</p>
           <p class="font-medium truncate text-gray-900 dark:text-gray-100">
             {% if item.analysis %}
               {{ item.analysis.type.name }}
-              / {{ item.analysis.test.test_type.name }}
+              / {{ item.analysis.pipeline.type.name }}
+              / {{ item.analysis.pipeline.test.test_type.name }}
             {% else %}
               -
             {% endif %}
@@ -645,7 +646,7 @@
       <div class="flex flex-col">
         <span>{{ item.analysis.type.name }}</span>
         <span class="text-xs text-gray-400"
-          >{{ item.analysis.test.test_type.name }}</span
+          >{{ item.analysis.pipeline.type.name }} / {{ item.analysis.pipeline.test.test_type.name }}</span
         >
       </div>
     {% else %}
@@ -728,7 +729,7 @@
             scope="col"
             class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-100"
           >
-            Analysis/Test
+            Pipeline/Test
           </th>
           <th
             scope="col"

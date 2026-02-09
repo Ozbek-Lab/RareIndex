@@ -39,16 +39,32 @@ def get_all_tests(individual):
 
 
 @register.filter
+def get_all_pipelines(individual):
+    """Get all unique pipelines associated with an individual's tests"""
+    unique_pipelines = []
+    seen_ids = set()
+    for sample in individual.samples.all():
+        for test in sample.tests.all():
+            for pipeline in test.pipelines.all():
+                if pipeline.id not in seen_ids:
+                    unique_pipelines.append(pipeline)
+                    seen_ids.add(pipeline.id)
+    return unique_pipelines
+
+
+@register.filter
 def get_all_analyses(individual):
-    """Get all unique analyses associated with an individual's tests"""
+    """Get all unique analyses associated with an individual's pipelines"""
+    from lab.models import Analysis
     unique_analyses = []
     seen_ids = set()
     for sample in individual.samples.all():
         for test in sample.tests.all():
-            for analysis in test.analyses.all():
-                if analysis.id not in seen_ids:
-                    unique_analyses.append(analysis)
-                    seen_ids.add(analysis.id)
+            for pipeline in test.pipelines.all():
+                for analysis in pipeline.analyses.all():
+                    if analysis.id not in seen_ids:
+                        unique_analyses.append(analysis)
+                        seen_ids.add(analysis.id)
     return unique_analyses
 
 
@@ -198,13 +214,35 @@ def plotly_safe(value):
 
 
 @register.filter
-def has_analyses(sample):
-    """Return True if any test on the sample has at least one analysis."""
+def has_pipelines(sample):
+    """Return True if any test on the sample has at least one pipeline."""
     try:
         # Efficient existence check through reverse relation
-        return sample.tests.filter(analyses__isnull=False).exists()
+        return sample.tests.filter(pipelines__isnull=False).exists()
     except Exception:
         return False
+
+
+@register.filter
+def has_analyses(sample):
+    """Return True if any pipeline on the sample's tests has at least one analysis."""
+    try:
+        # Efficient existence check through reverse relation
+        return sample.tests.filter(pipelines__analyses__isnull=False).exists()
+    except Exception:
+        return False
+
+
+@register.filter
+def get_variants_from_analyses(analyses):
+    """Get all variants from a queryset of analyses."""
+    from variant.models import Variant
+    if not analyses:
+        return Variant.objects.none()
+    if hasattr(analyses, 'all'):
+        analyses = analyses.all()
+    analysis_ids = [a.id for a in analyses]
+    return Variant.objects.filter(analysis_id__in=analysis_ids).distinct()
 
 
 @register.filter
@@ -283,7 +321,7 @@ def status_changes(instance):
 @register.filter
 def hierarchical_history(instance):
     """Get history records from instance and all hierarchical children, with status changes and notifications."""
-    from lab.models import Individual, Sample, Test, Analysis
+    from lab.models import Individual, Sample, Test, Pipeline, Analysis
     from django.contrib.contenttypes.models import ContentType
     
     all_history = []
@@ -327,7 +365,7 @@ def hierarchical_history(instance):
     
     # Process children based on instance type
     if isinstance(instance, Individual):
-        # Individual -> Samples -> Tests -> Analyses
+        # Individual -> Samples -> Tests -> Pipelines
         for sample in instance.samples.all():
             if hasattr(sample, 'history'):
                 history_records = list(sample.history.all().order_by('history_date'))
@@ -365,10 +403,10 @@ def hierarchical_history(instance):
                                     **status_info,
                                 })
                     
-                    # Analyses for this test
-                    for analysis in test.analyses.all():
-                        if hasattr(analysis, 'history'):
-                            history_records = list(analysis.history.all().order_by('history_date'))
+                    # Pipelines for this test
+                    for pipeline in test.pipelines.all():
+                        if hasattr(pipeline, 'history'):
+                            history_records = list(pipeline.history.all().order_by('history_date'))
                             for i, record in enumerate(history_records):
                                 previous_record = history_records[i - 1] if i > 0 else None
                                 status_info = get_status_change_for_record(record, previous_record)
@@ -378,14 +416,14 @@ def hierarchical_history(instance):
                                         'record': record,
                                         'history_date': record.history_date,
                                         'history_user': record.history_user,
-                                        'model_name': 'Analysis',
-                                        'object_id': str(analysis),
-                                        'object_type': 'Analysis',
+                                        'model_name': 'Pipeline',
+                                        'object_id': str(pipeline),
+                                        'object_type': 'Pipeline',
                                         **status_info,
                                     })
     
     elif isinstance(instance, Sample):
-        # Sample -> Tests -> Analyses
+        # Sample -> Tests -> Pipelines
         for test in instance.tests.all():
             if hasattr(test, 'history'):
                 history_records = list(test.history.all().order_by('history_date'))
@@ -404,8 +442,46 @@ def hierarchical_history(instance):
                             **status_info,
                         })
             
-            # Analyses for this test
-            for analysis in test.analyses.all():
+            # Pipelines for this test
+            for pipeline in test.pipelines.all():
+                if hasattr(pipeline, 'history'):
+                    history_records = list(pipeline.history.all().order_by('history_date'))
+                    for i, record in enumerate(history_records):
+                        previous_record = history_records[i - 1] if i > 0 else None
+                        status_info = get_status_change_for_record(record, previous_record)
+                        if i == 0 or status_info['status_changed']:
+                            all_history.append({
+                                'type': 'status_change',
+                                'record': record,
+                                'history_date': record.history_date,
+                                'history_user': record.history_user,
+                                'model_name': 'Pipeline',
+                                'object_id': str(pipeline),
+                                'object_type': 'Pipeline',
+                                **status_info,
+                            })
+    
+    elif isinstance(instance, Test):
+        # Test -> Pipelines -> Analyses
+        for pipeline in instance.pipelines.all():
+            if hasattr(pipeline, 'history'):
+                history_records = list(pipeline.history.all().order_by('history_date'))
+                for i, record in enumerate(history_records):
+                    previous_record = history_records[i - 1] if i > 0 else None
+                    status_info = get_status_change_for_record(record, previous_record)
+                    if i == 0 or status_info['status_changed']:
+                        all_history.append({
+                            'type': 'status_change',
+                            'record': record,
+                            'history_date': record.history_date,
+                            'history_user': record.history_user,
+                            'model_name': 'Pipeline',
+                            'object_id': str(pipeline),
+                            'object_type': 'Pipeline',
+                            **status_info,
+                        })
+            # Also get analyses for this pipeline
+            for analysis in pipeline.analyses.all():
                 if hasattr(analysis, 'history'):
                     history_records = list(analysis.history.all().order_by('history_date'))
                     for i, record in enumerate(history_records):
@@ -422,9 +498,8 @@ def hierarchical_history(instance):
                                 'object_type': 'Analysis',
                                 **status_info,
                             })
-    
-    elif isinstance(instance, Test):
-        # Test -> Analyses
+    elif isinstance(instance, Pipeline):
+        # Pipeline -> Analyses
         for analysis in instance.analyses.all():
             if hasattr(analysis, 'history'):
                 history_records = list(analysis.history.all().order_by('history_date'))
@@ -451,14 +526,23 @@ def hierarchical_history(instance):
             related_objects.append(sample)
             for test in sample.tests.all():
                 related_objects.append(test)
-                for analysis in test.analyses.all():
-                    related_objects.append(analysis)
+                for pipeline in test.pipelines.all():
+                    related_objects.append(pipeline)
+                    for analysis in pipeline.analyses.all():
+                        related_objects.append(analysis)
     elif isinstance(instance, Sample):
         for test in instance.tests.all():
             related_objects.append(test)
-            for analysis in test.analyses.all():
-                related_objects.append(analysis)
+            for pipeline in test.pipelines.all():
+                related_objects.append(pipeline)
+                for analysis in pipeline.analyses.all():
+                    related_objects.append(analysis)
     elif isinstance(instance, Test):
+        for pipeline in instance.pipelines.all():
+            related_objects.append(pipeline)
+            for analysis in pipeline.analyses.all():
+                related_objects.append(analysis)
+    elif isinstance(instance, Pipeline):
         for analysis in instance.analyses.all():
             related_objects.append(analysis)
     

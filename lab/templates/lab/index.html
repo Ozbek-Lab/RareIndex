@@ -116,8 +116,13 @@
           {% include "lab/partials/partials.html#search-section" %}
           {% endwith %}
         </div>
+        <div x-show="activeItem === 'pipeline'">
+          {% with title='Pipelines' icon_class='fa-laptop' model_name='Pipeline' app_label='lab' select='true' field_name='pipeline_type' view="page" %}
+          {% include "lab/partials/partials.html#search-section" %}
+          {% endwith %}
+        </div>
         <div x-show="activeItem === 'analysis'">
-          {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type' view="page" %}
+          {% with title='Analyses' icon_class='fa-chart-line' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type' view="page" %}
           {% include "lab/partials/partials.html#search-section" %}
           {% endwith %}
         </div>
@@ -214,6 +219,7 @@
         'individual': 'Individuals',
         'sample': 'Samples',
         'test': 'Tests',
+        'pipeline': 'Pipelines',
         'analysis': 'Analyses',
         'institution': 'Institutions',
         'project': 'Projects',
@@ -604,7 +610,7 @@
         });
       },
 
-      getHxVals(appLabel, modelName, page = 1, viewMode = null, card = null, icon_class = null) {
+      getHxVals(appLabel, modelName, page = 1, viewMode = null, card = null, icon_class = null, view = null) {
         // Fallback to controller properties if arguments are empty (though typically they are passed from template)
         if (!appLabel && this.appLabel) appLabel = this.appLabel;
         if (!modelName && this.modelName) modelName = this.modelName;
@@ -645,6 +651,9 @@
         }
         if (icon_class) {
           vals['icon_class'] = icon_class;
+        }
+        if (view) {
+          vals['view'] = view;
         }
         this.addSortsToVals(vals, modelName);
         return JSON.stringify(vals);

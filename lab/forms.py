@@ -11,6 +11,8 @@ from .models import (
     Status,
     Project,
     Test,
+    Pipeline,
+    PipelineType,
     Analysis,
     AnalysisType,
     Institution,
@@ -139,7 +141,7 @@ class TaskForm(BaseForm):
         
         # Set up content_type choices - models that can have tasks
         from variant.models import Variant
-        taskable_models = [Individual, Sample, Test, Analysis, Project, Variant]
+        taskable_models = [Individual, Sample, Test, Pipeline, Analysis, Project, Variant]
         content_types = ContentType.objects.filter(
             model__in=[m._meta.model_name for m in taskable_models],
             app_label__in=["lab", "variant"]
@@ -287,11 +289,44 @@ class TestForm(BaseForm):
         }
 
 
+class PipelineForm(BaseForm):
+    class Meta:
+        model = Pipeline
+        fields = [
+            "test",
+            "performed_date",
+            "performed_by",
+            "type",
+            "status",
+        ]
+        widgets = {
+            "performed_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+
+class PipelineTypeForm(BaseForm):
+    class Meta:
+        model = PipelineType
+        fields = [
+            "name",
+            "description",
+            "version",
+            "parent_types",
+            "source_url",
+            "results_url",
+        ]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "source_url": forms.URLInput(attrs={"placeholder": "https://..."}),
+            "results_url": forms.URLInput(attrs={"placeholder": "https://..."}),
+        }
+
+
 class AnalysisForm(BaseForm):
     class Meta:
         model = Analysis
         fields = [
-            "test",
+            "pipeline",
             "performed_date",
             "performed_by",
             "type",
@@ -413,12 +448,14 @@ FORMS_MAPPING = {
     "Individual": IndividualForm,
     "Sample": SampleForm,
     "Test": TestForm,
+    "Pipeline": PipelineForm,
     "Analysis": AnalysisForm,
     "Note": NoteForm,
     "Task": TaskForm,
     "Project": ProjectForm,
     "TestType": TestTypeForm,
     "SampleType": SampleTypeForm,
+    "PipelineType": PipelineTypeForm,
     "AnalysisType": AnalysisTypeForm,
     "Institution": InstitutionForm,
     "Family": FamilyForm,

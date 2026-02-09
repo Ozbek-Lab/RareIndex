@@ -10,8 +10,8 @@ from lab.models import (
     SampleType,
     Test,
     TestType,
-    Analysis,
-    AnalysisType,
+    Pipeline,
+    PipelineType,
 )
 import openpyxl
 from datetime import datetime
@@ -139,11 +139,11 @@ class Command(BaseCommand):
         tt, _ = TestType.objects.get_or_create(name=name, defaults={"created_by": admin_user})
         return tt
 
-    def _get_or_create_analysis_type(self, name, admin_user):
+    def _get_or_create_pipeline_type(self, name, admin_user):
         if not name:
             return None
-        at, _ = AnalysisType.objects.get_or_create(name=name, defaults={"created_by": admin_user})
-        return at
+        pt, _ = PipelineType.objects.get_or_create(name=name, defaults={"created_by": admin_user})
+        return pt
 
     def _get_or_create_sample_type(self, name, admin_user):
         st, _ = SampleType.objects.get_or_create(name=name, defaults={"created_by": admin_user})
@@ -346,7 +346,7 @@ class Command(BaseCommand):
             if rb_raw:
                 text = str(rb_raw)
                 parts = [p.strip() for p in text.replace("\n", ",").split(",") if p and p.strip()]
-                # First: if contains Reanalysis or WGS Reanalysis, create an Analysis
+                # First: if contains Reanalysis or WGS Reanalysis, create a Pipeline
                 has_reanalysis = any(p.lower() in {"reanalysis", "wgs reanalysis"} for p in parts)
                 if has_reanalysis:
                     # Choose preferred order depending on whether WGS Reanalysis is explicitly present
@@ -357,7 +357,7 @@ class Command(BaseCommand):
                     else:
                         target_test = self._get_preferred_existing_test(individual)
                     if not target_test:
-                        # If no preferred existing test, try to create WES as default carrier for analysis
+                        # If no preferred existing test, try to create WES as default carrier for pipeline
                         wes_tt = self._get_or_create_test_type("WES", admin_user)
                         sample_for_tests = self._ensure_sample_for_tests(individual, admin_user)
                         target_test = Test.objects.create(
@@ -366,23 +366,23 @@ class Command(BaseCommand):
                             sample=sample_for_tests,
                             created_by=admin_user,
                         )
-                    analysis_type = self._get_or_create_analysis_type("Reanalysis", admin_user)
-                    analysis_status = Status.objects.filter(content_type=ContentType.objects.get(app_label="lab", model="analysis"), name="In Progress").first()
-                    if not analysis_status:
-                        analysis_status = Status.objects.create(
+                    pipeline_type = self._get_or_create_pipeline_type("Reanalysis", admin_user)
+                    pipeline_status = Status.objects.filter(content_type=ContentType.objects.get(app_label="lab", model="pipeline"), name="In Progress").first()
+                    if not pipeline_status:
+                        pipeline_status = Status.objects.create(
                             name="In Progress",
-                            description="Analysis is in progress",
+                            description="Pipeline is in progress",
                             color="yellow",
                             created_by=admin_user,
-                            content_type=ContentType.objects.get(app_label="lab", model="analysis"),
+                            content_type=ContentType.objects.get(app_label="lab", model="pipeline"),
                             icon="fa-spinner",
                         )
-                    Analysis.objects.create(
+                    Pipeline.objects.create(
                         test=target_test,
                         performed_date=datetime.today().date(),
                         performed_by=admin_user,
-                        type=analysis_type,
-                        status=analysis_status,
+                        type=pipeline_type,
+                        status=pipeline_status,
                         created_by=admin_user,
                     )
                 # Other entries become tests (e.g., WES/WGS/RNA Seq)

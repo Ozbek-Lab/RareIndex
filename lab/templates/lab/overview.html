@@ -10,7 +10,7 @@
     {% with title='Tests' icon_class='fa-flask-vial' model_name='Test' app_label='lab' select='true' field_name='test_type' view="index" %}
         {% include "lab/partials/partials.html#search-section" %}
     {% endwith %}
-    {% with title='Analyses' icon_class='fa-laptop' model_name='Analysis' app_label='lab' select='true' field_name='analysis_type' view="index" %}
+    {% with title='Pipelines' icon_class='fa-laptop' model_name='Pipeline' app_label='lab' select='true' field_name='pipeline_type' view="index" %}
         {% include "lab/partials/partials.html#search-section" %}
     {% endwith %}
     {% with title='Institutions' icon_class='fa-building-columns' model_name='Institution' app_label='lab' view="index" %}
