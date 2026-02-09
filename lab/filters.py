@@ -457,6 +457,24 @@ def _apply_own_search(queryset, target_model_name, request):
                     if token:
                         include_fuzzy.append(token)
             
+            # Special handling for ontology Terms (e.g. HPO codes like "HP:0025696")
+            # If a token looks like PREFIX:CODE, also search by the CODE part alone
+            if target_model_name == "Term":
+                def _augment_with_code(tokens_list):
+                    augmented = list(tokens_list)
+                    for t in list(tokens_list):
+                        if ":" in t:
+                            _, _, after = t.partition(":")
+                            code = after.strip()
+                            if code and code not in augmented:
+                                augmented.append(code)
+                    return augmented
+                
+                include_exact = _augment_with_code(include_exact)
+                include_fuzzy = _augment_with_code(include_fuzzy)
+                exclude_exact = _augment_with_code(exclude_exact)
+                exclude_fuzzy = _augment_with_code(exclude_fuzzy)
+            
             # Build include Q for regular fields (OR logic)
             include_q = Q()
             for term in include_exact:

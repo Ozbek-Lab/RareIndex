@@ -359,6 +359,19 @@ def generic_search(request):
                             base_qs = base_qs.filter(pk__in=list(all_pks)).distinct()
                         else:
                             base_qs = base_qs.none()
+                    # Special handling for ontology Terms (e.g. HPO): search label AND identifier (code)
+                    elif target_app_label == "ontologies" and target_model_name == "Term":
+                        search_raw = own_search_term.strip()
+                        # Normalize potential "HP:0001234" to just the numeric code
+                        code_part = search_raw
+                        if ":" in search_raw:
+                            _, _, after = search_raw.partition(":")
+                            code_part = after
+                        code_part = code_part.strip()
+                        q_label = Q(**{f"{label_field}__icontains": own_search_term})
+                        if code_part:
+                            q_label |= Q(identifier__icontains=code_part)
+                        base_qs = base_qs.filter(q_label).distinct()
                     else:
                         # Try direct icontains on specified label field
                         # BUT ALSO include cross_id search for related models if applicable
@@ -499,7 +512,11 @@ def generic_search(request):
                 except Exception:
                     value = getattr(obj, "pk")
                 try:
-                    label = getattr(obj, label_field) if label_field else str(obj)
+                    # Special display for ontology Terms (e.g. HPO): show code + label
+                    if target_app_label == "ontologies" and target_model_name == "Term":
+                        label = f"{getattr(obj, 'term', str(obj))} {getattr(obj, 'label', '')}".strip()
+                    else:
+                        label = getattr(obj, label_field) if label_field else str(obj)
                 except Exception:
                     label = str(obj)
                 options.append({"value": value, "label": str(label)})
@@ -719,7 +736,11 @@ def generic_search_page(request):
                 except Exception:
                     value = getattr(obj, "pk")
                 try:
-                    label = getattr(obj, label_field) if label_field else str(obj)
+                    # Special display for ontology Terms (e.g. HPO): show code + label
+                    if target_app_label == "ontologies" and target_model_name == "Term":
+                        label = f"{getattr(obj, 'term', str(obj))} {getattr(obj, 'label', '')}".strip()
+                    else:
+                        label = getattr(obj, label_field) if label_field else str(obj)
                 except Exception:
                     label = str(obj)
                 options.append({"value": value, "label": str(label)})
@@ -1158,7 +1179,11 @@ def update_status(request):
             
             # Determine which partial to return based on view parameter
             view_type = request.POST.get("view", "card")  # Default to card for list views
-            template_name = f"{app_label}/{model_name.lower()}.html"
+            # Handle variant template path
+            if app_label == "variant":
+                template_name = "variant/variant.html"
+            else:
+                template_name = f"{app_label}/{model_name.lower()}.html"
             
             if view_type == "detail":
                 partial_name = "status-badge"
@@ -2892,10 +2917,15 @@ def generic_edit(request):
         # Provide initial JSON for HPO combobox in Individual edit form
         try:
             if model_name == "Individual":
-                initial = [
-                    {"value": str(t.pk), "label": getattr(t, "label", str(t))}
-                    for t in getattr(obj, "hpo_terms", []).all()
-                ]
+                initial = []
+                for t in getattr(obj, "hpo_terms", []).all():
+                    code = getattr(t, "identifier", None)
+                    base_label = getattr(t, "label", str(t))
+                    if code:
+                        display_label = f"HP:{code} {base_label}"
+                    else:
+                        display_label = base_label
+                    initial.append({"value": str(t.pk), "label": display_label})
                 context["hpo_initial_json"] = json.dumps(initial)
                 context["institution_initial_json"] = _institution_initial_json_from_queryset(
                     getattr(obj, "institution", []).all()
@@ -3775,10 +3805,15 @@ def edit_individual_hpo_terms(request):
     
     # Build initial JSON for HPO terms combobox
     try:
-        hpo_initial = [
-            {"value": str(t.pk), "label": getattr(t, "label", str(t))}
-            for t in getattr(individual, "hpo_terms", []).all()
-        ]
+        hpo_initial = []
+        for t in getattr(individual, "hpo_terms", []).all():
+            code = getattr(t, "identifier", None)
+            base_label = getattr(t, "label", str(t))
+            if code:
+                display_label = f"HP:{code} {base_label}"
+            else:
+                display_label = base_label
+            hpo_initial.append({"value": str(t.pk), "label": display_label})
         hpo_initial_json = json.dumps(hpo_initial)
     except Exception:
         hpo_initial_json = "[]"
@@ -3813,10 +3848,15 @@ def view_individual_hpo_terms(request):
     
     # Build initial JSON for HPO terms (for potential future use)
     try:
-        hpo_initial = [
-            {"value": str(t.pk), "label": getattr(t, "label", str(t))}
-            for t in getattr(individual, "hpo_terms", []).all()
-        ]
+        hpo_initial = []
+        for t in getattr(individual, "hpo_terms", []).all():
+            code = getattr(t, "identifier", None)
+            base_label = getattr(t, "label", str(t))
+            if code:
+                display_label = f"HP:{code} {base_label}"
+            else:
+                display_label = base_label
+            hpo_initial.append({"value": str(t.pk), "label": display_label})
         hpo_initial_json = json.dumps(hpo_initial)
     except Exception:
         hpo_initial_json = "[]"
@@ -3883,10 +3923,15 @@ def update_individual_hpo_terms(request):
     if request.htmx:
         # Build initial JSON for HPO terms combobox (for modal)
         try:
-            hpo_initial = [
-                {"value": str(t.pk), "label": getattr(t, "label", str(t))}
-                for t in getattr(individual, "hpo_terms", []).all()
-            ]
+            hpo_initial = []
+            for t in getattr(individual, "hpo_terms", []).all():
+                code = getattr(t, "identifier", None)
+                base_label = getattr(t, "label", str(t))
+                if code:
+                    display_label = f"HP:{code} {base_label}"
+                else:
+                    display_label = base_label
+                hpo_initial.append({"value": str(t.pk), "label": display_label})
             hpo_initial_json = json.dumps(hpo_initial)
         except Exception:
             hpo_initial_json = "[]"
