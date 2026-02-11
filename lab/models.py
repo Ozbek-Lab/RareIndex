@@ -378,17 +378,19 @@ class Individual(HistoryMixin, models.Model):
 
     @property
     def lab_id(self):
-        if self.cross_ids.filter(id_type__name="RareBoost").exists():
-            return self.cross_ids.get(id_type__name="RareBoost").id_value
-        else:
-            return f"No Lab ID"
+        qs = self.cross_ids.filter(id_type__name="RareBoost")
+        if qs.exists():
+            # Use the first matching RareBoost ID to avoid MultipleObjectsReturned
+            return qs.first().id_value
+        return "No Lab ID"
 
     @property
     def biobank_id(self):
-        if self.cross_ids.filter(id_type__name="Biobank").exists():
-            return self.cross_ids.get(id_type__name="Biobank").id_value
-        else:
-            return f"No Biobank ID"
+        qs = self.cross_ids.filter(id_type__name="Biobank")
+        if qs.exists():
+            # Use the first matching Biobank ID to avoid MultipleObjectsReturned
+            return qs.first().id_value
+        return "No Biobank ID"
 
     @property
     def individual_id(self):
