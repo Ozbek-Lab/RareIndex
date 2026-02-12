@@ -451,7 +451,8 @@
         </div>
 
         {% partialdef project-individuals-fragment %}
-          {% if item.individuals.exists %}
+          {% with project_individuals=item.individuals.all|slice:":50" %}
+          {% if project_individuals %}
             <div x-data="{ viewMode: 'cards' }" class="space-y-4">
               <div class="flex justify-end">
                 <div
@@ -500,7 +501,7 @@
                 x-transition:leave-end="opacity-0 scale-95 translate-y-4"
                 class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
               >
-                {% for individual in item.individuals.all %}
+                {% for individual in project_individuals %}
                   {% with item=individual %}
                     {% include "lab/individual.html#card" %}
                   {% endwith %}
@@ -518,10 +519,16 @@
                 x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
                 class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
               >
-                {% with items=item.individuals.all view_mode='table' model_name='Individual' app_label='lab' card='card' %}
+                {% with items=project_individuals view_mode='table' model_name='Individual' app_label='lab' card='card' %}
                   {% include "lab/individual.html#table" %}
                 {% endwith %}
               </div>
+              
+              {% if item.individuals.count > project_individuals|length %}
+                <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                  Showing first {{ project_individuals|length }} of {{ item.individuals.count }} individuals.
+                </p>
+              {% endif %}
             </div>
           {% else %}
             <div
@@ -530,11 +537,13 @@
               No individuals linked to this project.
             </div>
           {% endif %}
+          {% endwith %}
         {% endpartialdef %}
 
         <!-- Tasks tab -->
         <div x-show="activeTab === 'tasks'" x-cloak>
-          {% if item.tasks.exists %}
+          {% with project_tasks=item.tasks.all|slice:":50" %}
+          {% if project_tasks %}
             <div x-data="{ viewMode: 'cards' }" class="space-y-4">
               <div class="flex items-center justify-between">
                 <div>
@@ -597,7 +606,7 @@
                 x-transition:leave-end="opacity-0 scale-95 translate-y-4"
                 class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
               >
-                {% for task in item.tasks.all %}
+                {% for task in project_tasks %}
                   {% with item=task %}
                     {% include "lab/task.html#card" %}
                   {% endwith %}
@@ -615,10 +624,16 @@
                 x-transition:leave-end="opacity-0 scale-95 -translate-y-4"
                 class="overflow-x-auto bg-white dark:bg-gray-800 shadow-sm rounded-lg"
               >
-                {% with items=item.tasks.all view_mode='table' model_name='Task' app_label='lab' card='card' %}
+                {% with items=project_tasks view_mode='table' model_name='Task' app_label='lab' card='card' %}
                   {% include "lab/task.html#table" %}
                 {% endwith %}
               </div>
+              
+              {% if item.tasks.count > project_tasks|length %}
+                <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                  Showing first {{ project_tasks|length }} of {{ item.tasks.count }} tasks.
+                </p>
+              {% endif %}
             </div>
           {% else %}
             <div
@@ -627,6 +642,7 @@
               No tasks available for this project.
             </div>
           {% endif %}
+          {% endwith %}
         </div>
 
         <!-- Notes tab -->
