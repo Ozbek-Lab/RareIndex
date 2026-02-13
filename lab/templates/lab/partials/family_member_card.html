@@ -1,0 +1,207 @@
+<div id="row-{{ index }}" class="bg-base-100 border border-base-300 rounded-lg p-4 shadow-sm relative transition-all duration-200 hover:shadow-md"
+     x-data="memberCard({{ index }})"
+     x-init="init()"
+     @hpo-selected.stop="addHpoTerm($event.detail.id, $event.detail.label)">
+    
+    <!-- Header / Delete -->
+    <div class="flex justify-between items-start mb-2 border-b border-base-200 pb-1">
+        <h3 class="text-base font-medium text-base-content" x-text="members.find(m => m.index === index)?.name || 'New Member'"></h3>
+        <button type="button" @click="removeMember(index)" class="text-gray-400 hover:text-red-500 transition-colors">
+            <span class="sr-only">Remove</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+    </div>
+
+    <!-- Hidden Fields -->
+    {{ form.id }}
+    {{ form.cross_identifiers_json }}
+    {{ form.father_ref }}
+    {{ form.mother_ref }}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- COLUMN 1: Personal & IDs -->
+        <div class="space-y-3">
+            <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Full Name</label>
+                <input type="text" name="{{ form.full_name.html_name }}" value="{{ form.full_name.value|default:'' }}"
+                       class="input input-bordered w-full input-sm"
+                       @input="updateMemberName(index, $event.target.value)"
+                       placeholder="e.g. John Doe">
+                {% if form.full_name.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.full_name.errors.0 }}</p>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Father -->
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Father</label>
+                    <select class="select select-bordered select-sm w-full text-xs"
+                            @change="document.getElementById('id_individuals-' + index + '-father_ref').value = $event.target.value">
+                        <option value="">-- Select --</option>
+                        <template x-for="m in members">
+                            <option :value="m.index" x-show="m.index !== index" x-text="m.name || 'Member ' + (m.index+1)"></option>
+                        </template>
+                    </select>
+                </div>
+                
+                <!-- Mother -->
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Mother</label>
+                    <select class="select select-bordered select-sm w-full text-xs"
+                            @change="document.getElementById('id_individuals-' + index + '-mother_ref').value = $event.target.value">
+                        <option value="">-- Select --</option>
+                        <template x-for="m in members">
+                            <option :value="m.index" x-show="m.index !== index" x-text="m.name || 'Member ' + (m.index+1)"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+
+            <!-- IDs -->
+            <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">TC Identity</label>
+                {{ form.tc_identity }}
+            </div>
+
+            <div class="bg-base-200 rounded p-2 border border-base-300">
+                <div class="flex justify-between items-center mb-1">
+                     <h4 class="text-[10px] font-bold text-base-content/60 uppercase tracking-wider">Cross IDs</h4>
+                     <button type="button" @click="addCrossId()" class="text-[10px] text-blue-600 hover:text-blue-800 hover:underline">+ ADD</button>
+                </div>
+                <div class="space-y-1.5">
+                    <template x-for="(id, idx) in crossIds" :key="idx">
+                        <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
+                            <select x-model="id.type_id" @change="updateJson()" class="select select-bordered select-xs w-16 shrink-0 px-1 text-[10px] h-6 min-h-0">
+                                <template x-for="type in IDENTIFIER_TYPES">
+                                    <option :value="type.id" x-text="type.name" :selected="type.id == id.type_id"></option>
+                                </template>
+                            </select>
+                            <input type="text" x-model="id.value" @input="updateJson()" class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
+                            <button type="button" @click="removeCrossId(idx)" class="btn btn-ghost btn-xs text-red-500 min-h-0 h-6 w-6 p-0 rounded-full">✕</button>
+                        </div>
+                    </template>
+                    <div x-show="crossIds.length === 0" class="text-xs text-base-content/50 italic text-center py-1">None</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLUMN 2: Clinical & Logistics -->
+        <div class="space-y-3">
+             <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Sex</label>
+                    {{ form.sex }}
+                </div>
+                <div>
+                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Date of Birth</label>
+                     {{ form.birth_date }}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Status</label>
+                    {{ form.status }}
+                </div>
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Council Date</label>
+                    {{ form.council_date }}
+                </div>
+            </div>
+
+            <div class="relative">
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Institution</label>
+                
+                <select name="{{ form.institution.html_name }}" class="hidden" x-ref="instSelect">
+                     <template x-if="selectedInst">
+                         <option :value="selectedInst.id" selected></option>
+                     </template>
+                </select>
+
+                <div class="relative">
+                    <input type="text" 
+                           x-model="instSearch"
+                           @focus="instOpen = true"
+                           @click.away="instOpen = false"
+                           placeholder="Search Institution..."
+                           class="input input-bordered w-full input-sm"
+                           :class="{'input-primary': instOpen}">
+                    <div x-show="instOpen" 
+                         class="absolute z-10 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
+                         x-transition>
+                        <template x-for="inst in filteredInstitutions" :key="inst.id">
+                            <div @click="selectInstitution(inst)"
+                                 class="px-3 py-1.5 text-xs cursor-pointer hover:bg-base-200 text-base-content"
+                                 x-text="inst.name">
+                            </div>
+                        </template>
+                        <div x-show="filteredInstitutions.length === 0" class="px-3 py-1.5 text-xs text-base-content/50">No matches.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">HPO Terms</label>
+                <select name="{{ form.hpo_terms.html_name }}" multiple class="hidden">
+                     <template x-for="term in hpoTerms" :key="term.id">
+                         <option :value="term.id" selected></option>
+                     </template>
+                </select>
+                <div class="flex flex-wrap gap-1 mb-1 min-h-[1.5rem]">
+                    <template x-for="term in hpoTerms" :key="term.id">
+                        <span class="badge badge-primary gap-1 p-2 text-xs">
+                            <span x-text="term.label"></span>
+                            <button type="button" @click="removeHpoTerm(term.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">✕</button>
+                        </span>
+                    </template>
+                    <span x-show="hpoTerms.length === 0" class="text-xs text-base-content/50 italic py-1">No terms selected.</span>
+                </div>
+                <div class="relative">
+                    <label class="input input-bordered input-sm flex items-center w-full">
+                        <input type="text" 
+                               class="grow min-w-0" 
+                               placeholder="Search HPO..." 
+                               id="hpo-search-{{ index }}"
+                               name="q"
+                               hx-get="{% url 'lab:hpo_search' %}?variant=picker_client"
+                               hx-trigger="keyup changed delay:500ms"
+                               hx-target="#hpo-results-{{ index }}"
+                               hx-indicator="#hpo-spinner-{{ index }}"
+                               autocomplete="off" />
+                        
+                        <div id="hpo-spinner-{{ index }}" class="htmx-indicator">
+                            <span class="loading loading-spinner loading-xs text-primary"></span>
+                        </div>
+                        
+                        <i class="fa-solid fa-search text-base-content/40 text-xs"></i>
+                    </label>
+                    <div id="hpo-results-{{ index }}" 
+                         class="absolute z-10 w-full mt-1 empty:hidden">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLUMN 3: Meta & Notes -->
+        <div class="space-y-3">
+             <div class="bg-base-200 rounded p-2 border border-base-300">
+                <div class="flex items-center gap-4">
+                    <label class="cursor-pointer flex items-center items-center gap-2">
+                         {{ form.is_index }}
+                        <span class="label-text text-xs">Index Case</span> 
+                    </label>
+                    <label class="cursor-pointer flex items-center items-center gap-2">
+                        {{ form.is_affected }}
+                        <span class="label-text text-xs">Affected</span> 
+                    </label>
+                </div>
+            </div>
+            
+            <div>
+                 <label class="block mb-0.5 text-xs font-medium text-base-content/80">Notes</label>
+                 {{ form.note_content }}
+            </div>
+        </div>
+
+    </div>
+</div>

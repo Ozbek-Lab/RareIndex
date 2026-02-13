@@ -1,0 +1,56 @@
+{% extends "django_tables2/bootstrap5.html" %}
+{% load django_tables2 %}
+{% load i18n %}
+
+{% block table.tbody %}
+
+
+<tbody {{ table.attrs.tbody.as_html }}>
+    {% for row in table.paginated_rows %}
+        {% block table.tbody.row %}
+        <tr {{ row.attrs.as_html }}>
+            {% for column, cell in row.items %}
+                <td {{ column.attrs.td.as_html }}>{% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}</td>
+            {% endfor %}
+        </tr>
+        {% endblock table.tbody.row %}
+    {% empty %}
+        {% if table.empty_text %}
+        {% block table.tbody.empty_text %}
+        <tr><td colspan="{{ table.columns|length }}">{{ table.empty_text }}</td></tr>
+        {% endblock table.tbody.empty_text %}
+        {% endif %}
+    {% endfor %}
+
+    {% if table.page.has_next %}
+    <!-- Sentinel Row for Infinite Scroll -->
+    <tr hx-get="{% querystring table.prefixed_page_field=table.page.next_page_number %}"
+        hx-trigger="intersect once"
+        hx-target="this"
+        hx-swap="outerHTML"
+        hx-include="#filter-form, [name='search']"
+        hx-select="tbody > tr"
+        hx-indicator="#infinite-spinner">
+        <td colspan="{{ table.columns|length }}" class="p-0">
+            <div id="infinite-spinner" class="flex justify-center items-center p-8 w-full">
+                 <span class="loading loading-spinner loading-lg text-primary"></span>
+                 <span class="ml-2 text-sm text-base-content/50">Loading more...</span>
+            </div>
+        </td>
+    </tr>
+    {% else %}
+    <tr>
+        <td colspan="{{ table.columns|length }}">
+            <div class="p-4 text-center text-base-content/40 italic text-sm border-t border-base-200">
+                <i class="fa-solid fa-check-circle mr-2"></i>
+                End of results
+            </div>
+        </td>
+    </tr>
+    {% endif %}
+</tbody>
+{% endblock table.tbody %}
+
+{% block pagination %}
+    {# Remove default pagination #}
+{% endblock pagination %}

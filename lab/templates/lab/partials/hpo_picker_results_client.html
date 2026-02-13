@@ -1,0 +1,19 @@
+{% if results %}
+<ul class="menu bg-base-100 w-full rounded-box shadow-xl border border-base-300 p-2 z-50 overflow-y-auto overflow-x-hidden max-h-60" style="flex-wrap: nowrap !important; flex-direction: column !important; display: flex !important;">
+    <li class="menu-title text-xs">Search Results</li>
+    {% for term in results %}
+    <li>
+        <button type="button"
+                onclick="this.dispatchEvent(new CustomEvent('hpo-selected', {bubbles: true, detail: {id: '{{ term.id }}', label: '{{ term.label|escapejs }}'}})); this.closest('ul').remove();"
+                class="flex flex-col items-start px-3 py-2 text-left w-full hover:bg-base-200">
+            <span class="text-sm font-bold text-base-content">{{ term.label }}</span>
+            <span class="text-xs font-mono opacity-50">{{ term.term|default:term.identifier }}</span>
+        </button>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="p-4 text-center text-sm text-base-content/50 bg-base-100 rounded-box shadow-xl border border-base-300 z-50">
+    No matches found for HPO terms.
+</div>
+{% endif %}

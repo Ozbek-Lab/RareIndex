@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load render_table from django_tables2 %}
+
+{% block content %}
+<div class="flex flex-col gap-4">
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Samples</h1>
+        <div>
+            <!-- Add Button logic here if needed -->
+        </div>
+    </div>
+
+    <div class="flex items-center gap-2 bg-base-100 p-4 rounded-lg shadow-sm">
+        <form id="filter-form" class="join w-full max-w-lg" action="#" method="GET" hx-get="{% url 'lab:sample_list' %}" hx-target="#sample-table-container" hx-swap="outerHTML" hx-trigger="change delay:500ms, search">
+            <input class="input input-bordered join-item w-full" type="text" name="search" placeholder="Search for samples..." value="{{ request.GET.search|default:'' }}"/>
+            <button class="btn join-item rounded-r-full">Search</button>
+        </form>
+    </div>
+
+    <div class="divider m-0"></div>
+
+    <div class="w-full">
+        {% include "lab/partials/sample_table.html" %}
+    </div>
+</div>
+{% endblock %}

@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation
 from simple_history.models import HistoricalRecords
-from lab.models import Analysis, Individual, HistoryMixin
+from lab.models import Pipeline, Individual, HistoryMixin
 
 class Variant(HistoryMixin, models.Model):
     """Base class for all variant types"""
@@ -13,7 +13,7 @@ class Variant(HistoryMixin, models.Model):
     
     # Linkage
     individual = models.ForeignKey(Individual, on_delete=models.PROTECT, related_name="variants")
-    analysis = models.ForeignKey(Analysis, on_delete=models.PROTECT, related_name="found_variants", null=True, blank=True)
+    pipeline = models.ForeignKey(Pipeline, on_delete=models.PROTECT, related_name="found_variants", null=True, blank=True)
     
     # Metadata
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)

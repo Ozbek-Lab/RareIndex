@@ -1,0 +1,20 @@
+{% for family in page_obj %}
+<div class="px-3 py-2 hover:bg-base-200 cursor-pointer border-b border-base-200 last:border-0"
+     @click="select('{{ family.id }}', '{{ family.family_id }}')"
+     {% if forloop.last and page_obj.has_next %}
+     hx-get="{% url 'lab:family_search' %}?q={{ query }}&page={{ page_obj.next_page_number }}"
+     hx-trigger="intersect once"
+     hx-swap="afterend"
+     {% endif %}>
+    <div class="flex flex-col">
+        <span class="font-medium text-sm text-base-content">{{ family.family_id }}</span>
+        {% if family.description %}
+        <span class="text-xs text-base-content/60 truncate">{{ family.description }}</span>
+        {% endif %}
+    </div>
+</div>
+{% empty %}
+{% if page_obj.number == 1 %}
+<div class="px-3 py-2 text-sm text-base-content/50 italic">No families found.</div>
+{% endif %}
+{% endfor %}

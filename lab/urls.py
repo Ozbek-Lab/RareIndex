@@ -1,146 +1,84 @@
 from django.urls import path
-from . import views
-from variant import views as variant_views
+from .views import (
+    DashboardView, IndividualListView, SampleListView, IndividualDetailView, 
+    FamilyCreateView, HPOTermSearchView, RenderSelectedHPOTermView,
+    CompleteTaskView, ReopenTaskView, IndividualExportView
+)
+from .profile_views import ProfileView, UpdateThemeView
+from .htmx_views import (
+    RevealSensitiveFieldView, add_individual_row, IndividualHPOEditView, manage_hpo_term,
+    note_create, note_update, note_delete, note_list, note_count,
+    individual_identification_edit, individual_identification_save,
+    individual_demographics_edit, individual_demographics_save,
+    individual_identification_display, individual_demographics_display,
+    family_search,
+    individual_clinical_summary_edit, individual_clinical_summary_save, individual_clinical_summary_display,
+    update_status, sample_create_modal, test_create_modal, task_create_modal,
+    pipeline_create_modal, analysis_create_modal,
+    individual_projects_edit, individual_projects_save, project_search,
+    document_preview
+)
+
 
 app_name = "lab"
 
 urlpatterns = [
-    path("", views.index, name="home"),
+    path("", DashboardView.as_view(), name="dashboard"),
+    path("individuals/", IndividualListView.as_view(), name="individual_list"),
+    path("individuals/export/", IndividualExportView.as_view(), name="individual_export"),
+    path("individuals/create-family/", FamilyCreateView.as_view(), name="create_family"),
+    path("samples/", SampleListView.as_view(), name="sample_list"),
+    path("individuals/<int:pk>/detail/", IndividualDetailView.as_view(), name="individual_detail"),
+    path("reveal/<str:model_name>/<int:pk>/<str:field_name>/", RevealSensitiveFieldView.as_view(), name="reveal_sensitive_field"),
+    path("htmx/add-individual-row/", add_individual_row, name="add_individual_row"),
+    path("htmx/individual/<int:pk>/hpo-edit/", IndividualHPOEditView.as_view(), name="hpo_edit"),
+    path("htmx/individual/<int:pk>/hpo-manage/", manage_hpo_term, name="hpo_manage"),
+    
+    # Inline Edit
+    path("htmx/individual/<int:pk>/identification/", individual_identification_display, name="individual_identification_display"),
+    path("htmx/individual/<int:pk>/identification/edit/", individual_identification_edit, name="individual_identification_edit"),
+    path("htmx/individual/<int:pk>/identification/save/", individual_identification_save, name="individual_identification_save"),
+    path("htmx/individual/<int:pk>/demographics/", individual_demographics_display, name="individual_demographics_display"),
+    path("htmx/individual/<int:pk>/demographics/edit/", individual_demographics_edit, name="individual_demographics_edit"),
+    path("htmx/individual/<int:pk>/demographics/save/", individual_demographics_save, name="individual_demographics_save"),
+    path("htmx/family/search/", family_search, name="family_search"),
+    path("htmx/individual/<int:pk>/clinical-summary/", individual_clinical_summary_display, name="individual_clinical_summary_display"),
+    path("htmx/individual/<int:pk>/clinical-summary/edit/", individual_clinical_summary_edit, name="individual_clinical_summary_edit"),
+    path("htmx/individual/<int:pk>/clinical-summary/save/", individual_clinical_summary_save, name="individual_clinical_summary_save"),
+
+    # HPO Search
+    path("htmx/hpo/search/", HPOTermSearchView.as_view(), name="hpo_search"),
+    path("htmx/hpo/picker/", HPOTermSearchView.as_view(template_name="lab/partials/hpo_picker_results.html"), name="hpo_picker"),
+    path("htmx/hpo/render/<int:pk>/", RenderSelectedHPOTermView.as_view(), name="render_selected_hpo"),
+    
+    # Notes
+    path("htmx/notes/create/", note_create, name="note_create"),
+    path("htmx/notes/update/<int:pk>/", note_update, name="note_update"),
+    path("htmx/notes/delete/<int:pk>/", note_delete, name="note_delete"),
+    path("htmx/notes/list/", note_list, name="note_list"),
+    path("htmx/notes/count/", note_count, name="note_count"),
+    
+    # Profile & Theme
+    path("profile/", ProfileView.as_view(), name="profile"),
+    path("profile/update-theme/", UpdateThemeView.as_view(), name="update_theme"),
+    
+    # Status Updates
     path(
-        "search/",
-        views.generic_search,
-        name="generic_search",
+        "status/update/<int:content_type_id>/<int:object_id>/<int:status_id>/",
+        update_status,
+        name="update_status",
     ),
-    path('detail/', views.generic_detail, name='generic_detail'),
-    path('search/page/', views.generic_search_page, name='generic_search_page'),
-    path(
-        "hpo_network_visualization/",
-        views.hpo_network_visualization,
-        name="hpo_network_visualization",
-    ),
-    path("plots/", views.plots_page, name="plots"),
-    path("map/", views.map_view, name="map"),
-    path("pie-chart/<str:model_name>/<str:attribute_name>/", views.pie_chart_view, name="pie_chart"),
-    path("get-select-options/", views.get_select_options, name="get_select_options"),
-    path("get-objects-by-content-type/", views.get_objects_by_content_type, name="get_objects_by_content_type"),
-    path("individual/<int:pk>/timeline/", views.individual_timeline, name="individual_timeline"),
-    path("get-status-buttons/", views.get_status_buttons, name="get_status_buttons"),
-    path("get-type-buttons/", views.get_type_buttons, name="get_type_buttons"),
-    path("get-stats-counts/", views.get_stats_counts, name="get_stats_counts"),
-    path("history-tab/", views.history_tab, name="history_tab"),
-    path("project/add-individuals/", views.project_add_individuals, name="project_add_individuals"),
-    path("project/remove-individuals/", views.project_remove_individuals, name="project_remove_individuals"),
-    path("individual/edit-hpo-terms/", views.edit_individual_hpo_terms, name="edit_individual_hpo_terms"),
-    path("individual/view-hpo-terms/", views.view_individual_hpo_terms, name="view_individual_hpo_terms"),
-    path("individual/update-hpo-terms/", views.update_individual_hpo_terms, name="update_individual_hpo_terms"),
-    path("individual/update-status/", views.update_individual_status, name="update_individual_status"),
-    path("update-status/", views.update_status, name="update_status"),
+    path("htmx/sample/create/<int:individual_id>/", sample_create_modal, name="sample_create_modal"),
+    path("htmx/test/create/<int:sample_id>/", test_create_modal, name="test_create_modal"),
+    path("htmx/pipeline/create/<int:test_id>/", pipeline_create_modal, name="pipeline_create_modal"),
+    path("htmx/analysis/create/<int:pipeline_id>/", analysis_create_modal, name="analysis_create_modal"),
+    path("htmx/task/create/<int:content_type_id>/<int:object_id>/", task_create_modal, name="task_create_modal"),
     
-    # Natural language search routes
-    path("nl-search/", views.nl_search, name="nl_search"),
-    path("nl-search/page/", views.nl_search_page, name="nl_search_page"),
-    
-    # path("", views.dashboard, name="dashboard"),
-    # path("select/search/", views.select_search, name="select_search"),
-    # # Individual routes
-    # path("individuals/", views.individual_index, name="individuals"),
-    # path("individual/create/", views.individual_create, name="individual_create"),
-    # path("individual/<int:pk>/", views.individual_detail, name="individual_detail"),
-    # path("individual/<int:pk>/edit/", views.individual_edit, name="individual_edit"),
-    # path(
-    #     "individual/<int:pk>/delete/", views.individual_delete, name="individual_delete"
-    # ),
-    # path("individual/search/", views.individual_search, name="individual_search"),
-    # # Sample routes
-    # path("samples/", views.sample_list, name="samples"),
-    # path("sample/create/", views.sample_create, name="sample_create"),
-    # path("sample/<int:pk>/", views.sample_detail, name="sample_detail"),
-    # path("sample/<int:pk>/edit/", views.sample_edit, name="sample_edit"),
-    # path("sample/<int:pk>/delete/", views.sample_delete, name="sample_delete"),
-    # path("sample/search/", views.sample_search, name="sample_search"),
-    # # Test routes
-    # path("tests/", views.test_list, name="tests"),
-    # path("test/create/", views.test_create, name="test_create"),
-    # path("test/<int:pk>/", views.test_detail, name="test_detail"),
-    # path("test/<int:pk>/edit/", views.test_edit, name="test_edit"),
-    # path("test/<int:pk>/delete/", views.test_delete, name="test_delete"),
-    # path("test/<int:pk>/card/", views.test_card, name="test_card"),
-    # path("test/search/", views.test_search, name="test_search"),
-    # # Analysis routes
-    # path("analyses/", views.analysis_list, name="analyses"),
-    # path("analysis/create/", views.analysis_create, name="analysis_create"),
-    # path("analysis/<int:pk>/", views.analysis_detail, name="analysis_detail"),
-    # path("analysis/<int:pk>/edit/", views.analysis_edit, name="analysis_edit"),
-    # path("analysis/<int:pk>/delete/", views.analysis_delete, name="analysis_delete"),
-    # path("analysis/search/", views.analysis_search, name="analysis_search"),
-    # # Type routes
-    # path("types/", views.types_list, name="types"),
-    # path("types/search/", views.type_search, name="type_search"),
-    # path("test-type/create/", views.test_type_create, name="test_type_create"),
-    # path("test-type/<int:pk>/edit/", views.test_type_edit, name="test_type_edit"),
-    # path("test-type/<int:pk>/delete/", views.test_type_delete, name="test_type_delete"),
-    # path("sample-type/create/", views.sample_type_create, name="sample_type_create"),
-    # path("sample-type/<int:pk>/edit/", views.sample_type_edit, name="sample_type_edit"),
-    # path(
-    #     "sample-type/<int:pk>/delete/",
-    #     views.sample_type_delete,
-    #     name="sample_type_delete",
-    # ),
-    # path("sample-type/search/", views.sample_type_search, name="sample_type_search"),
-    # path(
-    #     "analysis-type/create/", views.analysis_type_create, name="analysis_type_create"
-    # ),
-    # path(
-    #     "analysis-type/<int:pk>/edit/",
-    #     views.analysis_type_edit,
-    #     name="analysis_type_edit",
-    # ),
-    # path(
-    #     "analysis-type/<int:pk>/delete/",
-    #     views.analysis_type_delete,
-    #     name="analysis_type_delete",
-    # ),
-    # # Notes
-    path("notes/", views.note_list, name="notes"),
-    path("note/count/", views.note_count, name="note_count"),
-    path("note/create/", views.note_create, name="note_create"),
-    path("note/<int:pk>/update/", views.note_update, name="note_update"),
-    path("note/<int:pk>/delete/", views.note_delete, name="note_delete"),
-    
-    # Generic CRUD routes
-    path("create/", views.generic_create, name="generic_create"),
-    path("edit/", views.generic_edit, name="generic_edit"),
-    path("family/create/", views.family_create_segway, name="family_create_segway"),
-    path("delete/", views.generic_delete, name="generic_delete"),
-    
-    path("check-notifications/", views.check_notifications, name="check_notifications"),
-    path("notifications/", views.notifications_page, name="notifications"),
-    path("profile/settings/", views.profile_settings, name="profile_settings"),
-    path("profile/send-group-message/", views.send_group_message, name="send_group_message"),
-    # # Project routes
-    # path("projects/", views.project_index, name="projects"),
-    # path("project/create/", views.project_create, name="project_create"),
-    # path("project/<int:pk>/", views.project_detail, name="project_detail"),
-    # path("project/<int:pk>/edit/", views.project_edit, name="project_edit"),
-    # path("project/<int:pk>/delete/", views.project_delete, name="project_delete"),
-    # path(
-    #     "project/<int:pk>/toggle-complete/",
-    #     views.project_toggle_complete,
-    #     name="project_toggle_complete",
-    # ),
-    # path("project/search/", views.project_search, name="project_search"),
-    # # Task routes
-    # path("tasks/", views.task_index, name="tasks"),
-    # path("task/create/<str:model>/<int:pk>/", views.task_create, name="task_create"),
-    # path("task/create/", views.task_create_standalone, name="task_create_standalone"),
-    path("task/<int:pk>/complete/", views.task_complete, name="task_complete"),
-    path("task/<int:pk>/reopen/", views.task_reopen, name="task_reopen"),
-    path("variant/create/", variant_views.variant_create, name="variant_create"),
-    path("variant/<int:pk>/update/", variant_views.variant_update, name="variant_update"),
-    # path("task/<int:pk>/", views.task_detail, name="task_detail"),
-    # path("task/search/", views.task_search, name="task_search"),
-    # path("search-hpo-terms/", views.search_hpo_terms, name="search_hpo_terms"),
-    # path(
-    #     "visualization/hpo-network/", views.hpo_visualization, name="hpo_visualization"
-    # ),
+    # Project Management
+    path("htmx/individual/<int:pk>/projects/edit/", individual_projects_edit, name="individual_projects_edit"),
+    path("htmx/individual/<int:pk>/projects/save/", individual_projects_save, name="individual_projects_save"),
+    path("htmx/project/search/", project_search, name="project_search"),
+    path("htmx/task/complete/<int:pk>/", CompleteTaskView.as_view(), name="complete_task"),
+    path("htmx/task/reopen/<int:pk>/", ReopenTaskView.as_view(), name="reopen_task"),
+    path("htmx/preview/<str:model_name>/<int:pk>/", document_preview, name="document_preview"),
 ]

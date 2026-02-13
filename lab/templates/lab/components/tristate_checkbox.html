@@ -1,0 +1,79 @@
+{# Tristate Checkbox Component #}
+{# Args: name, value, label, count (optional), current_values, excluded_values #}
+<div x-data="{
+        state: 0,
+        init() {
+            // Determine initial state based on passed values
+            const val = '{{ value }}';
+            const inclusions = {{ current_values|safe|default:'[]' }};
+            const exclusions = {{ excluded_values|safe|default:'[]' }};
+            
+            if (inclusions.includes(val)) {
+                this.state = 1;
+            } else if (exclusions.includes(val)) {
+                this.state = -1;
+            } else {
+                this.state = 0;
+            }
+        },
+        toggle() {
+            if (this.state === 0) this.state = 1;      // Neutral -> Include
+            else if (this.state === 1) this.state = -1; // Include -> Exclude
+            else this.state = 0;                       // Exclude -> Neutral
+            
+            // Trigger htmx request if needed, or just let the form submit do it?
+            // The requirement says 'should not reload page', implying HTMX.
+            // If this is inside a form with hx-trigger='change', we need to dispatch an event.
+            // But hidden inputs don't inherently trigger 'change' on the form when updated via JS.
+            // So we dispatch a custom event or manually trigger the form.
+            $nextTick(() => {
+                this.$dispatch('filter-changed');
+            });
+        }
+    }"
+    class="flex items-center justify-between py-1 cursor-pointer group"
+    @click="toggle()"
+>
+    <div class="flex items-center gap-2">
+        <!-- Visual Indicator -->
+        <div class="w-4 h-4 rounded border flex items-center justify-center transition-colors duration-200"
+             :class="{
+                 'bg-success border-success': state === 1,
+                 'bg-error border-error': state === -1,
+                 'bg-base-100 border-base-300 group-hover:border-base-content/50': state === 0
+             }">
+            <!-- Checkmark for Include -->
+            <svg x-show="state === 1" class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+            </svg>
+            <!-- X for Exclude -->
+            <svg x-show="state === -1" class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </div>
+        
+        <span class="text-sm select-none" 
+              :class="{
+                  'text-base-content': state === 0,
+                  'text-success font-medium': state === 1,
+                  'text-error font-medium': state === -1
+              }">
+            {{ label }}
+        </span>
+    </div>
+
+    <!-- Hidden Inputs -->
+    <!-- Name for Include -->
+    <template x-if="state === 1">
+        <input type="hidden" name="{{ name }}" value="{{ value }}">
+    </template>
+    
+    <!-- Name for Exclude -->
+    <template x-if="state === -1">
+        <input type="hidden" name="{{ name }}__exclude" value="{{ value }}">
+    </template>
+    
+    {% if count %}
+    <span class="text-xs text-base-content/50">{{ count }}</span>
+    {% endif %}
+</div>

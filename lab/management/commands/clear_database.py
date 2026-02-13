@@ -12,7 +12,8 @@ from lab.models import (
     Individual,
     Sample,
     Test,
-    AnalysisType,
+    PipelineType,
+    Pipeline,
     Analysis,
     IdentifierType,
     CrossIdentifier,
@@ -49,8 +50,11 @@ class Command(BaseCommand):
         self.stdout.write("Deleting Analysis entries...")
         Analysis.objects.all().delete()
 
-        self.stdout.write("Deleting AnalysisType entries...")
-        AnalysisType.objects.all().delete()
+        self.stdout.write("Deleting Pipeline entries...")
+        Pipeline.objects.all().delete()
+
+        self.stdout.write("Deleting PipelineType entries...")
+        PipelineType.objects.all().delete()
 
         self.stdout.write("Deleting Test entries...")
         Test.objects.all().delete()
@@ -65,8 +69,10 @@ class Command(BaseCommand):
         Sample.objects.all().update(individual=None)
         self.stdout.write("Nullifying Test.sample...")
         Test.objects.all().update(sample=None)
-        self.stdout.write("Nullifying Analysis.test...")
-        Analysis.objects.all().update(test=None)
+        self.stdout.write("Nullifying Analysis.pipeline...")
+        Analysis.objects.all().update(pipeline=None)
+        self.stdout.write("Nullifying Pipeline.test...")
+        Pipeline.objects.all().update(test=None)
         # Nullifying CrossIdentifier.individual is not possible due to NOT NULL constraint; delete instead
         self.stdout.write("Deleting CrossIdentifier entries...")
         CrossIdentifier.objects.all().delete()
@@ -85,6 +91,8 @@ class Command(BaseCommand):
             # Delete all objects that reference Status before deleting Status itself
             self.stdout.write("Deleting Analysis entries...")
             Analysis.objects.all().delete()
+            self.stdout.write("Deleting Pipeline entries...")
+            Pipeline.objects.all().delete()
             self.stdout.write("Deleting Test entries...")
             Test.objects.all().delete()
             self.stdout.write("Deleting Sample entries...")
@@ -128,12 +136,13 @@ class Command(BaseCommand):
         Sample.objects.all().delete()  # Sample has NOT NULL created_by
         Test.objects.all().delete()  # Test has NOT NULL created_by
         Analysis.objects.all().delete()  # Analysis has NOT NULL created_by
+        Pipeline.objects.all().delete()  # Pipeline has NOT NULL created_by
         Project.objects.all().delete()  # Project has NOT NULL created_by
         Note.objects.all().delete()  # Note has NOT NULL created_by
         Institution.objects.all().delete()  # Institution has NOT NULL created_by
         SampleType.objects.all().delete()  # SampleType has NOT NULL created_by
         TestType.objects.all().delete()  # TestType has NOT NULL created_by
-        AnalysisType.objects.all().delete()  # AnalysisType has NOT NULL created_by
+        PipelineType.objects.all().delete()  # PipelineType has NOT NULL created_by
         IdentifierType.objects.all().delete()  # IdentifierType has NOT NULL created_by
         CrossIdentifier.objects.all().delete()  # CrossIdentifier has NOT NULL created_by
         Individual.objects.all().delete()  # Individual has NOT NULL created_by

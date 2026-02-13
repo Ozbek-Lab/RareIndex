@@ -1,0 +1,43 @@
+{% load lab_tags %}
+{# If it's the first page, render the wrapper ul. If not, just render the li items #}
+{% if page_obj.number == 1 %}
+    {% if results %}
+    <ul class="menu flex-nowrap bg-base-100 w-full rounded-box p-2 shadow-lg border border-base-200 max-h-80 overflow-y-auto overflow-x-hidden"
+        style="flex-wrap: nowrap !important;"
+        id="hpo-results-list">
+    {% else %}
+    <div class="p-4 text-center text-sm text-base-content/50 bg-base-100 rounded-box border border-base-200 shadow-lg w-full">
+        No matching terms found.
+    </div>
+    {% endif %}
+{% endif %}
+
+{% for term in results %}
+    <li class="shrink-0">
+        <button type="button" 
+                class="flex flex-col items-start gap-1 py-2 h-auto"
+                hx-get="{% url 'lab:render_selected_hpo' pk=term.pk %}"
+                hx-target="#selected-hpo-list"
+                hx-swap="beforeend"
+                hx-on::after-request="this.closest('li').remove(); htmx.trigger('#filter-form', 'change');"
+                @click="$refs.searchInput.focus()">
+            <span class="font-bold text-sm whitespace-normal break-words text-left">{{ term.label }}</span>
+            <span class="text-xs font-mono opacity-50 break-all">{{ term.term }}</span>
+        </button>
+    </li>
+{% endfor %}
+
+{% if page_obj.has_next %}
+    <li hx-get="{% url 'lab:hpo_search' %}?q={{ request.GET.q }}&page={{ page_obj.next_page_number }}"
+        hx-trigger="intersect once"
+        hx-swap="outerHTML"
+        hx-target="this"
+        hx-include="#filter-form"
+        class="shrink-0">
+        <span class="loading loading-spinner loading-xs mx-auto"></span>
+    </li>
+{% endif %}
+
+{% if page_obj.number == 1 and results %}
+    </ul>
+{% endif %}

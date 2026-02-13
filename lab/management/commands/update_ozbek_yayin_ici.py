@@ -10,8 +10,8 @@ from lab.models import (
     SampleType,
     Test,
     TestType,
-    Analysis,
-    AnalysisType,
+    Pipeline,
+    PipelineType,
 )
 import openpyxl
 from datetime import datetime
@@ -139,11 +139,11 @@ class Command(BaseCommand):
         tt, _ = TestType.objects.get_or_create(name=name, defaults={"created_by": admin_user})
         return tt
 
-    def _get_or_create_analysis_type(self, name, admin_user):
+    def _get_or_create_pipeline_type(self, name, admin_user):
         if not name:
             return None
-        at, _ = AnalysisType.objects.get_or_create(name=name, defaults={"created_by": admin_user})
-        return at
+        pt, _ = PipelineType.objects.get_or_create(name=name, defaults={"created_by": admin_user})
+        return pt
 
     def _get_or_create_sample_type(self, name, admin_user):
         st, _ = SampleType.objects.get_or_create(name=name, defaults={"created_by": admin_user})
@@ -366,23 +366,23 @@ class Command(BaseCommand):
                             sample=sample_for_tests,
                             created_by=admin_user,
                         )
-                    analysis_type = self._get_or_create_analysis_type("Reanalysis", admin_user)
-                    analysis_status = Status.objects.filter(content_type=ContentType.objects.get(app_label="lab", model="analysis"), name="In Progress").first()
-                    if not analysis_status:
-                        analysis_status = Status.objects.create(
+                    pipeline_type = self._get_or_create_pipeline_type("Reanalysis", admin_user)
+                    pipeline_status = Status.objects.filter(content_type=ContentType.objects.get(app_label="lab", model="pipeline"), name="In Progress").first()
+                    if not pipeline_status:
+                        pipeline_status = Status.objects.create(
                             name="In Progress",
-                            description="Analysis is in progress",
+                            description="Pipeline is in progress",
                             color="yellow",
                             created_by=admin_user,
-                            content_type=ContentType.objects.get(app_label="lab", model="analysis"),
+                            content_type=ContentType.objects.get(app_label="lab", model="pipeline"),
                             icon="fa-spinner",
                         )
-                    Analysis.objects.create(
+                    Pipeline.objects.create(
                         test=target_test,
                         performed_date=datetime.today().date(),
                         performed_by=admin_user,
-                        type=analysis_type,
-                        status=analysis_status,
+                        type=pipeline_type,
+                        status=pipeline_status,
                         created_by=admin_user,
                     )
                 # Other entries become tests (e.g., WES/WGS/RNA Seq)

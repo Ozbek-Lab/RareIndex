@@ -1,0 +1,73 @@
+
+<div class="note-item group py-1.5 border-b border-base-200 last:border-0" 
+     x-data="{ editing: false, content: '{{ note.content|escapejs }}' }"
+     data-note-id="{{ note.id }}">
+  
+  <div class="flex items-start justify-between gap-3">
+    <div class="flex-1 min-w-0">
+      <!-- Meta -->
+      <div class="flex items-center gap-1.5 mb-0.5 whitespace-nowrap overflow-hidden">
+        <span class="font-bold text-[11px] text-base-content/80">{{ note.user.username }}</span>
+        <span class="text-[10px] text-base-content/40">{{ note.get_created_at|date:"M d, H:i" }}</span>
+        {% if note.private_owner %}
+            <i class="fa-solid fa-lock text-[10px] text-base-content/30" title="Private"></i>
+        {% endif %}
+      </div>
+
+      <!-- Content -->
+      <div x-show="!editing" class="whitespace-pre-wrap text-xs text-base-content/70 leading-relaxed">{{ note.content }}</div>
+      
+      <!-- Edit Mode -->
+      <div x-show="editing" style="display: none;" class="mt-1">
+          <textarea
+          x-ref="editTextarea"
+          x-model="content"
+          class="textarea textarea-bordered textarea-xs w-full leading-normal min-h-[60px]"
+          placeholder="Edit note..."
+          required
+          ></textarea>
+          <div class="flex justify-end gap-1 mt-1">
+              <button type="button" class="btn btn-ghost btn-xs text-base-content/50" @click="editing = false; content = '{{ note.content|escapejs }}'">Cancel</button>
+              <button type="button" class="btn btn-primary btn-xs" @click="$el.closest('.note-item').querySelector('form').dispatchEvent(new Event('submit', {bubbles: true})); editing = false;">Save</button>
+          </div>
+          <form
+          hx-post="{% url 'lab:note_update' note.id %}"
+          hx-target="closest .note-item"
+          hx-swap="outerHTML"
+          class="hidden"
+          >
+              {% csrf_token %}
+              <input type="hidden" name="content" x-bind:value="content" />
+          </form>
+      </div>
+    </div>
+
+    <!-- Actions (Always visible) -->
+    {% if user == note.user or user.is_staff %}
+      <div class="flex items-center">
+        <button
+          type="button"
+          x-show="!editing"
+          class="btn btn-ghost btn-xs btn-square text-base-content/30 hover:text-primary"
+          @click="editing = true; $nextTick(() => $refs.editTextarea.focus())"
+          title="Edit"
+        >
+          <i class="fa-solid fa-pencil"></i>
+        </button>
+        
+        <button
+          type="button"
+          x-show="!editing"
+          class="btn btn-ghost btn-xs btn-square text-base-content/30 hover:text-error"
+          hx-delete="{% url 'lab:note_delete' note.id %}"
+          hx-target="closest .notes-list"
+          hx-swap="outerHTML"
+          hx-confirm="Delete this note?"
+          title="Delete"
+        >
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>
+    {% endif %}
+  </div>
+</div>

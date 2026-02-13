@@ -1,0 +1,46 @@
+<div class="badge badge-lg gap-2 p-2 pl-3 pr-2 h-auto w-full justify-between items-center text-left cursor-pointer transition-colors select-none" 
+     id="hpo-term-{{ term.pk }}"
+     role="button"
+     x-data="{ 
+        state: 'include', // include -> exclude -> remove
+        toggle() {
+            if (this.state === 'include') {
+                this.state = 'exclude';
+            } else if (this.state === 'exclude') {
+                this.remove();
+            }
+        },
+        remove() {
+            $el.remove();
+            htmx.trigger(document.getElementById('filter-form'), 'change');
+        }
+     }"
+     @click="toggle(); $nextTick(() => htmx.trigger(document.getElementById('filter-form'), 'change'))"
+     :class="{
+        'badge-success text-success-content': state === 'include', 
+        'badge-error text-error-content': state === 'exclude'
+     }">
+    
+    <!-- Hidden Inputs -->
+    <input type="checkbox" name="hpo_terms" value="{{ term.pk }}" 
+           x-bind:checked="state === 'include'" class="hidden">
+           
+    <input type="checkbox" name="hpo_terms__exclude" value="{{ term.pk }}" 
+           x-bind:checked="state === 'exclude'" class="hidden">
+
+    <div class="flex flex-col min-w-0 flex-1">
+        <span class="font-bold text-xs truncate leading-tight">{{ term.label }}</span>
+        <span class="font-mono text-[10px] opacity-60 leading-tight">{{ term.term }}</span>
+    </div>
+    
+    <button type="button" 
+            class="btn btn-ghost btn-xs btn-circle h-5 w-5 min-w-[20px] flex-shrink-0 hover:bg-white/20"
+            @click.stop="remove()">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+    </button>
+</div>
+<script>
+    htmx.trigger('#filter-form', 'change');
+</script>

@@ -94,7 +94,7 @@ class VariantTaskTests(TestCase):
 
     def test_variants_property(self):
         """Test that the variants property returns correct variants for Sample and Test."""
-        from lab.models import Test, TestType, Sample, SampleType, Analysis, AnalysisType
+        from lab.models import Test, TestType, Sample, SampleType, Pipeline, PipelineType
         
         # Create Sample and Test
         test_type = TestType.objects.create(name="WGS", created_by=self.user)
@@ -113,24 +113,24 @@ class VariantTaskTests(TestCase):
             created_by=self.user
         )
         
-        # Create Analysis
-        analysis_type = AnalysisType.objects.create(name="Variant Calling", created_by=self.user)
-        analysis = Analysis.objects.create(
+        # Create Pipeline
+        pipeline_type = PipelineType.objects.create(name="Variant Calling", created_by=self.user)
+        pipeline = Pipeline.objects.create(
             test=test,
-            type=analysis_type,
+            type=pipeline_type,
             status=self.status,
             performed_date="2023-01-01",
             performed_by=self.user,
             created_by=self.user
         )
         
-        # Create Variant associated with Analysis
+        # Create Variant associated with Pipeline
         variant = Variant.objects.create(
             chromosome="chr2",
             start=200,
             end=201,
             individual=self.individual,
-            analysis=analysis,
+            pipeline=pipeline,
             created_by=self.user
         )
         

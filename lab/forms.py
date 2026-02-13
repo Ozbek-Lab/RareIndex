@@ -12,9 +12,11 @@ from .models import (
     Project,
     Test,
     Analysis,
-    AnalysisType,
+    Pipeline, # Added Pipeline
+    PipelineType, # Added PipelineType
     Institution,
     Family,
+    AnalysisType,
 )
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
@@ -26,43 +28,31 @@ class BaseForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Apply consistent styling to all fields
+        # Apply consistent styling to all fields using DaisyUI
         for field_name, field in self.fields.items():
+            current_classes = field.widget.attrs.get("class", "")
+            
             if isinstance(field.widget, forms.TextInput):
-                field.widget.attrs.update(
-                    {
-                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-                    }
-                )
+                if "input" not in current_classes:
+                    field.widget.attrs["class"] = f"input input-bordered w-full {current_classes}"
             elif isinstance(field.widget, forms.Textarea):
-                field.widget.attrs.update(
-                    {
-                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 resize-vertical min-h-[80px]"
-                    }
-                )
+                if "textarea" not in current_classes:
+                    field.widget.attrs["class"] = f"textarea textarea-bordered w-full h-24 {current_classes}"
             elif isinstance(field.widget, forms.Select):
-                field.widget.attrs.update(
-                    {
-                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10"
-                    }
-                )
+                if "select" not in current_classes:
+                    field.widget.attrs["class"] = f"select select-bordered w-full {current_classes}"
             elif isinstance(field.widget, forms.SelectMultiple):
-                field.widget.attrs.update(
-                    {
-                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 h-32"
-                    }
-                )
+                if "select" not in current_classes:
+                    field.widget.attrs["class"] = f"select select-bordered w-full h-32 {current_classes}"
             elif isinstance(field.widget, forms.DateInput):
-                field.widget.attrs.update(
-                    {
-                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-                    }
-                )
+                 if "input" not in current_classes:
+                    field.widget.attrs["class"] = f"input input-bordered w-full {current_classes}"
             elif isinstance(field.widget, forms.NumberInput):
-                field.widget.attrs.update(
-                    {
-                        "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200"
-                    }
-                )
+                 if "input" not in current_classes:
+                    field.widget.attrs["class"] = f"input input-bordered w-full {current_classes}"
+            elif isinstance(field.widget, forms.CheckboxInput):
+                if "checkbox" not in current_classes:
+                    field.widget.attrs["class"] = f"checkbox {current_classes}"
 
     def save(self, commit=True, **kwargs):
         """Override save to handle created_by field automatically"""
@@ -234,7 +224,7 @@ class NoteForm(BaseForm):
         widgets = {
             "content": forms.Textarea(
                 attrs={
-                    "class": "flex-1 px-2 py-1 text-xs shadow-sm rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none h-[32px]",
+                    "class": "textarea textarea-bordered w-full h-[32px] px-2 py-1 text-xs resize-none",
                     "placeholder": "Add a note...",
                     "required": True,
                 }
@@ -253,17 +243,8 @@ class SampleTypeForm(BaseForm):
         model = SampleType
         fields = ["name", "description"]
         widgets = {
-            "name": forms.TextInput(
-                attrs={
-                    "class": "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                }
-            ),
-            "description": forms.Textarea(
-                attrs={
-                    "rows": 3,
-                    "class": "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-                }
-            ),
+            "name": forms.TextInput(attrs={}),
+            "description": forms.Textarea(attrs={"rows": 3}),
         }
 
 
@@ -278,7 +259,6 @@ class TestForm(BaseForm):
             "status",
             "service_send_date",
             "data_receipt_date",
-            "created_by",
         ]
         widgets = {
             "performed_date": forms.DateInput(attrs={"type": "date"}),
@@ -287,24 +267,41 @@ class TestForm(BaseForm):
         }
 
 
+class PipelineForm(BaseForm):
+    class Meta:
+        model = Pipeline
+        fields = [
+            "type",
+            "performed_date",
+            "performed_by",
+            "status",
+            "test"
+        ]
+        widgets = {
+            "performed_date": forms.DateInput(attrs={"type": "date"}),
+            "test": forms.HiddenInput(),
+        }
+
+
 class AnalysisForm(BaseForm):
     class Meta:
         model = Analysis
         fields = [
-            "test",
+            "type",
             "performed_date",
             "performed_by",
-            "type",
             "status",
+            "pipeline"
         ]
         widgets = {
             "performed_date": forms.DateInput(attrs={"type": "date"}),
+            "pipeline": forms.HiddenInput(),
         }
 
 
-class AnalysisTypeForm(BaseForm):
+class PipelineTypeForm(BaseForm):
     class Meta:
-        model = AnalysisType
+        model = PipelineType
         fields = [
             "name",
             "description",
@@ -317,6 +314,15 @@ class AnalysisTypeForm(BaseForm):
             "description": forms.Textarea(attrs={"rows": 3}),
             "source_url": forms.URLInput(attrs={"placeholder": "https://..."}),
             "results_url": forms.URLInput(attrs={"placeholder": "https://..."}),
+        }
+
+
+class AnalysisTypeForm(BaseForm):
+    class Meta:
+        model = AnalysisType
+        fields = ["name", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
         }
 
 
@@ -375,7 +381,6 @@ class FamilyForm(BaseForm):
             required=True,
             widget=forms.Select(
                 attrs={
-                    "class": "w-[95%] px-3 py-2 ml-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200 appearance-none bg-no-repeat bg-right pr-10",
                     "data-family-select": "true",
                 }
             ),
@@ -408,19 +413,277 @@ class StatusForm(BaseForm):
         }
 
 
+class CreateFamilyForm(BaseForm):
+    class Meta:
+        model = Family
+        fields = [
+            "family_id",
+            "description",
+            "is_consanguineous",
+        ]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "family_id": forms.TextInput(
+                attrs={
+                    "placeholder": "e.g. FAM001",
+                }
+            ),
+        }
+
+
+class FamilyMemberForm(BaseForm):
+    # Hidden fields to handle client-side references
+    father_ref = forms.CharField(required=False, widget=forms.HiddenInput())
+    mother_ref = forms.CharField(required=False, widget=forms.HiddenInput())
+    
+    # JSON field for dynamic cross identifiers
+    # Expected format: [{"type_id": 1, "value": "123"}, ...]
+    cross_identifiers_json = forms.CharField(required=False, widget=forms.HiddenInput())
+    
+    # Simple text field for initial note
+    note_content = forms.CharField(
+        required=False, 
+        widget=forms.Textarea(attrs={
+            "rows": 2, 
+            "placeholder": "Add initial notes...",
+            # BaseForm will inject textarea-bordered, we just add resize-none or specific sizing if needed
+            "class": "resize-none"
+        })
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Ensure institutions are selectable
+        self.fields["institution"].queryset = Institution.objects.all()
+        # Set HPO terms widget attributes
+        self.fields["hpo_terms"].widget.attrs.update({
+             # "class": "hidden", # Standard select for now
+             "data-hpo-picker": "true",
+             "class": "select select-bordered w-full h-32"
+        })
+        # Override birth_date and council_date to use standard date input
+        self.fields["birth_date"].widget = forms.DateInput(attrs={"type": "date"})
+        self.fields["council_date"].widget = forms.DateInput(attrs={"type": "date"})
+        
+        # Filter status for Individuals only
+        try:
+            ind_ct = ContentType.objects.get_for_model(Individual)
+            self.fields["status"].queryset = Status.objects.filter(content_type=ind_ct)
+        except Exception:
+            pass # Fallback to all if CT not found (e.g. during migration)
+
+    class Meta:
+        model = Individual
+        fields = [
+            "full_name",
+            "tc_identity",
+            "birth_date",
+            "sex",
+            "status",
+            "is_index",
+            "is_affected",
+            "council_date",
+            "institution",
+            "hpo_terms",
+            "diagnosis",
+        ]
+        widgets = {
+            "birth_date": forms.DateInput(attrs={"type": "date"}),
+            "council_date": forms.DateInput(attrs={"type": "date"}),
+            "full_name": forms.TextInput(attrs={"placeholder": "Full Name"}),
+            "tc_identity": forms.NumberInput(
+                attrs={
+                    "type": "number",
+                    "min": "10000000000",
+                    "max": "99999999999",
+                    "step": "1",
+                    "placeholder": "TC Identity (11 digits)",
+                }
+            ),
+        }
+
 # Forms mapping for generic views
 FORMS_MAPPING = {
     "Individual": IndividualForm,
     "Sample": SampleForm,
     "Test": TestForm,
-    "Analysis": AnalysisForm,
+    "Pipeline": PipelineForm,
     "Note": NoteForm,
     "Task": TaskForm,
     "Project": ProjectForm,
     "TestType": TestTypeForm,
     "SampleType": SampleTypeForm,
+    "PipelineType": PipelineTypeForm,
     "AnalysisType": AnalysisTypeForm,
     "Institution": InstitutionForm,
     "Family": FamilyForm,
     "Status": StatusForm,
 }
+
+
+class IndividualIdentificationForm(BaseForm):
+    lab_id = forms.CharField(required=False, label="Lab ID")
+    biobank_id = forms.CharField(required=False, label="Biobank ID")
+    tc_identity = forms.IntegerField(required=False, label="TC Identity")
+    cross_identifiers_json = forms.CharField(required=False, widget=forms.HiddenInput())
+
+    class Meta:
+        model = Individual
+        fields = ["full_name", "tc_identity"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            lid = self.instance.lab_id
+            bid = self.instance.biobank_id
+            
+            self.fields["lab_id"].initial = lid if "No Lab ID" not in lid else ""
+            self.fields["biobank_id"].initial = bid if "No Biobank ID" not in bid else ""
+
+    def save(self, commit=True, **kwargs):
+        user = kwargs.get("user")
+        instance = super().save(commit=False, **kwargs)
+        if commit:
+            instance.save()
+            from .models import IdentifierType, CrossIdentifier
+            import json
+
+            # Helper to update cross ID
+            def update_cross_id(type_name, value):
+                try:
+                    id_type = IdentifierType.objects.get(name=type_name)
+                    if not value:
+                        # If empty, delete it
+                        CrossIdentifier.objects.filter(
+                            individual=instance, id_type=id_type
+                        ).delete()
+                    else:
+                        defaults = {"id_value": value}
+                        if user:
+                            defaults["created_by"] = user
+
+                        obj, created = CrossIdentifier.objects.get_or_create(
+                            individual=instance,
+                            id_type=id_type,
+                            defaults=defaults
+                        )
+                        if not created and obj.id_value != value:
+                            obj.id_value = value
+                            obj.save()
+                except IdentifierType.DoesNotExist:
+                    pass 
+                except Exception:
+                    pass
+
+            update_cross_id("RareBoost", self.cleaned_data.get("lab_id"))
+            update_cross_id("Biobank", self.cleaned_data.get("biobank_id"))
+
+            # Handle dynamic cross IDs
+            cross_ids_json = self.cleaned_data.get("cross_identifiers_json")
+            if cross_ids_json:
+                try:
+                    cross_ids_data = json.loads(cross_ids_json)
+                    # {type_id: value} mapping
+                    current_ids_map = {
+                        str(item["type_id"]): item["value"] 
+                        for item in cross_ids_data 
+                        if item.get("value")
+                    }
+
+                    # Get existing IDs distinct from RB/Biobank
+                    excluded_types = ["RareBoost", "Biobank"]
+                    existing_ids = CrossIdentifier.objects.filter(
+                        individual=instance
+                    ).exclude(id_type__name__in=excluded_types)
+
+                    # Update/Delete existing
+                    for xid in existing_ids:
+                        type_str = str(xid.id_type.id)
+                        if type_str in current_ids_map:
+                            if xid.id_value != current_ids_map[type_str]:
+                                xid.id_value = current_ids_map[type_str]
+                                xid.save()
+                            del current_ids_map[type_str]
+                        else:
+                            xid.delete()
+
+                    # Create new
+                    for type_id, value in current_ids_map.items():
+                        try:
+                            id_type = IdentifierType.objects.get(id=type_id)
+                            if id_type.name in excluded_types:
+                                continue
+                            
+                            CrossIdentifier.objects.create(
+                                individual=instance,
+                                id_type=id_type,
+                                id_value=value,
+                                created_by=user if user else instance.created_by
+                            )
+                        except IdentifierType.DoesNotExist:
+                            pass
+                except json.JSONDecodeError:
+                    pass
+            
+        return instance
+
+
+class IndividualDemographicsForm(BaseForm):
+    # Map is_alive (boolean) to Vital Status selection
+    vital_status = forms.ChoiceField(
+        choices=[("alive", "Alive"), ("deceased", "Deceased")],
+        required=True,
+        widget=forms.Select(attrs={"class": "select select-bordered w-full"})
+    )
+
+    class Meta:
+        model = Individual
+        fields = ["sex", "birth_date", "family"]
+        widgets = {
+            "birth_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields["vital_status"].initial = "alive" if self.instance.is_alive else "deceased"
+        
+        # Family field - use standard select but filter slightly? 
+        # Or just allow all. BaseForm styles it.
+
+    def save(self, commit=True, **kwargs):
+        # Consume user if passed, as views pass it
+        user = kwargs.get("user")
+        instance = super().save(commit=False)
+        instance.is_alive = (self.cleaned_data.get("vital_status") == "alive")
+        if commit:
+            instance.save()
+        return instance
+
+
+class ClinicalSummaryForm(BaseForm):
+    class Meta:
+        model = Individual
+        fields = [
+            "diagnosis",
+            "diagnosis_date",
+            "age_of_onset",
+            "is_affected",
+            "icd11_code",
+        ]
+        widgets = {
+            "diagnosis_date": forms.DateInput(attrs={"type": "date"}),
+            "diagnosis": forms.Textarea(
+                attrs={
+                    "rows": 2,
+                    "class": "textarea textarea-bordered",
+                    "placeholder": "Enter diagnosis...",
+                }
+            ),
+            "icd11_code": forms.TextInput(
+                attrs={
+                    "placeholder": "e.g. LDBS",
+                }
+            ),
+        }
+

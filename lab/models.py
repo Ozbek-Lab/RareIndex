@@ -368,6 +368,7 @@ class Individual(HistoryMixin, models.Model):
         permissions = [
             ("view_sensitive_data", "Can view sensitive data"),
         ]
+        ordering = ["-id"]
 
     @property
     def all_ids(self):
@@ -542,8 +543,8 @@ class Test(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
-class AnalysisType(HistoryMixin, models.Model):
-    """Model for defining types of analyses that can be performed"""
+class PipelineType(HistoryMixin, models.Model):
+    """Model for defining types of bioinformatics pipelines that can be run"""
 
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
@@ -555,16 +556,16 @@ class AnalysisType(HistoryMixin, models.Model):
         max_length=500,
         null=True,
         blank=True,
-        help_text="URL to the analysis source code or documentation",
+        help_text="URL to the pipeline source code or documentation",
     )
     results_url = models.URLField(
         max_length=500,
         null=True,
         blank=True,
-        help_text="URL to view analysis results",
+        help_text="URL to view pipeline results",
     )
     created_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="created_analysis_types"
+        User, on_delete=models.PROTECT, related_name="created_pipeline_types"
     )
     history = HistoricalRecords()
 
@@ -575,23 +576,23 @@ class AnalysisType(HistoryMixin, models.Model):
         return f"{self.name} v{self.version}"
 
 
-class Analysis(HistoryMixin, models.Model):
-    """Model for tracking analyses performed on sample tests"""
+class Pipeline(HistoryMixin, models.Model):
+    """Model for tracking bioinformatics pipeline runs on sample tests"""
 
-    test = models.ForeignKey(Test, on_delete=models.PROTECT, related_name="analyses")
+    test = models.ForeignKey(Test, on_delete=models.PROTECT, related_name="pipelines")
     performed_date = models.DateField()
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
-    type = models.ForeignKey(AnalysisType, on_delete=models.PROTECT)
+    type = models.ForeignKey(PipelineType, on_delete=models.PROTECT)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
     notes = GenericRelation("Note")
     created_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="created_analyses"
+        User, on_delete=models.PROTECT, related_name="created_pipelines"
     )
     tasks = GenericRelation("Task")
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name_plural = "analyses"
+        verbose_name_plural = "pipelines"
         ordering = ["-id"]
 
     def __str__(self):
@@ -615,6 +616,60 @@ class Analysis(HistoryMixin, models.Model):
                 self.created_by = current_user
 
         super().save(*args, **kwargs)
+
+
+class AnalysisType(HistoryMixin, models.Model):
+    """Types of clinical interpretations (e.g., Initial, Reanalysis)"""
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="analysis_types_created",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    history = HistoricalRecords()
+
+    def __str__(self):
+        return self.name
+
+
+class Analysis(HistoryMixin, models.Model):
+    """Model for genome analyst's clinical interpretation of pipeline results"""
+
+    pipeline = models.ForeignKey(
+        Pipeline, on_delete=models.PROTECT, related_name="analyses", null=True, blank=True
+    )
+    type = models.ForeignKey(
+        AnalysisType,
+        on_delete=models.PROTECT,
+        related_name="analyses",
+        null=True,
+        blank=True,
+    )
+    performed_date = models.DateField(null=True, blank=True)
+    performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    notes = GenericRelation("Note")
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="created_analyses",
+        null=True,
+        blank=True,
+    )
+    tasks = GenericRelation("Task")
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name_plural = "analyses"
+        ordering = ["-id"]
+
+    def __str__(self):
+        return f"{self.pipeline} - {self.type} - {self.performed_date}"
 
 
 class IdentifierType(HistoryMixin, models.Model):
@@ -705,7 +760,7 @@ def notify_status_change(sender, instance, **kwargs):
     """Generic signal to notify on status change for models with status field"""
     # This is a bit broad, so we should limit it to specific models or use a mixin.
     # Let's limit to Sample, Test, Analysis for now.
-    if sender.__name__ not in ["Sample", "Test", "Analysis"]:
+    if sender.__name__ not in ["Sample", "Test", "Pipeline"]:
         return
 
     # We need to check if status changed.
@@ -721,3 +776,40 @@ def notify_status_change(sender, instance, **kwargs):
     # Let's use the `tracker` if available (django-model-utils) or just skip automatic signal for status
     # and rely on explicit calls in views/methods (like Task.complete does).
     pass
+
+
+class AnalysisReport(HistoryMixin, models.Model):
+    pipeline = models.ForeignKey(
+        Pipeline, on_delete=models.PROTECT, related_name="reports"
+    )
+    # Lazy reference to avoid circular import if Variant is in another app
+    variants = models.ManyToManyField("variant.Variant", related_name="reports", blank=True)
+    file = models.FileField(upload_to="analysis_reports/%Y/%m/%d/")
+    preview_file = models.FileField(upload_to="analysis_reports/previews/%Y/%m/%d/", null=True, blank=True, max_length=500)
+    description = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="uploaded_analysis_reports"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    history = HistoricalRecords()
+
+    def __str__(self):
+        return f"Analysis Report for {self.pipeline} - {self.created_at.strftime('%Y-%m-%d')}"
+
+
+class AnalysisRequestForm(HistoryMixin, models.Model):
+    individual = models.ForeignKey(
+        Individual, on_delete=models.PROTECT, related_name="analysis_request_forms"
+    )
+    file = models.FileField(upload_to="analysis_requests/%Y/%m/%d/")
+    preview_file = models.FileField(upload_to='analysis_requests/previews/%Y/%m/%d/', null=True, blank=True, max_length=500)
+    description = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="uploaded_analysis_requests"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    history = HistoricalRecords()
+
+    def __str__(self):
+        return f"Request Form for {self.individual} - {self.created_at.strftime('%Y-%m-%d')}"
+

@@ -1,0 +1,66 @@
+{% load lab_tags %}
+<div class="flex flex-col h-full overflow-hidden">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-base-200 bg-base-100 shrink-0">
+        <div class="flex items-center gap-3">
+             <div class="h-10 w-10 rounded bg-primary/10 flex items-center justify-center text-primary">
+                <i class="fa-solid fa-file-pdf text-xl"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-base line-clamp-1">
+                    {{ object.file.name|basename }}
+                </h3>
+                <p class="text-xs text-base-content/60">
+                    Uploaded on {{ object.created_at|date:"M d, Y" }} by {{ object.created_by.get_full_name|default:object.created_by.username }}
+                </p>
+            </div>
+        </div>
+        <label for="preview-drawer" class="btn btn-ghost btn-sm btn-circle">
+            <i class="fa-solid fa-xmark"></i>
+        </label>
+    </div>
+
+    <!-- Content -->
+    <div class="flex-1 bg-base-200 overflow-hidden relative">
+        <div class="w-full h-full">
+            {% if object.preview_file %}
+                <embed src="{{ object.preview_file.url }}#toolbar=0" type="application/pdf" class="w-full h-full border-0" />
+            {% elif object.file.name|lower|slice:"-4:" == ".pdf" %}
+                <embed src="{{ object.file.url }}#toolbar=0" type="application/pdf" class="w-full h-full border-0" />
+            {% else %}
+                <div class="flex flex-col items-center justify-center h-full p-8 text-center bg-base-100">
+                    <div class="size-20 bg-base-200 rounded-full flex items-center justify-center mb-4 text-base-content/20">
+                        <i class="fa-solid fa-file-circle-exclamation text-4xl"></i>
+                    </div>
+                    <h4 class="font-bold text-lg mb-2">Preview Unavailable</h4>
+                    <p class="text-sm text-base-content/60 max-w-xs mb-6">
+                        We could not generate a visual preview for this file type ({{ object.file.name|lower|slice:"-4:" }}). Please download the file to view it.
+                    </p>
+                    <a href="{{ object.file.url }}" download class="btn btn-primary gap-2">
+                        <i class="fa-solid fa-download"></i>
+                        Download File
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Footer / Actions -->
+    <div class="p-4 border-t border-base-200 bg-base-100 flex justify-between items-center shrink-0">
+        <div class="text-xs text-base-content/50">
+            Internal Document · Protected Health Information
+        </div>
+        <div class="flex gap-2">
+            <a href="{{ object.file.url }}" download class="btn btn-outline btn-sm gap-2">
+                <i class="fa-solid fa-download"></i>
+                Download Original
+            </a>
+            {% if object.preview_file %}
+            <a href="{{ object.preview_file.url }}" target="_blank" class="btn btn-primary btn-sm gap-2">
+                <i class="fa-solid fa-up-right-from-square"></i>
+                Open Large
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>

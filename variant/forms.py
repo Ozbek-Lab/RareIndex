@@ -1,6 +1,6 @@
 from django import forms
 from .models import Variant, SNV, CNV, SV, Repeat
-from lab.models import Individual, Test, Analysis
+from lab.models import Individual, Test, Pipeline
 
 class VariantContextForm(forms.Form):
     individual = forms.ModelChoiceField(
@@ -20,12 +20,12 @@ class VariantContextForm(forms.Form):
             'name': 'test'
         })
     )
-    analysis = forms.ModelChoiceField(
-        queryset=Analysis.objects.none(),
+    pipeline = forms.ModelChoiceField(
+        queryset=Pipeline.objects.none(),
         required=False,
         widget=forms.Select(attrs={
             'class': 'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200',
-            'name': 'analysis'
+            'name': 'pipeline'
         })
     )
     variant_type = forms.ChoiceField(
@@ -56,7 +56,7 @@ class VariantContextForm(forms.Form):
         if 'test' in data:
             try:
                 test_id = int(data.get('test'))
-                self.fields['analysis'].queryset = Analysis.objects.filter(test_id=test_id)
+                self.fields['pipeline'].queryset = Pipeline.objects.filter(test_id=test_id)
             except (ValueError, TypeError):
                 pass
 
@@ -105,7 +105,7 @@ class BaseVariantForm(forms.ModelForm):
     )
 
     class Meta:
-        exclude = ['created_by', 'created_at', 'analysis', 'individual']
+        exclude = ['created_by', 'created_at', 'pipeline', 'individual']
         widgets = {
             'start': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
             'end': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
@@ -180,17 +180,17 @@ class RepeatForm(BaseVariantForm):
 class VariantUpdateForm(forms.ModelForm):
     class Meta:
         model = Variant
-        fields = ['analysis'] # We only want to update analysis for now
+        fields = ['pipeline'] # We only want to update pipeline for now
         
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Filter analysis based on individual if possible, or show all
+        # Filter pipeline based on individual if possible, or show all
         if self.instance and self.instance.individual:
-            # Show analyses for the same individual
-            self.fields['analysis'].queryset = Analysis.objects.filter(
+            # Show pipelines for the same individual
+            self.fields['pipeline'].queryset = Pipeline.objects.filter(
                 test__sample__individual=self.instance.individual
             )
         
-        self.fields['analysis'].widget.attrs.update({
+        self.fields['pipeline'].widget.attrs.update({
             'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'
         })

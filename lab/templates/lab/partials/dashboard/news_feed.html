@@ -1,0 +1,61 @@
+{% load lab_tags %}
+<div class="px-3 py-4">
+    <ul class="timeline timeline-vertical timeline-compact items-start">
+        {% for item in news_feed %}
+            <li>
+                <hr class="bg-base-200"/>
+                <div class="timeline-middle">
+                    {% with model_name=item.instance|class_name %}
+                        {% if model_name == "Individual" %}
+                            <i class="fas fa-user text-primary opacity-50 scale-75"></i>
+                        {% elif model_name == "Sample" %}
+                            <i class="fas fa-vial text-secondary opacity-50 scale-75"></i>
+                        {% elif model_name == "Note" %}
+                            <i class="fas fa-sticky-note text-accent opacity-50 scale-75"></i>
+                        {% elif model_name == "Test" %}
+                            <i class="fas fa-microscope text-info opacity-50 scale-75"></i>
+                        {% else %}
+                            <i class="fas fa-circle text-base-content/20 opacity-50 scale-75"></i>
+                        {% endif %}
+                    {% endwith %}
+                </div>
+                <div class="timeline-end mb-4 ml-1 w-full overflow-hidden">
+                    <div class="text-[9px] font-mono opacity-40 mb-0.5">
+                        {{ item.history_date|timesince }} ago
+                    </div>
+                    <div class="text-[11px] font-medium leading-tight">
+                        <span class="opacity-60 text-[10px]">
+                            {% if item.history_type == "+" %}Created{% elif item.history_type == "~" %}Updated{% elif item.history_type == "-" %}Deleted{% endif %}
+                            {% if item.history_user %}
+                                by <span class="font-semibold text-base-content/80 ml-0.5">{{ item.history_user }}</span>
+                            {% endif %}
+                        </span>
+                        
+                        <span class="font-bold text-base-content/70">{{ item.instance|class_name }}</span>
+                        
+                        {% if item.instance.get_absolute_url %}
+                            <a href="{{ item.instance.get_absolute_url }}" class="hover:underline text-primary">
+                                {{ item.instance }}
+                            </a>
+                        {% else %}
+                            {{ item.instance }}
+                        {% endif %}
+                    </div>
+                    
+                    {% if item.history_type == "~" and item.diff_display %}
+                        <div class="text-[10px] opacity-60 mt-1 pl-1.5 border-l border-base-200">
+                            {% for field, value in item.diff_display.items %}
+                                <div class="truncate"><strong>{{ field }}</strong>: {{ value }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                <hr class="bg-base-200"/>
+            </li>
+        {% empty %}
+            <li class="text-center p-4 opacity-40 text-xs italic">
+                No recent activity.
+            </li>
+        {% endfor %}
+    </ul>
+</div>

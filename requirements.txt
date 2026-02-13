@@ -34,3 +34,8 @@ django-environ
 gunicorn
 psycopg2-binary
 
+
+django-tables2
+django-filter
+pypandoc
+weasyprint

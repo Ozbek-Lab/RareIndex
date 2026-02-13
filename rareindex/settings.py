@@ -62,6 +62,9 @@ INSTALLED_APPS = [
     "openpyxl",
     "plotly_express",
     "variant",
+    "django_tables2",
+    "django_filters",
+    "widget_tweaks",
 ]
 
 MIDDLEWARE = [
@@ -101,6 +104,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "lab.context_processors.user_profile",
             ],
         },
     },
@@ -112,6 +116,10 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+
+# Media files (Uploads)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # HTMX settings
 DJANGO_HTMX_REFRESH_TEMPLATES = True
@@ -217,3 +225,8 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+X_FRAME_OPTIONS = "SAMEORIGIN"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"

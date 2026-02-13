@@ -1,0 +1,16 @@
+<div class="notes-list flex flex-col gap-1"
+     hx-on:htmx:after-swap="if(event.detail.target.classList.contains('notes-list')) { document.body.dispatchEvent(new CustomEvent('noteCountUpdate-{{ content_type }}-{{ object.id }}')); }">
+  
+  {% if notes %}
+    {% for note in notes %}
+        {% include "lab/partials/notes/item.html" %}
+    {% endfor %}
+  {% else %}
+    <div class="flex items-center justify-center gap-2 py-4 text-xs opacity-40 italic">
+         <i class="fa-regular fa-comment-dots"></i>
+         <span>No notes yet.</span>
+    </div>
+  {% endif %}
+
+  {% include "lab/partials/notes/form.html" %}
+</div>

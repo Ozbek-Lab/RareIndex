@@ -3,19 +3,19 @@ import json
 from django.utils import timezone
 from django.db.models import Count, Q
 from .models import Annotation
-from lab.models import Analysis, Status
+from lab.models import Pipeline, Status
 
 class DiagnosticService:
     """Service to calculate diagnostic yield and analysis statistics"""
 
-    def get_diagnostic_yield(self, analysis_type=None):
+    def get_diagnostic_yield(self, pipeline_type=None):
         """
-        Calculate diagnostic yield: Solved Analyses / Total Analyses
+        Calculate diagnostic yield: Solved Pipelines / Total Pipelines
         Returns a dict with counts and percentage.
         """
-        queryset = Analysis.objects.all()
-        if analysis_type:
-            queryset = queryset.filter(type=analysis_type)
+        queryset = Pipeline.objects.all()
+        if pipeline_type:
+            queryset = queryset.filter(type=pipeline_type)
             
         total = queryset.count()
         if total == 0:
@@ -32,9 +32,9 @@ class DiagnosticService:
         }
 
     def get_variants_leading_to_diagnosis(self):
-        """Return variants linked to solved analyses"""
+        """Return variants linked to solved pipelines"""
         solved_statuses = ["Solved - P/LP", "Solved - VUS"]
-        return Analysis.objects.filter(status__name__in=solved_statuses).values_list('found_variants', flat=True)
+        return Pipeline.objects.filter(status__name__in=solved_statuses).values_list('found_variants', flat=True)
 
 
 class AnnotationService:

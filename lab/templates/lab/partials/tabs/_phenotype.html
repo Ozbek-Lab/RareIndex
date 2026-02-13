@@ -1,0 +1,243 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Clinical Information -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm">
+        <div class="card-body p-4" id="clinical-summary-card">
+            {% partial clinical_summary_content %}
+        </div>
+    </div>
+
+    <!-- HPO Terms -->
+    <div id="hpo-card-container-{{ individual.pk }}" class="hpo-container card bg-base-100 border border-base-200 shadow-sm overflow-visible">
+        {% partial hpo_card %}
+    </div>
+</div>
+
+<!-- Partial Definitions -->
+
+{% partialdef hpo_card %}
+<div class="card-body p-4">
+    <h3 class="card-title text-sm uppercase text-base-content/50 mb-4 flex justify-between items-center group">
+        <div>
+            HPO Terms
+            <span class="badge badge-sm badge-ghost ml-2">{{ individual.hpo_terms.count }}</span>
+        </div>
+        <button hx-get="{% url 'lab:hpo_edit' individual.pk %}" 
+                hx-target="closest .hpo-container"
+                class="btn btn-ghost btn-xs btn-circle">
+            <i class="fa-solid fa-pencil text-xs"></i>
+        </button>
+    </h3>
+    
+    {% if individual.hpo_terms.exists %}
+        {% regroup individual.hpo_terms.all by source as term_groups %}
+        
+        {% for group in term_groups %}
+            {% if group.grouper == "HP" %}
+                 <div class="flex flex-wrap gap-2 mb-4">
+                    {% for term in group.list %}
+                        <div class="tooltip" data-tip="{{ term.description|truncatechars:100 }}">
+                            <span class="badge badge-outline gap-1 h-auto py-1">
+                                <span class="font-mono text-xs font-bold text-primary">{{ term.term }}</span>
+                                <span class="break-words">{{ term.label }}</span>
+                            </span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="mt-4 first:mt-0">
+                     <h4 class="text-xs font-bold text-base-content/50 mb-2">{{ group.grouper }} Terms</h4>
+                     <div class="flex flex-wrap gap-2">
+                        {% for term in group.list %}
+                            <span class="badge badge-ghost badge-outline gap-1 h-auto py-1">
+                                <span class="font-mono text-xs font-bold text-secondary">{{ term.term }}</span>
+                                <span>{{ term.label }}</span>
+                            </span>
+                        {% endfor %}
+                     </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+
+    {% else %}
+        <div class="flex flex-col items-center justify-center py-8 text-base-content/40">
+            <i class="fa-solid fa-notes-medical text-2xl mb-2"></i>
+            <span class="text-sm italic">No HPO terms recorded</span>
+        </div>
+    {% endif %}
+</div>
+{% endpartialdef %}
+
+{% partialdef hpo_edit %}
+<div class="card-body p-4">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="card-title text-sm uppercase text-base-content/50">Edit HPO Terms</h3>
+        <button hx-get="{% url 'lab:individual_detail' individual.pk %}?partial=hpo_card" 
+                hx-target="closest .hpo-container"
+                class="btn btn-primary btn-xs">Done</button>
+    </div>
+
+    <div class="space-y-4">
+        <!-- Search -->
+        <div class="relative">
+            <label class="input input-bordered input-sm flex items-center w-full">
+                <input type="text" 
+                       class="grow min-w-0" 
+                       placeholder="Search HPO terms..." 
+                       name="q"
+                       hx-get="{% url 'lab:hpo_picker' %}?individual_id={{ individual.id }}"
+                       hx-trigger="keyup changed delay:500ms"
+                       hx-target="#search-results"
+                       hx-indicator="#search-spinner" />
+                
+                <div id="search-spinner" class="htmx-indicator">
+                    <span class="loading loading-spinner loading-xs text-primary"></span>
+                </div>
+                
+                <i class="fa-solid fa-search text-base-content/40 text-xs"></i>
+            </label>
+            <div id="search-results" class="absolute z-[100] w-full mt-1 bg-base-100"></div>
+        </div>
+
+        <!-- Selected Terms -->
+        <div id="individual-hpo-terms">
+            {% partial hpo_edit_list %}
+        </div>
+    </div>
+</div>
+{% endpartialdef %}
+
+{% partialdef hpo_edit_list %}
+<div class="space-y-2">
+    <h4 class="text-xs font-bold text-base-content/50">Current Terms</h4>
+    <div class="flex flex-wrap gap-2">
+        {% for term in individual.hpo_terms.all %}
+        <div class="badge badge-outline gap-2 h-auto py-1 pl-2 pr-1">
+            <span class="font-mono text-xs font-bold {% if term.source == 'HP' %}text-primary{% else %}text-secondary{% endif %}">{{ term.term }}</span>
+            <span class="text-xs truncate max-w-[200px]">{{ term.label }}</span>
+            <button hx-post="{% url 'lab:hpo_manage' individual.pk %}"
+                    hx-vals='{"action": "remove", "term_id": "{{ term.id }}"}'
+                    hx-target="#individual-hpo-terms"
+                    class="btn btn-ghost btn-xs btn-circle h-4 w-4 min-h-0 min-w-0">
+                <i class="fa-solid fa-xmark text-[10px]"></i>
+            </button>
+        </div>
+        {% empty %}
+        <span class="text-xs italic text-base-content/40">No terms selected</span>
+        {% endfor %}
+    </div>
+</div>
+{% endpartialdef %}
+
+
+{% partialdef clinical_summary_content %}
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="card-title text-sm uppercase text-base-content/50">Clinical Summary</h3>
+        {% if not edit_mode %}
+        <button hx-get="{% url 'lab:individual_clinical_summary_edit' individual.pk %}"
+                hx-target="#clinical-summary-card"
+                class="btn btn-ghost btn-xs btn-circle">
+            <i class="fa-solid fa-pencil text-xs"></i>
+        </button>
+        {% endif %}
+    </div>
+
+    {% if edit_mode %}
+        <form hx-post="{% url 'lab:individual_clinical_summary_save' individual.pk %}"
+              hx-target="#clinical-summary-card"
+              class="space-y-3">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Diagnosis</label>
+                <textarea name="{{ form.diagnosis.html_name }}" 
+                          class="textarea textarea-bordered w-full text-sm"
+                          rows="2">{{ form.diagnosis.value|default:'' }}</textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Diagnosis Date</label>
+                     <input type="date" name="{{ form.diagnosis_date.html_name }}"
+                            value="{{ form.diagnosis_date.value|date:'Y-m-d'|default:'' }}"
+                            class="input input-bordered w-full input-sm">
+                </div>
+                <div>
+                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">ICD-11 Code</label>
+                     <input type="text" name="{{ form.icd11_code.html_name }}"
+                            value="{{ form.icd11_code.value|default:'' }}"
+                            class="input input-bordered w-full input-sm">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                 <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Age of Onset</label>
+                    <input type="text" name="{{ form.age_of_onset.html_name }}"
+                           value="{{ form.age_of_onset.value|default:'' }}"
+                           class="input input-bordered w-full input-sm">
+                </div>
+                
+                <div class="flex items-end pb-1">
+                    <label class="cursor-pointer label p-0 gap-2">
+                        <span class="text-xs font-medium text-base-content/80">Affected Status</span>
+                        <input type="checkbox" name="{{ form.is_affected.html_name }}" class="checkbox checkbox-sm" {% if form.is_affected.value %}checked{% endif %}>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 mt-4">
+                <button type="button" 
+                        hx-get="{% url 'lab:individual_clinical_summary_display' individual.pk %}"
+                        hx-target="#clinical-summary-card"
+                        class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </div>
+        </form>
+    {% else %}
+        <dl class="grid grid-cols-1 gap-y-4">
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Diagnosis</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                    {% if individual.diagnosis %}
+                        <div class="font-semibold">{{ individual.diagnosis }}</div>
+                    {% else %}
+                        <span class="text-base-content/40 italic">Not diagnosed</span>
+                    {% endif %}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Diagnosis Date</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                    {{ individual.diagnosis_date|default:"--" }}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Age of Onset</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                    {{ individual.age_of_onset|default:"--" }}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Affected Status</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                    {% if individual.is_affected %}
+                        <span class="badge badge-warning badge-sm badge-outline">Affected</span>
+                    {% else %}
+                        <span class="badge badge-ghost badge-sm badge-outline">Unaffected / Unknown</span>
+                    {% endif %}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">ICD-11 Code</dt>
+                <dd class="text-sm text-base-content col-span-2 font-mono">
+                    {{ individual.icd11_code|default:"--" }}
+                </dd>
+            </div>
+        </dl>
+    {% endif %}
+{% endpartialdef %}
+

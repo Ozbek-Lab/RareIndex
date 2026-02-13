@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load lab_tags %}
+
+{% block content %}
+<div class="p-4 lg:p-6 min-h-full" x-data="{ sidebarOpen: JSON.parse(localStorage.getItem('dashboardSidebarOpen')) ?? true }" 
+     x-init="$watch('sidebarOpen', val => localStorage.setItem('dashboardSidebarOpen', JSON.stringify(val)))">
+    
+    <div class="flex flex-col md:flex-row gap-6" hx-trigger="taskChanged from:body" hx-get="{% url 'lab:dashboard' %}" hx-select=".dashboard-content-refresh" hx-target=".dashboard-content-refresh" hx-swap="outerHTML">
+        
+        <!-- Main Content Area: Stats + Tasks -->
+        <div class="flex-1 dashboard-content-refresh">
+            <div class="stats shadow w-full mb-8">
+              <div class="stat p-4">
+                <div class="stat-figure text-primary">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                </div>
+                <div class="stat-title text-xs lg:text-sm">Individuals</div>
+                <div class="stat-value text-xl lg:text-2xl text-primary">{{ individual_count|default:"..." }}</div>
+                <div class="stat-desc text-[10px]">Registered Patients</div>
+              </div>
+              
+              <div class="stat p-4 border-l border-base-200">
+                <div class="stat-figure text-secondary">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                </div>
+                <div class="stat-title text-xs lg:text-sm">Samples</div>
+                <div class="stat-value text-xl lg:text-2xl text-secondary">{{ sample_count|default:"..." }}</div>
+                <div class="stat-desc text-[10px]">Processed samples</div>
+              </div>
+            </div>
+
+            <!-- My Tasks Section -->
+            <div id="dashboard-tasks-container">
+                {% include "lab/partials/dashboard/my_tasks.html" %}
+            </div>
+        </div>
+
+        <!-- Sidebar Area: News Feed -->
+        <div class="transition-all duration-300 relative z-20 shrink-0" 
+             :class="sidebarOpen ? 'w-32' : 'w-0 md:w-6'">
+            
+            <!-- Sidebar Content -->
+            <div class="h-[80vh] bg-base-100 rounded-l-xl shadow-xl flex flex-col border-l border-y border-base-200 sticky top-4 overflow-hidden" 
+                 x-show="sidebarOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0">
+                <div class="p-3 border-b border-base-200 flex items-center bg-base-100 shrink-0 gap-3">
+                    <!-- Toggle Button (Matches main sidebar style) -->
+                    <button @click="sidebarOpen = false" class="btn btn-square btn-ghost btn-sm">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <h2 class="font-bold text-[10px] uppercase tracking-wider flex items-center truncate opacity-70">
+                        <i class="fas fa-rss mr-2 text-secondary"></i>
+                        Recent Activity
+                    </h2>
+                </div>
+                <div class="flex-1 overflow-y-auto text-xs">
+                    {% include "lab/partials/dashboard/news_feed.html" %}
+                </div>
+            </div>
+
+            <!-- Collasped Placeholder (Directly matches the provided expansion button pattern) -->
+            <div @click="sidebarOpen = true" 
+                 class="fixed inset-y-0 right-0 w-6 bg-base-200 hover:bg-base-300 cursor-pointer flex items-center justify-center z-10 transition-colors hidden md:flex" 
+                 :class="{ 'hidden': sidebarOpen }" 
+                 title="Expand Activity Feed">
+                 <i class="fas fa-chevron-left text-xs opacity-50"></i>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

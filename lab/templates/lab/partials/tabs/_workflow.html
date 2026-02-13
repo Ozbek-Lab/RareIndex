@@ -1,0 +1,733 @@
+{% load lab_tags %}
+<div class="space-y-1" style="--padding-card: 0.1rem;">
+    <!-- Individual Status Header - Row Style -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm mb-2">
+        <div class="card-body p-0">
+             <div class="flex items-center justify-between bg-base-200/50 px-2 py-2 border-b border-base-200 rounded-t-lg">
+                <div class="flex items-center gap-1">
+                    <button class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0 invisible">
+                         <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                    </button>
+                    <div class="w-6 flex justify-center tooltip tooltip-right" data-tip="Individual">
+                        <i class="fa-solid fa-user text-primary text-xs opacity-70"></i>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <h3 class="text-sm font-normal leading-5">{{ individual.lab_id }}</h3>
+                        <span class="text-xs text-base-content/50 leading-4">#{{ individual.id }}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1">
+                    {% partial individual_status_badge %}
+                    <div class="flex items-center gap-1 text-xs text-base-content/50 mr-1 border-l border-base-300/50 pl-1 ml-1 leading-4">
+                         {% include "lab/partials/notes/workflow_summary.html" with object=individual content_type="individual" %}
+                         <div id="task-count-individual-{{ individual.id }}" class="flex items-center gap-1 tooltip tooltip-bottom" data-tip="{{ individual.tasks.count }} Tasks">
+                             <i class="fa-solid fa-list-check"></i> {{ individual.tasks.count }}
+                         </div>
+                     </div>
+                    <button class="btn btn-primary btn-xs gap-1 font-normal"
+                            hx-get="{% url 'lab:sample_create_modal' individual.id %}"
+                            hx-target="#generic-modal-content"
+                            onclick="document.getElementById('generic-modal').showModal()">
+                        <i class="fa-solid fa-plus text-[10px]"></i>
+                        Add Sample
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
+        <!-- Individual Notes -->
+        <div class="card bg-base-100 border border-base-200 shadow-sm h-full">
+            <div class="card-body">
+                <h4 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center gap-1">
+                    <i class="fa-solid fa-comment-dots"></i>
+                    Notes
+                </h4>
+                {% include "lab/partials/notes/list.html" with notes=individual.notes|visible_to:user object=individual content_type="Individual" %}
+            </div>
+        </div>
+
+        <!-- Pending Tasks -->
+        <div class="card bg-base-100 border border-base-200 shadow-sm h-full">
+            <div class="card-body">
+                <h4 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center justify-between gap-1">
+                    <div class="flex items-center gap-1">
+                        <i class="fa-solid fa-list-check"></i>
+                        Pending Tasks
+                    </div>
+                    {% get_content_type_id individual as indiv_ct %}
+                    <button hx-get="{% url 'lab:task_create_modal' indiv_ct individual.id %}"
+                            hx-target="#generic-modal-content"
+                            onclick="document.getElementById('generic-modal').showModal()"
+                            class="btn btn-primary btn-xs gap-1 font-normal">
+                        <i class="fa-solid fa-plus"></i>
+                        Add Task
+                    </button>
+                </h4>
+                <div id="individual-tasks-{{ individual.id }}">
+                    {% partialdef individual_tasks %}
+                    {% if individual.tasks.exists %}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
+                        {% for task in individual.tasks.all %}
+                            {% if task.status.name != "Completed" %}
+                            <div class="p-1 border border-base-200 rounded-lg hover:shadow-sm transition-shadow bg-base-50">
+                                <div class="flex justify-between items-start mb-0.5">
+                                    <span class="font-medium text-sm">{{ task.title }}</span>
+                                    <span class="badge badge-xs {{ task.priority }}">{{ task.priority }}</span>
+                                </div>
+                                <div class="flex justify-between items-center text-[10px] text-base-content/50">
+                                    <span>Assigned to: {{ task.assigned_to.username }}</span>
+                                    <span>Due: {{ task.due_date|default:"--" }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-1 text-base-content/40 italic text-xs">
+                        No active tasks.
+                        </div>
+                    {% endif %}
+                    {% endpartialdef %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-col gap-1 border-l border-base-300 ml-4 pl-4 space-y-2 relative">
+    {% if individual.samples.exists %}
+        {% for sample in individual.samples.all %}
+        <div class="card {% cycle 'bg-base-100' 'bg-base-200' %} border border-base-200 shadow-sm overflow-visible relative focus-within:z-50 transition-all duration-200 group" x-data="{ expanded: true }">
+            <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
+            <div class="card-body p-0 overflow-visible relative z-10">
+                <!-- Sample Header -->
+                <div class="p-1 border-b border-base-200 flex items-center justify-between bg-base-200/50 relative z-30 px-2 py-2">
+                    <div class="flex items-center gap-1">
+                        <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square">
+                            <i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
+                        </button>
+                        <div class="avatar placeholder w-6 flex justify-center tooltip tooltip-right" data-tip="Sample">
+                            <div class="w-6 h-6 flex items-center justify-center">
+                                <i class="fa-solid fa-vial text-xs text-secondary"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-sm font-normal leading-5">{{ sample.sample_type.name }}</span>
+                            <span class="text-xs text-base-content/50 leading-4">
+                                Received: {{ sample.receipt_date|default:"Unknown" }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 relative z-40">
+                         {% partial sample_status_badge %}
+                         <div class="flex items-center gap-1 text-xs text-base-content/50 mr-1 border-l border-base-300/50 pl-1 ml-1 leading-4">
+                             {% include "lab/partials/notes/workflow_summary.html" with object=sample content_type="sample" %}
+                             <div id="task-count-sample-{{ sample.id }}" class="flex items-center gap-1 tooltip tooltip-bottom" data-tip="{{ sample.tasks.count }} Tasks">
+                                 <i class="fa-solid fa-list-check"></i> {{ sample.tasks.count }}
+                             </div>
+                         </div>
+                        <button hx-get="{% url 'lab:test_create_modal' sample.id %}"
+                                hx-target="#generic-modal-content"
+                                onclick="document.getElementById('generic-modal').showModal()"
+                                class="btn btn-primary btn-xs gap-1 font-normal">
+                            <i class="fa-solid fa-plus"></i>
+                            Add Test
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sample Content (Collapsible) -->
+                <div x-show="expanded" x-collapse>
+                    <!-- Sample Notes & Tasks -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 border-b border-base-200">
+                        <div class="p-1 border-r border-base-200/50">
+                            <h4 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center gap-1">
+                                <i class="fa-solid fa-comment-dots"></i>
+                                Sample Notes
+                            </h4>
+                            {% include "lab/partials/notes/list.html" with notes=sample.notes|visible_to:user object=sample content_type="Sample" %}
+                        </div>
+                        <div class="p-1 bg-base-200/5">
+                            <h4 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center justify-between gap-1">
+                                <div class="flex items-center gap-1">
+                                    <i class="fa-solid fa-list-check"></i>
+                                    Sample Tasks
+                                </div>
+                                {% get_content_type_id sample as sample_ct %}
+                                <button hx-get="{% url 'lab:task_create_modal' sample_ct sample.id %}"
+                                        hx-target="#generic-modal-content"
+                                        onclick="document.getElementById('generic-modal').showModal()"
+                                        class="btn btn-primary btn-xs gap-1 font-normal">
+                                    <i class="fa-solid fa-plus"></i>
+                                    Add Task
+                                </button>
+                            </h4>
+                            <div id="sample-tasks-{{ sample.id }}">
+                                {% partialdef sample_tasks %}
+                                {% if sample.tasks.exists %}
+                                    <div class="grid grid-cols-1 gap-1">
+                                    {% for task in sample.tasks.all %}
+                                        {% if task.status.name != "Completed" %}
+                                        <div class="p-1 border border-base-200 rounded-lg bg-base-100/50 text-[10px]">
+                                            <div class="flex justify-between items-start mb-0.5">
+                                                <span class="font-semibold">{{ task.title }}</span>
+                                                <span class="badge badge-xs {{ task.priority }} scale-90 origin-right">{{ task.priority }}</span>
+                                            </div>
+                                            <div class="flex justify-between items-center opacity-50">
+                                                <span>{{ task.assigned_to.username }}</span>
+                                                <span>{{ task.due_date|date:"M d"|default:"--" }}</span>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-center py-1 text-base-content/30 italic text-[10px]">
+                                    No active sample tasks.
+                                    </div>
+                                {% endif %}
+                                {% endpartialdef %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tests -->
+                    <div class="p-1 space-y-1 relative z-10">
+                        {% if sample.tests.exists %}
+                            <div class="pl-4 border-l border-base-300 ml-4 space-y-2 relative">
+                                {% for test in sample.tests.all %}
+                                <div class="relative mb-2 last:mb-0" x-data="{ expanded: true }">
+                                    <!-- Test Node -->
+                                        <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
+
+                                        <div class="card {% cycle 'bg-base-100' 'bg-base-200' %} border border-base-200 shadow-sm overflow-visible relative focus-within:z-50">
+                                            <div class="card-body p-0">
+                                                <div class="flex justify-between items-center bg-base-200/50 px-2 py-2 border-b border-base-200 rounded-t-lg relative z-30">
+                                                    <div class="flex items-center gap-1">
+                                                        <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
+                                                            <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
+                                                        </button>
+                                                        <div class="w-6 flex justify-center tooltip tooltip-right" data-tip="Test">
+                                                            <i class="fa-solid fa-flask text-primary text-xs"></i>
+                                                        </div>
+                                                        <div class="flex items-baseline gap-2">
+                                                            <h4 class="text-sm font-normal leading-5">{{ test.test_type.name }}</h4>
+                                                            <span class="text-xs text-base-content/50 leading-4">Performed: {{ test.performed_date|default:"Pending" }}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex items-center gap-1">
+                                                     {% partial test_status_badge %}
+                                                     <div class="flex items-center gap-1 text-xs text-base-content/50 mr-1 border-l border-base-300/50 pl-1 ml-1 leading-4">
+                                                         {% include "lab/partials/notes/workflow_summary.html" with object=test content_type="test" %}
+                                                         <div id="task-count-test-{{ test.id }}" class="flex items-center gap-1 tooltip tooltip-bottom" data-tip="{{ test.tasks.count }} Tasks">
+                                                             <i class="fa-solid fa-list-check"></i> {{ test.tasks.count }}
+                                                         </div>
+                                                     </div>
+                                                     <button hx-get="{% url 'lab:pipeline_create_modal' test.id %}"
+                                                            hx-target="#generic-modal-content"
+                                                            onclick="document.getElementById('generic-modal').showModal()"
+                                                            class="btn btn-primary btn-xs gap-1 font-normal">
+                                                        <i class="fa-solid fa-plus text-[10px]"></i>
+                                                        Add Pipeline
+                                                    </button>
+                                                </div>
+                                                </div>
+                                                
+                                                <div class="p-2">
+                                            
+                                            <!-- Test Notes & Tasks (Collapsible) -->
+                                            <div x-show="expanded" x-collapse>
+                                                <div class="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1 pt-1 border-t border-base-200/50">
+                                                    <div>
+                                                        <h5 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center gap-1">
+                                                            <i class="fa-solid fa-comment-dots"></i>
+                                                            Test Notes
+                                                        </h5>
+                                                        {% include "lab/partials/notes/list.html" with notes=test.notes|visible_to:user object=test content_type="Test" %}
+                                                    </div>
+                                                    <div class="pl-1 border-l border-base-200/50">
+                                                        <h5 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center justify-between gap-1">
+                                                            <div class="flex items-center gap-1">
+                                                                <i class="fa-solid fa-list-check"></i>
+                                                                Test Tasks
+                                                            </div>
+                                                            {% get_content_type_id test as test_ct %}
+                                                            <button hx-get="{% url 'lab:task_create_modal' test_ct test.id %}"
+                                                                    hx-target="#generic-modal-content"
+                                                                    onclick="document.getElementById('generic-modal').showModal()"
+                                                                    class="btn btn-primary btn-xs gap-1 font-normal">
+                                                                <i class="fa-solid fa-plus"></i>
+                                                                Add Task
+                                                            </button>
+                                                        </h5>
+                                                        <div id="test-tasks-{{ test.id }}">
+                                                            {% partialdef test_tasks %}
+                                                            {% if test.tasks.exists %}
+                                                                <div class="space-y-1">
+                                                                {% for task in test.tasks.all %}
+                                                                    {% if task.status.name != "Completed" %}
+                                                                    <div class="p-1 border border-base-200 rounded-md bg-base-200/20 text-[9px]">
+                                                                        <div class="flex justify-between items-start">
+                                                                            <span class="font-medium truncate mr-1">{{ task.title }}</span>
+                                                                            <span class="badge badge-xs {{ task.priority }} scale-[0.8] origin-right">{{ task.priority }}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    {% endif %}
+                                                                {% endfor %}
+                                                                </div>
+                                                            {% else %}
+                                                                <div class="text-center py-1 text-base-content/30 italic text-[9px]">
+                                                                No active test tasks.
+                                                                </div>
+                                                            {% endif %}
+                                                            {% endpartialdef %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Pipelines (Collapsible) -->
+                                    <div x-show="expanded" x-collapse>
+                                        {% if test.pipelines.exists %}
+                                        <div class="pl-4 border-l border-base-300 ml-4 mt-2 space-y-2 relative z-10">
+                                            {% for pipeline in test.pipelines.all %}
+                                            <div class="relative" x-data="{ expanded: true }">
+                                                <!-- Pipeline Node -->
+                                                <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
+                                                
+                                                <div class="card {% cycle 'bg-base-100' 'bg-base-200' %} border border-base-200 shadow-sm overflow-visible relative focus-within:z-50">
+                                                    <div class="card-body p-0">
+                                                        <div class="flex justify-between items-center bg-base-200/50 px-2 py-2 border-b border-base-200 rounded-t-lg">
+                                                            <div class="flex items-center gap-1">
+                                                                <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
+                                                                    <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
+                                                                </button>
+                                                                <div class="w-6 flex justify-center tooltip tooltip-right" data-tip="Pipeline">
+                                                                    <i class="fa-solid fa-microchip text-secondary text-xs"></i>
+                                                                </div>
+                                                                <div class="flex items-baseline gap-2">
+                                                                    <h5 class="text-sm font-normal secondary uppercase leading-5">{{ pipeline.type.name }} <span class="text-base-content/40 ml-1">v{{ pipeline.type.version }}</span></h5>
+                                                                    <span class="text-xs text-base-content/50 leading-4">{{ pipeline.performed_date|default:"Running..." }}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="flex items-center gap-1">
+                                                                {% partial pipeline_status_badge %}
+                                                                <div class="flex items-center gap-1 text-xs text-base-content/50 mr-1 border-l border-base-300/50 pl-1 ml-1 leading-4">
+                                                                     {% include "lab/partials/notes/workflow_summary.html" with object=pipeline content_type="pipeline" %}
+                                                                     <div id="task-count-pipeline-{{ pipeline.id }}" class="flex items-center gap-1 tooltip tooltip-bottom" data-tip="{{ pipeline.tasks.count }} Tasks">
+                                                                         <i class="fa-solid fa-list-check"></i> {{ pipeline.tasks.count }}
+                                                                     </div>
+                                                                 </div>
+                                                                <button hx-get="{% url 'lab:analysis_create_modal' pipeline.id %}"
+                                                                        hx-target="#generic-modal-content"
+                                                                        onclick="document.getElementById('generic-modal').showModal()"
+                                                                        class="btn btn-primary btn-xs gap-1 font-normal">
+                                                                    <i class="fa-solid fa-plus text-[10px]"></i>
+                                                                    Add Analysis
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="p-2">
+                                                            <div x-show="expanded" x-collapse>
+                                                            <!-- Pipeline Notes & Tasks -->
+                                                            <div class="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1 pt-1 border-t border-base-200/50">
+                                                                <div>
+                                                                    <h5 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center gap-1">
+                                                                        <i class="fa-solid fa-comment-dots"></i>
+                                                                        Pipeline Notes
+                                                                    </h5>
+                                                                    {% include "lab/partials/notes/list.html" with notes=pipeline.notes|visible_to:user object=pipeline content_type="Pipeline" %}
+                                                                </div>
+                                                                <div class="pl-1 border-l border-base-200/50">
+                                                                    <h5 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center justify-between gap-1">
+                                                                        <div class="flex items-center gap-1">
+                                                                            <i class="fa-solid fa-list-check"></i>
+                                                                            Pipeline Tasks
+                                                                        </div>
+                                                                        {% get_content_type_id pipeline as pipeline_ct %}
+                                                                        <button hx-get="{% url 'lab:task_create_modal' pipeline_ct pipeline.id %}"
+                                                                                hx-target="#generic-modal-content"
+                                                                                onclick="document.getElementById('generic-modal').showModal()"
+                                                                                class="btn btn-primary btn-xs gap-1 font-normal">
+                                                                            <i class="fa-solid fa-plus"></i>
+                                                                            Add Task
+                                                                        </button>
+                                                                    </h5>
+                                                                    <div id="pipeline-tasks-{{ pipeline.id }}">
+                                                                        {% partialdef pipeline_tasks %}
+                                                                        {% if pipeline.tasks.exists %}
+                                                                            <div class="space-y-1">
+                                                                            {% for task in pipeline.tasks.all %}
+                                                                                {% if task.status.name != "Completed" %}
+                                                                                <div class="p-1 border border-base-200 rounded-md bg-base-200/20 text-[9px]">
+                                                                                    <div class="flex justify-between items-start">
+                                                                                        <span class="font-medium truncate mr-1">{{ task.title }}</span>
+                                                                                        <span class="badge badge-xs {{ task.priority }} scale-[0.8] origin-right">{{ task.priority }}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                                {% endif %}
+                                                                            {% endfor %}
+                                                                            </div>
+                                                                        {% else %}
+                                                                            <div class="text-center py-1 text-base-content/30 italic text-[9px]">
+                                                                            No active pipeline tasks.
+                                                                            </div>
+                                                                        {% endif %}
+                                                                        {% endpartialdef %}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            {% if pipeline.analyses.exists %}
+                                                            <div class="mt-2 space-y-2 border-t border-base-200/50 pt-2 pl-4 border-l border-base-300 ml-4 relative">
+                                                                {% for analysis in pipeline.analyses.all %}
+                                                                    <div x-data="{ expanded: true }" class="flex flex-col relative {% cycle 'bg-base-200/50' 'bg-base-200' %} border border-base-200 shadow-sm overflow-visible group focus-within:z-50 transition-all duration-200">
+                                                                    <div class="absolute -left-4 top-0 h-5 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
+                                                                    <div class="p-0 text-left">
+                                                                        <!-- Header -->
+                                                                        <div class="flex items-center justify-between py-2 px-2 relative z-10 rounded-t-lg">
+                                                                            <!-- Left Side -->
+                                                                            <div class="flex items-center gap-2">
+                                                                                <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
+                                                                                    <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
+                                                                                </button>
+                                                                                <div class="w-6 flex justify-center tooltip tooltip-right" data-tip="Analysis">
+                                                                                    <i class="fa-solid fa-laptop text-xs text-base-content/50"></i>
+                                                                                </div>
+                                                                                <!-- Title/Metadata -->
+                                                                                <div class="flex items-baseline gap-2">
+                                                                                    <h5 class="text-sm font-normal leading-5">
+                                                                                        {% if analysis.type %}
+                                                                                            {{ analysis.type.name }}
+                                                                                        {% else %}
+                                                                                            <span class="italic opacity-50">Analysis</span>
+                                                                                        {% endif %}
+                                                                                    </h5>
+                                                                                    <span class="text-xs text-base-content/50 leading-4">
+                                                                                        {{ analysis.performed_by.username }}
+                                                                                        {% if analysis.performed_date %}
+                                                                                            <span class="opacity-50 mx-1">&bull;</span> {{ analysis.performed_date|date:"Y-m-d" }}
+                                                                                        {% endif %}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                
+                                                                            <!-- Right Side (Status/Summary) -->
+                                                                            <div class="flex items-center gap-1">
+                                                                                {% partial analysis_status_badge %}
+                                                                                <div class="flex items-center gap-1 text-xs text-base-content/50 mr-1 border-l border-base-300/50 pl-1 ml-1 leading-4">
+                                                                                    {% include "lab/partials/notes/workflow_summary.html" with object=analysis content_type="analysis" %}
+                                                                                    <div id="task-count-analysis-{{ analysis.id }}" class="flex items-center gap-1 tooltip tooltip-left" data-tip="{{ analysis.tasks.count }} Tasks">
+                                                                                        <i class="fa-solid fa-list-check"></i> {{ analysis.tasks.count }}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                
+                                                                        <!-- Expanded Content -->
+                                                                        <div x-show="expanded" x-collapse>
+                                                                            <div class="grid grid-cols-1 md:grid-cols-2 border-t border-base-200 bg-base-100">
+                                                                                <!-- Notes Column -->
+                                                                                <div class="p-2 border-r border-base-200">
+                                                                                    <h5 class="text-[9px] uppercase text-base-content/50 mb-1 font-bold flex items-center gap-1">
+                                                                                        <i class="fa-solid fa-comment-dots"></i> Analysis Notes
+                                                                                    </h5>
+                                                                                    {% include "lab/partials/notes/list.html" with notes=analysis.notes|visible_to:user object=analysis content_type="Analysis" %}
+                                                                                </div>
+                                                                                <!-- Tasks Column -->
+                                                                                <div class="p-2">
+                                                                                    <h5 class="text-[9px] uppercase text-base-content/50 mb-1 font-bold flex items-center justify-between gap-1">
+                                                                                        <div class="flex items-center gap-1"><i class="fa-solid fa-list-check"></i> Analysis Tasks</div>
+                                                                                        {% get_content_type_id analysis as analysis_ct %}
+                                                                                        <button hx-get="{% url 'lab:task_create_modal' analysis_ct analysis.id %}"
+                                                                                                hx-target="#generic-modal-content"
+                                                                                                onclick="document.getElementById('generic-modal').showModal()"
+                                                                                                class="btn btn-primary btn-xs h-4 min-h-0 px-1 text-[8px] font-normal">
+                                                                                            <i class="fa-solid fa-plus text-[8px]"></i> Add Task
+                                                                                        </button>
+                                                                                    </h5>
+                                                                                    <div id="analysis-tasks-{{ analysis.id }}">
+                                                                                        {% partialdef analysis_tasks %}
+                                                                                        {% if analysis.tasks.exists %}
+                                                                                            <div class="space-y-1">
+                                                                                            {% for task in analysis.tasks.all %}
+                                                                                                {% if task.status.name != "Completed" %}
+                                                                                                <div class="p-1 border border-base-200 rounded-md bg-base-200/20 text-[8px]">
+                                                                                                    <div class="flex justify-between items-start">
+                                                                                                        <span class="font-medium truncate mr-1">{{ task.title }}</span>
+                                                                                                        <span class="badge badge-xs {{ task.priority }} scale-[0.7] origin-right">{{ task.priority }}</span>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                {% endif %}
+                                                                                            {% endfor %}
+                                                                                            </div>
+                                                                                        {% else %}
+                                                                                            <div class="text-center py-1 text-base-content/30 italic text-[8px]">No active tasks.</div>
+                                                                                        {% endif %}
+                                                                                        {% endpartialdef %}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                {% endfor %}
+                                                            </div>
+                                                            {% endif %}
+
+                                                            <!-- Variants (if any) -->
+                                                            {% if pipeline.found_variants.exists %}
+                                                            <div class="mt-1 border-t border-base-200/50 pt-2">
+                                                                <table class="table table-xs w-full bg-base-200/30 rounded-lg">
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th>Variant</th>
+                                                                            <th>Zygosity</th>
+                                                                            <th>Class</th>
+                                                                            <th>Gene</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {% for variant in pipeline.found_variants.all|slice:":5" %}
+                                                                        <tr>
+                                                                            <td class="font-mono">{{ variant.variant_id }}</td>
+                                                                            <td>{{ variant.zygosity }}</td>
+                                                                            <td>
+                                                                                {% if "Pathogenic" in variant.classification %}
+                                                                                    <span class="text-error font-bold">{{ variant.classification }}</span>
+                                                                                {% elif "VUS" in variant.classification %}
+                                                                                    <span class="text-warning">{{ variant.classification }}</span>
+                                                                                {% else %}
+                                                                                    <span class="text-base-content/50">{{ variant.classification }}</span>
+                                                                                {% endif %}
+                                                                            </td>
+                                                                            <td class="italic">{{ variant.gene_symbol|default:"--" }}</td>
+                                                                        </tr>
+                                                                        {% endfor %}
+                                                                    </tbody>
+                                                                </table>
+                                                                {% if pipeline.found_variants.count > 5 %}
+                                                                    <div class="text-center text-xs text-base-content/40 mt-1">
+                                                                        + {{ pipeline.found_variants.count|add:"-5" }} more variants
+                                                                    </div>
+                                                                {% endif %}
+                                                            </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-sm text-base-content/40 italic pl-1">No tests performed on this sample yet.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="flex flex-col items-center justify-center py-4 border-2 border-dashed border-base-200 rounded-box text-base-content/40">
+            <i class="fa-solid fa-diagram-project text-xl mb-1"></i>
+            <span class="font-medium">No workflow data found</span>
+            <span class="text-sm mt-1">This individual has no samples to display in the workflow.</span>
+        </div>
+    {% endif %}
+</div>
+
+{% partialdef sample_status_badge %}
+    <div class="dropdown dropdown-end dropdown-bottom" id="sample-status-{{ sample.id }}">
+        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-2 font-normal text-xs text-base-content hover:bg-base-200 transition-all border-base-content/10">
+            {% if sample.status.icon %}
+                <i class="fa-solid {{ sample.status.icon }} text-xs" style="color: {{ sample.status.color }};"></i>
+            {% else %}
+                <span class="size-2 rounded-full ring-1 ring-base-content/10 border border-base-100" style="background-color: {{ sample.status.color }};"></span>
+            {% endif %}
+            {{ sample.status.name }}
+            <i class="fa-solid fa-chevron-down text-[10px] opacity-40"></i>
+        </div>
+        <ul tabindex="0" class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-56 mt-2">
+            <li class="menu-title text-[10px] uppercase opacity-40 px-3 py-2">Update Sample Status</li>
+            {% get_statuses sample as statuses %}
+            {% get_content_type_id sample as ct_id %}
+            {% for s in statuses %}
+            <li>
+                <a hx-post="{% url 'lab:update_status' ct_id sample.id s.id %}" 
+                   hx-target="#sample-status-{{ sample.id }}" 
+                   hx-swap="outerHTML"
+                   class="flex items-center gap-3 py-3 px-4 hover:bg-base-200 {% if s == sample.status %}bg-base-200 font-semibold{% endif %}">
+                    {% if s.icon %}
+                        <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
+                    {% else %}
+                        <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                    {% endif %}
+                    <span class="flex-1">{{ s.name }}</span>
+                    {% if s == sample.status %}
+                        <i class="fa-solid fa-check text-xs opacity-50"></i>
+                    {% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endpartialdef %}
+
+{% partialdef test_status_badge %}
+    <div class="dropdown dropdown-end dropdown-bottom" id="test-status-{{ test.id }}">
+        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-2 font-normal text-xs text-base-content hover:bg-base-200 transition-all border-base-content/5">
+            {% if test.status.icon %}
+                <i class="fa-solid {{ test.status.icon }} text-[10px]" style="color: {{ test.status.color }};"></i>
+            {% else %}
+                <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ test.status.color }};"></span>
+            {% endif %}
+            {{ test.status.name }}
+            <i class="fa-solid fa-chevron-down text-[8px] opacity-40"></i>
+        </div>
+        <ul tabindex="0" class="dropdown-content z-[100] menu menu-sm p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-48 mt-2">
+            <li class="menu-title text-[9px] uppercase opacity-40 px-3 py-2">Update Test Status</li>
+            {% get_statuses test as statuses %}
+            {% get_content_type_id test as ct_id %}
+            {% for s in statuses %}
+            <li>
+                <a hx-post="{% url 'lab:update_status' ct_id test.id s.id %}" 
+                   hx-target="#test-status-{{ test.id }}" 
+                   hx-swap="outerHTML"
+                   class="flex items-center gap-2.5 py-2.5 px-3 hover:bg-base-200 {% if s == test.status %}bg-base-200 font-semibold{% endif %}">
+                    {% if s.icon %}
+                        <i class="fa-solid {{ s.icon }} text-[10px]" style="color: {{ s.color }};"></i>
+                    {% else %}
+                        <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                    {% endif %}
+                    <span class="flex-1">{{ s.name }}</span>
+                    {% if s == test.status %}
+                        <i class="fa-solid fa-check text-[10px] opacity-50"></i>
+                    {% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endpartialdef %}
+
+{% partialdef pipeline_status_badge %}
+    <div class="dropdown dropdown-end dropdown-bottom" id="pipeline-status-{{ pipeline.id }}">
+        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-1.5 font-normal text-xs text-base-content hover:bg-base-200 transition-all border-base-content/5">
+            {% if pipeline.status.icon %}
+                <i class="fa-solid {{ pipeline.status.icon }} text-[10px]" style="color: {{ pipeline.status.color }};"></i>
+            {% else %}
+                <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ pipeline.status.color }};"></span>
+            {% endif %}
+            {{ pipeline.status.name }}
+            <i class="fa-solid fa-chevron-down text-[8px] opacity-40"></i>
+        </div>
+        <ul tabindex="0" class="dropdown-content z-[100] menu menu-sm p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-48 mt-2">
+            <li class="menu-title text-[9px] uppercase opacity-40 px-3 py-2">Update Pipeline Status</li>
+            {% get_statuses pipeline as statuses %}
+            {% get_content_type_id pipeline as ct_id %}
+            {% for s in statuses %}
+            <li>
+                <a hx-post="{% url 'lab:update_status' ct_id pipeline.id s.id %}" 
+                   hx-target="#pipeline-status-{{ pipeline.id }}" 
+                   hx-swap="outerHTML"
+                   class="flex items-center gap-2.5 py-2.5 px-3 hover:bg-base-200 {% if s == pipeline.status %}bg-base-200 font-semibold{% endif %}">
+                    {% if s.icon %}
+                        <i class="fa-solid {{ s.icon }} text-[10px]" style="color: {{ s.color }};"></i>
+                    {% else %}
+                        <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                    {% endif %}
+                    <span class="flex-1 text-xs">{{ s.name }}</span>
+                    {% if s == pipeline.status %}
+                        <i class="fa-solid fa-check text-[10px] opacity-50"></i>
+                    {% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endpartialdef %}
+
+{% partialdef analysis_status_badge %}
+    <div class="dropdown dropdown-end dropdown-bottom" id="analysis-status-{{ analysis.id }}">
+        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-1 font-normal text-xs hover:bg-base-200 transition-all border-base-content/5">
+            {% if analysis.status.icon %}
+                <i class="fa-solid {{ analysis.status.icon }} text-[9px]" style="color: {{ analysis.status.color }};"></i>
+            {% else %}
+                <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ analysis.status.color }};"></span>
+            {% endif %}
+            {{ analysis.status.name }}
+            <i class="fa-solid fa-chevron-down text-[6px] opacity-40"></i>
+        </div>
+        <ul tabindex="0" class="dropdown-content z-[100] menu menu-xs p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-40 mt-1">
+            <li class="menu-title text-[8px] uppercase opacity-40 px-3 py-1.5">Update Analysis Status</li>
+            {% get_statuses analysis as statuses %}
+            {% get_content_type_id analysis as ct_id %}
+            {% for s in statuses %}
+            <li>
+                <a hx-post="{% url 'lab:update_status' ct_id analysis.id s.id %}" 
+                   hx-target="#analysis-status-{{ analysis.id }}" 
+                   hx-swap="outerHTML"
+                   class="flex items-center gap-2 py-2 px-2.5 hover:bg-base-200 {% if s == analysis.status %}bg-base-200 font-semibold{% endif %}">
+                    {% if s.icon %}
+                        <i class="fa-solid {{ s.icon }} text-[9px]" style="color: {{ s.color }};"></i>
+                    {% else %}
+                        <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                    {% endif %}
+                    <span class="flex-1 text-[10px]">{{ s.name }}</span>
+                    {% if s == analysis.status %}
+                        <i class="fa-solid fa-check text-[9px] opacity-50"></i>
+                    {% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endpartialdef %}
+
+{% partialdef individual_status_badge %}
+    <div class="dropdown dropdown-end dropdown-bottom" id="individual-status-{{ individual.id }}">
+        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-2 font-normal text-xs text-base-content hover:bg-base-200 transition-all border-base-content/10">
+            {% if individual.status.icon %}
+                <i class="fa-solid {{ individual.status.icon }} text-sm" style="color: {{ individual.status.color }};"></i>
+            {% else %}
+                <span class="size-2.5 rounded-full ring-1 ring-base-content/10 border border-base-100" style="background-color: {{ individual.status.color }};"></span>
+            {% endif %}
+            {{ individual.status.name }}
+            <i class="fa-solid fa-chevron-down text-[10px] opacity-40"></i>
+        </div>
+        <ul tabindex="0" class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-64 mt-2">
+            <li class="menu-title text-[10px] uppercase opacity-40 px-3 py-2">Update Individual Status</li>
+            {% get_statuses individual as statuses %}
+            {% get_content_type_id individual as ct_id %}
+            {% for s in statuses %}
+            <li>
+                <a hx-post="{% url 'lab:update_status' ct_id individual.id s.id %}" 
+                   hx-target="#individual-status-{{ individual.id }}" 
+                   hx-swap="outerHTML"
+                   class="flex items-center gap-3 py-3 px-4 hover:bg-base-200 {% if s == individual.status %}bg-base-200 font-semibold{% endif %}">
+                    {% if s.icon %}
+                        <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
+                    {% else %}
+                        <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                    {% endif %}
+                    <span class="flex-1">{{ s.name }}</span>
+                    {% if s == individual.status %}
+                        <i class="fa-solid fa-check text-xs opacity-50"></i>
+                    {% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endpartialdef %}
+
+</div>

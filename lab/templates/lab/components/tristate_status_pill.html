@@ -1,0 +1,88 @@
+{% load lab_tags %}
+<div x-data="{
+        state: 'neutral',
+        value: '{{ value }}',
+        name: '{{ name }}',
+        color: '{{ color|default:'gray' }}',
+        icon: '{{ icon|default:'' }}',
+        init() {
+            // Check initial state from server-rendered active lists
+            const currentValues = {{ current_values|safe|default:'[]' }};
+            const excludedValues = {{ excluded_values|safe|default:'[]' }};
+            
+            if (currentValues.includes(this.value)) {
+                this.state = 'include';
+            } else if (excludedValues.includes(this.value)) {
+                this.state = 'exclude';
+            }
+        },
+        toggle() {
+            if (this.state === 'neutral') {
+                this.state = 'include';
+            } else if (this.state === 'include') {
+                this.state = 'exclude';
+            } else {
+                this.state = 'neutral';
+            }
+            // Dispatch event to notify HTMX or parent
+            this.$nextTick(() => {
+                 this.$el.closest('form').dispatchEvent(new Event('filter-changed', {bubbles: true}));
+            });
+        },
+        get classes() {
+            // Base classes for the pill
+            let classes = 'cursor-pointer inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all duration-200 select-none';
+            
+            if (this.state === 'neutral') {
+                return classes + ' bg-base-100 border-base-300 text-base-content/70 hover:border-base-content/50';
+            } else if (this.state === 'include') {
+                // Use style binding for dynamic colors, or map basic colors to tailwind classes if possible
+                // For now, let's use a generic 'primary' look or try to use the color.
+                // If we want to use the specific color passed, we might need style attribute.
+                // But let's assume 'color' is a valid CSS color string or tailwind class suffix.
+                // If it's a hex code, we need style. 
+                return classes + ' border-transparent text-white shadow-sm';
+            } else if (this.state === 'exclude') {
+                return classes + ' bg-error/10 border-error text-error';
+            }
+            return classes;
+        },
+        get style() {
+            if (this.state === 'include') {
+                // If color is 'gray' (default), use a nice green for 'include'
+                let activeColor = this.color;
+                if (activeColor === 'gray') {
+                    activeColor = '#22c55e'; // Tailwind green-500
+                }
+                return `background-color: ${activeColor}; border-color: ${activeColor};`;
+            }
+            return '';
+        }
+    }"
+    x-init="init()"
+    @click="toggle()"
+    :class="classes"
+    :style="style"
+>
+    <!-- Hidden Inputs -->
+    <template x-if="state === 'include'">
+        <input type="hidden" :name="name" :value="value">
+    </template>
+    <template x-if="state === 'exclude'">
+        <input type="hidden" :name="name + '__exclude'" :value="value">
+    </template>
+
+    <!-- Icon -->
+    <template x-if="icon">
+        <i :class="icon.includes('fa-') && !icon.includes('fa-solid') && !icon.includes('fa-regular') && !icon.includes('fa-brands') ? 'fa-solid ' + icon : icon" class="text-[10px]"></i>
+    </template>
+    <template x-if="!icon && state === 'exclude'">
+        <i class="fa-solid fa-circle-xmark text-[10px]"></i>
+    </template>
+     <template x-if="!icon && state === 'include'">
+        <i class="fa-solid fa-circle-check text-[10px]"></i>
+    </template>
+
+    <!-- Label -->
+    <span x-text="'{{ label }}'.trim() || '{{ value }}'"></span>
+</div>

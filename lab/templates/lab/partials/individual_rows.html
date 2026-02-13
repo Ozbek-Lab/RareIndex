@@ -1,0 +1,99 @@
+{% load django_tables2 %}
+{% load i18n %}
+{% load lab_tags %}
+
+{% if table.page.has_previous and request.GET.direction != 'down' %}
+<!-- Top Sentinel for Loading Upwards -->
+<tr hx-get="{% clean_pagination_url table.page.previous_page_number %}&direction=up"
+    hx-trigger="intersect once"
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-push-url="{% clean_pagination_url table.page.previous_page_number %}"
+    hx-indicator="#infinite-spinner-top">
+    <td colspan="{{ table.columns|length }}" class="p-0">
+        <div id="infinite-spinner-top" class="flex justify-center items-center p-4 w-full bg-base-100/50">
+             <span class="loading loading-spinner loading-md text-primary"></span>
+             <span class="ml-2 text-xs text-base-content/50">Loading previous...</span>
+        </div>
+    </td>
+</tr>
+{% endif %}
+
+{% for row in table.paginated_rows %}
+    <tr {{ row.attrs.as_html }} 
+        class="hover:bg-base-200/50 transition-colors border-b-0"
+        :class="{'bg-base-200': expandedId === '{{ row.record.pk }}'}"
+        {% if forloop.first %}
+        x-data
+        x-intersect.threshold.20="history.replaceState(null, '', '{% clean_pagination_url table.page.number %}')"
+        {% endif %}>
+        {% for column, cell in row.items %}
+            <td {{ column.attrs.td.as_html }}>
+                {% if forloop.first %}
+                    <div class="flex items-center gap-1">
+                        <button type="button" 
+                                class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary transition-transform duration-200" 
+                                :class="{'rotate-90': expandedId === '{{ row.record.pk }}'}"
+                                @click.stop="expandedId = expandedId === '{{ row.record.pk }}' ? null : '{{ row.record.pk }}'">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                        <a href="{% url 'lab:individual_detail' row.record.pk %}" 
+                           target="_blank" 
+                           class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary"
+                           @click.stop
+                           title="Open in new tab">
+                            <i class="fa-solid fa-up-right-from-square scale-75"></i>
+                        </a>
+                        <span class="ml-1">
+                            {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
+                        </span>
+                    </div>
+                {% else %}
+                    {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
+                {% endif %}
+            </td>
+        {% endfor %}
+    </tr>
+    <!-- Expanded Row -->
+    <tr x-show="expandedId === '{{ row.record.pk }}'" x-collapse x-cloak class="bg-base-100 border-b border-base-200">
+        <td colspan="{{ table.columns|length }}" class="p-0">
+            <div class="p-4" 
+                 hx-get="{% url 'lab:individual_detail' row.record.pk %}?partial=detail"
+                 hx-trigger="intersect once"
+                 hx-target="this"
+                 hx-swap="innerHTML">
+                <div class="flex justify-center p-4">
+                    <span class="loading loading-spinner loading-md text-primary"></span>
+                </div>
+            </div>
+        </td>
+    </tr>
+{% endfor %}
+
+{% if table.page.has_next %}
+    {% if request.GET.direction != 'up' %}
+    <!-- Sentinel Row for Infinite Scroll -->
+    <tr hx-get="{% clean_pagination_url table.page.next_page_number %}&direction=down"
+        hx-trigger="intersect once"
+        hx-target="this"
+        hx-swap="outerHTML"
+        hx-push-url="{% clean_pagination_url table.page.next_page_number %}"
+        hx-indicator="#infinite-spinner-bottom">
+        <td colspan="{{ table.columns|length }}" class="p-0">
+            <div id="infinite-spinner-bottom" class="flex justify-center items-center p-8 w-full">
+                 <span class="loading loading-spinner loading-lg text-primary"></span>
+                 <span class="ml-2 text-sm text-base-content/50">Loading more...</span>
+            </div>
+        </td>
+    </tr>
+    {% endif %}
+{% else %}
+    <tr>
+        <td colspan="{{ table.columns|length }}">
+            <div class="p-4 text-center text-base-content/40 italic text-sm border-t border-base-200">
+                <i class="fa-solid fa-check-circle mr-2"></i>
+                End of results
+            </div>
+        </td>
+    </tr>
+{% endif %}

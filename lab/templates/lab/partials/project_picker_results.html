@@ -1,0 +1,13 @@
+{% if projects %}
+    {% for project in projects %}
+        <div class="flex items-center justify-between p-2 hover:bg-base-200 cursor-pointer rounded-lg group"
+             @click="addProject('{{ project.id }}', '{{ project.name }}')">
+            <span class="text-sm">{{ project.name }}</span>
+            <i class="fa-solid fa-plus text-xs opacity-0 group-hover:opacity-50"></i>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="p-4 text-center text-xs text-base-content/40 italic">
+        No projects found.
+    </div>
+{% endif %}

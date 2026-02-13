@@ -14,8 +14,8 @@ from lab.models import (
     SampleType,
     Institution,
     TestType,
-    AnalysisType,
-    Analysis,
+    PipelineType,
+    Pipeline,
     Project,
     Task,
     IdentifierType,
@@ -31,7 +31,7 @@ class Command(BaseCommand):
         parser.add_argument('--families', type=int, default=3, help='Number of families to create')
         parser.add_argument('--samples-per-individual', type=int, default=2, help='Number of samples per individual')
         parser.add_argument('--tests-per-sample', type=int, default=2, help='Number of tests per sample')
-        parser.add_argument('--analyses-per-test', type=int, default=2, help='Number of analyses per test')
+        parser.add_argument('--pipelines-per-test', type=int, default=2, help='Number of pipelines per test')
         parser.add_argument('--tasks-per-object', type=int, default=2, help='Number of tasks per object')
 
 
@@ -55,8 +55,8 @@ class Command(BaseCommand):
         # Create test types if they don't exist
         test_types = self._create_test_types(user)
 
-        # Create analysis types if they don't exist
-        analysis_types = self._create_analysis_types(user)
+        # Create pipeline types if they don't exist
+        pipeline_types = self._create_pipeline_types(user)
 
         # Create institution if it doesn't exist
         institution = self._get_or_create_institution(user)
@@ -148,10 +148,10 @@ class Command(BaseCommand):
                     individual,
                     sample_types,
                     test_types,
-                    analysis_types,
+                    pipeline_types,
                     options['samples_per_individual'],
                     options['tests_per_sample'],
-                    options['analyses_per_test'],
+                    options['pipelines_per_test'],
                     options['tasks_per_object'],
                     user,
                     all_statuses,
@@ -164,7 +164,7 @@ class Command(BaseCommand):
         """Create statuses for each model type separately"""
         all_statuses = {}
         
-        for model_type in [Individual, Sample, Test, Analysis, Task]:
+        for model_type in [Individual, Sample, Test, Pipeline, Task]:
             model_name = model_type.__name__
             status_data = {
                 'registered': ('Registered', 'gray', 'fa-user-plus'),
@@ -211,12 +211,12 @@ class Command(BaseCommand):
             created[t.lower()] = tt
         return created
 
-    def _create_analysis_types(self, user):
+    def _create_pipeline_types(self, user):
         types = ['Bioinformatics', 'Interpretation', 'Validation']
         created = {}
         for t in types:
-            at, _ = AnalysisType.objects.get_or_create(name=t, defaults={'created_by': user})
-            created[t.lower()] = at
+            pt, _ = PipelineType.objects.get_or_create(name=t, defaults={'created_by': user})
+            created[t.lower()] = pt
         return created
 
     def _get_or_create_institution(self, user):
@@ -370,7 +370,7 @@ class Command(BaseCommand):
                 due_date=base_date + timedelta(days=random.randint(1, 30))
             )
 
-    def _create_samples(self, individual, sample_types, test_types, analysis_types, num_samples, tests_per_sample, analyses_per_test, tasks_per_object, user, all_statuses, project):
+    def _create_samples(self, individual, sample_types, test_types, pipeline_types, num_samples, tests_per_sample, pipelines_per_test, tasks_per_object, user, all_statuses, project):
         for _ in range(num_samples):
             sample_type = random.choice(list(sample_types.values()))
             sample = Sample.objects.create(
@@ -395,25 +395,25 @@ class Command(BaseCommand):
                 )
                 self._create_tasks(test, user, all_statuses, project, tasks_per_object, test.performed_date)
                 
-                for _ in range(analyses_per_test):
-                    analysis_type = random.choice(list(analysis_types.values()))
-                    analysis = Analysis.objects.create(
+                for _ in range(pipelines_per_test):
+                    pipeline_type = random.choice(list(pipeline_types.values()))
+                    pipeline = Pipeline.objects.create(
                         test=test,
-                        type=analysis_type,
-                        status=all_statuses['analysis']['active'],
+                        type=pipeline_type,
+                        status=all_statuses['pipeline']['active'],
                         created_by=user,
                         performed_date=test.performed_date + timedelta(days=random.randint(1, 5)),
                         performed_by=user
                     )
-                    self._create_tasks(analysis, user, all_statuses, project, tasks_per_object, analysis.performed_date)
+                    self._create_tasks(pipeline, user, all_statuses, project, tasks_per_object, pipeline.performed_date)
                     
-                    self._create_variants(individual, analysis, user, all_statuses)
+                    self._create_variants(individual, pipeline, user, all_statuses)
 
-    def _create_variants(self, individual, analysis, user, all_statuses):
-        """Create variants for an individual's analysis"""
+    def _create_variants(self, individual, pipeline, user, all_statuses):
+        """Create variants for an individual's pipeline"""
         from variant.models import SNV, CNV, SV, Repeat, Classification
         
-        # Only create variants for some analyses
+        # Only create variants for some pipelines
         if random.random() > 0.7:
             return
 
@@ -455,7 +455,7 @@ class Command(BaseCommand):
             
             common_args = {
                 'individual': individual,
-                'analysis': analysis,
+                'pipeline': pipeline,
                 'chromosome': chrom,
                 'start': start,
                 'end': end,
