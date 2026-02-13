@@ -541,8 +541,12 @@ def sample_create_modal(request, individual_id):
             initial["status"] = status
             
         form = SampleForm(initial=initial)
-        # Hide individual field as it's fixed
-        form.fields["individual"].widget = forms.HiddenInput()
+        # Individual is fixed – show it but make it non-interactable
+        form.fields["individual"].disabled = True
+        form.fields["individual"].widget.attrs["class"] = (
+            form.fields["individual"].widget.attrs.get("class", "")
+            + " pointer-events-none bg-base-200/60"
+        )
 
     context = {
         "form": form,
@@ -583,8 +587,12 @@ def test_create_modal(request, sample_id):
             initial["status"] = status
             
         form = TestForm(initial=initial)
-        # Hide sample field
-        form.fields["sample"].widget = forms.HiddenInput()
+        # Sample is fixed – show it but make it non-interactable
+        form.fields["sample"].disabled = True
+        form.fields["sample"].widget.attrs["class"] = (
+            form.fields["sample"].widget.attrs.get("class", "")
+            + " pointer-events-none bg-base-200/60"
+        )
         # Hide created_by if it's in the form (TestForm has it)
         if "created_by" in form.fields:
             form.fields["created_by"].widget = forms.HiddenInput()
@@ -629,8 +637,12 @@ def pipeline_create_modal(request, test_id):
             initial["status"] = status
             
         form = PipelineForm(initial=initial)
-        # Hide test field
-        form.fields["test"].widget = forms.HiddenInput()
+        # Test is fixed – show it but make it non-interactable
+        form.fields["test"].disabled = True
+        form.fields["test"].widget.attrs["class"] = (
+            form.fields["test"].widget.attrs.get("class", "")
+            + " pointer-events-none bg-base-200/60"
+        )
 
     context = {
         "form": form,
@@ -672,8 +684,12 @@ def analysis_create_modal(request, pipeline_id):
             initial["status"] = status
             
         form = AnalysisForm(initial=initial)
-        # Hide pipeline field
-        form.fields["pipeline"].widget = forms.HiddenInput()
+        # Pipeline is fixed – show it but make it non-interactable
+        form.fields["pipeline"].disabled = True
+        form.fields["pipeline"].widget.attrs["class"] = (
+            form.fields["pipeline"].widget.attrs.get("class", "")
+            + " pointer-events-none bg-base-200/60"
+        )
 
     context = {
         "form": form,
@@ -767,10 +783,32 @@ def task_create_modal(request, content_type_id, object_id):
         form.fields["content_type"].widget = forms.HiddenInput()
         form.fields["object_id"].widget = forms.HiddenInput()
 
+    # Make associated type & object visible, descriptive, and non-interactable
+    from django import forms as dj_forms
+    form.fields["content_type"].disabled = True
+    form.fields["content_type"].label = "Associated Type"
+    form.fields["content_type"].initial = Model._meta.verbose_name.title()
+    form.fields["content_type"].widget = dj_forms.TextInput(
+        attrs={
+            "class": "input input-bordered w-full pointer-events-none bg-base-200/60",
+            "readonly": True,
+        }
+    )
+
+    form.fields["object_id"].disabled = True
+    form.fields["object_id"].label = "Associated Object"
+    form.fields["object_id"].initial = str(obj)
+    form.fields["object_id"].widget = dj_forms.TextInput(
+        attrs={
+            "class": "input input-bordered w-full pointer-events-none bg-base-200/60",
+            "readonly": True,
+        }
+    )
+
     context = {
         "form": form,
         "individual": individual,
-        "title": f"Add Task for {ct.model.title()} {object_id}",
+        "title": f"Add Task for {obj}",
         "action_url": request.path,
         "hx_target": target_id,
     }
