@@ -39,3 +39,4 @@ django-tables2
 django-filter
 pypandoc
 weasyprint
+django-widget-tweaks

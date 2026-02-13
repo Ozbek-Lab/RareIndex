@@ -1,6 +1,7 @@
 {% load lab_tags %}
-<div class="h-full flex flex-col bg-base-100 border-r border-base-200 w-80"
-     x-data="{ 
+<div
+  class="h-full flex flex-col bg-base-100 border-r border-base-200 w-80"
+  x-data="{ 
         expanded: JSON.parse(localStorage.getItem('filterSidebarExpanded')) || {
             'individual': true, 
             'sample': false, 
@@ -13,271 +14,434 @@
             this.$watch('expanded', val => localStorage.setItem('filterSidebarExpanded', JSON.stringify(val)));
         }
      }"
-     x-init="init()">
-    
-    <!-- Sidebar Header -->
-    <div class="px-6 py-4 border-b border-base-200 flex justify-between items-center bg-base-100 sticky top-0 z-10">
-        <h2 class="font-bold text-lg text-base-content">Filters</h2>
-        <button class="btn btn-ghost btn-xs text-primary font-normal normal-case" 
-                hx-get="{% url 'lab:individual_list' %}" 
-                hx-target="body" 
-                hx-push-url="true">
-            Reset All
-        </button>
+  x-init="init()"
+>
+  <!-- Sidebar Header -->
+  <div
+    class="px-6 py-4 border-b border-base-200 flex justify-between items-center bg-base-100 sticky top-0 z-10"
+  >
+    <h2 class="font-bold text-lg text-base-content">Filters</h2>
+    <button
+      class="btn btn-ghost btn-xs text-primary font-normal normal-case"
+      hx-get="{% url 'lab:individual_list' %}"
+      hx-target="body"
+      hx-push-url="true"
+    >
+      Reset All
+    </button>
+  </div>
+
+  <form
+    id="filter-form"
+    hx-get="{% url 'lab:individual_list' %}"
+    hx-target="#individual-table-container"
+    hx-trigger="change delay:500ms, filter-changed delay:500ms"
+    hx-push-url="true"
+    hx-indicator="#table-indicator"
+    hx-include="[name='search']"
+    class="flex-1 overflow-y-auto p-2 space-y-2"
+    @submit.prevent
+  >
+    <!-- Individual Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.individual" @change.stop />
+      <div
+        class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent"
+      >
+        <span>Individual</span>
+        <span
+          @click.stop="expanded.individual = !expanded.individual"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+          ><i
+            class="fa-solid fa-chevron-right transition-transform duration-200"
+            :class="{ 'rotate-90': expanded.individual }"
+          ></i
+        ></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+          <!-- Status -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Status
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.status.field.choices %}
+                {% with metadata=status_metadata|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'status' excluded_values=request.GET|get_list:'status__exclude' %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+          <!-- Sex -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Sex
+            </h3>
+            <div class="space-y-1">
+              {% for choice in filter.form.sex.field.choices %}
+                {% include "lab/components/tristate_checkbox.html" with name="sex" value=choice.0 label=choice.1 current_values=request.GET|get_list:'sex' excluded_values=request.GET|get_list:'sex__exclude' %}
+              {% endfor %}
+            </div>
+          </div>
+          <!-- Vital Status -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Vital Status
+            </h3>
+            <div class="space-y-1">
+              {% for choice in filter.form.is_alive.field.choices %}
+                {% include "lab/components/tristate_checkbox.html" with name="is_alive" value=choice.0 label=choice.1 current_values=request.GET|get_list:'is_alive' excluded_values=request.GET|get_list:'is_alive__exclude' %}
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- HPO Terms Search -->
+          <div
+            class="space-y-3"
+            x-data="{ search: '' }"
+            @click.outside="search = ''"
+          >
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              HPO Terms
+            </h3>
+
+            <!-- Selected Terms -->
+            <div
+              id="selected-hpo-list"
+              class="flex flex-wrap gap-1.5 min-h-[1.5rem]"
+            >
+              {% for term in selected_hpo_terms %}
+                {% include "lab/partials/hpo_selected_term.html" with term=term %}
+              {% endfor %}
+            </div>
+
+            <!-- Search Input -->
+            <label
+              class="input input-bordered input-sm flex items-center w-full rounded-lg"
+            >
+              <input
+                type="text"
+                class="grow min-w-0"
+                placeholder="Search phenotypes..."
+                x-model="search"
+                x-ref="searchInput"
+                name="q"
+                hx-get="{% url 'lab:hpo_search' %}"
+                hx-trigger="keyup changed delay:300ms, search"
+                hx-target="#hpo-search-results"
+                hx-indicator="#hpo-search-indicator"
+                hx-include="#filter-form"
+                autocomplete="off"
+              />
+
+              <!-- Loading Spinner -->
+              <div id="hpo-search-indicator" class="htmx-indicator">
+                <span
+                  class="loading loading-spinner loading-xs text-primary"
+                ></span>
+              </div>
+
+              <!-- Clear Button -->
+              <button
+                type="button"
+                @click="search = ''; $refs.searchInput.focus()"
+                x-show="search"
+                class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content -mr-2"
+              >
+                <i class="fa-solid fa-times"></i>
+              </button>
+
+              <!-- Search Icon (visible when not searching/loading) -->
+              <div x-show="!search" class="text-base-content/40">
+                <i class="fa-solid fa-search text-xs"></i>
+              </div>
+            </label>
+
+            <!-- Dropdown Results -->
+            <div
+              id="hpo-search-results"
+              class="relative z-50 mt-1"
+              x-show="search.length > 0"
+              x-transition:enter="transition ease-out duration-100"
+              x-transition:enter-start="opacity-0 -translate-y-2"
+              x-transition:enter-end="opacity-100 translate-y-0"
+            >
+              <!-- Results injected here -->
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <form id="filter-form" 
-          hx-get="{% url 'lab:individual_list' %}" 
-          hx-target="#individual-table-container" 
-          hx-trigger="change delay:500ms, filter-changed delay:500ms"
-          hx-push-url="true"
-          hx-indicator="#table-indicator"
-          hx-include="[name='search']"
-          class="flex-1 overflow-y-auto p-2 space-y-2"
-          @submit.prevent>
-        
-        <!-- Individual Section -->
-        <div class="collapse bg-base-100 border border-base-200 rounded-box">
-            <input type="checkbox" x-model="expanded.individual" @change.stop /> 
-            <div class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent">
-                <span>Individual</span>
-                <span @click.stop="expanded.individual = !expanded.individual" class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"><i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{ 'rotate-90': expanded.individual }"></i></span>
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.sample" @change.stop />
+      <div
+        class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent"
+      >
+        <span>Sample</span>
+        <span
+          @click.stop="expanded.sample = !expanded.sample"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+          ><i
+            class="fa-solid fa-chevron-right transition-transform duration-200"
+            :class="{ 'rotate-90': expanded.sample }"
+          ></i
+        ></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+          <!-- Sample Type -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Type
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.samples__sample_type.field.choices %}
+                {% include "lab/components/tristate_status_pill.html" with name="samples__sample_type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'samples__sample_type' excluded_values=request.GET|get_list:'samples__sample_type__exclude' %}
+              {% endfor %}
             </div>
-            <div class="collapse-content"> 
-                <div class="space-y-6 pt-2">
-                    <!-- Status -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.status.field.choices %}
-                                {% with metadata=status_metadata|get_item:choice.0 %}
-                                    {% include "lab/components/tristate_status_pill.html" with name="status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'status' excluded_values=request.GET|get_list:'status__exclude' %}
-                                {% endwith %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <!-- Sex -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Sex</h3>
-                         <div class="space-y-1">
-                            {% for choice in filter.form.sex.field.choices %}
-                                {% include "lab/components/tristate_checkbox.html" with name="sex" value=choice.0 label=choice.1 current_values=request.GET|get_list:'sex' excluded_values=request.GET|get_list:'sex__exclude' %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <!-- Vital Status -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Vital Status</h3>
-                         <div class="space-y-1">
-                            {% for choice in filter.form.is_alive.field.choices %}
-                                {% include "lab/components/tristate_checkbox.html" with name="is_alive" value=choice.0 label=choice.1 current_values=request.GET|get_list:'is_alive' excluded_values=request.GET|get_list:'is_alive__exclude' %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    
-                    <!-- HPO Terms Search -->
-                    <div class="space-y-3" 
-                         x-data="{ search: '' }" 
-                         @click.outside="search = ''">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">HPO Terms</h3>
-                        
-                        <!-- Selected Terms -->
-                        <div id="selected-hpo-list" class="flex flex-wrap gap-1.5 min-h-[1.5rem]">
-                            {% for term in selected_hpo_terms %}
-                                {% include "lab/partials/hpo_selected_term.html" with term=term %}
-                            {% endfor %}
-                        </div>
-
-                        <!-- Search Input -->
-                        <label class="input input-bordered input-sm flex items-center w-full rounded-lg">
-                            <input type="text" 
-                                   class="grow min-w-0" 
-                                   placeholder="Search phenotypes..." 
-                                   x-model="search"
-                                   x-ref="searchInput"
-                                   name="q"
-                                   hx-get="{% url 'lab:hpo_search' %}"
-                                   hx-trigger="keyup changed delay:300ms, search" 
-                                   hx-target="#hpo-search-results"
-                                   hx-indicator="#hpo-search-indicator"
-                                   hx-include="#filter-form"
-                                   autocomplete="off" />
-                            
-                            <!-- Loading Spinner -->
-                            <div id="hpo-search-indicator" class="htmx-indicator">
-                                <span class="loading loading-spinner loading-xs text-primary"></span>
-                            </div>
-
-                            <!-- Clear Button -->
-                            <button type="button" 
-                                    @click="search = ''; $refs.searchInput.focus()" 
-                                    x-show="search" 
-                                    class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content -mr-2">
-                                <i class="fa-solid fa-times"></i>
-                            </button>
-                            
-                            <!-- Search Icon (visible when not searching/loading) -->
-                            <div x-show="!search" class="text-base-content/40">
-                                <i class="fa-solid fa-search text-xs"></i>
-                            </div>
-                        </label>
-
-                        <!-- Dropdown Results -->
-                        <div id="hpo-search-results" 
-                             class="relative z-50 mt-1" 
-                             x-show="search.length > 0"
-                             x-transition:enter="transition ease-out duration-100"
-                             x-transition:enter-start="opacity-0 -translate-y-2"
-                             x-transition:enter-end="opacity-100 translate-y-0">
-                            <!-- Results injected here -->
-                        </div>
-                    </div>
-                </div>
+          </div>
+          <!-- Sample Status -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Status
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.samples__status.field.choices %}
+                {% with metadata=status_metadata|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="samples__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'samples__status' excluded_values=request.GET|get_list:'samples__status__exclude' %}
+                {% endwith %}
+              {% endfor %}
             </div>
+          </div>
         </div>
+      </div>
+    </div>
 
-
-
-        <!-- Test Section -->
-        <div class="collapse bg-base-100 border border-base-200 rounded-box">
-             <input type="checkbox" x-model="expanded.test" @change.stop />
-            <div class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent">
-                <span>Test</span>
-                <span @click.stop="expanded.test = !expanded.test" class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"><i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{ 'rotate-90': expanded.test }"></i></span>
+    <!-- Test Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.test" @change.stop />
+      <div
+        class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent"
+      >
+        <span>Test</span>
+        <span
+          @click.stop="expanded.test = !expanded.test"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+          ><i
+            class="fa-solid fa-chevron-right transition-transform duration-200"
+            :class="{ 'rotate-90': expanded.test }"
+          ></i
+        ></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+          <!-- Test Type -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Type
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.samples__tests__test_type.field.choices %}
+                {% include "lab/components/tristate_status_pill.html" with name="samples__tests__test_type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'samples__tests__test_type' excluded_values=request.GET|get_list:'samples__tests__test_type__exclude' %}
+              {% endfor %}
             </div>
-            <div class="collapse-content">
-                <div class="space-y-6 pt-2">
-                     <!-- Test Type -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.samples__tests__test_type.field.choices %}
-                                {% include "lab/components/tristate_status_pill.html" with name="samples__tests__test_type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'samples__tests__test_type' excluded_values=request.GET|get_list:'samples__tests__test_type__exclude' %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <!-- Test Status -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.samples__tests__status.field.choices %}
-                                {% with metadata=status_metadata|get_item:choice.0 %}
-                                    {% include "lab/components/tristate_status_pill.html" with name="samples__tests__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'samples__tests__status' excluded_values=request.GET|get_list:'samples__tests__status__exclude' %}
-                                {% endwith %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+          </div>
+          <!-- Test Status -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Status
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.samples__tests__status.field.choices %}
+                {% with metadata=status_metadata|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="samples__tests__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'samples__tests__status' excluded_values=request.GET|get_list:'samples__tests__status__exclude' %}
+                {% endwith %}
+              {% endfor %}
             </div>
+          </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Pipeline Section -->
-        <div class="collapse bg-base-100 border border-base-200 rounded-box">
-             <input type="checkbox" x-model="expanded.pipeline" @change.stop />
-            <div class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent">
-                <span>Pipeline</span>
-                <span @click.stop="expanded.pipeline = !expanded.pipeline" class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"><i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{ 'rotate-90': expanded.pipeline }"></i></span>
+    <!-- Pipeline Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.pipeline" @change.stop />
+      <div
+        class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent"
+      >
+        <span>Pipeline</span>
+        <span
+          @click.stop="expanded.pipeline = !expanded.pipeline"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+          ><i
+            class="fa-solid fa-chevron-right transition-transform duration-200"
+            :class="{ 'rotate-90': expanded.pipeline }"
+          ></i
+        ></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+          <!-- Pipeline Type -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Type
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.samples__tests__pipelines__type.field.choices %}
+                {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'samples__tests__pipelines__type' excluded_values=request.GET|get_list:'samples__tests__pipelines__type__exclude' %}
+              {% endfor %}
             </div>
-            <div class="collapse-content">
-                <div class="space-y-6 pt-2">
-                     <!-- Pipeline Type -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.samples__tests__pipelines__type.field.choices %}
-                                {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'samples__tests__pipelines__type' excluded_values=request.GET|get_list:'samples__tests__pipelines__type__exclude' %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <!-- Pipeline Status -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.samples__tests__pipelines__status.field.choices %}
-                                {% with metadata=status_metadata|get_item:choice.0 %}
-                                    {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'samples__tests__pipelines__status' excluded_values=request.GET|get_list:'samples__tests__pipelines__status__exclude' %}
-                                {% endwith %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+          </div>
+          <!-- Pipeline Status -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Status
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.samples__tests__pipelines__status.field.choices %}
+                {% with metadata=status_metadata|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'samples__tests__pipelines__status' excluded_values=request.GET|get_list:'samples__tests__pipelines__status__exclude' %}
+                {% endwith %}
+              {% endfor %}
             </div>
+          </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Analysis Section -->
-        <div class="collapse bg-base-100 border border-base-200 rounded-box">
-             <input type="checkbox" x-model="expanded.analysis" @change.stop />
-            <div class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent">
-                <span>Analysis</span>
-                <span @click.stop="expanded.analysis = !expanded.analysis" class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"><i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{ 'rotate-90': expanded.analysis }"></i></span>
+    <!-- Analysis Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.analysis" @change.stop />
+      <div
+        class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent"
+      >
+        <span>Analysis</span>
+        <span
+          @click.stop="expanded.analysis = !expanded.analysis"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+          ><i
+            class="fa-solid fa-chevron-right transition-transform duration-200"
+            :class="{ 'rotate-90': expanded.analysis }"
+          ></i
+        ></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+          <!-- Analysis Type -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Type
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.samples__tests__pipelines__analyses__type.field.choices %}
+                {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__analyses__type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'samples__tests__pipelines__analyses__type' excluded_values=request.GET|get_list:'samples__tests__pipelines__analyses__type__exclude' %}
+              {% endfor %}
             </div>
-            <div class="collapse-content">
-                <div class="space-y-6 pt-2">
-                    <!-- Analysis Type -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.samples__tests__pipelines__analyses__type.field.choices %}
-                                {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__analyses__type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'samples__tests__pipelines__analyses__type' excluded_values=request.GET|get_list:'samples__tests__pipelines__analyses__type__exclude' %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <!-- Analysis Status -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.samples__tests__pipelines__analyses__status.field.choices %}
-                                {% with metadata=status_metadata|get_item:choice.0 %}
-                                    {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__analyses__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'samples__tests__pipelines__analyses__status' excluded_values=request.GET|get_list:'samples__tests__pipelines__analyses__status__exclude' %}
-                                {% endwith %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+          </div>
+          <!-- Analysis Status -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Status
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.samples__tests__pipelines__analyses__status.field.choices %}
+                {% with metadata=status_metadata|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__analyses__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'samples__tests__pipelines__analyses__status' excluded_values=request.GET|get_list:'samples__tests__pipelines__analyses__status__exclude' %}
+                {% endwith %}
+              {% endfor %}
             </div>
+          </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Variant Section -->
-        <div class="collapse bg-base-100 border border-base-200 rounded-box">
-             <input type="checkbox" x-model="expanded.variant" @change.stop />
-            <div class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent">
-                <span>Variant</span>
-                <span @click.stop="expanded.variant = !expanded.variant" class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"><i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{ 'rotate-90': expanded.variant }"></i></span>
+    <!-- Variant Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.variant" @change.stop />
+      <div
+        class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent"
+      >
+        <span>Variant</span>
+        <span
+          @click.stop="expanded.variant = !expanded.variant"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+          ><i
+            class="fa-solid fa-chevron-right transition-transform duration-200"
+            :class="{ 'rotate-90': expanded.variant }"
+          ></i
+        ></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+          <!-- Variant Type -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Type
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.variant_type.field.choices %}
+                {% include "lab/components/tristate_status_pill.html" with name="variant_type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'variant_type' excluded_values=request.GET|get_list:'variant_type__exclude' %}
+              {% endfor %}
             </div>
-            <div class="collapse-content">
-                <div class="space-y-6 pt-2">
-                     <!-- Variant Type -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.variant_type.field.choices %}
-                                {% include "lab/components/tristate_status_pill.html" with name="variant_type" value=choice.0 label=choice.1 current_values=request.GET|get_list:'variant_type' excluded_values=request.GET|get_list:'variant_type__exclude' %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <!-- Variant Status -->
-                    <div class="space-y-2">
-                        <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {% for choice in filter.form.variants__status.field.choices %}
-                                {% with metadata=status_metadata|get_item:choice.0 %}
-                                    {% include "lab/components/tristate_status_pill.html" with name="variants__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'variants__status' excluded_values=request.GET|get_list:'variants__status__exclude' %}
-                                {% endwith %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <!-- Classification -->
-                    <div class="space-y-2">
-                         <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Classification</h3>
-                         <div class="space-y-1">
-                            {% for choice in filter.form.variants__classifications__classification.field.choices %}
-                                {% include "lab/components/tristate_checkbox.html" with name="variants__classifications__classification" value=choice.0 label=choice.1 current_values=request.GET|get_list:'variants__classifications__classification' excluded_values=request.GET|get_list:'variants__classifications__classification__exclude' %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+          </div>
+          <!-- Variant Status -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Status
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.variants__status.field.choices %}
+                {% with metadata=status_metadata|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="variants__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'variants__status' excluded_values=request.GET|get_list:'variants__status__exclude' %}
+                {% endwith %}
+              {% endfor %}
             </div>
+          </div>
+          <!-- Classification -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Classification
+            </h3>
+            <div class="space-y-1">
+              {% for choice in filter.form.variants__classifications__classification.field.choices %}
+                {% include "lab/components/tristate_checkbox.html" with name="variants__classifications__classification" value=choice.0 label=choice.1 current_values=request.GET|get_list:'variants__classifications__classification' excluded_values=request.GET|get_list:'variants__classifications__classification__exclude' %}
+              {% endfor %}
+            </div>
+          </div>
         </div>
-        
-    </form>
+      </div>
+    </div>
+  </form>
 </div>
