@@ -15,6 +15,9 @@ from lab.models import (
     PipelineType,
     Pipeline,
     Analysis,
+    AnalysisType,
+    AnalysisReport,
+    AnalysisRequestForm,
     IdentifierType,
     CrossIdentifier,
 )
@@ -49,6 +52,12 @@ class Command(BaseCommand):
         # Delete all data in reverse order of dependencies
         self.stdout.write("Deleting Analysis entries...")
         Analysis.objects.all().delete()
+        self.stdout.write("Deleting AnalysisReport entries...")
+        AnalysisReport.objects.all().delete()
+        self.stdout.write("Deleting AnalysisRequestForm entries...")
+        AnalysisRequestForm.objects.all().delete()
+        self.stdout.write("Deleting AnalysisType entries...")
+        AnalysisType.objects.all().delete()
 
         self.stdout.write("Deleting Pipeline entries...")
         Pipeline.objects.all().delete()
@@ -105,8 +114,10 @@ class Command(BaseCommand):
                 receiver=history_notifications.notify_on_history
             )
 
-        # Preserve default statuses
-        default_statuses = ["Registered", "Completed", "In Progress"]
+        # Preserve default baseline statuses
+        # These are generic status names that are reused across models
+        # and recreated by management commands if missing.
+        default_statuses = ["Registered", "Active", "Completed", "Cancelled", "Pending", "In Progress"]
         self.stdout.write("Preserving default statuses...")
         Status.objects.exclude(name__in=default_statuses).delete()
 
@@ -132,7 +143,6 @@ class Command(BaseCommand):
         # Delete objects with required User references before nullifying others
         self.stdout.write("Deleting objects with required User references...")
         Family.objects.all().delete()  # Family has NOT NULL created_by
-        Status.objects.all().delete()  # Status has NOT NULL created_by
         Sample.objects.all().delete()  # Sample has NOT NULL created_by
         Test.objects.all().delete()  # Test has NOT NULL created_by
         Analysis.objects.all().delete()  # Analysis has NOT NULL created_by
@@ -144,7 +154,6 @@ class Command(BaseCommand):
         TestType.objects.all().delete()  # TestType has NOT NULL created_by
         PipelineType.objects.all().delete()  # PipelineType has NOT NULL created_by
         IdentifierType.objects.all().delete()  # IdentifierType has NOT NULL created_by
-        CrossIdentifier.objects.all().delete()  # CrossIdentifier has NOT NULL created_by
         Individual.objects.all().delete()  # Individual has NOT NULL created_by
 
         # Keep superuser, delete other users

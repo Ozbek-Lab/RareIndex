@@ -1047,8 +1047,9 @@ class Command(BaseCommand):
                 # Build code -> individual map using RareBoost ID
                 code_to_individual = {}
                 for ind in fam_obj.individuals.all():
-                    lab_id_val = ind.lab_id
-                    if not lab_id_val or lab_id_val == 'No Lab ID':
+                    lab_id_val = ind.primary_id
+                    # Skip if primary ID is missing or a \"No ...\" placeholder
+                    if not lab_id_val or str(lab_id_val).upper().startswith("NO "):
                         continue
                     parts = str(lab_id_val).split('.')
                     if len(parts) < 2:

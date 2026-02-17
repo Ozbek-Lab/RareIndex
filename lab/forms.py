@@ -541,8 +541,8 @@ FORMS_MAPPING = {
 
 
 class IndividualIdentificationForm(BaseForm):
-    lab_id = forms.CharField(required=False, label="Lab ID")
-    biobank_id = forms.CharField(required=False, label="Biobank ID")
+    primary_id = forms.CharField(required=False, label="Primary ID")
+    secondary_id = forms.CharField(required=False, label="Secondary ID")
     tc_identity = forms.IntegerField(required=False, label="TC Identity")
     cross_identifiers_json = forms.CharField(required=False, widget=forms.HiddenInput())
 
@@ -553,11 +553,15 @@ class IndividualIdentificationForm(BaseForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
-            lid = self.instance.lab_id
-            bid = self.instance.biobank_id
+            pid = self.instance.primary_id
+            sid = self.instance.secondary_id
             
-            self.fields["lab_id"].initial = lid if "No Lab ID" not in lid else ""
-            self.fields["biobank_id"].initial = bid if "No Biobank ID" not in bid else ""
+            self.fields["primary_id"].initial = (
+                pid if pid and not pid.upper().startswith("NO ") else ""
+            )
+            self.fields["secondary_id"].initial = (
+                sid if sid and not sid.upper().startswith("NO ") else ""
+            )
 
     def save(self, commit=True, **kwargs):
         user = kwargs.get("user")
@@ -568,15 +572,27 @@ class IndividualIdentificationForm(BaseForm):
             import json
 
             # Helper to update cross ID
-            def update_cross_id(type_name, value):
+            def update_priority_cross_id(priority, value):
                 try:
-                    id_type = IdentifierType.objects.get(name=type_name)
                     if not value:
                         # If empty, delete it
                         CrossIdentifier.objects.filter(
-                            individual=instance, id_type=id_type
+                            individual=instance, id_type__use_priority=priority
                         ).delete()
                     else:
+                        id_type = (
+                            IdentifierType.objects.filter(use_priority=priority)
+                            .order_by("id")
+                            .first()
+                        )
+                        if not id_type:
+                            return
+
+                        # Enforce a single ID for a given priority
+                        CrossIdentifier.objects.filter(
+                            individual=instance, id_type__use_priority=priority
+                        ).exclude(id_type=id_type).delete()
+
                         defaults = {"id_value": value}
                         if user:
                             defaults["created_by"] = user
@@ -589,13 +605,11 @@ class IndividualIdentificationForm(BaseForm):
                         if not created and obj.id_value != value:
                             obj.id_value = value
                             obj.save()
-                except IdentifierType.DoesNotExist:
-                    pass 
                 except Exception:
                     pass
 
-            update_cross_id("RareBoost", self.cleaned_data.get("lab_id"))
-            update_cross_id("Biobank", self.cleaned_data.get("biobank_id"))
+            update_priority_cross_id(1, self.cleaned_data.get("primary_id"))
+            update_priority_cross_id(2, self.cleaned_data.get("secondary_id"))
 
             # Handle dynamic cross IDs
             cross_ids_json = self.cleaned_data.get("cross_identifiers_json")
@@ -609,11 +623,11 @@ class IndividualIdentificationForm(BaseForm):
                         if item.get("value")
                     }
 
-                    # Get existing IDs distinct from RB/Biobank
-                    excluded_types = ["RareBoost", "Biobank"]
+                    # Get existing IDs distinct from primary/secondary
+                    excluded_priorities = [1, 2]
                     existing_ids = CrossIdentifier.objects.filter(
                         individual=instance
-                    ).exclude(id_type__name__in=excluded_types)
+                    ).exclude(id_type__use_priority__in=excluded_priorities)
 
                     # Update/Delete existing
                     for xid in existing_ids:
@@ -630,7 +644,7 @@ class IndividualIdentificationForm(BaseForm):
                     for type_id, value in current_ids_map.items():
                         try:
                             id_type = IdentifierType.objects.get(id=type_id)
-                            if id_type.name in excluded_types:
+                            if id_type.use_priority in excluded_priorities:
                                 continue
                             
                             CrossIdentifier.objects.create(

@@ -6,8 +6,8 @@ from django.views.generic import TemplateView
 from django_tables2 import SingleTableMixin
 from django_filters.views import FilterView
 from .models import Individual, Sample, Task, Note, Project, Test, Pipeline, Status
-from .tables import IndividualTable, SampleTable
-from .filters import IndividualFilter
+from .tables import IndividualTable, SampleTable, ProjectTable
+from .filters import IndividualFilter, ProjectFilter
 
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = "lab/dashboard.html"
@@ -95,6 +95,9 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['total_count'] = self.model.objects.count()
+        # Whether there is any IdentifierType configured as secondary (priority 2)
+        from .models import IdentifierType
+        context['has_secondary_identifier_type'] = IdentifierType.objects.filter(use_priority=2).exists()
         # Status Metadata for colored pills
         from .models import Status
         statuses = Status.objects.all()
@@ -149,6 +152,53 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
             return ["lab/individual_list.html"]
             
         return ["lab/individual_list.html"]
+
+class ProjectListView(LoginRequiredMixin, SingleTableMixin, FilterView):
+    model = Project
+    table_class = ProjectTable
+    filterset_class = ProjectFilter
+    template_name = "lab/project_list.html"
+    paginate_by = 25
+    
+    def get_queryset(self):
+        # Optimize query by prefetching individuals and their families
+        return super().get_queryset().prefetch_related(
+            'individuals',
+            'individuals__family',
+            'status',
+            'created_by'
+        )
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_count'] = self.model.objects.count()
+        # Status Metadata for colored pills
+        from .models import Status
+        statuses = Status.objects.all()
+        metadata = {}
+        for s in statuses:
+            metadata[s.name] = {
+                'color': s.color,
+                'icon': s.icon
+            }
+        context['status_metadata'] = metadata
+        
+        return context
+    
+    def get_template_names(self):
+        if self.request.htmx:
+            # Filtering / Sorting / Global Search (Targeting the table container)
+            if self.request.headers.get('HX-Target') == 'project-table-container':
+                return ["lab/partials/project_table.html"]
+            
+            # Infinite Scroll (returns only new rows to append)
+            if self.request.GET.get("page"):
+                return ["lab/partials/project_rows.html"]
+            
+            # Reset All / Full Navigation (return full page to swap body)
+            return ["lab/project_list.html"]
+            
+        return ["lab/project_list.html"]
 
 from django.views.generic import ListView, DetailView
 from django.db.models import Q
@@ -515,7 +565,7 @@ class IndividualExportView(LoginRequiredMixin, View):
         # 3. Write Header
         header = [
             # IDs
-            "Özbek Lab. ID", "Biyobanka ID", "Ad-Soyad", "TC Kimlik No", "Other IDs",
+            "Primary ID", "Secondary ID", "Ad-Soyad", "TC Kimlik No", "Other IDs",
             # Demographics
             "Doğum Tarihi", "Cinsiyet", "Durum", # Status
             # Clinical
@@ -538,14 +588,14 @@ class IndividualExportView(LoginRequiredMixin, View):
         # 4. Write Rows — ONE row per individual, aggregated sample/test data
         for individual in filtered_qs:
             # Base Individual Data
-            lab_id = individual.lab_id
-            biobank_id = individual.biobank_id
+            primary_id = individual.primary_id
+            secondary_id = individual.secondary_id
             
             # Other IDs
             other_ids_list = [
                 f"{x.id_type.name}:{x.id_value}" 
                 for x in individual.cross_ids.all() 
-                if x.id_type.name not in ["RareBoost", "Biobank"]
+                if x.id_type.use_priority not in [1, 2]
             ]
             other_ids = "; ".join(other_ids_list)
             
@@ -616,7 +666,7 @@ class IndividualExportView(LoginRequiredMixin, View):
                         data_dates.append(str(test.data_receipt_date))
 
             row = [
-                lab_id, biobank_id, name, tc, other_ids,
+                primary_id, secondary_id, name, tc, other_ids,
                 dob, sex, status,
                 icd11, hpo, diagnosis,
                 "; ".join(receipt_dates) if receipt_dates else (individual.created_at.date() if individual.created_at else ""),

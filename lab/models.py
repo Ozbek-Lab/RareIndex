@@ -378,31 +378,77 @@ class Individual(HistoryMixin, models.Model):
         ]
 
     @property
+    def other_table_ids(self):
+        """All non-primary/secondary IDs that are marked as visible for tables."""
+        ids = [
+            f"{x.id_type.name}: {x.id_value}"
+            for x in self.cross_ids.select_related("id_type").all()
+            if x.id_type.use_priority not in (1, 2) and x.id_type.is_shown_in_table
+        ]
+        return ", ".join(ids) if ids else ""
+
+    @property
+    def primary_id(self):
+        primary_types = IdentifierType.objects.filter(use_priority=1).order_by("id")
+        if not primary_types.exists():
+            return "NO PRIMARY ID SET"
+
+        xid = (
+            self.cross_ids.filter(id_type__in=primary_types)
+            .order_by("id_type__id")
+            .first()
+        )
+        if xid:
+            return xid.id_value
+        # No matching ID, but we still have at least one primary IdentifierType
+        primary_type = primary_types.first()
+        return f"No {primary_type.name}"
+
+    @property
+    def secondary_id(self):
+        secondary_types = IdentifierType.objects.filter(use_priority=2).order_by("id")
+        if not secondary_types.exists():
+            return "NO SECONDARY ID SET"
+
+        xid = (
+            self.cross_ids.filter(id_type__in=secondary_types)
+            .order_by("id_type__id")
+            .first()
+        )
+        if xid:
+            return xid.id_value
+        # No matching ID, but we still have at least one secondary IdentifierType
+        secondary_type = secondary_types.first()
+        return f"No {secondary_type.name}"
+
+    # Backwards-compatible aliases (deprecated): prefer primary_id/secondary_id
+    @property
     def lab_id(self):
-        if self.cross_ids.filter(id_type__name="RareBoost").exists():
-            return self.cross_ids.get(id_type__name="RareBoost").id_value
-        else:
-            return f"No Lab ID"
+        return self.primary_id
 
     @property
     def biobank_id(self):
-        if self.cross_ids.filter(id_type__name="Biobank").exists():
-            return self.cross_ids.get(id_type__name="Biobank").id_value
-        else:
-            return f"No Biobank ID"
+        return self.secondary_id
 
     @property
     def individual_id(self):
-        # If no cross IDs exist, show pk - name
-        if not self.cross_ids.exists():
-            return f"{self.id} - {self.full_name}"
-        # Otherwise, prioritize RareBoost, then Biobank, then any other cross ID
-        elif self.cross_ids.filter(id_type__name="RareBoost").exists():
-            return self.cross_ids.filter(id_type__name="RareBoost").first().id_value
-        elif self.cross_ids.filter(id_type__name="Biobank").exists():
-            return self.cross_ids.filter(id_type__name="Biobank").first().id_value
-        else:
-            return self.cross_ids.first().id_value
+        # Prefer the ID with the lowest non-zero priority
+        preferred = (
+            self.cross_ids.filter(id_type__use_priority__gt=0)
+            .order_by("id_type__use_priority", "id_type__id")
+            .first()
+        )
+        if preferred:
+            return preferred.id_value
+
+        # Otherwise show pk - any priority-0 IDs - name
+        zero_priority_ids = list(
+            self.cross_ids.filter(id_type__use_priority=0)
+            .order_by("id_type__name", "id_type__id")
+            .values_list("id_value", flat=True)
+        )
+        parts = [str(self.id), *zero_priority_ids, self.full_name]
+        return " - ".join([p for p in parts if p])
 
     @property
     def sensitive_fields(self):
@@ -460,7 +506,7 @@ class Sample(HistoryMixin, models.Model):
         ordering = ["-receipt_date"]
 
     def __str__(self):
-        return f"{self.individual.lab_id} - {self.sample_type} - {self.receipt_date}"
+        return f"{self.individual.primary_id} - {self.sample_type} - {self.receipt_date}"
 
     def save(self, *args, **kwargs):
         """Ensure `created_by` is set from the current request user if available.
@@ -684,6 +730,9 @@ class IdentifierType(HistoryMixin, models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_id_types"
     )
+    # 0 = not used, 1 = Primary ID, 2 = Secondary ID, 3 = Tertiary ID etc.
+    use_priority = models.IntegerField(default=0) # 0 = not used, 1 = RB ID, 2 = BioBank ID, 3 = Erdera ID etc.
+    is_shown_in_table = models.BooleanField(default=True)
     history = HistoricalRecords()
 
     def __str__(self):
@@ -707,6 +756,8 @@ class CrossIdentifier(HistoryMixin, models.Model):
     def __str__(self):
         return f"{self.individual} - {self.id_type} - {self.id_value}"
 
+    class Meta:
+        unique_together = ["individual", "id_type"]
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")

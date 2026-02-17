@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    DashboardView, IndividualListView, SampleListView, IndividualDetailView, 
+    DashboardView, IndividualListView, ProjectListView, SampleListView, IndividualDetailView, 
     FamilyCreateView, HPOTermSearchView, RenderSelectedHPOTermView,
     CompleteTaskView, ReopenTaskView, IndividualExportView
 )
@@ -26,6 +26,7 @@ app_name = "lab"
 urlpatterns = [
     path("", DashboardView.as_view(), name="dashboard"),
     path("individuals/", IndividualListView.as_view(), name="individual_list"),
+    path("projects/", ProjectListView.as_view(), name="project_list"),
     path("individuals/export/", IndividualExportView.as_view(), name="individual_export"),
     path("individuals/create-family/", FamilyCreateView.as_view(), name="create_family"),
     path("samples/", SampleListView.as_view(), name="sample_list"),

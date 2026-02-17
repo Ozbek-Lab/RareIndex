@@ -327,15 +327,18 @@ def individual_identification_edit(request, pk):
     from .models import IdentifierType
     form = IndividualIdentificationForm(instance=individual)
     
-    # Exclude RareBoost and Biobank from general choices if desired, or keep all
-    # The plan said to filter them out from the dropdown to avoid confusion
-    identifier_types = IdentifierType.objects.exclude(name__in=["RareBoost", "Biobank"])
+    # Exclude primary/secondary identifier types from the "other IDs" dropdown
+    identifier_types = IdentifierType.objects.exclude(use_priority__in=[1, 2])
+    primary_id_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+    secondary_id_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
     
     context = {
         "individual": individual, 
         "form": form, 
         "edit_mode": True,
-        "identifier_types": identifier_types
+        "identifier_types": identifier_types,
+        "primary_id_type": primary_id_type,
+        "secondary_id_type": secondary_id_type,
     }
     return render(request, "lab/partials/tabs/_info.html#identification_content", context)
 
@@ -353,7 +356,18 @@ def individual_identification_save(request, pk):
         return render(request, "lab/partials/tabs/_info.html#identification_content", context)
     
     # Render edit mode with errors
-    context = {"individual": individual, "form": form, "edit_mode": True}
+    from .models import IdentifierType
+    identifier_types = IdentifierType.objects.exclude(use_priority__in=[1, 2])
+    primary_id_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+    secondary_id_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+    context = {
+        "individual": individual,
+        "form": form,
+        "edit_mode": True,
+        "identifier_types": identifier_types,
+        "primary_id_type": primary_id_type,
+        "secondary_id_type": secondary_id_type,
+    }
     return render(request, "lab/partials/tabs/_info.html#identification_content", context)
 
 @login_required

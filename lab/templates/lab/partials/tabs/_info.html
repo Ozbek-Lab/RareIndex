@@ -68,7 +68,7 @@
                      x-data="{
                         crossIds: [
                             {% for xid in individual.cross_ids.all %}
-                                {% if xid.id_type.name != 'RareBoost' and xid.id_type.name != 'Biobank' %}
+                                {% if xid.id_type.use_priority != 1 and xid.id_type.use_priority != 2 %}
                                     {type_id: '{{ xid.id_type.id }}', value: '{{ xid.id_value|escapejs }}'},
                                 {% endif %}
                             {% endfor %}
@@ -94,15 +94,19 @@
                          <button type="button" @click="addCrossId()" class="text-[10px] text-blue-600 hover:text-blue-800 hover:underline">+ ADD</button>
                     </div>
                     <div class="space-y-1.5">
-                        <!-- Static Fields (RareBoost/Biobank) -->
+                        <!-- Static Fields (Primary/Secondary) -->
                         <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
-                             <span class="text-[10px] font-medium text-base-content/70 w-16 px-1">RareBoost</span>
-                             <input type="text" name="{{ form.lab_id.html_name }}" value="{{ form.lab_id.value|default:'' }}" 
+                             <span class="text-[10px] font-medium text-base-content/70 w-28 px-1">
+                                 Primary{% if primary_id_type %} ({{ primary_id_type.name }}){% else %} (not set){% endif %}
+                             </span>
+                             <input type="text" name="{{ form.primary_id.html_name }}" value="{{ form.primary_id.value|default:'' }}" 
                                     class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
                         </div>
                         <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
-                             <span class="text-[10px] font-medium text-base-content/70 w-16 px-1">Biobank</span>
-                             <input type="text" name="{{ form.biobank_id.html_name }}" value="{{ form.biobank_id.value|default:'' }}" 
+                             <span class="text-[10px] font-medium text-base-content/70 w-28 px-1">
+                                 Secondary{% if secondary_id_type %} ({{ secondary_id_type.name }}){% else %} (not set){% endif %}
+                             </span>
+                             <input type="text" name="{{ form.secondary_id.html_name }}" value="{{ form.secondary_id.value|default:'' }}" 
                                     class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
                         </div>
 
@@ -172,16 +176,16 @@
             </div>
 
             <div class="grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-base-content/70">Lab ID</dt>
+                <dt class="text-sm font-medium text-base-content/70">Primary ID</dt>
                 <dd class="text-sm text-base-content col-span-2 font-mono bg-base-200 px-2 py-0.5 rounded w-fit select-all text-xs">
-                    {{ individual.lab_id }}
+                    {{ individual.primary_id }}
                 </dd>
             </div>
 
             <div class="grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-base-content/70">Biobank ID</dt>
+                <dt class="text-sm font-medium text-base-content/70">Secondary ID</dt>
                 <dd class="text-sm text-base-content col-span-2 font-mono bg-base-200 px-2 py-0.5 rounded w-fit select-all text-xs">
-                    {{ individual.biobank_id }}
+                    {{ individual.secondary_id }}
                 </dd>
             </div>
 
@@ -189,7 +193,7 @@
                 <dt class="text-sm font-medium text-base-content/70">Cross IDs</dt>
                 <dd class="text-sm text-base-content col-span-2 flex flex-wrap gap-2">
                     {% for xid in individual.cross_ids.all %}
-                        {% if xid.id_type.name != "RareBoost" and xid.id_type.name != "Biobank" %}
+                        {% if xid.id_type.use_priority != 1 and xid.id_type.use_priority != 2 %}
                         <div class="badge badge-outline gap-2 text-xs">
                             <span class="font-bold border-r border-base-content/20 pr-2">{{ xid.id_type.name }}</span>
                             <span class="font-mono">{{ xid.id_value }}</span>

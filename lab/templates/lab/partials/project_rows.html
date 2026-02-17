@@ -28,48 +28,43 @@
         x-intersect.threshold.20="history.replaceState(null, '', '{% clean_pagination_url table.page.number %}')"
         {% endif %}>
         {% for column, cell in row.items %}
-            {% if column.name == 'individual_id' %}
-                {# skip individual_id column in rows #}
-            {% elif column.name == 'secondary_id' and not has_secondary_identifier_type %}
-                {# skip secondary_id column entirely if there is no secondary identifier type #}
-            {% else %}
-                <td {{ column.attrs.td.as_html }}>
-                    {% if forloop.first %}
-                        <div class="flex items-center gap-1">
-                            <button type="button" 
-                                    class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary transition-transform duration-200" 
-                                    :class="{'rotate-90': expandedId === '{{ row.record.pk }}'}"
-                                    @click.stop="expandedId = expandedId === '{{ row.record.pk }}' ? null : '{{ row.record.pk }}'">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </button>
-                            <a href="{% url 'lab:individual_detail' row.record.pk %}" 
-                               target="_blank" 
-                               class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary"
-                               @click.stop
-                               title="Open in new tab">
-                                <i class="fa-solid fa-up-right-from-square scale-75"></i>
-                            </a>
-                            <span class="ml-1">
-                                {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
-                            </span>
-                        </div>
-                    {% else %}
-                        {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
-                    {% endif %}
-                </td>
-            {% endif %}
+            <td {{ column.attrs.td.as_html }}>
+                {% if forloop.first %}
+                    <div class="flex items-center gap-1">
+                        <button type="button" 
+                                class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary transition-transform duration-200" 
+                                :class="{'rotate-90': expandedId === '{{ row.record.pk }}'}"
+                                @click.stop="expandedId = expandedId === '{{ row.record.pk }}' ? null : '{{ row.record.pk }}'">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                        <span class="ml-1">
+                            {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
+                        </span>
+                    </div>
+                {% else %}
+                    {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
+                {% endif %}
+            </td>
         {% endfor %}
     </tr>
     <!-- Expanded Row -->
     <tr x-show="expandedId === '{{ row.record.pk }}'" x-collapse x-cloak class="bg-base-100 border-b border-base-200">
         <td colspan="{{ table.columns|length }}" class="p-0">
-            <div class="p-4" 
-                 hx-get="{% url 'lab:individual_detail' row.record.pk %}?partial=detail"
-                 hx-trigger="intersect once"
-                 hx-target="this"
-                 hx-swap="innerHTML">
-                <div class="flex justify-center p-4">
-                    <span class="loading loading-spinner loading-md text-primary"></span>
+            <div class="p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h4 class="font-semibold text-sm text-base-content/60 mb-2">Description</h4>
+                        <p class="text-sm text-base-content">{{ row.record.description|default:"No description provided." }}</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-sm text-base-content/60 mb-2">Details</h4>
+                        <div class="space-y-1 text-sm">
+                            <div><span class="font-medium">Due Date:</span> {{ row.record.due_date|default:"Not set" }}</div>
+                            <div><span class="font-medium">Created By:</span> {{ row.record.created_by.username }}</div>
+                            <div><span class="font-medium">Created:</span> {{ row.record.created_at|date:"M d, Y" }}</div>
+                            <div><span class="font-medium">Individuals:</span> {{ row.record.individuals.count }} individual{{ row.record.individuals.count|pluralize }}</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </td>

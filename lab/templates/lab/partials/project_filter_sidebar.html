@@ -1,0 +1,105 @@
+{% load lab_tags %}
+<div
+  class="h-full flex flex-col bg-base-100 border-r border-base-200 w-80"
+  x-data="{ 
+        expanded: JSON.parse(localStorage.getItem('projectFilterSidebarExpanded')) || {
+            'project': true
+        },
+        init() {
+            this.$watch('expanded', val => localStorage.setItem('projectFilterSidebarExpanded', JSON.stringify(val)));
+        }
+     }"
+  x-init="init()"
+>
+  <!-- Sidebar Header -->
+  <div
+    class="px-6 py-4 border-b border-base-200 flex justify-between items-center bg-base-100 sticky top-0 z-10"
+  >
+    <h2 class="font-bold text-lg text-base-content">Filters</h2>
+    <button
+      class="btn btn-ghost btn-xs text-primary font-normal normal-case"
+      hx-get="{% url 'lab:project_list' %}"
+      hx-target="body"
+      hx-push-url="true"
+    >
+      Reset All
+    </button>
+  </div>
+
+  <form
+    id="filter-form"
+    hx-get="{% url 'lab:project_list' %}"
+    hx-target="#project-table-container"
+    hx-trigger="change delay:500ms, filter-changed delay:500ms"
+    hx-push-url="true"
+    hx-indicator="#table-indicator"
+    hx-include="[name='search']"
+    class="flex-1 overflow-y-auto p-2 space-y-2"
+    @submit.prevent
+  >
+    <!-- Project Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.project" @change.stop />
+      <div
+        class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent"
+      >
+        <span>Project</span>
+        <span
+          @click.stop="expanded.project = !expanded.project"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+          ><i
+            class="fa-solid fa-chevron-right transition-transform duration-200"
+            :class="{ 'rotate-90': expanded.project }"
+          ></i
+        ></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+          <!-- Status -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Status
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.status.field.choices %}
+                {% with metadata=status_metadata|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'status' excluded_values=request.GET|get_list:'status__exclude' %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+          <!-- Priority -->
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Priority
+            </h3>
+            <div class="space-y-1">
+              {% for choice in filter.form.priority.field.choices %}
+                {% include "lab/components/tristate_checkbox.html" with name="priority" value=choice.0 label=choice.1 current_values=request.GET|get_list:'priority' excluded_values=request.GET|get_list:'priority__exclude' %}
+              {% endfor %}
+            </div>
+          </div>
+          <!-- Created By -->
+          {% if filter.form.created_by %}
+          <div class="space-y-2">
+            <h3
+              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >
+              Created By
+            </h3>
+            <div class="space-y-1 max-h-48 overflow-y-auto">
+              {% for user in filter.form.created_by.field.queryset %}
+                {% include "lab/components/tristate_checkbox.html" with name="created_by" value=user.username label=user.username current_values=request.GET|get_list:'created_by' excluded_values=request.GET|get_list:'created_by__exclude' %}
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

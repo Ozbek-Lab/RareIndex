@@ -298,3 +298,47 @@ class IndividualFilter(django_filters.FilterSet):
             queryset = queryset.exclude(exclude_q)
             
         return queryset.distinct()
+
+class ProjectFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(method='filter_search', label="Search")
+    
+    # Project Fields
+    status = TristateModelMultipleChoiceFilter(queryset=Status.objects.all(), to_field_name='name')
+    priority = TristateMultipleChoiceFilter(choices=[], label="Priority")  # Will be set in __init__
+    created_by = TristateModelMultipleChoiceFilter(
+        queryset=None,  # Will be set in __init__
+        to_field_name='username',
+        label="Created By"
+    )
+    
+    class Meta:
+        model = Project
+        fields = ['status', 'priority']
+        
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Set created_by queryset to User model
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        if 'created_by' in self.filters:
+            self.filters['created_by'].queryset = User.objects.all()
+        
+        # Restrict Status choices by ContentType
+        self._restrict_status_queryset('status', Project)
+        
+        # Set priority choices from Task model
+        from .models import Task
+        if 'priority' in self.filters:
+            self.filters['priority'].field.choices = Task.PRIORITY_CHOICES
+
+    def _restrict_status_queryset(self, field_name, model_class):
+        if field_name in self.filters:
+            ct = ContentType.objects.get_for_model(model_class)
+            self.filters[field_name].queryset = Status.objects.filter(content_type=ct)
+
+    def filter_search(self, queryset, name, value):
+        return queryset.filter(
+            Q(name__icontains=value) | 
+            Q(description__icontains=value) |
+            Q(id__icontains=value)
+        ).distinct()
