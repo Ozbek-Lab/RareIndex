@@ -669,12 +669,27 @@ from django.dispatch import receiver
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
+    """
+    Automatically create a Profile when a User is created.
+
+    Skip when `raw=True` (e.g. during loaddata) to avoid creating
+    duplicate profiles that conflict with fixture data.
+    """
+    if kwargs.get("raw", False):
+        return
     if created:
         Profile.objects.create(user=instance)
 
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
+    """
+    Save the related Profile when a User is saved.
+
+    Skip when `raw=True` so fixture loading isn't affected.
+    """
+    if kwargs.get("raw", False):
+        return
     if hasattr(instance, "profile"):
         instance.profile.save()
 
