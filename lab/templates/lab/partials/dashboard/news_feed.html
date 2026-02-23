@@ -5,7 +5,7 @@
             <li>
                 <hr class="bg-base-200"/>
                 <div class="timeline-middle">
-                    {% with model_name=item.instance|class_name %}
+                    {% with model_name=item.safe_model_name %}
                         {% if model_name == "Individual" %}
                             <i class="fas fa-user text-primary opacity-50 scale-75"></i>
                         {% elif model_name == "Sample" %}
@@ -31,14 +31,14 @@
                             {% endif %}
                         </span>
                         
-                        <span class="font-bold text-base-content/70">{{ item.instance|class_name }}</span>
+                        <span class="font-bold text-base-content/70">{{ item.safe_model_name }}</span>
                         
-                        {% if item.instance.get_absolute_url %}
-                            <a href="{{ item.instance.get_absolute_url }}" class="hover:underline text-primary">
-                                {{ item.instance }}
+                        {% if item.safe_instance_url %}
+                            <a href="{{ item.safe_instance_url }}" class="hover:underline text-primary">
+                                {{ item.safe_instance_repr }}
                             </a>
                         {% else %}
-                            {{ item.instance }}
+                            {{ item.safe_instance_repr }}
                         {% endif %}
                     </div>
                     

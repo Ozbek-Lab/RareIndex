@@ -402,7 +402,7 @@ class Individual(HistoryMixin, models.Model):
             return xid.id_value
         # No matching ID, but we still have at least one primary IdentifierType
         primary_type = primary_types.first()
-        return f"No {primary_type.name}"
+        return f"No {primary_type.name} ID"
 
     @property
     def secondary_id(self):
@@ -419,7 +419,7 @@ class Individual(HistoryMixin, models.Model):
             return xid.id_value
         # No matching ID, but we still have at least one secondary IdentifierType
         secondary_type = secondary_types.first()
-        return f"No {secondary_type.name}"
+        return f"No {secondary_type.name} ID"
 
     # Backwards-compatible aliases (deprecated): prefer primary_id/secondary_id
     @property

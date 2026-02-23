@@ -47,8 +47,13 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 name = field.name
                 if name in ignore_fields:
                     continue
-                new_val = getattr(new_hist, name, None)
-                old_val = getattr(old_hist, name, None)
+                # Use raw FK id (e.g. family_id) to avoid DoesNotExist when related object was deleted
+                if getattr(field, "remote_field", None) and getattr(field, "attname", None):
+                    new_val = getattr(new_hist, field.attname, None)
+                    old_val = getattr(old_hist, field.attname, None)
+                else:
+                    new_val = getattr(new_hist, name, None)
+                    old_val = getattr(old_hist, name, None)
                 if new_val != old_val:
                     # Simple string representation for now
                     changes[name] = f"'{old_val}' → '{new_val}'"
@@ -70,12 +75,24 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         
         feed_items = combined_history[:20]
         
-        # Calculate diffs for updates
+        # Model name from history class (e.g. HistoricalTest -> Test) so template never touches instance FKs
+        def _history_model_name(hist_record):
+            name = type(hist_record).__name__
+            return name.replace("Historical", "", 1) if name.startswith("Historical") else name
+
+        # Calculate diffs and safe display for each item (avoid DoesNotExist when related objects were deleted)
         for item in feed_items:
-            if item.history_type == '~': # Update
-                # Fetch previous record
-                # Use simple_history's prev_record if available or query manually
-                # Optimisation: This triggers queries in a loop. For 20 items it's okay.
+            item.safe_model_name = _history_model_name(item)
+            try:
+                item.safe_instance_repr = str(item.instance)
+            except Exception:
+                pk = getattr(item, "id", "?")
+                item.safe_instance_repr = f"{item.safe_model_name} #{pk}"
+            try:
+                item.safe_instance_url = getattr(item.instance, "get_absolute_url", None) and item.instance.get_absolute_url()
+            except Exception:
+                item.safe_instance_url = None
+            if item.history_type == '~':  # Update
                 prev = item.prev_record
                 if prev:
                     item.diff_display = get_field_diff(item, prev)
@@ -95,9 +112,6 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['total_count'] = self.model.objects.count()
-        # Whether there is any IdentifierType configured as secondary (priority 2)
-        from .models import IdentifierType
-        context['has_secondary_identifier_type'] = IdentifierType.objects.filter(use_priority=2).exists()
         # Status Metadata for colored pills
         from .models import Status
         statuses = Status.objects.all()

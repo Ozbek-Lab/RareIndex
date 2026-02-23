@@ -1,41 +1,25 @@
 import django_tables2 as tables
-from .models import Individual, Sample, Project, IdentifierType
+from .models import Individual, Sample, Project
 from django.utils.html import format_html
 
 from django.urls import reverse
 
+
 class IndividualTable(tables.Table):
-    primary_id = tables.Column(order_by=("id"))
-    secondary_id = tables.Column(order_by=("id"))
+    """Static column set: Primary ID, Secondary ID, Other IDs, Institution, Name, Sex, Status."""
+
+    primary_id = tables.Column(verbose_name="Primary ID", order_by=("id"))
+    secondary_id = tables.Column(verbose_name="Secondary ID", order_by=("id"))
     other_table_ids = tables.Column(verbose_name="Other IDs", orderable=False)
     institution = tables.Column(verbose_name="Institution", orderable=False)
     full_name = tables.Column(verbose_name="Name")
-    status = tables.Column(verbose_name="Status")
     sex = tables.Column(verbose_name="Sex")
-    
+    status = tables.Column(verbose_name="Status")
+
     def before_render(self, request):
         self.total_count = Individual.objects.count()
         self.verbose_name = Individual._meta.verbose_name
         self.verbose_name_plural = Individual._meta.verbose_name_plural
-
-        # Dynamic column headers based on IdentifierType priorities
-        primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
-        secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
-        if primary_type:
-            self.columns["primary_id"].column.verbose_name = primary_type.name
-        else:
-            self.columns["primary_id"].column.verbose_name = "Primary ID"
-        if secondary_type:
-            self.columns["secondary_id"].column.verbose_name = secondary_type.name
-        else:
-            # If there is no IdentifierType with secondary priority at all,
-            # hide the secondary_id column from the rendered table.
-            if "secondary_id" in self.columns:
-                self.columns["secondary_id"].column.visible = False
-
-        # Individual ID is not needed as a visible column in the table rows
-        if "individual_id" in self.columns:
-            self.columns["individual_id"].column.visible = False
 
     def render_institution(self, value, record):
         names = [i.name for i in record.institution.all()]
@@ -43,8 +27,8 @@ class IndividualTable(tables.Table):
 
     class Meta:
         model = Individual
-        template_name = "lab/partials/individual_expandable_table.html" 
-        fields = ("primary_id", "secondary_id", "other_table_ids", "institution", "individual_id", "full_name", "sex", "status", "family")
+        template_name = "lab/partials/individual_expandable_table.html"
+        fields = ("primary_id", "secondary_id", "other_table_ids", "institution", "full_name", "sex", "status")
         attrs = {
             "class": "table table-zebra table-sm",
             "thead": {
