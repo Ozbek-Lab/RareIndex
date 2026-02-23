@@ -1,0 +1,36 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-4">
+    <h3 class="font-bold text-lg text-primary flex items-center gap-2">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        {{ title }}
+    </h3>
+</div>
+
+<form hx-post="{{ action_url }}" 
+      hx-target="{{ hx_target|default:'#workflow-content' }}" 
+      hx-swap="innerHTML"
+      hx-encoding="multipart/form-data"
+      class="space-y-4"
+      onsubmit="document.getElementById('generic-modal').close()">
+    {% csrf_token %}
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for field in form %}
+            <div class="form-control w-full {% if field.is_hidden %}hidden{% endif %}">
+                <label class="label py-1">
+                    <span class="label-text font-semibold text-xs opacity-70">{{ field.label }}</span>
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                    <label class="label py-0">
+                        <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                    </label>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="modal-action mt-8 pt-4 border-t border-base-200 flex justify-between">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('generic-modal').close()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm px-8">Upload</button>
+    </div>
+</form>

@@ -39,8 +39,8 @@ def get_statuses(obj):
     from lab.models import Status
     
     ct = ContentType.objects.get_for_model(obj)
-    # Include statuses specific to this content type OR global statuses (ct=None)
-    return Status.objects.filter(content_type=ct) | Status.objects.filter(content_type=None)
+    # Exclusively return statuses specific to this content type
+    return Status.objects.filter(content_type=ct).order_by('name')
 
 @register.simple_tag(takes_context=True)
 def clean_pagination_url(context, page):

@@ -11,6 +11,6 @@
 
 {% if request.htmx %}
 <div id="table-counts" hx-swap-oob="true" class="badge badge-lg badge-ghost">
-    {{ table.page.paginator.count }} Individuals
+    {{ family_count }} Families with {{ table.page.paginator.count }} Individuals
 </div>
 {% endif %}

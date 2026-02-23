@@ -525,7 +525,16 @@
 {% partialdef request_forms_display %}
     <div class="flex justify-between items-center mb-4">
         <h3 class="card-title text-sm uppercase text-base-content/50">Request Forms</h3>
-        <span class="badge badge-sm badge-neutral">{{ individual.analysis_request_forms.count }}</span>
+        <div class="flex items-center gap-2">
+            <span class="badge badge-sm badge-neutral">{{ individual.analysis_request_forms.count }}</span>
+            <button class="btn btn-primary btn-xs gap-1 font-normal tooltip tooltip-left"
+                    data-tip="Upload Request Form"
+                    hx-get="{% url 'lab:request_form_create_modal' individual.pk %}"
+                    hx-target="#generic-modal-content"
+                    onclick="document.getElementById('generic-modal').showModal()">
+                <i class="fa-solid fa-upload text-[10px]"></i>
+            </button>
+        </div>
     </div>
 
     {% if individual.analysis_request_forms.exists %}

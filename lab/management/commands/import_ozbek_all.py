@@ -23,7 +23,9 @@ from lab.models import (
     IdentifierType,
     CrossIdentifier,
     Project,
-    Task
+    Task,
+    Analysis,
+    AnalysisType
 )
 from variant.models import Variant, SNV, Gene
 from ontologies.models import Term, Ontology

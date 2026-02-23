@@ -16,7 +16,8 @@ from .htmx_views import (
     update_status, sample_create_modal, test_create_modal, task_create_modal,
     pipeline_create_modal, analysis_create_modal,
     individual_projects_edit, individual_projects_save, project_search,
-    document_preview
+    document_preview,
+    request_form_create_modal, report_create_modal, variant_create_modal
 )
 
 
@@ -73,6 +74,9 @@ urlpatterns = [
     path("htmx/pipeline/create/<int:test_id>/", pipeline_create_modal, name="pipeline_create_modal"),
     path("htmx/analysis/create/<int:pipeline_id>/", analysis_create_modal, name="analysis_create_modal"),
     path("htmx/task/create/<int:content_type_id>/<int:object_id>/", task_create_modal, name="task_create_modal"),
+    path("htmx/request_form/create/<int:individual_id>/", request_form_create_modal, name="request_form_create_modal"),
+    path("htmx/report/create/<int:pipeline_id>/", report_create_modal, name="report_create_modal"),
+    path("htmx/variant/create/<int:pipeline_id>/", variant_create_modal, name="variant_create_modal"),
     
     # Project Management
     path("htmx/individual/<int:pk>/projects/edit/", individual_projects_edit, name="individual_projects_edit"),

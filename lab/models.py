@@ -617,6 +617,12 @@ class Pipeline(HistoryMixin, models.Model):
 
         super().save(*args, **kwargs)
 
+    @property
+    def unreported_variants(self):
+        """Return pipeline variants that are not linked to any report."""
+        reported_ids = self.reports.values_list('variants', flat=True)
+        return self.found_variants.exclude(pk__in=reported_ids)
+
 
 class AnalysisType(HistoryMixin, models.Model):
     """Types of clinical interpretations (e.g., Initial, Reanalysis)"""

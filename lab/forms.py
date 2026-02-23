@@ -17,6 +17,8 @@ from .models import (
     Institution,
     Family,
     AnalysisType,
+    AnalysisRequestForm,
+    AnalysisReport
 )
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
@@ -27,6 +29,18 @@ class BaseForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
+        # Limit status choices strictly to model-specific statuses
+        if "status" in self.fields and hasattr(self, '_meta') and hasattr(self._meta, 'model'):
+            from django.contrib.contenttypes.models import ContentType
+            from .models import Status
+            try:
+                model_ct = ContentType.objects.get_for_model(self._meta.model)
+                self.fields["status"].queryset = Status.objects.filter(content_type=model_ct).order_by("name")
+            except Exception:
+                pass
+                
+
         # Apply consistent styling to all fields
         # Apply consistent styling to all fields using DaisyUI
         for field_name, field in self.fields.items():
@@ -75,20 +89,6 @@ class BaseForm(forms.ModelForm):
 class ProjectForm(BaseForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Limit status choices to Project-specific (or global) statuses
-        try:
-            project_ct = ContentType.objects.get_for_model(Project)
-            specific_qs = Status.objects.filter(content_type=project_ct)
-            if specific_qs.exists():
-                self.fields["status"].queryset = specific_qs.order_by("name")
-            else:
-                self.fields["status"].queryset = Status.objects.filter(
-                    content_type__isnull=True
-                ).order_by("name")
-        except Exception:
-            # Fallback: keep default queryset
-            pass
-
     class Meta:
         model = Project
         fields = ["name", "description", "due_date", "priority", "status"]
@@ -134,14 +134,6 @@ class TaskForm(BaseForm):
         super().__init__(*args, **kwargs)
         # Remove StatusLog filtering logic; just show all Status objects
         self.fields["project"].queryset = Project.objects.all().order_by("name")
-        # Limit status choices to Task-specific (or global) statuses
-        try:
-            task_ct = ContentType.objects.get_for_model(Task)
-            self.fields["status"].queryset = Status.objects.filter(
-                Q(content_type=task_ct) | Q(content_type__isnull=True)
-            ).order_by("name")
-        except Exception:
-            self.fields["status"].queryset = Status.objects.all().order_by("name")
         
         # Set up content_type choices - models that can have tasks
         from variant.models import Variant
@@ -166,16 +158,6 @@ class TaskForm(BaseForm):
 class IndividualForm(BaseForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Limit status choices strictly to Individual-specific statuses
-        try:
-            indiv_ct = ContentType.objects.get_for_model(Individual)
-            self.fields["status"].queryset = Status.objects.filter(
-                content_type=indiv_ct
-            ).order_by("name")
-        except Exception:
-            # Fallback: leave whatever default queryset BaseForm/ModelForm gave us
-            pass
-
     class Meta:
         model = Individual
         fields = [
@@ -218,19 +200,6 @@ class IndividualForm(BaseForm):
 class SampleForm(BaseForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Limit status choices to Sample-specific (or global) statuses
-        try:
-            sample_ct = ContentType.objects.get_for_model(Sample)
-            specific_qs = Status.objects.filter(content_type=sample_ct)
-            if specific_qs.exists():
-                self.fields["status"].queryset = specific_qs.order_by("name")
-            else:
-                self.fields["status"].queryset = Status.objects.filter(
-                    content_type__isnull=True
-                ).order_by("name")
-        except Exception:
-            pass
-
     class Meta:
         model = Sample
         fields = [
@@ -282,19 +251,6 @@ class SampleTypeForm(BaseForm):
 class TestForm(BaseForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Limit status choices to Test-specific (or global) statuses
-        try:
-            test_ct = ContentType.objects.get_for_model(Test)
-            specific_qs = Status.objects.filter(content_type=test_ct)
-            if specific_qs.exists():
-                self.fields["status"].queryset = specific_qs.order_by("name")
-            else:
-                self.fields["status"].queryset = Status.objects.filter(
-                    content_type__isnull=True
-                ).order_by("name")
-        except Exception:
-            pass
-
     class Meta:
         model = Test
         fields = [
@@ -316,19 +272,6 @@ class TestForm(BaseForm):
 class PipelineForm(BaseForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Limit status choices to Pipeline-specific (or global) statuses
-        try:
-            pipeline_ct = ContentType.objects.get_for_model(Pipeline)
-            specific_qs = Status.objects.filter(content_type=pipeline_ct)
-            if specific_qs.exists():
-                self.fields["status"].queryset = specific_qs.order_by("name")
-            else:
-                self.fields["status"].queryset = Status.objects.filter(
-                    content_type__isnull=True
-                ).order_by("name")
-        except Exception:
-            pass
-
     class Meta:
         model = Pipeline
         fields = [
@@ -346,19 +289,6 @@ class PipelineForm(BaseForm):
 class AnalysisForm(BaseForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Limit status choices to Analysis-specific (or global) statuses
-        try:
-            analysis_ct = ContentType.objects.get_for_model(Analysis)
-            specific_qs = Status.objects.filter(content_type=analysis_ct)
-            if specific_qs.exists():
-                self.fields["status"].queryset = specific_qs.order_by("name")
-            else:
-                self.fields["status"].queryset = Status.objects.filter(
-                    content_type__isnull=True
-                ).order_by("name")
-        except Exception:
-            pass
-
     class Meta:
         model = Analysis
         fields = [
@@ -396,6 +326,24 @@ class AnalysisTypeForm(BaseForm):
     class Meta:
         model = AnalysisType
         fields = ["name", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class AnalysisRequestFormForm(BaseForm):
+    class Meta:
+        model = AnalysisRequestForm
+        fields = ["file", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class AnalysisReportForm(BaseForm):
+    class Meta:
+        model = AnalysisReport
+        fields = ["file", "description"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
         }
@@ -540,12 +488,6 @@ class FamilyMemberForm(BaseForm):
         self.fields["birth_date"].widget = forms.DateInput(attrs={"type": "date"})
         self.fields["council_date"].widget = forms.DateInput(attrs={"type": "date"})
         
-        # Filter status for Individuals only
-        try:
-            ind_ct = ContentType.objects.get_for_model(Individual)
-            self.fields["status"].queryset = Status.objects.filter(content_type=ind_ct)
-        except Exception:
-            pass # Fallback to all if CT not found (e.g. during migration)
 
     class Meta:
         model = Individual
@@ -593,6 +535,8 @@ FORMS_MAPPING = {
     "Institution": InstitutionForm,
     "Family": FamilyForm,
     "Status": StatusForm,
+    "AnalysisRequestForm": AnalysisRequestFormForm,
+    "AnalysisReport": AnalysisReportForm,
 }
 
 

@@ -95,14 +95,52 @@
         </div>
     </div>
 
+    <!-- Previously Identified Variants (individual-level, no pipeline) -->
+    {% with external_variants=individual.variants.all %}
+    {% if external_variants %}
+    {% for v in external_variants %}{% if not v.pipeline_id %}{% with has_external=True %}{% endwith %}{% endif %}{% endfor %}
+    <div class="card bg-base-100 border border-base-200 shadow-sm">
+        <div class="card-body">
+            <h4 class="text-xs uppercase text-base-content/50 mb-2 font-bold flex items-center gap-1">
+                <i class="fa-solid fa-dna"></i> Previously Identified Variants
+            </h4>
+            <table class="table table-xs w-full">
+                <thead>
+                    <tr>
+                        <th>Location</th>
+                        <th>Zyg.</th>
+                        <th>Type</th>
+                        <th>Genes</th>
+                        <th>Added</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for variant in external_variants %}
+                    {% if not variant.pipeline_id %}
+                    <tr>
+                        <td class="font-mono text-xs">{{ variant }}</td>
+                        <td class="text-xs">{{ variant.get_zygosity_display }}</td>
+                        <td class="text-xs">{{ variant.type }}</td>
+                        <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
+                        <td class="text-xs text-base-content/50">{{ variant.created_at|date:"M d, Y" }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+
     <div class="flex flex-col gap-1 border-l border-base-300 ml-4 pl-4 space-y-2 relative">
     {% if individual.samples.exists %}
         {% for sample in individual.samples.all %}
-        <div class="card {% cycle 'bg-base-100' 'bg-base-200' %} border border-base-200 shadow-sm overflow-visible relative focus-within:z-50 transition-all duration-200 group" x-data="{ expanded: true }">
+        <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50 transition-all duration-200 group" x-data="{ expanded: true }">
             <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
             <div class="card-body p-0 overflow-visible relative z-10">
                 <!-- Sample Header -->
-                <div class="p-1 border-b border-base-200 flex items-center justify-between bg-base-200/50 relative z-30 px-2 py-2">
+                <div class="p-1 border-b border-base-200 flex items-center justify-between bg-secondary/10 relative z-30 px-2 py-2 border-l-4 border-l-secondary rounded-t-lg">
                     <div class="flex items-center gap-1">
                         <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square">
                             <i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -195,15 +233,15 @@
                     <!-- Tests -->
                     <div class="p-1 space-y-1 relative z-10">
                         {% if sample.tests.exists %}
-                            <div class="pl-4 border-l border-base-300 ml-4 space-y-2 relative">
+                            <div class="pl-4 border-l-2 border-secondary/30 ml-4 space-y-3 relative">
                                 {% for test in sample.tests.all %}
                                 <div class="relative mb-2 last:mb-0" x-data="{ expanded: true }">
                                     <!-- Test Node -->
                                         <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
 
-                                        <div class="card {% cycle 'bg-base-100' 'bg-base-200' %} border border-base-200 shadow-sm overflow-visible relative focus-within:z-50">
+                                        <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50">
                                             <div class="card-body p-0">
-                                                <div class="flex justify-between items-center bg-base-200/50 px-2 py-2 border-b border-base-200 rounded-t-lg relative z-30">
+                                                <div class="flex justify-between items-center bg-primary/10 px-2 py-2 border-b border-base-200 border-l-4 border-l-primary rounded-t-lg relative z-30">
                                                     <div class="flex items-center gap-1">
                                                         <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
                                                             <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -292,15 +330,15 @@
                                     <!-- Pipelines (Collapsible) -->
                                     <div x-show="expanded" x-collapse>
                                         {% if test.pipelines.exists %}
-                                        <div class="pl-4 border-l border-base-300 ml-4 mt-2 space-y-2 relative z-10">
+                                        <div class="pl-4 border-l-2 border-primary/30 ml-4 mt-2 space-y-3 relative z-10">
                                             {% for pipeline in test.pipelines.all %}
                                             <div class="relative" x-data="{ expanded: true }">
                                                 <!-- Pipeline Node -->
                                                 <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
                                                 
-                                                <div class="card {% cycle 'bg-base-100' 'bg-base-200' %} border border-base-200 shadow-sm overflow-visible relative focus-within:z-50">
+                                                <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50">
                                                     <div class="card-body p-0">
-                                                        <div class="flex justify-between items-center bg-base-200/50 px-2 py-2 border-b border-base-200 rounded-t-lg">
+                                                        <div class="flex justify-between items-center bg-accent/10 px-2 py-2 border-b border-base-200 border-l-4 border-l-accent rounded-t-lg">
                                                             <div class="flex items-center gap-1">
                                                                 <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
                                                                     <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -321,7 +359,7 @@
                                                                          <i class="fa-solid fa-list-check"></i> {{ pipeline.tasks.count }}
                                                                      </div>
                                                                  </div>
-                                                                <button hx-get="{% url 'lab:analysis_create_modal' pipeline.id %}"
+                                                                 <button hx-get="{% url 'lab:analysis_create_modal' pipeline.id %}"
                                                                         hx-target="#generic-modal-content"
                                                                         onclick="document.getElementById('generic-modal').showModal()"
                                                                         class="btn btn-primary btn-xs gap-1 font-normal">
@@ -382,14 +420,15 @@
                                                                 </div>
                                                             </div>
 
+
                                                             {% if pipeline.analyses.exists %}
-                                                            <div class="mt-2 space-y-2 border-t border-base-200/50 pt-2 pl-4 border-l border-base-300 ml-4 relative">
+                                                            <div class="mt-2 space-y-2 border-t border-base-200/50 pt-2 pl-4 border-l-2 border-l-accent/40 ml-4 relative">
                                                                 {% for analysis in pipeline.analyses.all %}
-                                                                    <div x-data="{ expanded: true }" class="flex flex-col relative {% cycle 'bg-base-200/50' 'bg-base-200' %} border border-base-200 shadow-sm overflow-visible group focus-within:z-50 transition-all duration-200">
+                                                                    <div x-data="{ expanded: true }" class="flex flex-col relative bg-base-100 border border-base-300 shadow-sm overflow-visible group focus-within:z-50 transition-all duration-200">
                                                                     <div class="absolute -left-4 top-0 h-5 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
                                                                     <div class="p-0 text-left">
                                                                         <!-- Header -->
-                                                                        <div class="flex items-center justify-between py-2 px-2 relative z-10 rounded-t-lg">
+                                                                        <div class="flex items-center justify-between py-2 px-2 bg-base-200/60 border-b border-base-200 border-l-4 border-l-base-300 relative z-10 rounded-t-lg">
                                                                             <!-- Left Side -->
                                                                             <div class="flex items-center gap-2">
                                                                                 <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
@@ -472,6 +511,7 @@
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
+
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -479,44 +519,120 @@
                                                             </div>
                                                             {% endif %}
 
-                                                            <!-- Variants (if any) -->
-                                                            {% if pipeline.found_variants.exists %}
-                                                            <div class="mt-1 border-t border-base-200/50 pt-2">
-                                                                <table class="table table-xs w-full bg-base-200/30 rounded-lg">
+                                                            <!-- Unreported Variants -->
+                                                            {% if pipeline.unreported_variants.exists %}
+                                                            <div class="mt-2 border-t-2 border-base-200 pt-2">
+                                                                <h5 class="text-xs uppercase text-base-content/50 mb-2 font-bold flex items-center gap-1 px-1">
+                                                                    <i class="fa-solid fa-dna"></i> Unreported Variants
+                                                                </h5>
+                                                                <table class="table table-xs w-full">
                                                                     <thead>
                                                                         <tr>
-                                                                            <th>Variant</th>
-                                                                            <th>Zygosity</th>
-                                                                            <th>Class</th>
-                                                                            <th>Gene</th>
+                                                                            <th>Location</th>
+                                                                            <th>Zyg.</th>
+                                                                            <th>Type</th>
+                                                                            <th>Genes</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
-                                                                        {% for variant in pipeline.found_variants.all|slice:":5" %}
+                                                                        {% for variant in pipeline.unreported_variants|slice:":10" %}
                                                                         <tr>
-                                                                            <td class="font-mono">{{ variant.variant_id }}</td>
-                                                                            <td>{{ variant.zygosity }}</td>
-                                                                            <td>
-                                                                                {% if "Pathogenic" in variant.classification %}
-                                                                                    <span class="text-error font-bold">{{ variant.classification }}</span>
-                                                                                {% elif "VUS" in variant.classification %}
-                                                                                    <span class="text-warning">{{ variant.classification }}</span>
-                                                                                {% else %}
-                                                                                    <span class="text-base-content/50">{{ variant.classification }}</span>
-                                                                                {% endif %}
-                                                                            </td>
-                                                                            <td class="italic">{{ variant.gene_symbol|default:"--" }}</td>
+                                                                            <td class="font-mono text-xs">{{ variant }}</td>
+                                                                            <td class="text-xs">{{ variant.get_zygosity_display }}</td>
+                                                                            <td class="text-xs">{{ variant.type }}</td>
+                                                                            <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
                                                                         </tr>
                                                                         {% endfor %}
                                                                     </tbody>
                                                                 </table>
-                                                                {% if pipeline.found_variants.count > 5 %}
-                                                                    <div class="text-center text-xs text-base-content/40 mt-1">
-                                                                        + {{ pipeline.found_variants.count|add:"-5" }} more variants
-                                                                    </div>
+                                                                {% if pipeline.unreported_variants.count > 10 %}
+                                                                <div class="text-center text-xs text-base-content/40 mt-1">+ {{ pipeline.unreported_variants.count|add:"-10" }} more</div>
                                                                 {% endif %}
                                                             </div>
                                                             {% endif %}
+
+                                                            <!-- Reports (matching info tab style) -->
+                                                            <div class="mt-2 border-t-2 border-base-200 pt-2">
+                                                                <div class="flex items-center justify-between mb-2 px-1">
+                                                                    <h5 class="text-xs uppercase text-base-content/50 font-bold flex items-center gap-1">
+                                                                        <i class="fa-solid fa-file-invoice"></i> Reports
+                                                                    </h5>
+                                                                    <button hx-get="{% url 'lab:report_create_modal' pipeline.id %}"
+                                                                            hx-target="#generic-modal-content"
+                                                                            onclick="document.getElementById('generic-modal').showModal()"
+                                                                            class="btn btn-primary btn-xs gap-1 font-normal tooltip tooltip-left"
+                                                                            data-tip="Upload Report">
+                                                                        <i class="fa-solid fa-upload text-[10px]"></i>
+                                                                    </button>
+                                                                </div>
+                                                                {% if pipeline.reports.exists %}
+                                                                <div class="space-y-2">
+                                                                    {% for report in pipeline.reports.all|dictsortreversed:"created_at" %}
+                                                                    <div class="bg-base-200/50 rounded-lg group hover:bg-base-200 transition-colors overflow-hidden">
+                                                                        <div class="flex items-center justify-between p-3">
+                                                                            <div class="flex items-center gap-3">
+                                                                                <div class="h-10 w-10 rounded bg-white flex items-center justify-center border border-base-200 shrink-0">
+                                                                                    {% if report.file.name|lower|slice:"-4:" == ".pdf" %}
+                                                                                        <i class="fa-solid fa-file-pdf text-red-500 text-lg"></i>
+                                                                                    {% elif report.file.name|lower|slice:"-5:" == ".docx" %}
+                                                                                        <i class="fa-solid fa-file-word text-blue-500 text-lg"></i>
+                                                                                    {% else %}
+                                                                                        <i class="fa-solid fa-file text-base-content/40 text-lg"></i>
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                                <div>
+                                                                                    <div class="font-medium text-sm flex items-center gap-2">
+                                                                                        <a href="{{ report.file.url }}" target="_blank" class="hover:underline hover:text-primary">
+                                                                                            {{ report.file.name|basename|truncatechars:30 }}
+                                                                                        </a>
+                                                                                        {% if report.preview_file %}
+                                                                                        <button hx-get="{% url 'lab:document_preview' 'AnalysisReport' report.pk %}"
+                                                                                                hx-target="#preview-drawer-content"
+                                                                                                hx-on::after-request="window.dispatchEvent(new CustomEvent('open-preview'))"
+                                                                                                class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary tooltip tooltip-right"
+                                                                                                data-tip="View Preview">
+                                                                                            <i class="fa-solid fa-eye"></i>
+                                                                                        </button>
+                                                                                        {% endif %}
+                                                                                    </div>
+                                                                                    <div class="text-xs text-base-content/60">
+                                                                                        {{ report.created_at|date:"M d, Y" }} · {{ report.created_by.first_name }}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <a href="{{ report.file.url }}" download class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary">
+                                                                                <i class="fa-solid fa-download"></i>
+                                                                            </a>
+                                                                        </div>
+                                                                        {% if report.variants.exists %}
+                                                                        <div class="border-t border-base-300/50 px-3 py-2">
+                                                                            <h6 class="text-[10px] uppercase text-base-content/40 mb-1 font-bold flex items-center gap-1">
+                                                                                <i class="fa-solid fa-dna text-[8px]"></i> Reported Variants
+                                                                            </h6>
+                                                                            <table class="table table-xs w-full">
+                                                                                <tbody>
+                                                                                    {% for variant in report.variants.all %}
+                                                                                    <tr>
+                                                                                        <td class="font-mono text-[10px]">{{ variant }}</td>
+                                                                                        <td class="text-[10px]">{{ variant.get_zygosity_display }}</td>
+                                                                                        <td class="text-[10px]">{{ variant.type }}</td>
+                                                                                        <td class="italic text-[10px]">{{ variant.genes.all|join:", "|default:"--" }}</td>
+                                                                                    </tr>
+                                                                                    {% endfor %}
+                                                                                </tbody>
+                                                                            </table>
+                                                                        </div>
+                                                                        {% endif %}
+                                                                    </div>
+                                                                    {% endfor %}
+                                                                </div>
+                                                                {% else %}
+                                                                <div class="text-center py-4 text-base-content/40 italic text-xs border-2 border-dashed border-base-200 rounded-lg">
+                                                                    No reports uploaded.
+                                                                </div>
+                                                                {% endif %}
+                                                            </div>
+
                                                         </div>
                                                     </div>
                                                 </div>

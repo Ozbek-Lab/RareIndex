@@ -521,6 +521,8 @@ def sample_create_modal(request, individual_id):
     
     if request.method == "POST":
         form = SampleForm(request.POST)
+        form.fields["individual"].queryset = Individual.objects.filter(pk=individual.pk)
+        form.fields["individual"].required = False  # disabled fields are not submitted
         if form.is_valid():
             sample = form.save(commit=False)
             sample.individual = individual
@@ -531,8 +533,9 @@ def sample_create_modal(request, individual_id):
                 sample.status = status
             sample.save()
             
-            # Refresh the workflow tab
-            return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+            response = HttpResponse(status=204)
+            response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
+            return response
     else:
         # Initial form: pre-set individual and default status
         initial = {"individual": individual}
@@ -541,6 +544,7 @@ def sample_create_modal(request, individual_id):
             initial["status"] = status
             
         form = SampleForm(initial=initial)
+        form.fields["individual"].queryset = Individual.objects.filter(pk=individual.pk)
         # Individual is fixed – show it but make it non-interactable
         form.fields["individual"].disabled = True
         form.fields["individual"].widget.attrs["class"] = (
@@ -568,6 +572,8 @@ def test_create_modal(request, sample_id):
     
     if request.method == "POST":
         form = TestForm(request.POST)
+        form.fields["sample"].queryset = Sample.objects.filter(pk=sample.pk)
+        form.fields["sample"].required = False  # disabled fields are not submitted
         if form.is_valid():
             test = form.save(commit=False)
             test.sample = sample
@@ -578,8 +584,9 @@ def test_create_modal(request, sample_id):
                 test.status = status
             test.save()
             
-            # Refresh the workflow tab
-            return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+            response = HttpResponse(status=204)
+            response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
+            return response
     else:
         initial = {"sample": sample}
         status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
@@ -587,6 +594,7 @@ def test_create_modal(request, sample_id):
             initial["status"] = status
             
         form = TestForm(initial=initial)
+        form.fields["sample"].queryset = Sample.objects.filter(pk=sample.pk)
         # Sample is fixed – show it but make it non-interactable
         form.fields["sample"].disabled = True
         form.fields["sample"].widget.attrs["class"] = (
@@ -618,6 +626,8 @@ def pipeline_create_modal(request, test_id):
     
     if request.method == "POST":
         form = PipelineForm(request.POST)
+        form.fields["test"].queryset = Test.objects.filter(pk=test.pk)
+        form.fields["test"].required = False  # disabled fields are not submitted
         if form.is_valid():
             pipeline = form.save(commit=False)
             pipeline.test = test
@@ -628,8 +638,9 @@ def pipeline_create_modal(request, test_id):
                 pipeline.status = status
             pipeline.save()
             
-            # Refresh the workflow tab
-            return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+            response = HttpResponse(status=204)
+            response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
+            return response
     else:
         initial = {"test": test}
         status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
@@ -637,6 +648,7 @@ def pipeline_create_modal(request, test_id):
             initial["status"] = status
             
         form = PipelineForm(initial=initial)
+        form.fields["test"].queryset = Test.objects.filter(pk=test.pk)
         # Test is fixed – show it but make it non-interactable
         form.fields["test"].disabled = True
         form.fields["test"].widget.attrs["class"] = (
@@ -665,6 +677,8 @@ def analysis_create_modal(request, pipeline_id):
     
     if request.method == "POST":
         form = AnalysisForm(request.POST)
+        form.fields["pipeline"].queryset = Pipeline.objects.filter(pk=pipeline.pk)
+        form.fields["pipeline"].required = False  # disabled fields are not submitted
         if form.is_valid():
             analysis = form.save(commit=False)
             analysis.pipeline = pipeline
@@ -675,8 +689,9 @@ def analysis_create_modal(request, pipeline_id):
                 analysis.status = status
             analysis.save()
             
-            # Refresh the workflow tab
-            return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+            response = HttpResponse(status=204)
+            response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
+            return response
     else:
         initial = {"pipeline": pipeline}
         status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
@@ -684,6 +699,7 @@ def analysis_create_modal(request, pipeline_id):
             initial["status"] = status
             
         form = AnalysisForm(initial=initial)
+        form.fields["pipeline"].queryset = Pipeline.objects.filter(pk=pipeline.pk)
         # Pipeline is fixed – show it but make it non-interactable
         form.fields["pipeline"].disabled = True
         form.fields["pipeline"].widget.attrs["class"] = (
@@ -866,3 +882,105 @@ def document_preview(request, model_name, pk):
     response = render(request, "lab/partials/preview_drawer.html", context)
     response["HX-Trigger"] = "open-preview"
     return response
+
+
+@login_required
+def request_form_create_modal(request, individual_id):
+    """Render an analysis request form creation modal or handle submission"""
+    from .forms import AnalysisRequestFormForm
+    from .models import Individual
+    
+    individual = get_object_or_404(Individual, pk=individual_id)
+    
+    if request.method == "POST":
+        form = AnalysisRequestFormForm(request.POST, request.FILES)
+        if form.is_valid():
+            req_form = form.save(commit=False)
+            req_form.individual = individual
+            req_form.created_by = request.user
+            req_form.save()
+            
+            # Refresh the info tab's request forms display
+            return render(request, "lab/partials/tabs/_info.html#request_forms_display", {"individual": individual})
+    else:
+        form = AnalysisRequestFormForm()
+
+    context = {
+        "form": form,
+        "title": f"Upload Analysis Request Form for {individual.lab_id}",
+        "action_url": request.path,
+        "hx_target": f"#request-forms-card-{individual.pk} .card-body"
+    }
+    return render(request, "lab/partials/modals/upload_modal_form.html", context)
+
+
+@login_required
+def report_create_modal(request, pipeline_id):
+    """Render an analysis report creation modal or handle submission"""
+    from .forms import AnalysisReportForm
+    from .models import Pipeline
+    
+    pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
+    individual = pipeline.test.sample.individual
+    
+    if request.method == "POST":
+        form = AnalysisReportForm(request.POST, request.FILES)
+        if form.is_valid():
+            report = form.save(commit=False)
+            report.pipeline = pipeline
+            report.created_by = request.user
+            report.save()
+            
+            # Refresh the workflow tab
+            return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+    else:
+        form = AnalysisReportForm()
+
+    context = {
+        "form": form,
+        "title": f"Upload Analysis Report for {pipeline.type.name}",
+        "action_url": request.path,
+    }
+    return render(request, "lab/partials/modals/upload_modal_form.html", context)
+
+
+@login_required
+def variant_create_modal(request, pipeline_id):
+    """Render a basic SNV variant creation modal or handle submission"""
+    from variant.forms import SNVForm
+    from lab.models import Pipeline
+    
+    pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
+    individual = pipeline.test.sample.individual
+    
+    if request.method == "POST":
+        form = SNVForm(request.POST) # SNV formulation doesn't expect FILES currently but standard structure
+        if form.is_valid():
+            variant = form.save(commit=False)
+            variant.pipeline = pipeline
+            variant.individual = individual
+            variant.created_by = request.user
+            variant.save()
+            
+            # Refresh the workflow tab
+            return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+    else:
+        form = SNVForm()
+
+    # We need to manually inject some styling because Variant forms don't inherit BaseForm
+    for field_name, field in form.fields.items():
+        current_classes = field.widget.attrs.get("class", "")
+        if isinstance(field.widget, forms.TextInput) or isinstance(field.widget, forms.NumberInput) or isinstance(field.widget, forms.Select):
+            if "select" not in current_classes and "input" not in current_classes:
+                # Basic daisyUI mapping
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs["class"] = f"select select-bordered w-full {current_classes}"
+                else:
+                    field.widget.attrs["class"] = f"input input-bordered w-full {current_classes}"
+
+    context = {
+        "form": form,
+        "title": f"Add SNV for {pipeline.type.name}",
+        "action_url": request.path,
+    }
+    return render(request, "lab/partials/generic_modal_form.html", context)

@@ -106,6 +106,15 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
             }
         context['status_metadata'] = metadata
         
+        # Get filtered queryset to calculate distinct families
+        if 'filter' in context:
+            qs = context['filter'].qs
+        else:
+            qs = self.get_queryset()
+        
+        # Count distinct non-null families the filtered individuals belong to
+        context['family_count'] = qs.exclude(family__isnull=True).values('family').distinct().count()
+
         # Load Selected HPO Terms
         hpo_term_ids = self.request.GET.getlist('hpo_terms')
         if hpo_term_ids:

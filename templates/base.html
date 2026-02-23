@@ -125,13 +125,13 @@
     </div>
     
     <!-- Notes Modal -->
-    <dialog id="notes-modal" class="modal">
+    <dialog id="notes-modal" class="modal" x-data @close="$refs.content.innerHTML = '<div class=\'flex justify-center items-center h-full\'><span class=\'loading loading-spinner loading-md\'></span></div>'">
       <div class="modal-box w-11/12 max-w-3xl h-[80vh] flex flex-col p-4 bg-white dark:bg-gray-800">
         <form method="dialog">
           <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
         </form>
         <h3 class="font-bold text-lg mb-4 text-gray-900 dark:text-gray-100">Notes</h3>
-        <div id="notes-modal-content" class="flex-1 overflow-y-auto">
+        <div id="notes-modal-content" x-ref="content" class="flex-1 overflow-y-auto">
             <!-- Content loaded via HTMX -->
             <div class="flex justify-center items-center h-full">
                 <span class="loading loading-spinner loading-md"></span>
@@ -144,12 +144,12 @@
     </dialog>
     
     <!-- Generic Modal for Samples, Tests, etc. -->
-    <dialog id="generic-modal" class="modal">
+    <dialog id="generic-modal" class="modal" x-data @close="$refs.content.innerHTML = '<div class=\'flex justify-center p-8\'><span class=\'loading loading-spinner loading-md\'></span></div>'" @closeModal.window="$el.close()">
       <div class="modal-box w-11/12 max-w-2xl bg-base-100">
         <form method="dialog">
           <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
         </form>
-        <div id="generic-modal-content">
+        <div id="generic-modal-content" x-ref="content">
             <div class="flex justify-center p-8">
                 <span class="loading loading-spinner loading-md"></span>
             </div>
