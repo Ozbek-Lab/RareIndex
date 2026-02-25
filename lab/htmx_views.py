@@ -998,3 +998,608 @@ def variant_create_modal(request, pipeline_id):
         "action_url": request.path,
     }
     return render(request, "lab/partials/generic_modal_form.html", context)
+
+
+def _safe_deep_get(data, *keys, default=None):
+    """Safely traverse nested dict/list, treating a list node as its first element."""
+    try:
+        result = data
+        for k in keys:
+            if isinstance(result, dict):
+                result = result.get(k)
+            elif isinstance(result, list):
+                result = result[0].get(k) if result and isinstance(result[0], dict) else None
+            else:
+                return default
+            if result is None:
+                return default
+        return result
+    except (AttributeError, TypeError, IndexError, KeyError):
+        return default
+
+
+def _prepare_vep_display(data):
+    item = data[0] if isinstance(data, list) and data and isinstance(data[0], dict) else (data if isinstance(data, dict) else {})
+    IMPACT_ORDER = {'HIGH': 0, 'MODERATE': 1, 'LOW': 2, 'MODIFIER': 3}
+
+    summary = {}
+    if item.get('most_severe_consequence'):
+        summary['Most Severe Consequence'] = item['most_severe_consequence'].replace('_', ' ').title()
+    if item.get('allele_string'):
+        summary['Allele'] = item['allele_string']
+    if item.get('assembly_name'):
+        summary['Assembly'] = item['assembly_name']
+    if item.get('seq_region_name'):
+        summary['Region'] = item['seq_region_name']
+
+    transcripts = []
+    for tc in item.get('transcript_consequences', []):
+        if not isinstance(tc, dict):
+            continue
+        sift_pred = tc.get('sift_prediction', '')
+        sift_score = tc.get('sift_score')
+        pp_pred = tc.get('polyphen_prediction', '')
+        pp_score = tc.get('polyphen_score')
+        transcripts.append({
+            'gene':         tc.get('gene_symbol', ''),
+            'transcript':   tc.get('transcript_id', ''),
+            'biotype':      tc.get('biotype', ''),
+            'consequences': ', '.join(tc.get('consequence_terms', [])).replace('_', ' '),
+            'impact':       tc.get('impact', ''),
+            'hgvsc':        tc.get('hgvsc', ''),
+            'hgvsp':        tc.get('hgvsp', ''),
+            'sift':         f"{sift_pred} ({sift_score})" if sift_pred and sift_score is not None else sift_pred,
+            'sift_pred':    sift_pred,
+            'polyphen':     f"{pp_pred} ({pp_score})" if pp_pred and pp_score is not None else pp_pred,
+            'polyphen_pred': pp_pred,
+            'canonical':    tc.get('canonical', 0),
+        })
+
+    transcripts.sort(key=lambda t: (0 if t['canonical'] else 1, IMPACT_ORDER.get(t['impact'], 99)))
+    return {'type': 'vep', 'summary': summary, 'transcripts': transcripts[:25]}
+
+
+def _prepare_myvariant_display(data):
+    if not isinstance(data, dict):
+        return {'type': 'generic', 'fields': {}}
+    g = _safe_deep_get
+    sections = {}
+
+    pop = {}
+    v = g(data, 'gnomad_genome', 'af', 'af')
+    if v is not None: pop['gnomAD Genome AF'] = f"{float(v):.2e}"
+    v = g(data, 'gnomad_exome', 'af', 'af')
+    if v is not None: pop['gnomAD Exome AF'] = f"{float(v):.2e}"
+    v = g(data, 'gnomad', 'af')
+    if v is not None and not pop: pop['gnomAD AF'] = f"{float(v):.2e}"
+    if pop:
+        sections['Population Frequencies'] = pop
+
+    path = {}
+    v = g(data, 'cadd', 'phred')
+    if v is not None: path['CADD Phred'] = str(v)
+    v = g(data, 'cadd', 'rawscore')
+    if v is not None: path['CADD Raw'] = f"{float(v):.4f}"
+    v = g(data, 'dbnsfp', 'sift', 'pred')
+    if v: path['SIFT'] = v if isinstance(v, str) else str(v)
+    v = g(data, 'dbnsfp', 'polyphen2', 'hdiv', 'pred')
+    if v: path['PolyPhen2 (HDIV)'] = v if isinstance(v, str) else str(v)
+    v = g(data, 'dbnsfp', 'mutationtaster', 'pred')
+    if v: path['MutationTaster'] = v if isinstance(v, str) else str(v)
+    v = g(data, 'dbnsfp', 'revel', 'score')
+    if v is not None: path['REVEL'] = str(v)
+    if path:
+        sections['Pathogenicity Scores'] = path
+
+    clin = {}
+    v = g(data, 'clinvar', 'rcv', 'clinical_significance') or g(data, 'clinvar', 'clinical_significance')
+    if v: clin['Significance'] = v if isinstance(v, str) else str(v)
+    v = g(data, 'clinvar', 'rcv', 'conditions', 'name')
+    if v: clin['Condition'] = v if isinstance(v, str) else str(v)
+    v = g(data, 'clinvar', 'gene', 'symbol')
+    if v: clin['Gene'] = v
+    if clin:
+        sections['ClinVar'] = clin
+
+    return {'type': 'myvariant', 'sections': sections}
+
+
+def _prepare_genebe_display(data):
+    if not isinstance(data, dict):
+        return {'type': 'generic', 'fields': {}}
+    g = _safe_deep_get
+    vd = g(data, 'variants', 0)
+    if not isinstance(vd, dict):
+        vd = data
+
+    fields = {}
+    v = g(vd, 'acmg_classification') or g(data, 'acmg_classification')
+    if v: fields['ACMG Classification'] = v
+    v = g(vd, 'acmg_score') or g(data, 'acmg_score')
+    if v is not None: fields['ACMG Score'] = str(v)
+    v = g(vd, 'gnomad_af') or g(data, 'gnomad_af')
+    if v is not None:
+        try: fields['gnomAD AF'] = f"{float(v):.2e}"
+        except (TypeError, ValueError): fields['gnomAD AF'] = str(v)
+
+    criteria = g(vd, 'acmg_criteria') or g(data, 'acmg_criteria') or []
+    return {'type': 'genebe', 'fields': fields, 'criteria': criteria if isinstance(criteria, list) else [criteria]}
+
+
+def _prepare_generic_display(data):
+    items = data if isinstance(data, dict) else (data[0] if isinstance(data, list) and data and isinstance(data[0], dict) else {})
+    fields = {
+        k: str(v) if not isinstance(v, (dict, list)) else f"[{type(v).__name__}, {len(v)} items]"
+        for k, v in items.items() if not str(k).startswith('_') and v is not None
+    }
+    return {'type': 'generic', 'fields': fields}
+
+
+def _prepare_annotation_display(annotation):
+    source = (annotation.source or '').lower()
+    if 'vep' in source:
+        return _prepare_vep_display(annotation.data)
+    elif 'myvariant' in source:
+        return _prepare_myvariant_display(annotation.data)
+    elif 'genebe' in source:
+        return _prepare_genebe_display(annotation.data)
+    else:
+        return _prepare_generic_display(annotation.data)
+
+
+@login_required
+def variant_detail_partial(request, pk):
+    """Return the expanded detail panel for a single variant row."""
+    from variant.models import Variant
+    variant = get_object_or_404(
+        Variant.objects.select_related(
+            "individual",
+            "status",
+            "created_by",
+            "pipeline__type",
+            "pipeline__status",
+            "pipeline__performed_by",
+            "pipeline__test__test_type",
+            "pipeline__test__sample__sample_type",
+        ).prefetch_related(
+            "genes",
+            "classifications__user",
+            "annotations",
+            "individual__samples__sample_type",
+            "individual__samples__status",
+            "individual__samples__tests__test_type",
+            "individual__samples__tests__status",
+            "individual__samples__tests__performed_by",
+            "individual__samples__tests__pipelines__type",
+            "individual__samples__tests__pipelines__status",
+            "individual__samples__tests__pipelines__performed_by",
+            "individual__samples__tests__pipelines__analyses__type",
+            "individual__samples__tests__pipelines__analyses__status",
+            "individual__samples__tests__pipelines__analyses__performed_by",
+        ),
+        pk=pk,
+    )
+    annotations_display = [
+        {"annotation": ann, "display": _prepare_annotation_display(ann)}
+        for ann in variant.annotations.all()
+    ]
+
+    # Gene-in-cohort: for each gene, collect all variants (and their workflow) sharing that gene
+    gene_cohort_data = []
+    for gene in variant.genes.all():
+        gene_variants = Variant.objects.filter(
+            genes=gene
+        ).select_related(
+            "individual",
+            "individual__status",
+            "pipeline__type",
+            "pipeline__test__test_type",
+        ).prefetch_related(
+            "pipeline__analyses__type",
+            "individual__hpo_terms",
+            "individual__institution",
+            "individual__cross_ids__id_type",
+        ).order_by("individual__id")
+
+        entries = []
+        for v in gene_variants:
+            test = v.pipeline.test if v.pipeline_id else None
+            analysis = (
+                v.pipeline.analyses.select_related("type").first()
+                if v.pipeline_id else None
+            )
+            entries.append({
+                "variant": v,
+                "individual": v.individual,
+                "is_current": v.pk == variant.pk,
+                "pipeline": v.pipeline if v.pipeline_id else None,
+                "test": test,
+                "analysis": analysis,
+            })
+
+        gene_cohort_data.append({
+            "gene": gene,
+            "entries": entries,
+            "count": len(entries),
+        })
+
+    return render(request, "lab/partials/variant_detail.html", {
+        "variant": variant,
+        "annotations_display": annotations_display,
+        "gene_cohort_data": gene_cohort_data,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Configurations CRUD (generic HTMX views)
+# ---------------------------------------------------------------------------
+
+def _get_config_registry():
+    from .models import SampleType, TestType, Institution, PipelineType, AnalysisType, IdentifierType, Status
+    from .forms import (
+        SampleTypeForm, TestTypeForm, InstitutionConfigForm,
+        PipelineTypeForm, AnalysisTypeForm, IdentifierTypeForm,
+        StatusConfigForm,
+    )
+    return {
+        "sampletype": {
+            "model": SampleType, "form": SampleTypeForm,
+            "label": "Sample Types", "icon": "fa-solid fa-vial",
+            "fields": ["name", "description"],
+            "usage_relation": "sample",
+            "usage_label": "samples",
+        },
+        "testtype": {
+            "model": TestType, "form": TestTypeForm,
+            "label": "Test Types", "icon": "fa-solid fa-flask",
+            "fields": ["name", "description"],
+            "usage_relation": "test",
+            "usage_label": "tests",
+        },
+        "pipelinetype": {
+            "model": PipelineType, "form": PipelineTypeForm,
+            "label": "Pipeline Types", "icon": "fa-solid fa-diagram-project",
+            "fields": ["name", "version", "description"],
+            "usage_relation": "pipeline",
+            "usage_label": "pipelines",
+        },
+        "analysistype": {
+            "model": AnalysisType, "form": AnalysisTypeForm,
+            "label": "Analysis Types", "icon": "fa-solid fa-microscope",
+            "fields": ["name", "description"],
+            "usage_relation": "analyses",   # related_name on Analysis.type
+            "usage_label": "analyses",
+        },
+        "identifiertype": {
+            "model": IdentifierType, "form": IdentifierTypeForm,
+            "label": "Identifier Types", "icon": "fa-solid fa-id-badge",
+            "fields": ["name", "use_priority", "is_shown_in_table"],
+            "usage_relation": "crossidentifier",
+            "usage_label": "identifiers",
+        },
+        "status": {
+            "model": Status, "form": StatusConfigForm,
+            "label": "Statuses", "icon": "fa-solid fa-circle-dot",
+            "fields": ["name", "short_name", "color"],
+            "usage_relation": None,  # computed specially across many models
+            "usage_label": "objects",
+        },
+        "institution": {
+            "model": Institution, "form": InstitutionConfigForm,
+            "label": "Institutions", "icon": "fa-solid fa-hospital",
+            "fields": ["name", "city", "speciality"],
+            "usage_relation": "individuals",  # M2M related_name
+            "usage_label": "individuals",
+            # M2M fields are invisible to Django's Collector, so we guard manually.
+            "m2m_protections": [
+                {"accessor": "individuals", "verbose_name": "individual"},
+            ],
+        },
+    }
+
+
+def _check_m2m_protections(obj, config):
+    """
+    Return a list of {'type': ..., 'display': ...} dicts for any M2M-related
+    objects that should block deletion (Django's Collector won't catch these).
+    """
+    result = []
+    for guard in config.get("m2m_protections", []):
+        accessor = guard["accessor"]
+        verbose = guard["verbose_name"]
+        related_qs = getattr(obj, accessor).all()
+        sample = list(related_qs[:10])
+        if sample:
+            for related_obj in sample:
+                result.append({
+                    "type": verbose.title(),
+                    "display": str(related_obj),
+                })
+            remaining = related_qs.count() - len(sample)
+            if remaining > 0:
+                result.append({
+                    "type": verbose.title(),
+                    "display": f"… and {remaining} more",
+                })
+    return result
+
+
+def _compute_status_usage():
+    """Return {status_id: total_usage_count} across all models that hold a status FK."""
+    from collections import defaultdict
+    from django.db.models import Count
+    from .models import Individual, Sample, Test, Pipeline, Analysis, Task, Project
+
+    models_with_status = [Individual, Sample, Test, Pipeline, Analysis, Task, Project]
+    try:
+        from variant.models import Variant
+        models_with_status.append(Variant)
+    except ImportError:
+        pass
+
+    usage = defaultdict(int)
+    for model_cls in models_with_status:
+        for row in (
+            model_cls.objects
+            .filter(status__isnull=False)
+            .values("status_id")
+            .annotate(c=Count("id"))
+        ):
+            usage[row["status_id"]] += row["c"]
+    return dict(usage)
+
+
+def _build_section_context(request, key, config):
+    """Build per-section context dict for the config_section partial."""
+    from django.db.models import Count
+
+    usage_relation = config.get("usage_relation")
+    if usage_relation:
+        objects = config["model"].objects.annotate(
+            usage_count=Count(usage_relation, distinct=True)
+        )
+    else:
+        objects = config["model"].objects.all()
+
+    ctx = {
+        "key": key,
+        "label": config["label"],
+        "icon": config["icon"],
+        "fields": config["fields"],
+        "objects": objects,
+        "usage_label": config.get("usage_label", ""),
+        "can_add": request.user.has_perm(f"lab.add_{key}"),
+        "can_change": request.user.has_perm(f"lab.change_{key}"),
+        "can_delete": request.user.has_perm(f"lab.delete_{key}"),
+    }
+
+    if key == "status":
+        from .models import Status
+        usage_map = _compute_status_usage()
+        statuses = Status.objects.select_related("content_type").order_by(
+            "content_type__app_label", "content_type__model", "name"
+        )
+        # Attach pre-computed usage count to each status object
+        for s in statuses:
+            s.usage_count = usage_map.get(s.pk, 0)
+        groups = {}
+        for status in statuses:
+            if status.content_type:
+                group_key = status.content_type.model
+                group_label = status.content_type.model.replace("_", " ").title()
+            else:
+                group_key = "__global__"
+                group_label = "Global"
+            if group_key not in groups:
+                groups[group_key] = {"label": group_label, "objects": []}
+            groups[group_key]["objects"].append(status)
+        # Put Global first, then alphabetical
+        ordered = {}
+        if "__global__" in groups:
+            ordered["__global__"] = groups.pop("__global__")
+        for k in sorted(groups):
+            ordered[k] = groups[k]
+        ctx["status_groups"] = ordered
+
+    return ctx
+
+
+@login_required
+def config_section_partial(request, model_name):
+    """Return refreshed HTML for a single config section (used after CRUD operations)."""
+    registry = _get_config_registry()
+    if model_name not in registry:
+        return HttpResponse(status=404)
+    config = registry[model_name]
+    if not (request.user.has_perm(f"lab.view_{model_name}") or
+            request.user.has_perm(f"lab.change_{model_name}")):
+        return HttpResponse(status=403)
+    ctx = {"section": _build_section_context(request, model_name, config)}
+    return render(request, "lab/partials/config_section.html", ctx)
+
+
+@login_required
+def config_form(request, model_name, pk=None):
+    """
+    GET  → render add/edit form inside the generic modal.
+    POST → save and return updated section HTML (success) or form with errors
+           (re-targeted back into the modal).
+    """
+    registry = _get_config_registry()
+    if model_name not in registry:
+        return HttpResponse(status=404)
+
+    config = registry[model_name]
+    Model = config["model"]
+    FormClass = config["form"]
+
+    required_perm = f"lab.{'change' if pk else 'add'}_{model_name}"
+    if not request.user.has_perm(required_perm):
+        return HttpResponseForbidden("Permission denied.")
+
+    instance = get_object_or_404(Model, pk=pk) if pk else None
+
+    if request.method == "POST":
+        form = FormClass(request.POST, instance=instance)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            if not getattr(obj, "created_by_id", None):
+                obj.created_by = request.user
+            obj.save()
+            if hasattr(form, "save_m2m"):
+                form.save_m2m()
+
+            # Return the refreshed section as primary + close-modal snippet as OOB
+            ctx = {"section": _build_section_context(request, model_name, config)}
+            section_html = render(request, "lab/partials/config_section.html", ctx).content.decode()
+            close_oob = (
+                '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
+                '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
+                '</div>'
+            )
+            return HttpResponse(section_html + close_oob)
+        else:
+            # Re-render the form with errors back into the modal
+            ctx = {
+                "model_name": model_name,
+                "label": config["label"],
+                "form": form,
+                "pk": pk,
+                "action_url": request.path,
+                "section_id": f"config-section-{model_name}",
+            }
+            response = render(request, "lab/partials/config_form.html", ctx)
+            response.headers["HX-Retarget"] = "#generic-modal-content"
+            response.headers["HX-Reswap"] = "innerHTML"
+            return response
+
+    # GET – render empty/pre-filled form
+    form = FormClass(instance=instance)
+    ctx = {
+        "model_name": model_name,
+        "label": config["label"],
+        "form": form,
+        "pk": pk,
+        "action_url": request.path,
+        "section_id": f"config-section-{model_name}",
+    }
+    return render(request, "lab/partials/config_form.html", ctx)
+
+
+@login_required
+def config_delete_confirm(request, model_name, pk):
+    """Render a delete-confirmation snippet (loads into the generic modal)."""
+    registry = _get_config_registry()
+    if model_name not in registry:
+        return HttpResponse(status=404)
+
+    config = registry[model_name]
+    if not request.user.has_perm(f"lab.delete_{model_name}"):
+        return HttpResponseForbidden("Permission denied.")
+
+    obj = get_object_or_404(config["model"], pk=pk)
+
+    # Collect related objects (Django-admin style).
+    # PROTECT fields raise ProtectedError inside collector.collect() itself,
+    # so we must catch it here — not just at obj.delete() time.
+    from django.db.models.deletion import Collector, ProtectedError
+    from django.db import router
+
+    cascade = {}
+    protected = []
+
+    using = router.db_for_write(config["model"])
+    collector = Collector(using=using)
+    try:
+        collector.collect([obj], keep_parents=False)
+        # Objects that would be cascade-deleted (excluding the item itself)
+        for model_cls, objs in collector.data.items():
+            if model_cls is config["model"]:
+                continue
+            label = model_cls._meta.verbose_name_plural.title()
+            cascade[label] = [str(o) for o in list(objs)[:10]]
+    except ProtectedError as exc:
+        protected = [
+            {"type": o._meta.verbose_name.title(), "display": str(o)}
+            for o in list(exc.protected_objects)[:10]
+        ]
+
+    # M2M relations are invisible to Collector — check them separately.
+    protected.extend(_check_m2m_protections(obj, config))
+
+    ctx = {
+        "obj": obj,
+        "model_name": model_name,
+        "label": config["label"],
+        "cascade": cascade,
+        "protected": protected,
+        "delete_url": f"/htmx/config/{model_name}/{pk}/delete/",
+        "section_id": f"config-section-{model_name}",
+    }
+    return render(request, "lab/partials/config_delete_confirm.html", ctx)
+
+
+@login_required
+@require_POST
+def config_delete(request, model_name, pk):
+    """Execute deletion and return the refreshed section (or protected error)."""
+    registry = _get_config_registry()
+    if model_name not in registry:
+        return HttpResponse(status=404)
+
+    config = registry[model_name]
+    if not request.user.has_perm(f"lab.delete_{model_name}"):
+        return HttpResponseForbidden("Permission denied.")
+
+    obj = get_object_or_404(config["model"], pk=pk)
+
+    # Block on M2M protections before attempting deletion.
+    m2m_blocked = _check_m2m_protections(obj, config)
+    if m2m_blocked:
+        ctx = {
+            "obj": obj,
+            "model_name": model_name,
+            "label": config["label"],
+            "cascade": {},
+            "protected": m2m_blocked,
+            "delete_url": f"/htmx/config/{model_name}/{pk}/delete/",
+            "section_id": f"config-section-{model_name}",
+            "error": "This item cannot be deleted because other records depend on it.",
+        }
+        response = render(request, "lab/partials/config_delete_confirm.html", ctx)
+        response.headers["HX-Retarget"] = "#generic-modal-content"
+        response.headers["HX-Reswap"] = "innerHTML"
+        return response
+
+    from django.db.models.deletion import ProtectedError
+    try:
+        obj.delete()
+    except ProtectedError as exc:
+        protected_objs = [
+            {"type": o._meta.verbose_name.title(), "display": str(o)}
+            for o in list(exc.protected_objects)[:10]
+        ]
+        ctx = {
+            "obj": obj,
+            "model_name": model_name,
+            "label": config["label"],
+            "cascade": {},
+            "protected": protected_objs,
+            "delete_url": f"/htmx/config/{model_name}/{pk}/delete/",
+            "section_id": f"config-section-{model_name}",
+            "error": "This item cannot be deleted because other records depend on it.",
+        }
+        response = render(request, "lab/partials/config_delete_confirm.html", ctx)
+        response.headers["HX-Retarget"] = "#generic-modal-content"
+        response.headers["HX-Reswap"] = "innerHTML"
+        return response
+
+    # Success – return refreshed section + close modal OOB
+    ctx = {"section": _build_section_context(request, model_name, config)}
+    section_html = render(request, "lab/partials/config_section.html", ctx).content.decode()
+    close_oob = (
+        '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
+        '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
+        '</div>'
+    )
+    return HttpResponse(section_html + close_oob)

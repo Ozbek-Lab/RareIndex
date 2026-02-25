@@ -1,0 +1,90 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-4">
+    <h3 class="font-bold text-lg text-error flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        Delete {{ label|title }}
+    </h3>
+</div>
+
+{% if error %}
+<div class="alert alert-error mb-4 text-sm">
+    <i class="fa-solid fa-circle-xmark shrink-0"></i>
+    <span>{{ error }}</span>
+</div>
+{% endif %}
+
+{% if protected %}
+<!-- Cannot delete -->
+<div class="alert alert-warning mb-4 text-sm">
+    <i class="fa-solid fa-lock shrink-0"></i>
+    <div>
+        <p class="font-semibold">This item cannot be deleted.</p>
+        <p class="opacity-80 mt-1">The following records are linked to it and must be updated or removed first:</p>
+    </div>
+</div>
+<ul class="menu menu-sm bg-base-200 rounded-box mb-4 max-h-48 overflow-y-auto">
+    {% for item in protected %}
+    <li class="text-sm opacity-80">
+        <span class="gap-2">
+            <i class="fa-solid fa-link text-xs opacity-50"></i>
+            <span>{{ item.type }}:</span>
+            <span class="font-medium">{{ item.display }}</span>
+        </span>
+    </li>
+    {% endfor %}
+</ul>
+<div class="modal-action pt-4 border-t border-base-200">
+    <button type="button"
+            class="btn btn-primary btn-sm"
+            onclick="document.getElementById('generic-modal').close()">
+        OK, understood
+    </button>
+</div>
+
+{% else %}
+<!-- Confirm deletion -->
+<p class="text-sm mb-4">
+    Are you sure you want to delete
+    <strong class="text-base-content">{{ obj }}</strong>?
+    This action cannot be undone.
+</p>
+
+{% if cascade %}
+<div class="alert alert-warning mb-4 text-sm py-2">
+    <i class="fa-solid fa-exclamation-triangle shrink-0"></i>
+    <span>Deleting this will also permanently remove the following related records:</span>
+</div>
+<div class="bg-base-200 rounded-box p-3 mb-4 max-h-48 overflow-y-auto space-y-2">
+    {% for group_name, objs in cascade.items %}
+    <div>
+        <p class="text-xs font-semibold uppercase text-base-content/50 mb-1">{{ group_name }}</p>
+        <ul class="space-y-0.5">
+            {% for display in objs %}
+            <li class="text-xs text-base-content/70 flex items-center gap-1.5">
+                <i class="fa-solid fa-arrow-right text-[9px] opacity-40"></i>
+                {{ display }}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="modal-action pt-4 border-t border-base-200 flex justify-between">
+    <button type="button"
+            class="btn btn-ghost btn-sm"
+            onclick="document.getElementById('generic-modal').close()">
+        Cancel
+    </button>
+    <form hx-post="{{ delete_url }}"
+          hx-target="#config-section-{{ model_name }}"
+          hx-swap="outerHTML"
+          class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-error btn-sm px-6">
+            <i class="fa-solid fa-trash-can mr-1"></i>
+            Yes, delete
+        </button>
+    </form>
+</div>
+{% endif %}

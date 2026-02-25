@@ -64,8 +64,8 @@
             </h3>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.status.field.choices %}
-                {% with metadata=status_metadata|get_item:choice.0 %}
-                  {% include "lab/components/tristate_status_pill.html" with name="status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon current_values=request.GET|get_list:'status' excluded_values=request.GET|get_list:'status__exclude' %}
+                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.status|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="status" value=choice.0 label=choice.1 short_label=metadata.short_name color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'status' excluded_values=request.GET|get_list:'status__exclude' %}
                 {% endwith %}
               {% endfor %}
             </div>
@@ -77,27 +77,14 @@
             >
               Priority
             </h3>
-            <div class="space-y-1">
+            <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.priority.field.choices %}
-                {% include "lab/components/tristate_checkbox.html" with name="priority" value=choice.0 label=choice.1 current_values=request.GET|get_list:'priority' excluded_values=request.GET|get_list:'priority__exclude' %}
+                {% with count=filter_counts.priority|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="priority" value=choice.0 label=choice.1 count=count current_values=request.GET|get_list:'priority' excluded_values=request.GET|get_list:'priority__exclude' %}
+                {% endwith %}
               {% endfor %}
             </div>
           </div>
-          <!-- Created By -->
-          {% if filter.form.created_by %}
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Created By
-            </h3>
-            <div class="space-y-1 max-h-48 overflow-y-auto">
-              {% for user in filter.form.created_by.field.queryset %}
-                {% include "lab/components/tristate_checkbox.html" with name="created_by" value=user.username label=user.username current_values=request.GET|get_list:'created_by' excluded_values=request.GET|get_list:'created_by__exclude' %}
-              {% endfor %}
-            </div>
-          </div>
-          {% endif %}
         </div>
       </div>
     </div>

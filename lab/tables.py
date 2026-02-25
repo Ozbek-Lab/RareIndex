@@ -1,9 +1,9 @@
 import django_tables2 as tables
-from .models import Individual, Sample, Project
 from django.utils.html import format_html
-
 from django.urls import reverse
 
+from .models import Individual, Sample, Project
+from variant.models import Variant
 
 class IndividualTable(tables.Table):
     """Static column set: Primary ID, Secondary ID, Other IDs, Institution, Name, Sex, Status."""
@@ -44,28 +44,26 @@ class IndividualTable(tables.Table):
 
     def render_status(self, value, record):
         """Wrap status in a span with ID for OOB swaps"""
+        status = record.status
         icon_html = ""
-        # Apply color to the icon/text instead of border
-        style = f"color: {record.status.color}; filter: brightness(0.9);"
-        
-        if record.status.icon:
-            # We use format_html to ensure the class is escaped if needed, though it comes from DB
-            icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', record.status.icon)
-        
-        # We can pass safe string (icon_html) to another format_html
-        # Removed border-left style as requested
-        # Added style to the badge for text/icon color
-        # Removed badge-ghost to remove gray background, making it effectively transparent with just text color
+        style = f"color: {status.color}; filter: brightness(0.9);"
+
+        if status.icon:
+            icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', status.icon)
+
+        label = status.display_name
+
         badge_html = format_html(
-            '<div class="badge badge-sm bg-transparent border-0 font-medium" style="{}"> {}{} </div>',
+            '<div class="badge badge-sm bg-transparent border-0 font-medium whitespace-nowrap" style="{}" title="{}"> {}{} </div>',
             style,
+            status.name,
             icon_html,
-            value
+            label,
         )
         return format_html(
             '<span id="individual-row-status-{}">{}</span>',
             record.pk,
-            badge_html
+            badge_html,
         )
 
     def render_full_name(self, value, record):
@@ -155,23 +153,26 @@ class ProjectTable(tables.Table):
 
     def render_status(self, value, record):
         """Wrap status in a span with ID for OOB swaps"""
+        status = record.status
         icon_html = ""
-        # Apply color to the icon/text instead of border
-        style = f"color: {record.status.color}; filter: brightness(0.9);"
-        
-        if record.status.icon:
-            icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', record.status.icon)
-        
+        style = f"color: {status.color}; filter: brightness(0.9);"
+
+        if status.icon:
+            icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', status.icon)
+
+        label = status.display_name
+
         badge_html = format_html(
-            '<div class="badge badge-sm bg-transparent border-0 font-medium" style="{}"> {}{} </div>',
+            '<div class="badge badge-sm bg-transparent border-0 font-medium whitespace-nowrap" style="{}" title="{}"> {}{} </div>',
             style,
+            status.name,
             icon_html,
-            value
+            label,
         )
         return format_html(
             '<span id="project-row-status-{}">{}</span>',
             record.pk,
-            badge_html
+            badge_html,
         )
 
     def render_name(self, value, record):
@@ -238,4 +239,98 @@ class ProjectTable(tables.Table):
             affected_count,
             index_count,
             total_count
+        )
+
+
+class VariantTable(tables.Table):
+    variant = tables.Column(verbose_name="Variant", accessor="hgvs_name", orderable=False)
+    type = tables.Column(verbose_name="Type", accessor="type", orderable=False)
+    chromosome = tables.Column(verbose_name="Chr")
+    start = tables.Column(verbose_name="Start")
+    end = tables.Column(verbose_name="End")
+    zygosity = tables.Column(verbose_name="Zygosity")
+    genes = tables.Column(verbose_name="Genes", accessor="genes", orderable=False)
+    individual = tables.Column(verbose_name="Individual", accessor="individual__primary_id")
+    status = tables.Column(verbose_name="Status")
+
+    def before_render(self, request):
+        self.total_count = Variant.objects.count()
+        self.verbose_name = Variant._meta.verbose_name
+        self.verbose_name_plural = Variant._meta.verbose_name_plural
+
+    def render_genes(self, value, record):
+        symbols = [g.symbol for g in value.all()]
+        if not symbols:
+            return "—"
+        return format_html(
+            "{}",
+            ", ".join(symbols),
+        )
+
+    def render_individual(self, value, record):
+        if not value:
+            return "—"
+        url = reverse("lab:individual_detail", kwargs={"pk": record.individual_id})
+        return format_html(
+            '<span class="inline-flex items-center gap-1.5">'
+            '  <a href="{}" target="_blank" rel="noopener noreferrer"'
+            '     class="opacity-50 hover:opacity-100 transition-opacity">'
+            '    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5"'
+            '         fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+            '      <path stroke-linecap="round" stroke-linejoin="round"'
+            '            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4'
+            '               M14 4h6m0 0v6m0-6L10 14"/>'
+            '    </svg>'
+            '  </a>'
+            '  <span class="font-mono text-sm">{}</span>'
+            '</span>',
+            url,
+            value,
+        )
+
+    class Meta:
+        model = Variant
+        template_name = "lab/partials/variant_table_body.html"
+        fields = (
+            "variant",
+            "type",
+            "chromosome",
+            "start",
+            "end",
+            "zygosity",
+            "genes",
+            "individual",
+            "status",
+        )
+        attrs = {
+            "class": "table table-zebra table-sm",
+            "thead": {"class": ""},
+            "th": {"class": ""},
+            "td": {"class": ""},
+        }
+
+    def render_status(self, value, record):
+        status = record.status
+        if not status:
+            return "-"
+
+        icon_html = ""
+        style = f"color: {status.color}; filter: brightness(0.9);" if status.color else ""
+
+        if status.icon:
+            icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', status.icon)
+
+        label = status.display_name
+
+        badge_html = format_html(
+            '<div class="badge badge-sm bg-transparent border-0 font-medium whitespace-nowrap" style="{}" title="{}"> {}{} </div>',
+            style,
+            status.name,
+            icon_html,
+            label,
+        )
+        return format_html(
+            '<span id="variant-row-status-{}">{}</span>',
+            record.pk,
+            badge_html,
         )

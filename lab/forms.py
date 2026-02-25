@@ -12,13 +12,14 @@ from .models import (
     Project,
     Test,
     Analysis,
-    Pipeline, # Added Pipeline
-    PipelineType, # Added PipelineType
+    Pipeline,
+    PipelineType,
     Institution,
     Family,
     AnalysisType,
     AnalysisRequestForm,
     AnalysisReport
+    IdentifierType,
 )
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
@@ -718,5 +719,110 @@ class ClinicalSummaryForm(BaseForm):
                     "placeholder": "e.g. LDBS",
                 }
             ),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Configuration model forms
+# ---------------------------------------------------------------------------
+
+class SampleTypeForm(BaseForm):
+    class Meta:
+        model = SampleType
+        fields = ["name", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class TestTypeForm(BaseForm):
+    class Meta:
+        model = TestType
+        fields = ["name", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class InstitutionConfigForm(BaseForm):
+    class Meta:
+        model = Institution
+        fields = [
+            "name", "official_name", "center_name",
+            "speciality", "city", "contact",
+            "latitude", "longitude",
+        ]
+        widgets = {
+            "contact": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class PipelineTypeForm(BaseForm):
+    class Meta:
+        model = PipelineType
+        fields = ["name", "description", "version", "source_url", "results_url", "parent_types"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class AnalysisTypeForm(BaseForm):
+    class Meta:
+        model = AnalysisType
+        fields = ["name", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class IdentifierTypeForm(BaseForm):
+    class Meta:
+        model = IdentifierType
+        fields = ["name", "description", "use_priority", "is_shown_in_table"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class StatusConfigForm(BaseForm):
+    color = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={"type": "color", "class": "input input-bordered w-16 h-10 p-1 cursor-pointer"}),
+        help_text="Pick a colour for this status badge.",
+        initial="#6b7280",
+    )
+
+    class Meta:
+        model = Status
+        fields = ["name", "short_name", "description", "color", "content_type", "icon"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "icon": forms.TextInput(attrs={"placeholder": "e.g. fa-solid fa-check"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Show a human-readable label for the content_type choices
+        self.fields["content_type"].queryset = ContentType.objects.filter(
+            app_label__in=["lab", "variant"]
+        ).order_by("app_label", "model")
+        self.fields["content_type"].required = False
+        self.fields["content_type"].empty_label = "— Global (applies to all) —"
+        # If the stored value is a hex string, the color input handles it natively
+        if self.instance and self.instance.pk:
+            raw = self.instance.color or ""
+            if raw and not raw.startswith("#"):
+                # Stored as a named colour – keep as-is; color input might not show it
+                self.fields["color"].widget = forms.TextInput(
+                    attrs={"class": "input input-bordered w-full", "placeholder": "e.g. #6b7280 or gray"}
+                )
+
+
+class FamilyConfigForm(BaseForm):
+    class Meta:
+        model = Family
+        fields = ["family_id", "is_consanguineous", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
         }
 

@@ -1,0 +1,109 @@
+<div class="divide-y divide-base-200">
+    {% for group_key, group in section.status_groups.items %}
+    <div class="px-5 py-4">
+
+        <!-- Group header -->
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-base-content/50 flex items-center gap-2">
+                <span class="inline-block w-2 h-2 rounded-full bg-base-content/20"></span>
+                {{ group.label }}
+                <span class="badge badge-ghost badge-xs font-normal normal-case">{{ group.objects|length }}</span>
+            </h3>
+        </div>
+
+        <!-- Group table -->
+        {% if group.objects %}
+        <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-sm w-full">
+                <thead>
+                    <tr class="text-xs text-base-content/50 uppercase bg-base-200/40">
+                        <th class="font-semibold px-4 py-2">Name</th>
+                        <th class="font-semibold px-4 py-2">Short Name</th>
+                        <th class="font-semibold px-4 py-2">Color</th>
+                        <th class="font-semibold px-4 py-2">Icon</th>
+                        <th class="font-semibold px-4 py-2 text-right">Usage</th>
+                        {% if section.can_change or section.can_delete %}
+                        <th class="font-semibold px-4 py-2 text-right">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obj in group.objects %}
+                    <tr class="hover:bg-base-200/40">
+                        <td class="px-4 py-2 font-medium text-sm">{{ obj.name }}</td>
+                        <td class="px-4 py-2 text-sm text-base-content/60">
+                            {{ obj.short_name|default:"—" }}
+                        </td>
+                        <td class="px-4 py-2">
+                            <span class="inline-flex items-center gap-2">
+                                <span class="inline-block w-4 h-4 rounded-full border border-base-300 shrink-0"
+                                      style="background-color: {{ obj.color|default:'#6b7280' }}"></span>
+                                <span class="text-xs font-mono text-base-content/50">{{ obj.color|default:"—" }}</span>
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-base-content/60">
+                            {% if obj.icon %}
+                                {% if "fa-solid" in obj.icon or "fa-regular" in obj.icon or "fa-brands" in obj.icon %}
+                                    <i class="{{ obj.icon }}"></i>
+                                {% else %}
+                                    <i class="fa-solid {{ obj.icon }}"></i>
+                                {% endif %}
+                                <span class="text-xs font-mono ml-1">{{ obj.icon }}</span>
+                            {% else %}
+                                <span class="text-base-content/30">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2 text-right">
+                            {% if obj.usage_count %}
+                            <span class="badge badge-ghost badge-sm font-normal tabular-nums">
+                                {{ obj.usage_count }}
+                            </span>
+                            {% else %}
+                            <span class="text-base-content/30 text-xs">—</span>
+                            {% endif %}
+                        </td>
+                        {% if section.can_change or section.can_delete %}
+                        <td class="px-4 py-2 text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                {% if section.can_change %}
+                                <button type="button"
+                                        class="btn btn-ghost btn-xs"
+                                        title="Edit"
+                                        hx-get="{% url 'lab:config_form_edit' section.key obj.pk %}"
+                                        hx-target="#generic-modal-content"
+                                        hx-swap="innerHTML"
+                                        onclick="document.getElementById('generic-modal').showModal()">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                {% endif %}
+                                {% if section.can_delete %}
+                                <button type="button"
+                                        class="btn btn-ghost btn-xs text-error"
+                                        title="Delete"
+                                        hx-get="{% url 'lab:config_delete_confirm' section.key obj.pk %}"
+                                        hx-target="#generic-modal-content"
+                                        hx-swap="innerHTML"
+                                        onclick="document.getElementById('generic-modal').showModal()">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-xs text-base-content/40 italic">No statuses in this scope yet.</p>
+        {% endif %}
+
+    </div>
+    {% empty %}
+    <div class="flex flex-col items-center justify-center py-10 gap-2 text-base-content/40">
+        <i class="fa-solid fa-circle-dot text-2xl"></i>
+        <p class="text-sm">No statuses yet.</p>
+    </div>
+    {% endfor %}
+</div>

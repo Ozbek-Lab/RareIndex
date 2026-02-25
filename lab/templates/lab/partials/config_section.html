@@ -1,0 +1,198 @@
+{% load lab_tags %}
+<div id="config-section-{{ section.key }}"
+     class="card bg-base-100 shadow-sm border border-base-200"
+     x-data="{ open: true }">
+
+    <!-- Card Header -->
+    <div class="card-body p-0">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-base-200 cursor-pointer select-none"
+             @click="open = !open">
+            <div class="flex items-center gap-3">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">
+                    <i class="{{ section.icon }} text-sm"></i>
+                </span>
+                <div>
+                    <h2 class="text-base font-semibold text-base-content">{{ section.label }}</h2>
+                    <span class="text-xs text-base-content/50">{{ section.objects.count }} entr{{ section.objects.count|pluralize:"y,ies" }}</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                {% if section.can_add %}
+                <button type="button"
+                        class="btn btn-primary btn-xs gap-1"
+                        @click.stop
+                        hx-get="{% url 'lab:config_form_add' section.key %}"
+                        hx-target="#generic-modal-content"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('generic-modal').showModal()">
+                    <i class="fa-solid fa-plus text-[10px]"></i>
+                    Add
+                </button>
+                {% endif %}
+                <i class="fa-solid fa-chevron-down text-base-content/40 text-xs transition-transform duration-200"
+                   :class="open ? 'rotate-0' : '-rotate-90'"></i>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div x-show="open" x-transition:enter="transition-all duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+            {% if section.status_groups %}
+            {% include "lab/partials/config_status_groups.html" %}
+            {% elif section.objects %}
+            <div class="overflow-x-auto">
+                <table class="table table-sm w-full">
+                    <thead>
+                        <tr class="text-xs text-base-content/50 uppercase">
+                            {% for field in section.fields %}
+                            <th class="font-semibold px-5 py-3">
+                                {% if field == "family_id" %}Family ID
+                                {% elif field == "use_priority" %}Priority
+                                {% elif field == "is_shown_in_table" %}Show in Table
+                                {% elif field == "is_consanguineous" %}Consanguineous
+                                {% elif field == "short_name" %}Short Name
+                                {% elif field == "content_type" %}Scope
+                                {% else %}{{ field|title }}
+                                {% endif %}
+                            </th>
+                            {% endfor %}
+                            {% if section.usage_label %}
+                            <th class="font-semibold px-5 py-3 text-right">Usage</th>
+                            {% endif %}
+                            {% if section.can_change or section.can_delete %}
+                            <th class="font-semibold px-5 py-3 text-right">Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for obj in section.objects %}
+                        <tr class="hover:bg-base-200/50">
+                            {% for field in section.fields %}
+                            <td class="px-5 py-3">
+                                {% if field == "color" %}
+                                    <span class="inline-flex items-center gap-2">
+                                        <span class="inline-block w-4 h-4 rounded-full border border-base-300"
+                                              style="background-color: {{ obj.color|default:'#6b7280' }}"></span>
+                                        <span class="text-xs font-mono opacity-70">{{ obj.color|default:"—" }}</span>
+                                    </span>
+                                {% elif field == "content_type" %}
+                                    {% if obj.content_type %}
+                                        <span class="badge badge-ghost badge-sm">{{ obj.content_type.model|title }}</span>
+                                    {% else %}
+                                        <span class="text-base-content/40 text-xs">Global</span>
+                                    {% endif %}
+                                {% elif field == "is_shown_in_table" or field == "is_consanguineous" %}
+                                    {% if obj|class_name == "IdentifierType" and field == "is_shown_in_table" %}
+                                        {% if obj.is_shown_in_table %}
+                                            <i class="fa-solid fa-check text-success"></i>
+                                        {% else %}
+                                            <i class="fa-solid fa-xmark text-error"></i>
+                                        {% endif %}
+                                    {% elif obj|class_name == "Family" and field == "is_consanguineous" %}
+                                        {% if obj.is_consanguineous is None %}
+                                            <span class="text-base-content/40 text-xs">—</span>
+                                        {% elif obj.is_consanguineous %}
+                                            <i class="fa-solid fa-check text-success"></i>
+                                        {% else %}
+                                            <i class="fa-solid fa-xmark text-base-content/40"></i>
+                                        {% endif %}
+                                    {% else %}
+                                        {{ obj|class_name }}
+                                    {% endif %}
+                                {% elif field == "use_priority" %}
+                                    {% if obj.use_priority == 0 %}
+                                        <span class="badge badge-ghost badge-sm">Not used</span>
+                                    {% elif obj.use_priority == 1 %}
+                                        <span class="badge badge-primary badge-sm">Primary</span>
+                                    {% elif obj.use_priority == 2 %}
+                                        <span class="badge badge-secondary badge-sm">Secondary</span>
+                                    {% else %}
+                                        <span class="badge badge-ghost badge-sm">Priority {{ obj.use_priority }}</span>
+                                    {% endif %}
+                                {% elif field == "version" %}
+                                    {% if obj.version %}
+                                        <span class="badge badge-ghost badge-sm font-mono">v{{ obj.version }}</span>
+                                    {% else %}
+                                        <span class="text-base-content/40 text-xs">—</span>
+                                    {% endif %}
+                                {% elif field == "description" %}
+                                    <span class="text-base-content/70 text-sm truncate max-w-xs inline-block">
+                                        {{ obj.description|default:"—"|truncatechars:60 }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-sm">
+                                        {% if field == "name" %}{{ obj.name|default:"—" }}
+                                        {% elif field == "city" %}{{ obj.city|default:"—" }}
+                                        {% elif field == "speciality" %}{{ obj.speciality|default:"—" }}
+                                        {% elif field == "family_id" %}{{ obj.family_id|default:"—" }}
+                                        {% elif field == "short_name" %}{{ obj.short_name|default:"—" }}
+                                        {% else %}{{ obj }}
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+
+                            {% if section.usage_label %}
+                            <td class="px-5 py-3 text-right">
+                                {% if obj.usage_count %}
+                                <span class="badge badge-ghost badge-sm font-normal tabular-nums">
+                                    {{ obj.usage_count }} {{ section.usage_label }}
+                                </span>
+                                {% else %}
+                                <span class="text-base-content/30 text-xs">—</span>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            {% if section.can_change or section.can_delete %}
+                            <td class="px-5 py-3 text-right">
+                                <div class="flex items-center justify-end gap-1">
+                                    {% if section.can_change %}
+                                    <button type="button"
+                                            class="btn btn-ghost btn-xs"
+                                            title="Edit"
+                                            hx-get="{% url 'lab:config_form_edit' section.key obj.pk %}"
+                                            hx-target="#generic-modal-content"
+                                            hx-swap="innerHTML"
+                                            onclick="document.getElementById('generic-modal').showModal()">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if section.can_delete %}
+                                    <button type="button"
+                                            class="btn btn-ghost btn-xs text-error"
+                                            title="Delete"
+                                            hx-get="{% url 'lab:config_delete_confirm' section.key obj.pk %}"
+                                            hx-target="#generic-modal-content"
+                                            hx-swap="innerHTML"
+                                            onclick="document.getElementById('generic-modal').showModal()">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="flex flex-col items-center justify-center py-10 gap-2 text-base-content/40">
+                <i class="{{ section.icon }} text-2xl"></i>
+                <p class="text-sm">No {{ section.label|lower }} yet.</p>
+                {% if section.can_add %}
+                <button type="button"
+                        class="btn btn-ghost btn-xs text-primary mt-1"
+                        hx-get="{% url 'lab:config_form_add' section.key %}"
+                        hx-target="#generic-modal-content"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('generic-modal').showModal()">
+                    <i class="fa-solid fa-plus text-[10px]"></i>
+                    Add the first one
+                </button>
+                {% endif %}
+            </div>
+            {% endif %}  {# end elif section.objects / status_groups #}
+        </div>
+    </div>
+</div>

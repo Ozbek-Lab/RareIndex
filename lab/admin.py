@@ -216,8 +216,9 @@ class TestAdmin(SimpleHistoryAdmin):
 
 @admin.register(models.Status)
 class StatusAdmin(SimpleHistoryAdmin):
-    list_display = ["name", "content_type", "color", "created_by", "get_created_at", "get_updated_at"]
-    search_fields = ["name", "description"]
+    list_display = ["name", "short_name", "content_type", "color", "created_by", "get_created_at", "get_updated_at"]
+    list_editable = ["short_name"]
+    search_fields = ["name", "short_name", "description"]
     list_filter = ["content_type"]
 
     def get_created_at(self, obj):

@@ -1,8 +1,8 @@
 from django.urls import path
 from .views import (
-    DashboardView, IndividualListView, ProjectListView, SampleListView, IndividualDetailView, 
-    FamilyCreateView, HPOTermSearchView, RenderSelectedHPOTermView,
-    CompleteTaskView, ReopenTaskView, IndividualExportView
+    DashboardView, IndividualListView, ProjectListView, SampleListView, IndividualDetailView,
+    VariantListView, FamilyCreateView, HPOTermSearchView, RenderSelectedHPOTermView,
+    CompleteTaskView, ReopenTaskView, IndividualExportView, configurations_view,
 )
 from .profile_views import ProfileView, UpdateThemeView
 from .htmx_views import (
@@ -17,7 +17,8 @@ from .htmx_views import (
     pipeline_create_modal, analysis_create_modal,
     individual_projects_edit, individual_projects_save, project_search,
     document_preview,
-    request_form_create_modal, report_create_modal, variant_create_modal
+    request_form_create_modal, report_create_modal, variant_create_modal, variant_detail_partial,
+    config_form, config_delete_confirm, config_delete, config_section_partial,
 )
 
 
@@ -27,6 +28,7 @@ urlpatterns = [
     path("", DashboardView.as_view(), name="dashboard"),
     path("individuals/", IndividualListView.as_view(), name="individual_list"),
     path("projects/", ProjectListView.as_view(), name="project_list"),
+    path("variants/", VariantListView.as_view(), name="variant_list"),
     path("individuals/export/", IndividualExportView.as_view(), name="individual_export"),
     path("individuals/create-family/", FamilyCreateView.as_view(), name="create_family"),
     path("samples/", SampleListView.as_view(), name="sample_list"),
@@ -86,4 +88,13 @@ urlpatterns = [
     path("htmx/task/complete/<int:pk>/", CompleteTaskView.as_view(), name="complete_task"),
     path("htmx/task/reopen/<int:pk>/", ReopenTaskView.as_view(), name="reopen_task"),
     path("htmx/preview/<str:model_name>/<int:pk>/", document_preview, name="document_preview"),
+    path("htmx/variant/<int:pk>/detail/", variant_detail_partial, name="variant_detail_partial"),
+
+    # Configurations
+    path("configurations/", configurations_view, name="configurations"),
+    path("htmx/config/<str:model_name>/section/", config_section_partial, name="config_section"),
+    path("htmx/config/<str:model_name>/form/", config_form, name="config_form_add"),
+    path("htmx/config/<str:model_name>/<int:pk>/form/", config_form, name="config_form_edit"),
+    path("htmx/config/<str:model_name>/<int:pk>/delete-confirm/", config_delete_confirm, name="config_delete_confirm"),
+    path("htmx/config/<str:model_name>/<int:pk>/delete/", config_delete, name="config_delete"),
 ]

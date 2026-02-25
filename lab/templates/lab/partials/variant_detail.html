@@ -1,0 +1,664 @@
+{% load lab_tags %}
+<div x-data="{ tab: 'variant' }" class="bg-base-100">
+
+  <!-- Tabs -->
+  <div role="tablist" class="tabs tabs-boxed bg-base-200/50 p-1 gap-1 mb-4 flex-wrap">
+    <a role="tab"
+       class="tab transition-all duration-200"
+       :class="{ 'tab-active bg-white shadow-sm font-semibold': tab === 'variant' }"
+       @click="tab = 'variant'">
+      <i class="fa-solid fa-dna mr-1.5"></i>Variant
+    </a>
+    <a role="tab"
+       class="tab transition-all duration-200"
+       :class="{ 'tab-active bg-white shadow-sm font-semibold': tab === 'classifications' }"
+       @click="tab = 'classifications'">
+      <i class="fa-solid fa-certificate mr-1.5"></i>Classifications
+      {% with count=variant.classifications.count %}{% if count %}<span class="badge badge-xs badge-ghost ml-1">{{ count }}</span>{% endif %}{% endwith %}
+    </a>
+    <a role="tab"
+       class="tab transition-all duration-200"
+       :class="{ 'tab-active bg-white shadow-sm font-semibold': tab === 'annotations' }"
+       @click="tab = 'annotations'">
+      <i class="fa-solid fa-tags mr-1.5"></i>Annotations
+      {% with count=variant.annotations.count %}{% if count %}<span class="badge badge-xs badge-ghost ml-1">{{ count }}</span>{% endif %}{% endwith %}
+    </a>
+    <a role="tab"
+       class="tab transition-all duration-200"
+       :class="{ 'tab-active bg-white shadow-sm font-semibold': tab === 'cohort' }"
+       @click="tab = 'cohort'">
+      <i class="fa-solid fa-users mr-1.5"></i>Gene in Cohort
+    </a>
+  </div>
+
+  <div class="px-1 min-h-[180px]">
+
+    {# ─────────────────── VARIANT TAB ─────────────────── #}
+    <div x-show="tab === 'variant'"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0">
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        {# — Location & Type-specific — #}
+        <div class="border border-base-200 rounded-box">
+          <div class="p-4 space-y-3">
+
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
+                <i class="fa-solid fa-location-dot mr-1"></i>Location
+              </h3>
+              {% if variant.type == 'SNV' and variant.snv.reference and variant.snv.alternate %}
+              <a href="https://franklin.genoox.com/clinical-db/variant/snp/chr{{ variant.chromosome }}-{{ variant.start }}-{{ variant.snv.reference }}-{{ variant.snv.alternate }}-{{ variant.assembly_version|grch_to_hg }}"
+                 target="_blank" rel="noopener noreferrer"
+                 class="btn btn-xs btn-outline gap-1 h-6 min-h-0 px-2">
+                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                Franklin
+              </a>
+              {% endif %}
+            </div>
+            <dl class="space-y-1.5 text-sm">
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Assembly</dt>
+                <dd class="font-mono font-medium">{{ variant.assembly_version }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Chromosome</dt>
+                <dd class="font-mono font-medium">{{ variant.chromosome }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Start</dt>
+                <dd class="font-mono">{{ variant.start }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">End</dt>
+                <dd class="font-mono">{{ variant.end }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Zygosity</dt>
+                <dd>{{ variant.get_zygosity_display }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Type</dt>
+                <dd><span class="badge badge-sm badge-ghost">{{ variant.type }}</span></dd>
+              </div>
+              {% if variant.status %}
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Status</dt>
+                <dd style="color:{{ variant.status.color }};" class="font-medium text-xs">
+                  {% if variant.status.icon %}<i class="fa-solid {{ variant.status.icon }} mr-1"></i>{% endif %}
+                  {{ variant.status.display_name }}
+                </dd>
+              </div>
+              {% endif %}
+            </dl>
+
+            <div class="divider my-1 text-xs text-base-content/30">
+              {% if variant.type == 'SNV' %}SNV Details
+              {% elif variant.type == 'CNV' %}CNV Details
+              {% elif variant.type == 'SV' %}SV Details
+              {% elif variant.type == 'Repeat' %}Repeat Details
+              {% endif %}
+            </div>
+
+            <dl class="space-y-1.5 text-sm">
+              {% if variant.type == 'SNV' %}
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Reference</dt>
+                <dd class="font-mono font-medium text-error">{{ variant.snv.reference }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Alternate</dt>
+                <dd class="font-mono font-medium text-success">{{ variant.snv.alternate }}</dd>
+              </div>
+              {% elif variant.type == 'CNV' %}
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">CNV Type</dt>
+                <dd>{{ variant.cnv.get_cnv_type_display }}</dd>
+              </div>
+              {% if variant.cnv.copy_number is not None %}
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Copy Number</dt>
+                <dd class="font-mono">{{ variant.cnv.copy_number }}</dd>
+              </div>
+              {% endif %}
+              {% elif variant.type == 'SV' %}
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">SV Type</dt>
+                <dd>{{ variant.sv.get_sv_type_display }}</dd>
+              </div>
+              {% if variant.sv.breakpoints %}
+              <div class="space-y-1">
+                <dt class="text-base-content/50">Breakpoints</dt>
+                <dd class="font-mono text-xs bg-base-200 rounded p-2 break-all">{{ variant.sv.breakpoints }}</dd>
+              </div>
+              {% endif %}
+              {% elif variant.type == 'Repeat' %}
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Repeat Unit</dt>
+                <dd class="font-mono">{{ variant.repeat.repeat_unit }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Repeat Count</dt>
+                <dd class="font-mono">{{ variant.repeat.repeat_count }}</dd>
+              </div>
+              {% endif %}
+            </dl>
+
+            {# Pipeline that found this variant #}
+            {% if variant.pipeline %}
+            <div class="divider my-1 text-xs text-base-content/30">Originating Pipeline</div>
+            <dl class="space-y-1.5 text-sm">
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Type</dt>
+                <dd>{{ variant.pipeline.type.name }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Status</dt>
+                <dd>{{ variant.pipeline.status.name }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Performed</dt>
+                <dd>{{ variant.pipeline.performed_date|default:"—" }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">By</dt>
+                <dd>{{ variant.pipeline.performed_by.get_full_name|default:variant.pipeline.performed_by.username }}</dd>
+              </div>
+            </dl>
+            {% endif %}
+
+            <div class="divider my-1 text-xs text-base-content/30">Record</div>
+            <dl class="space-y-1.5 text-sm">
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Added by</dt>
+                <dd>{{ variant.created_by.get_full_name|default:variant.created_by.username }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-base-content/50">Added on</dt>
+                <dd class="text-base-content/60">{{ variant.created_at|date:"Y-m-d" }}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+
+        {# — Genes (spans 2 cols) — #}
+        <div class="border border-base-200 rounded-box md:col-span-2">
+          <div class="p-4">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+              <i class="fa-solid fa-dna mr-1"></i>Genes
+              <span class="badge badge-xs badge-ghost ml-1">{{ variant.genes.count }}</span>
+            </h3>
+            {% if variant.genes.count %}
+            <div class="overflow-x-auto">
+              <table class="table table-xs">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Full Name</th>
+                    <th>Location</th>
+                    <th>Locus Type</th>
+                    <th>OMIM</th>
+                    <th>HGNC</th>
+                    <th>Ensembl</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for gene in variant.genes.all %}
+                  <tr>
+                    <td class="font-mono font-bold text-primary whitespace-nowrap">{{ gene.symbol }}</td>
+                    <td class="text-base-content/70 max-w-[200px] truncate" title="{{ gene.name }}">{{ gene.name|default:"—" }}</td>
+                    <td class="font-mono text-xs whitespace-nowrap">{{ gene.location|default:"—" }}</td>
+                    <td class="text-xs text-base-content/60">{{ gene.locus_type|default:"—" }}</td>
+                    <td class="font-mono text-xs">
+                      {% if gene.omim_id %}
+                      <a href="https://omim.org/entry/{{ gene.omim_id }}" target="_blank" rel="noopener noreferrer"
+                         class="link link-hover text-info">{{ gene.omim_id }}</a>
+                      {% else %}—{% endif %}
+                    </td>
+                    <td class="font-mono text-xs">
+                      {% if gene.hgnc_id %}
+                      <a href="https://www.genenames.org/data/gene-symbol-report/#!/hgnc_id/{{ gene.hgnc_id }}" target="_blank" rel="noopener noreferrer"
+                         class="link link-hover text-info">{{ gene.hgnc_id }}</a>
+                      {% else %}—{% endif %}
+                    </td>
+                    <td class="font-mono text-xs">
+                      {% if gene.ensembl_gene_id %}
+                      <a href="https://www.ensembl.org/id/{{ gene.ensembl_gene_id }}" target="_blank" rel="noopener noreferrer"
+                         class="link link-hover text-info">{{ gene.ensembl_gene_id }}</a>
+                      {% else %}—{% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <p class="text-sm text-base-content/40 italic">No genes linked to this variant.</p>
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    {# ─────────────────── CLASSIFICATIONS TAB ─────────────────── #}
+    <div x-show="tab === 'classifications'" style="display:none;"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0">
+      {% if variant.classifications.count %}
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Classification</th>
+              <th>Inheritance</th>
+              <th>Classified By</th>
+              <th>Date</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in variant.classifications.all %}
+            <tr>
+              <td>
+                <span class="badge badge-sm font-medium whitespace-nowrap
+                  {% if c.classification == 'pathogenic' %}badge-error
+                  {% elif c.classification == 'likely_pathogenic' %}bg-orange-500 text-white border-0
+                  {% elif c.classification == 'vus' %}badge-warning
+                  {% elif c.classification == 'likely_benign' %}badge-info
+                  {% elif c.classification == 'benign' %}badge-success
+                  {% else %}badge-ghost{% endif %}">
+                  {{ c.get_classification_display }}
+                </span>
+              </td>
+              <td class="text-sm">{{ c.get_inheritance_display }}</td>
+              <td class="text-sm">{{ c.user.get_full_name|default:c.user.username }}</td>
+              <td class="text-sm text-base-content/60 whitespace-nowrap">{{ c.created_at|date:"Y-m-d" }}</td>
+              <td class="text-sm text-base-content/70 max-w-xs">{{ c.notes|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="flex flex-col items-center justify-center py-10 text-base-content/30">
+        <i class="fa-solid fa-certificate text-3xl mb-2"></i>
+        <p class="text-sm italic">No classifications recorded.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ─────────────────── ANNOTATIONS TAB ─────────────────── #}
+    <div x-show="tab === 'annotations'" style="display:none;"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0">
+      {% if annotations_display %}
+      <div class="space-y-2">
+        {% for item in annotations_display %}
+        {% with annotation=item.annotation display=item.display %}
+        <div x-data="{ open: true, raw: false }" class="border border-base-200 rounded-box overflow-hidden">
+
+          {# ── Header ── #}
+          <button type="button" @click="open = !open"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-base-200/50 transition-colors text-left">
+            <div class="flex items-center gap-3">
+              <i class="fa-solid fa-tag text-primary text-xs"></i>
+              <span class="font-semibold text-sm">{{ annotation.source }}</span>
+              {% if annotation.source_version %}
+              <span class="badge badge-xs badge-ghost font-mono">{{ annotation.source_version }}</span>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-base-content/40">{{ annotation.updated_at|date:"Y-m-d" }}</span>
+              <i class="fa-solid fa-chevron-right text-xs text-base-content/40 transition-transform duration-200"
+                 :class="{ 'rotate-90': open }"></i>
+            </div>
+          </button>
+
+          {# ── Body ── #}
+          <div x-show="open" x-collapse class="border-t border-base-200">
+
+            {# ════ VEP ════ #}
+            {% if display.type == 'vep' %}
+            <div class="p-4 space-y-4">
+              {# Summary row #}
+              {% if display.summary %}
+              <dl class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                {% for label, value in display.summary.items %}
+                <div>
+                  <dt class="text-xs text-base-content/40 uppercase tracking-wide mb-0.5">{{ label }}</dt>
+                  <dd class="font-medium">{{ value }}</dd>
+                </div>
+                {% endfor %}
+              </dl>
+              {% endif %}
+              {# Transcript consequences table #}
+              {% if display.transcripts %}
+              <div class="overflow-x-auto rounded border border-base-200">
+                <table class="table table-xs w-full text-xs">
+                  <thead class="bg-base-200/60 text-base-content/50 uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th>Gene</th>
+                      <th>Transcript</th>
+                      <th>Biotype</th>
+                      <th>Consequence</th>
+                      <th>Impact</th>
+                      <th>HGVSc</th>
+                      <th>HGVSp</th>
+                      <th>SIFT</th>
+                      <th>PolyPhen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for tc in display.transcripts %}
+                    <tr class="{% if tc.canonical %}bg-primary/5 font-medium{% endif %} hover:bg-base-200/30">
+                      <td class="font-semibold whitespace-nowrap">
+                        {{ tc.gene }}
+                        {% if tc.canonical %}<span class="badge badge-xs badge-primary ml-1">canonical</span>{% endif %}
+                      </td>
+                      <td class="font-mono text-[10px] text-base-content/60">{{ tc.transcript }}</td>
+                      <td class="text-base-content/60">{{ tc.biotype|default:"—" }}</td>
+                      <td class="max-w-[180px]">
+                        <span class="text-base-content/80">{{ tc.consequences|default:"—" }}</span>
+                      </td>
+                      <td>
+                        {% if tc.impact == 'HIGH' %}
+                          <span class="badge badge-xs badge-error">{{ tc.impact }}</span>
+                        {% elif tc.impact == 'MODERATE' %}
+                          <span class="badge badge-xs badge-warning">{{ tc.impact }}</span>
+                        {% elif tc.impact == 'LOW' %}
+                          <span class="badge badge-xs badge-success">{{ tc.impact }}</span>
+                        {% elif tc.impact == 'MODIFIER' %}
+                          <span class="badge badge-xs badge-ghost">{{ tc.impact }}</span>
+                        {% else %}
+                          <span class="text-base-content/40">—</span>
+                        {% endif %}
+                      </td>
+                      <td class="font-mono text-[10px] text-base-content/70 max-w-[160px] truncate" title="{{ tc.hgvsc }}">{{ tc.hgvsc|default:"—" }}</td>
+                      <td class="font-mono text-[10px] text-base-content/70 max-w-[160px] truncate" title="{{ tc.hgvsp }}">{{ tc.hgvsp|default:"—" }}</td>
+                      <td class="whitespace-nowrap">
+                        {% if tc.sift %}
+                          {% if 'deleterious' in tc.sift_pred %}
+                            <span class="text-error">{{ tc.sift }}</span>
+                          {% elif 'tolerated' in tc.sift_pred %}
+                            <span class="text-success">{{ tc.sift }}</span>
+                          {% else %}
+                            {{ tc.sift }}
+                          {% endif %}
+                        {% else %}
+                          <span class="text-base-content/30">—</span>
+                        {% endif %}
+                      </td>
+                      <td class="whitespace-nowrap">
+                        {% if tc.polyphen %}
+                          {% if 'probably_damaging' in tc.polyphen_pred %}
+                            <span class="text-error">{{ tc.polyphen }}</span>
+                          {% elif 'possibly_damaging' in tc.polyphen_pred %}
+                            <span class="text-warning">{{ tc.polyphen }}</span>
+                          {% elif 'benign' in tc.polyphen_pred %}
+                            <span class="text-success">{{ tc.polyphen }}</span>
+                          {% else %}
+                            {{ tc.polyphen }}
+                          {% endif %}
+                        {% else %}
+                          <span class="text-base-content/30">—</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% endif %}
+            </div>
+
+            {# ════ MyVariant ════ #}
+            {% elif display.type == 'myvariant' %}
+            <div class="p-4 space-y-4">
+              {% for section_name, section_fields in display.sections.items %}
+              <div>
+                <h4 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider mb-2">{{ section_name }}</h4>
+                <dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+                  {% for label, value in section_fields.items %}
+                  <div>
+                    <dt class="text-xs text-base-content/40 mb-0.5">{{ label }}</dt>
+                    <dd class="font-mono font-medium">
+                      {% if section_name == 'ClinVar' and label == 'Significance' %}
+                        {% if 'pathogenic' in value|lower and 'benign' not in value|lower %}
+                          <span class="text-error">{{ value }}</span>
+                        {% elif 'benign' in value|lower %}
+                          <span class="text-success">{{ value }}</span>
+                        {% elif 'uncertain' in value|lower %}
+                          <span class="text-warning">{{ value }}</span>
+                        {% else %}
+                          {{ value }}
+                        {% endif %}
+                      {% elif label == 'SIFT' %}
+                        {% if 'D' in value %}<span class="text-error">{{ value }}</span>
+                        {% elif 'T' in value %}<span class="text-success">{{ value }}</span>
+                        {% else %}{{ value }}{% endif %}
+                      {% elif label == 'PolyPhen2 (HDIV)' or label == 'PolyPhen2 (HVAR)' %}
+                        {% if 'D' in value %}<span class="text-error">{{ value }}</span>
+                        {% elif 'B' in value %}<span class="text-success">{{ value }}</span>
+                        {% elif 'P' in value %}<span class="text-warning">{{ value }}</span>
+                        {% else %}{{ value }}{% endif %}
+                      {% else %}
+                        {{ value }}
+                      {% endif %}
+                    </dd>
+                  </div>
+                  {% endfor %}
+                </dl>
+              </div>
+              {% endfor %}
+              {% if not display.sections %}
+              <p class="text-sm text-base-content/40 italic">No key fields extracted.</p>
+              {% endif %}
+            </div>
+
+            {# ════ GeneBe ════ #}
+            {% elif display.type == 'genebe' %}
+            <div class="p-4 space-y-4">
+              {% if display.fields %}
+              <dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+                {% for label, value in display.fields.items %}
+                <div>
+                  <dt class="text-xs text-base-content/40 uppercase tracking-wider mb-1">{{ label }}</dt>
+                  <dd class="font-medium">
+                    {% if label == 'ACMG Classification' %}
+                      {% if 'Pathogenic' in value and 'Likely' not in value %}
+                        <span class="badge badge-error">{{ value }}</span>
+                      {% elif 'Likely Pathogenic' in value %}
+                        <span class="badge badge-warning">{{ value }}</span>
+                      {% elif 'Benign' in value and 'Likely' not in value %}
+                        <span class="badge badge-success">{{ value }}</span>
+                      {% elif 'Likely Benign' in value %}
+                        <span class="badge badge-info">{{ value }}</span>
+                      {% elif 'Uncertain' in value %}
+                        <span class="badge badge-ghost">{{ value }}</span>
+                      {% else %}
+                        <span class="badge badge-ghost">{{ value }}</span>
+                      {% endif %}
+                    {% else %}
+                      {{ value }}
+                    {% endif %}
+                  </dd>
+                </div>
+                {% endfor %}
+              </dl>
+              {% endif %}
+              {% if display.criteria %}
+              <div>
+                <h4 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider mb-2">ACMG Criteria Met</h4>
+                <div class="flex flex-wrap gap-1.5">
+                  {% for criterion in display.criteria %}
+                  {% if criterion %}
+                  <span class="badge badge-sm badge-outline font-mono font-semibold">{{ criterion }}</span>
+                  {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              {% endif %}
+            </div>
+
+            {# ════ Generic ════ #}
+            {% else %}
+            <div class="p-4">
+              {% if display.fields %}
+              <dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+                {% for label, value in display.fields.items %}
+                <div>
+                  <dt class="text-xs text-base-content/40 mb-0.5">{{ label }}</dt>
+                  <dd class="font-mono text-xs break-all">{{ value }}</dd>
+                </div>
+                {% endfor %}
+              </dl>
+              {% else %}
+              <p class="text-sm text-base-content/40 italic">No data to display.</p>
+              {% endif %}
+            </div>
+            {% endif %}
+
+            {# ── Raw JSON toggle ── #}
+            <div class="border-t border-base-200 bg-base-200/20">
+              <button type="button" @click="raw = !raw"
+                      class="w-full flex items-center gap-2 px-4 py-2 text-xs text-base-content/40 hover:text-base-content/70 transition-colors text-left">
+                <i class="fa-solid fa-code text-[10px]"></i>
+                <span x-text="raw ? 'Hide raw JSON' : 'Show raw JSON'">Show raw JSON</span>
+              </button>
+              <div x-show="raw" x-collapse>
+                <pre class="px-4 pb-4 text-xs font-mono text-base-content/70 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto leading-relaxed">{{ annotation.data|json_pretty }}</pre>
+              </div>
+            </div>
+
+          </div>{# /body #}
+        </div>{# /card #}
+        {% endwith %}
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="flex flex-col items-center justify-center py-10 text-base-content/30">
+        <i class="fa-solid fa-tags text-3xl mb-2"></i>
+        <p class="text-sm italic">No annotations available.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ─────────────────── GENE IN COHORT TAB ─────────────────── #}
+    <div x-show="tab === 'cohort'" style="display:none;"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0">
+      {% if gene_cohort_data %}
+      <div x-data="{ geneTab: {{ gene_cohort_data.0.gene.pk }} }">
+
+        {# Gene sub-tabs #}
+        <div role="tablist" class="tabs tabs-bordered mb-4 flex-wrap">
+          {% for item in gene_cohort_data %}
+          <a role="tab"
+             class="tab text-sm font-medium transition-colors"
+             :class="{ 'tab-active font-semibold': geneTab === {{ item.gene.pk }} }"
+             @click="geneTab = {{ item.gene.pk }}">
+            <i class="fa-solid fa-dna mr-1.5 text-xs opacity-60"></i>
+            {{ item.gene.symbol }}
+            <span class="badge badge-xs ml-1.5"
+                  :class="geneTab === {{ item.gene.pk }} ? 'badge-primary' : 'badge-ghost'">
+              {{ item.count }}
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+
+        {# Gene content panels #}
+        {% for item in gene_cohort_data %}
+        <div x-show="geneTab === {{ item.gene.pk }}" style="display:none;"
+             x-transition:enter="transition ease-out duration-100"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
+          {% if item.entries %}
+          <div class="overflow-x-auto rounded-box border border-base-200">
+            <table class="table table-xs w-full text-xs">
+              <thead class="bg-base-200/60 text-base-content/50 uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th>Individual</th>
+                  <th>Sex</th>
+                  <th>Affected</th>
+                  <th>Institution</th>
+                  <th class="min-w-[160px]">Phenotype (HPO)</th>
+                  <th>Test Type</th>
+                  <th>Pipeline Type</th>
+                  <th>Analysis Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for entry in item.entries %}
+                <tr class="hover:bg-base-200/30 {% if entry.is_current %}bg-primary/5{% endif %}">
+                  <td class="whitespace-nowrap">
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-mono font-semibold text-[11px]">{{ entry.individual.individual_id }}</span>
+                      <a href="{% url 'lab:individual_detail' entry.individual.pk %}"
+                         target="_blank" rel="noopener noreferrer"
+                         class="btn btn-xs btn-ghost btn-square text-base-content/40 hover:text-primary"
+                         title="Open in new tab">
+                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                      </a>
+                      {% if entry.is_current %}
+                      <span class="badge badge-xs badge-primary">this</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td class="capitalize text-base-content/70">{{ entry.individual.sex|default:"—" }}</td>
+                  <td>
+                    {% if entry.individual.is_affected %}
+                    <span class="badge badge-xs badge-error">Affected</span>
+                    {% else %}
+                    <span class="badge badge-xs badge-ghost">Unaffected</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-base-content/70">
+                    {% for inst in entry.individual.institution.all %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+                  </td>
+                  <td class="max-w-[240px] py-2">
+                    <div class="flex flex-wrap gap-1.5">
+                      {% for hpo in entry.individual.hpo_terms.all %}
+                      <span class="badge badge-sm badge-ghost whitespace-nowrap" title="{{ hpo.label }}">{{ hpo.label|truncatechars:35 }}</span>
+                      {% empty %}<span class="text-base-content/30 italic">—</span>{% endfor %}
+                    </div>
+                  </td>
+                  {# Workflow columns — shown when a pipeline/analysis exists #}
+                  <td class="text-base-content/80">{{ entry.test.test_type.name|default:"—" }}</td>
+                  <td class="text-base-content/80">{{ entry.pipeline.type.name|default:"—" }}</td>
+                  <td class="text-base-content/80">{{ entry.analysis.type.name|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="flex flex-col items-center justify-center py-10 text-base-content/30">
+            <i class="fa-solid fa-users text-2xl mb-2"></i>
+            <p class="text-sm italic">No individuals carry a variant in {{ item.gene.symbol }}.</p>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+      </div>
+      {% else %}
+      <div class="flex flex-col items-center justify-center py-10 text-base-content/30">
+        <i class="fa-solid fa-dna text-3xl mb-2"></i>
+        <p class="text-sm italic">No genes linked to this variant.</p>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>

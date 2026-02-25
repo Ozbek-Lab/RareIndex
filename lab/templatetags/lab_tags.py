@@ -1,4 +1,5 @@
 import os
+import json
 from django import template
 
 register = template.Library()
@@ -70,6 +71,21 @@ def get_content_type_id(obj):
 @register.filter
 def class_name(obj):
     return obj.__class__.__name__
+
+
+@register.filter
+def grch_to_hg(value):
+    """Convert GRCh38/GRCh37 assembly names to UCSC hg38/hg19 style."""
+    return {'GRCh38': 'hg38', 'GRCh37': 'hg19'}.get(str(value), str(value))
+
+
+@register.filter
+def json_pretty(value):
+    """Serialize a Python object to an indented JSON string for display."""
+    try:
+        return json.dumps(value, indent=2, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return str(value)
 
 @register.filter
 def basename(value):

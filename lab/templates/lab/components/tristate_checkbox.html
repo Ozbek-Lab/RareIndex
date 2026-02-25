@@ -73,7 +73,7 @@
         <input type="hidden" name="{{ name }}__exclude" value="{{ value }}">
     </template>
     
-    {% if count %}
-    <span class="text-xs text-base-content/50">{{ count }}</span>
+    {% if count is not None %}
+    <span class="text-xs text-base-content/40 tabular-nums">{{ count }}</span>
     {% endif %}
 </div>

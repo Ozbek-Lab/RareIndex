@@ -84,5 +84,11 @@
     </template>
 
     <!-- Label -->
-    <span x-text="'{{ label }}'.trim() || '{{ value }}'"></span>
+    <span
+      x-text="'{{ short_label|default:'' }}'.trim() || '{{ label }}'.trim() || '{{ value }}'"
+      {% if short_label %}title="{{ label }}"{% endif %}
+    ></span>
+
+    <!-- Optional count badge -->
+    {% if count is not None %}<span class="opacity-50 tabular-nums text-[10px] ml-0.5">{{ count }}</span>{% endif %}
 </div>

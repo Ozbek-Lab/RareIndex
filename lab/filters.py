@@ -6,7 +6,7 @@ from .models import (
     Individual, Sample, Project, SampleType, TestType, Status, PipelineType,
     Institution, Test, Pipeline, Analysis, AnalysisType
 )
-from variant.models import Classification, Variant
+from variant.models import Classification, Variant, Annotation
 
 class TristateFilterMixin:
     """
@@ -298,6 +298,135 @@ class IndividualFilter(django_filters.FilterSet):
             queryset = queryset.exclude(exclude_q)
             
         return queryset.distinct()
+
+class VariantFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(method='filter_search', label="Search")
+
+    # Core variant fields
+    status = TristateModelMultipleChoiceFilter(
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        label="Status",
+    )
+    zygosity = TristateMultipleChoiceFilter(
+        choices=Variant.ZYGOSITY_CHOICES,
+        label="Zygosity",
+    )
+    variant_type = django_filters.MultipleChoiceFilter(
+        choices=[('SNV', 'SNV'), ('CNV', 'CNV'), ('SV', 'SV'), ('Repeat', 'Repeat')],
+        method='filter_variant_type',
+        label="Type",
+    )
+    classifications__classification = TristateMultipleChoiceFilter(
+        choices=Classification.CLASSIFICATION_CHOICES,
+        label="ACMG Classification",
+    )
+    chromosome = django_filters.CharFilter(lookup_expr='icontains', label="Chromosome")
+    gene = django_filters.CharFilter(method='filter_gene', label="Gene Symbol")
+    assembly_version = TristateMultipleChoiceFilter(
+        choices=[],  # populated in __init__
+        label="Assembly",
+    )
+
+    # Annotation filters
+    annotation_source = django_filters.MultipleChoiceFilter(
+        choices=[],  # populated in __init__
+        method='filter_annotation_source',
+        label="Annotation Source",
+    )
+    gnomad_af_max = django_filters.NumberFilter(
+        method='filter_gnomad_af_max',
+        label="gnomAD AF ≤",
+    )
+
+    class Meta:
+        model = Variant
+        fields = ['status', 'zygosity']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Restrict Status choices to Variant content type
+        ct = ContentType.objects.get_for_model(Variant)
+        self.filters['status'].queryset = Status.objects.filter(content_type=ct)
+
+        # Dynamically build assembly choices from existing data
+        assemblies = (
+            Variant.objects.values_list('assembly_version', flat=True)
+            .distinct()
+            .order_by('assembly_version')
+        )
+        self.filters['assembly_version'].field.choices = [(a, a) for a in assemblies if a]
+
+        # Dynamically build annotation source choices
+        sources = (
+            Annotation.objects.values_list('source', flat=True)
+            .distinct()
+            .order_by('source')
+        )
+        self.filters['annotation_source'].field.choices = [(s, s) for s in sources if s]
+
+    def filter_search(self, queryset, name, value):
+        return queryset.filter(
+            Q(chromosome__icontains=value)
+            | Q(individual__primary_id__icontains=value)
+            | Q(genes__symbol__icontains=value)
+        ).distinct()
+
+    def filter_gene(self, queryset, name, value):
+        return queryset.filter(genes__symbol__icontains=value).distinct()
+
+    def filter_variant_type(self, queryset, name, value):
+        if not value:
+            return queryset
+        q_obj = Q()
+        if 'SNV' in value:
+            q_obj |= Q(snv__isnull=False)
+        if 'CNV' in value:
+            q_obj |= Q(cnv__isnull=False)
+        if 'SV' in value:
+            q_obj |= Q(sv__isnull=False)
+        if 'Repeat' in value:
+            q_obj |= Q(repeat__isnull=False)
+
+        data = self.data
+        excluded = data.getlist(f"{name}__exclude") if hasattr(data, 'getlist') else []
+        exclude_q = Q()
+        if 'SNV' in excluded:
+            exclude_q |= Q(snv__isnull=False)
+        if 'CNV' in excluded:
+            exclude_q |= Q(cnv__isnull=False)
+        if 'SV' in excluded:
+            exclude_q |= Q(sv__isnull=False)
+        if 'Repeat' in excluded:
+            exclude_q |= Q(repeat__isnull=False)
+
+        if value:
+            queryset = queryset.filter(q_obj)
+        if excluded:
+            queryset = queryset.exclude(exclude_q)
+        return queryset.distinct()
+
+    def filter_annotation_source(self, queryset, name, value):
+        if not value:
+            return queryset
+        q = Q()
+        for source in value:
+            q |= Q(annotations__source=source)
+        return queryset.filter(q).distinct()
+
+    def filter_gnomad_af_max(self, queryset, name, value):
+        if value is None:
+            return queryset
+        threshold = float(value)
+        # Try the most common JSON paths used by myvariant.info and GeneBe
+        annotated_variant_ids = Annotation.objects.filter(
+            Q(data__gnomad_genome__af__af__lte=threshold)
+            | Q(data__gnomad_exome__af__af__lte=threshold)
+            | Q(data__gnomad__af__lte=threshold)
+        ).values_list('variant_id', flat=True)
+        return queryset.filter(pk__in=annotated_variant_ids).distinct()
+
 
 class ProjectFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")

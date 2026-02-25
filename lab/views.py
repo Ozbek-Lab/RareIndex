@@ -1,13 +1,296 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, HttpResponseForbidden
 from django.utils import timezone
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableMixin
 from django_filters.views import FilterView
-from .models import Individual, Sample, Task, Note, Project, Test, Pipeline, Status
-from .tables import IndividualTable, SampleTable, ProjectTable
-from .filters import IndividualFilter, ProjectFilter
+from django.core.cache import cache
+from django.db.models import Count
+from django.contrib.contenttypes.models import ContentType
+from .models import (
+    Individual, Sample, Task, Note, Project, Test, Pipeline, Analysis,
+    Status, SampleType, TestType, PipelineType, AnalysisType,
+)
+from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
+from .filters import IndividualFilter, ProjectFilter, VariantFilter
+from variant.models import Variant, Annotation as VariantAnnotation, Classification as VariantClassification
+
+
+def _variant_filter_counts():
+    """
+    Returns per-option counts for the variant filter sidebar.
+
+    Results are cached for 5 minutes. The counts are global (not affected by
+    the current filter selection) so they only need to be refreshed when the
+    underlying data changes, not on every request. The cache is invalidated
+    automatically after TTL; for immediate refresh after bulk imports use
+    cache.delete("variant_filter_counts").
+    """
+    CACHE_KEY = "variant_filter_counts"
+    CACHE_TTL = 300  # seconds
+
+    counts = cache.get(CACHE_KEY)
+    if counts is not None:
+        return counts
+
+    type_counts = {
+        'SNV':    Variant.objects.filter(snv__isnull=False).count(),
+        'CNV':    Variant.objects.filter(cnv__isnull=False).count(),
+        'SV':     Variant.objects.filter(sv__isnull=False).count(),
+        'Repeat': Variant.objects.filter(repeat__isnull=False).count(),
+    }
+
+    zygosity_counts = {choice[0]: 0 for choice in Variant.ZYGOSITY_CHOICES}
+    zygosity_counts.update({
+        row['zygosity']: row['c']
+        for row in Variant.objects.filter(zygosity__isnull=False).values('zygosity').annotate(c=Count('id'))
+    })
+
+    classif_counts = {choice[0]: 0 for choice in VariantClassification.CLASSIFICATION_CHOICES}
+    classif_counts.update({
+        row['classification']: row['c']
+        for row in VariantClassification.objects.values('classification')
+        .annotate(c=Count('variant_id', distinct=True))
+        if row['classification']
+    })
+
+    variant_ct = ContentType.objects.get_for_model(Variant)
+    status_counts = {s: 0 for s in Status.objects.filter(content_type=variant_ct).values_list('name', flat=True)}
+    status_counts.update({
+        row['status__name']: row['c']
+        for row in Variant.objects.filter(status__isnull=False)
+        .values('status__name')
+        .annotate(c=Count('id'))
+        if row['status__name']
+    })
+    assembly_counts = {
+        row['assembly_version']: row['c']
+        for row in Variant.objects.values('assembly_version').annotate(c=Count('id'))
+    }
+    annotation_source_counts = {
+        row['source']: row['c']
+        for row in VariantAnnotation.objects.values('source')
+        .annotate(c=Count('variant_id', distinct=True))
+    }
+
+    counts = {
+        "variant_type":      type_counts,
+        "zygosity":          zygosity_counts,
+        "classification":    classif_counts,
+        "status":            status_counts,
+        "assembly_version":  assembly_counts,
+        "annotation_source": annotation_source_counts,
+    }
+    cache.set(CACHE_KEY, counts, CACHE_TTL)
+    return counts
+
+def _individual_filter_counts():
+    """
+    Returns per-option counts for the individual filter sidebar.
+    Each count represents the number of distinct individuals matching that option.
+    Cached for 5 minutes.
+    """
+    CACHE_KEY = "individual_filter_counts"
+    CACHE_TTL = 300
+
+    counts = cache.get(CACHE_KEY)
+    if counts is not None:
+        return counts
+
+    individual_ct = ContentType.objects.get_for_model(Individual)
+    sample_ct = ContentType.objects.get_for_model(Sample)
+    test_ct = ContentType.objects.get_for_model(Test)
+    pipeline_ct = ContentType.objects.get_for_model(Pipeline)
+    analysis_ct = ContentType.objects.get_for_model(Analysis)
+    variant_ct = ContentType.objects.get_for_model(Variant)
+
+    # Status (keyed by status name)
+    status_counts = {s: 0 for s in Status.objects.filter(content_type=individual_ct).values_list('name', flat=True)}
+    status_counts.update({
+        row['status__name']: row['c']
+        for row in Individual.objects.values('status__name').annotate(c=Count('id'))
+        if row['status__name']
+    })
+
+    # Sex (keyed by sex value: 'male', 'female', 'other')
+    sex_counts = {'male': 0, 'female': 0, 'other': 0}
+    sex_counts.update({
+        row['sex']: row['c']
+        for row in Individual.objects.filter(sex__isnull=False).values('sex').annotate(c=Count('id'))
+    })
+
+    # Is alive (keyed by Python bool True/False)
+    is_alive_counts = {True: 0, False: 0}
+    is_alive_counts.update({
+        row['is_alive']: row['c']
+        for row in Individual.objects.values('is_alive').annotate(c=Count('id'))
+    })
+
+    # Sample type (count = distinct individuals with at least one sample of this type)
+    sample_type_counts = {name: 0 for name in SampleType.objects.values_list('name', flat=True)}
+    sample_type_counts.update({
+        row['sample_type__name']: row['c']
+        for row in Sample.objects.values('sample_type__name')
+        .annotate(c=Count('individual_id', distinct=True))
+        if row['sample_type__name']
+    })
+
+    # Sample status
+    sample_status_counts = {s: 0 for s in Status.objects.filter(content_type=sample_ct).values_list('name', flat=True)}
+    sample_status_counts.update({
+        row['status__name']: row['c']
+        for row in Sample.objects.values('status__name')
+        .annotate(c=Count('individual_id', distinct=True))
+        if row['status__name']
+    })
+
+    # Test type
+    test_type_counts = {name: 0 for name in TestType.objects.values_list('name', flat=True)}
+    test_type_counts.update({
+        row['test_type__name']: row['c']
+        for row in Test.objects.filter(sample__isnull=False).values('test_type__name')
+        .annotate(c=Count('sample__individual_id', distinct=True))
+        if row['test_type__name']
+    })
+
+    # Test status
+    test_status_counts = {s: 0 for s in Status.objects.filter(content_type=test_ct).values_list('name', flat=True)}
+    test_status_counts.update({
+        row['status__name']: row['c']
+        for row in Test.objects.filter(sample__isnull=False).values('status__name')
+        .annotate(c=Count('sample__individual_id', distinct=True))
+        if row['status__name']
+    })
+
+    # Pipeline type
+    pipeline_type_counts = {name: 0 for name in PipelineType.objects.values_list('name', flat=True)}
+    pipeline_type_counts.update({
+        row['type__name']: row['c']
+        for row in Pipeline.objects.values('type__name')
+        .annotate(c=Count('test__sample__individual_id', distinct=True))
+        if row['type__name']
+    })
+
+    # Pipeline status
+    pipeline_status_counts = {s: 0 for s in Status.objects.filter(content_type=pipeline_ct).values_list('name', flat=True)}
+    pipeline_status_counts.update({
+        row['status__name']: row['c']
+        for row in Pipeline.objects.values('status__name')
+        .annotate(c=Count('test__sample__individual_id', distinct=True))
+        if row['status__name']
+    })
+
+    # Analysis type
+    analysis_type_counts = {name: 0 for name in AnalysisType.objects.values_list('name', flat=True)}
+    analysis_type_counts.update({
+        row['type__name']: row['c']
+        for row in Analysis.objects.values('type__name')
+        .annotate(c=Count('pipeline__test__sample__individual_id', distinct=True))
+        if row['type__name']
+    })
+
+    # Analysis status
+    analysis_status_counts = {s: 0 for s in Status.objects.filter(content_type=analysis_ct).values_list('name', flat=True)}
+    analysis_status_counts.update({
+        row['status__name']: row['c']
+        for row in Analysis.objects.values('status__name')
+        .annotate(c=Count('pipeline__test__sample__individual_id', distinct=True))
+        if row['status__name']
+    })
+
+    # Variant type (distinct individuals with that variant subtype)
+    variant_type_counts = {
+        'SNV':    Individual.objects.filter(variants__snv__isnull=False).distinct().count(),
+        'CNV':    Individual.objects.filter(variants__cnv__isnull=False).distinct().count(),
+        'SV':     Individual.objects.filter(variants__sv__isnull=False).distinct().count(),
+        'Repeat': Individual.objects.filter(variants__repeat__isnull=False).distinct().count(),
+    }
+
+    # Variant status (distinct individuals)
+    variant_status_counts = {s: 0 for s in Status.objects.filter(content_type=variant_ct).values_list('name', flat=True)}
+    variant_status_counts.update({
+        row['status__name']: row['c']
+        for row in Variant.objects.filter(status__isnull=False).values('status__name')
+        .annotate(c=Count('individual_id', distinct=True))
+        if row['status__name']
+    })
+
+    # ACMG classification (distinct individuals)
+    classif_counts = {choice[0]: 0 for choice in VariantClassification.CLASSIFICATION_CHOICES}
+    classif_counts.update({
+        row['classification']: row['c']
+        for row in VariantClassification.objects.values('classification')
+        .annotate(c=Count('variant__individual_id', distinct=True))
+        if row['classification']
+    })
+
+    counts = {
+        "status":           status_counts,
+        "sex":              sex_counts,
+        "is_alive":         is_alive_counts,
+        "sample_type":      sample_type_counts,
+        "sample_status":    sample_status_counts,
+        "test_type":        test_type_counts,
+        "test_status":      test_status_counts,
+        "pipeline_type":    pipeline_type_counts,
+        "pipeline_status":  pipeline_status_counts,
+        "analysis_type":    analysis_type_counts,
+        "analysis_status":  analysis_status_counts,
+        "variant_type":     variant_type_counts,
+        "variant_status":   variant_status_counts,
+        "classification":   classif_counts,
+    }
+    cache.set(CACHE_KEY, counts, CACHE_TTL)
+    return counts
+
+
+def _project_filter_counts():
+    """
+    Returns per-option counts for the project filter sidebar.
+    Cached for 5 minutes.
+    """
+    CACHE_KEY = "project_filter_counts"
+    CACHE_TTL = 300
+
+    counts = cache.get(CACHE_KEY)
+    if counts is not None:
+        return counts
+
+    project_ct = ContentType.objects.get_for_model(Project)
+
+    # Status (keyed by status name)
+    status_counts = {s: 0 for s in Status.objects.filter(content_type=project_ct).values_list('name', flat=True)}
+    status_counts.update({
+        row['status__name']: row['c']
+        for row in Project.objects.values('status__name').annotate(c=Count('id'))
+        if row['status__name']
+    })
+
+    # Priority (keyed by priority value: 'low', 'medium', 'high', 'urgent')
+    priority_counts = {choice[0]: 0 for choice in Task.PRIORITY_CHOICES}
+    priority_counts.update({
+        row['priority']: row['c']
+        for row in Project.objects.values('priority').annotate(c=Count('id'))
+        if row['priority']
+    })
+
+    # Created by (keyed by username; no zero-seeding since it's dynamic)
+    created_by_counts = {
+        row['created_by__username']: row['c']
+        for row in Project.objects.values('created_by__username').annotate(c=Count('id'))
+        if row['created_by__username']
+    }
+
+    counts = {
+        "status":     status_counts,
+        "priority":   priority_counts,
+        "created_by": created_by_counts,
+    }
+    cache.set(CACHE_KEY, counts, CACHE_TTL)
+    return counts
+
 
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = "lab/dashboard.html"
@@ -119,10 +402,17 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         for s in statuses:
             metadata[s.name] = {
                 'color': s.color,
-                'icon': s.icon
+                'icon': s.icon,
+                'short_name': s.short_name,
             }
         context['status_metadata'] = metadata
         
+        # Filter counts are only needed on full page render (sidebar is present)
+        if not self.request.htmx:
+            context['filter_counts'] = _individual_filter_counts()
+        else:
+            context['filter_counts'] = {}
+
         # Get filtered queryset to calculate distinct families
         if 'filter' in context:
             qs = context['filter'].qs
@@ -193,9 +483,16 @@ class ProjectListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         for s in statuses:
             metadata[s.name] = {
                 'color': s.color,
-                'icon': s.icon
+                'icon': s.icon,
+                'short_name': s.short_name,
             }
         context['status_metadata'] = metadata
+
+        # Filter counts are only needed on full page render (sidebar is present)
+        if not self.request.htmx:
+            context['filter_counts'] = _project_filter_counts()
+        else:
+            context['filter_counts'] = {}
         
         return context
     
@@ -213,6 +510,50 @@ class ProjectListView(LoginRequiredMixin, SingleTableMixin, FilterView):
             return ["lab/project_list.html"]
             
         return ["lab/project_list.html"]
+
+
+class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
+    model = Variant
+    table_class = VariantTable
+    filterset_class = VariantFilter
+    template_name = "lab/variant_list.html"
+    paginate_by = 25
+
+    def get_queryset(self):
+        return super().get_queryset().select_related("individual", "status").prefetch_related("genes")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["total_count"] = self.model.objects.count()
+
+        statuses = Status.objects.all()
+        metadata = {}
+        for s in statuses:
+            metadata[s.name] = {
+                "color": s.color,
+                "icon": s.icon,
+                "short_name": s.short_name,
+            }
+        context["status_metadata"] = metadata
+
+        # Filter counts are only needed when the full page renders (sidebar included).
+        # HTMX filter/search/scroll requests only swap the table container, so skip
+        # the count queries entirely on those — they would be computed but never used.
+        if not self.request.htmx:
+            context["filter_counts"] = _variant_filter_counts()
+        else:
+            context["filter_counts"] = {}
+
+        return context
+
+    def get_template_names(self):
+        if self.request.htmx:
+            if self.request.headers.get('HX-Target') == 'variant-table-container':
+                return ["lab/partials/variant_table.html"]
+            if self.request.GET.get("page"):
+                return ["lab/partials/variant_rows.html"]
+            return ["lab/variant_list.html"]
+        return ["lab/variant_list.html"]
 
 from django.views.generic import ListView, DetailView
 from django.db.models import Q
@@ -696,3 +1037,35 @@ class IndividualExportView(LoginRequiredMixin, View):
             writer.writerow(row)
 
         return response
+
+
+@login_required
+def configurations_view(request):
+    """
+    Configuration catalogue page.  Shows one collapsible section per config
+    model; a section is visible only when the user has view or change permission
+    on that model.
+    """
+    from .htmx_views import _get_config_registry, _build_section_context
+
+    registry = _get_config_registry()
+
+    CONFIG_PERMISSIONS = [
+        f"lab.change_{key}" for key in registry
+    ] + [f"lab.view_{key}" for key in registry]
+
+    has_any = any(request.user.has_perm(p) for p in CONFIG_PERMISSIONS)
+    if not has_any:
+        return HttpResponseForbidden("You do not have permission to view Configurations.")
+
+    sections = []
+    for key, config in registry.items():
+        can_view = request.user.has_perm(f"lab.view_{key}")
+        can_change = request.user.has_perm(f"lab.change_{key}")
+        if can_view or can_change:
+            # Wrap each section in a dict with key "section" so the
+            # config_section.html partial can use {{ section.xxx }} in both
+            # the include context and the direct render context.
+            sections.append(_build_section_context(request, key, config))
+
+    return render(request, "lab/configurations.html", {"sections": sections})

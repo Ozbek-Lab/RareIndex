@@ -295,6 +295,12 @@ class Family(HistoryMixin, models.Model):
 
 class Status(HistoryMixin, models.Model):
     name = models.CharField(max_length=100)
+    short_name = models.CharField(
+        max_length=30,
+        blank=True,
+        null=True,
+        help_text="Optional abbreviated label shown in table badges (falls back to full name).",
+    )
     description = models.TextField(blank=True)
     color = models.CharField(max_length=50, default="gray")
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
@@ -303,6 +309,11 @@ class Status(HistoryMixin, models.Model):
     )
     icon = models.CharField(max_length=255, null=True)
     history = HistoricalRecords()
+
+    @property
+    def display_name(self):
+        """Returns short_name when set, otherwise falls back to name."""
+        return self.short_name if self.short_name else self.name
 
     class Meta:
         verbose_name_plural = "statuses"
@@ -447,7 +458,7 @@ class Individual(HistoryMixin, models.Model):
             .order_by("id_type__name", "id_type__id")
             .values_list("id_value", flat=True)
         )
-        parts = [str(self.id), *zero_priority_ids, self.full_name]
+        parts = [str(self.id), *zero_priority_ids]
         return " - ".join([p for p in parts if p])
 
     @property

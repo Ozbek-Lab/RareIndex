@@ -1,0 +1,202 @@
+{% load lab_tags %}
+<div
+  class="h-full flex flex-col bg-base-100 border-r border-base-200 w-80"
+  x-data="{
+    expanded: JSON.parse(localStorage.getItem('variantFilterSidebarExpanded')) || {
+        'variant': true,
+        'annotation': false
+    },
+    init() {
+        this.$watch('expanded', val => localStorage.setItem('variantFilterSidebarExpanded', JSON.stringify(val)));
+    }
+  }"
+  x-init="init()"
+>
+  <!-- Header -->
+  <div class="px-6 py-4 border-b border-base-200 flex justify-between items-center bg-base-100 sticky top-0 z-10">
+    <h2 class="font-bold text-lg text-base-content">Filters</h2>
+    <button
+      class="btn btn-ghost btn-xs text-primary font-normal normal-case"
+      hx-get="{% url 'lab:variant_list' %}"
+      hx-target="body"
+      hx-push-url="true"
+    >
+      Reset All
+    </button>
+  </div>
+
+  <form
+    id="variant-filter-form"
+    hx-get="{% url 'lab:variant_list' %}"
+    hx-target="#variant-table-container"
+    hx-trigger="change delay:300ms, filter-changed delay:300ms"
+    hx-push-url="true"
+    hx-indicator="#table-indicator"
+    hx-include="[name='search']"
+    class="flex-1 overflow-y-auto p-2 space-y-2"
+    @submit.prevent
+  >
+
+    <!-- Variant Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.variant" @change.stop />
+      <div class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent">
+        <span>Variant</span>
+        <span
+          @click.stop="expanded.variant = !expanded.variant"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+        ><i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{ 'rotate-90': expanded.variant }"></i></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+
+          <!-- Status -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.status.field.choices %}
+                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.status|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="status" value=choice.0 label=choice.1 short_label=metadata.short_name color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'status' excluded_values=request.GET|get_list:'status__exclude' %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Type -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.variant_type.field.choices %}
+                {% with count=filter_counts.variant_type|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="variant_type" value=choice.0 label=choice.1 count=count current_values=request.GET|get_list:'variant_type' excluded_values=request.GET|get_list:'variant_type__exclude' %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Zygosity -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Zygosity</h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.zygosity.field.choices %}
+                {% with count=filter_counts.zygosity|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="zygosity" value=choice.0 label=choice.1 count=count current_values=request.GET|get_list:'zygosity' excluded_values=request.GET|get_list:'zygosity__exclude' %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- ACMG Classification -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">ACMG Classification</h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.classifications__classification.field.choices %}
+                {% with count=filter_counts.classification|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="classifications__classification" value=choice.0 label=choice.1 count=count current_values=request.GET|get_list:'classifications__classification' excluded_values=request.GET|get_list:'classifications__classification__exclude' %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Chromosome -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Chromosome</h3>
+            <label class="input input-bordered input-sm flex items-center w-full">
+              <input
+                type="text"
+                name="chromosome"
+                value="{{ request.GET.chromosome|default:'' }}"
+                class="grow min-w-0"
+                placeholder="e.g. chr1, chrX"
+                autocomplete="off"
+              />
+            </label>
+          </div>
+
+          <!-- Gene Symbol -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Gene Symbol</h3>
+            <label class="input input-bordered input-sm flex items-center w-full">
+              <input
+                type="text"
+                name="gene"
+                value="{{ request.GET.gene|default:'' }}"
+                class="grow min-w-0"
+                placeholder="e.g. BRCA1, TP53"
+                autocomplete="off"
+              />
+            </label>
+          </div>
+
+          <!-- Assembly Version (only shown when multiple values exist) -->
+          {% if filter.form.assembly_version.field.choices|length > 1 %}
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Assembly</h3>
+            <div class="flex flex-wrap gap-2">
+              {% for choice in filter.form.assembly_version.field.choices %}
+                {% with count=filter_counts.assembly_version|get_item:choice.0 %}
+                  {% include "lab/components/tristate_status_pill.html" with name="assembly_version" value=choice.0 label=choice.1 count=count current_values=request.GET|get_list:'assembly_version' excluded_values=request.GET|get_list:'assembly_version__exclude' %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Annotations Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.annotation" @change.stop />
+      <div class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent">
+        <span>Annotations</span>
+        <span
+          @click.stop="expanded.annotation = !expanded.annotation"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+        ><i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{ 'rotate-90': expanded.annotation }"></i></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+
+          <!-- Annotation Source (only shown when multiple values exist) -->
+          {% if filter.form.annotation_source.field.choices|length > 1 %}
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Source</h3>
+            <div class="space-y-1">
+              {% for choice in filter.form.annotation_source.field.choices %}
+                {% with count=filter_counts.annotation_source|get_item:choice.0 %}
+                  {% include "lab/components/tristate_checkbox.html" with name="annotation_source" value=choice.0 label=choice.1 count=count current_values=request.GET|get_list:'annotation_source' excluded_values=request.GET|get_list:'annotation_source__exclude' %}
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- gnomAD AF max -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
+              gnomAD AF &le;
+            </h3>
+            <p class="text-xs text-base-content/50">Filter by max population allele frequency.</p>
+            <label class="input input-bordered input-sm flex items-center w-full">
+              <input
+                type="number"
+                name="gnomad_af_max"
+                value="{{ request.GET.gnomad_af_max|default:'' }}"
+                class="grow min-w-0"
+                placeholder="e.g. 0.01"
+                min="0"
+                max="1"
+                step="0.001"
+                autocomplete="off"
+              />
+            </label>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </form>
+</div>
