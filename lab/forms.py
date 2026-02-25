@@ -18,7 +18,7 @@ from .models import (
     Family,
     AnalysisType,
     AnalysisRequestForm,
-    AnalysisReport
+    AnalysisReport,
     IdentifierType,
 )
 from django.contrib.contenttypes.models import ContentType
