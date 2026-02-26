@@ -133,14 +133,15 @@
     {% endif %}
     {% endwith %}
 
-    <div class="flex flex-col gap-1 border-l border-base-300 ml-4 pl-4 space-y-2 relative">
+    <div class="flex flex-col gap-1 border-l-2 border-secondary/50 ml-4 pl-4 space-y-2 relative">
     {% if individual.samples.exists %}
         {% for sample in individual.samples.all %}
         <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50 transition-all duration-200 group" x-data="{ expanded: true }">
+            <div class="absolute pointer-events-none" style="top:0;bottom:0;left:0;width:4px;background-color:oklch(var(--s)/0.35);border-radius:var(--rounded-box,1rem) 0 0 var(--rounded-box,1rem);z-index:20;"></div>
             <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
             <div class="card-body p-0 overflow-visible relative z-10">
                 <!-- Sample Header -->
-                <div class="p-1 border-b border-base-200 flex items-center justify-between bg-secondary/10 relative z-30 px-2 py-2 border-l-4 border-l-secondary rounded-t-lg">
+                <div class="p-1 border-b border-base-200 flex items-center justify-between bg-secondary/10 relative z-30 px-2 py-2 rounded-t-lg">
                     <div class="flex items-center gap-1">
                         <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square">
                             <i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -233,15 +234,16 @@
                     <!-- Tests -->
                     <div class="p-1 space-y-1 relative z-10">
                         {% if sample.tests.exists %}
-                            <div class="pl-4 border-l-2 border-secondary/30 ml-4 space-y-3 relative">
+                            <div class="pl-4 border-l-2 border-primary/50 ml-4 space-y-3 relative">
                                 {% for test in sample.tests.all %}
                                 <div class="relative mb-2 last:mb-0" x-data="{ expanded: true }">
                                     <!-- Test Node -->
                                         <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
 
                                         <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50">
+                                            <div class="absolute pointer-events-none" style="top:0;bottom:0;left:0;width:4px;background-color:oklch(var(--p)/0.35);border-radius:var(--rounded-box,1rem) 0 0 var(--rounded-box,1rem);z-index:20;"></div>
                                             <div class="card-body p-0">
-                                                <div class="flex justify-between items-center bg-primary/10 px-2 py-2 border-b border-base-200 border-l-4 border-l-primary rounded-t-lg relative z-30">
+                                                <div class="flex justify-between items-center bg-primary/10 px-2 py-2 border-b border-base-200 rounded-t-lg relative z-30">
                                                     <div class="flex items-center gap-1">
                                                         <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
                                                             <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -330,15 +332,16 @@
                                     <!-- Pipelines (Collapsible) -->
                                     <div x-show="expanded" x-collapse>
                                         {% if test.pipelines.exists %}
-                                        <div class="pl-4 border-l-2 border-primary/30 ml-4 mt-2 space-y-3 relative z-10">
+                                        <div class="pl-4 border-l-2 border-accent/50 ml-4 mt-2 space-y-3 relative z-10">
                                             {% for pipeline in test.pipelines.all %}
                                             <div class="relative" x-data="{ expanded: true }">
                                                 <!-- Pipeline Node -->
                                                 <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
                                                 
                                                 <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50">
+                                                    <div class="absolute pointer-events-none" style="top:0;bottom:0;left:0;width:4px;background-color:oklch(var(--a)/0.35);border-radius:var(--rounded-box,1rem) 0 0 var(--rounded-box,1rem);z-index:20;"></div>
                                                     <div class="card-body p-0">
-                                                        <div class="flex justify-between items-center bg-accent/10 px-2 py-2 border-b border-base-200 border-l-4 border-l-accent rounded-t-lg">
+                                                        <div class="flex justify-between items-center bg-accent/10 px-2 py-2 border-b border-base-200 rounded-t-lg">
                                                             <div class="flex items-center gap-1">
                                                                 <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
                                                                     <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -422,13 +425,14 @@
 
 
                                                             {% if pipeline.analyses.exists %}
-                                                            <div class="mt-2 space-y-2 border-t border-base-200/50 pt-2 pl-4 border-l-2 border-l-accent/40 ml-4 relative">
+                                                            <div class="mt-2 space-y-2 border-t border-base-200/50 pt-2 pl-4 border-l-2 border-l-base-content/20 ml-4 relative">
                                                                 {% for analysis in pipeline.analyses.all %}
-                                                                    <div x-data="{ expanded: true }" class="flex flex-col relative bg-base-100 border border-base-300 shadow-sm overflow-visible group focus-within:z-50 transition-all duration-200">
-                                                                    <div class="absolute -left-4 top-0 h-5 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
-                                                                    <div class="p-0 text-left">
-                                                                        <!-- Header -->
-                                                                        <div class="flex items-center justify-between py-2 px-2 bg-base-200/60 border-b border-base-200 border-l-4 border-l-base-300 relative z-10 rounded-t-lg">
+                                                    <div x-data="{ expanded: true }" class="flex flex-col relative bg-base-100 border border-base-300 shadow-sm overflow-visible group focus-within:z-50 transition-all duration-200">
+                                                    <div class="absolute pointer-events-none" style="top:0;bottom:0;left:0;width:4px;background-color:oklch(var(--bc)/0.2);border-radius:var(--rounded-box,1rem) 0 0 var(--rounded-box,1rem);z-index:20;"></div>
+                                                    <div class="absolute -left-4 top-0 h-5 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
+                                                    <div class="p-0 text-left">
+                                                        <!-- Header -->
+                                                        <div class="flex items-center justify-between py-2 px-2 bg-base-200/60 border-b border-base-200 relative z-10 rounded-t-lg">
                                                                             <!-- Left Side -->
                                                                             <div class="flex items-center gap-2">
                                                                                 <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
