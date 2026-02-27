@@ -119,7 +119,6 @@ class SampleTable(tables.Table):
         }
 
 class ProjectTable(tables.Table):
-    project_id = tables.Column(verbose_name="ID", order_by=("id"))
     name = tables.Column(verbose_name="Name")
     status = tables.Column(verbose_name="Status")
     priority = tables.Column(verbose_name="Priority")
@@ -137,7 +136,7 @@ class ProjectTable(tables.Table):
     class Meta:
         model = Project
         template_name = "lab/partials/project_expandable_table.html" 
-        fields = ("project_id", "name", "status", "priority", "due_date", "individuals_count")
+        fields = ("name", "status", "priority", "due_date", "individuals_count")
         attrs = {
             "class": "table table-zebra table-sm",
             "thead": {

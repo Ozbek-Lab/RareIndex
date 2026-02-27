@@ -1,0 +1,121 @@
+<tr id="member-row-{{ member.pk }}" class="{% if member.pk == individual.pk %}bg-primary/5 font-medium{% elif edit_mode %}bg-warning/5{% else %}hover:bg-base-200/30{% endif %} transition-colors">
+    <td>
+        <div class="flex items-center gap-1">
+            <span class="font-mono text-sm text-primary">{{ member.primary_id }}</span>
+            {% if member.pk == individual.pk %}
+                <span class="badge badge-xs badge-ghost text-base-content/40">this</span>
+            {% endif %}
+            {% if not edit_mode %}
+                <a href="{% url 'lab:individual_detail' member.pk %}"
+                   class="btn btn-ghost btn-xs btn-square text-base-content/40 hover:text-primary"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   title="Open in new tab">
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                </a>
+            {% endif %}
+        </div>
+    </td>
+    <td class="font-mono text-xs text-base-content/50">{{ member.secondary_id|default:"—" }}</td>
+    <td class="text-xs">
+        {% if member.sex == "male" %}
+            <i class="fa-solid fa-mars text-blue-500"></i>
+        {% elif member.sex == "female" %}
+            <i class="fa-solid fa-venus text-pink-500"></i>
+        {% else %}
+            <span class="text-base-content/40">—</span>
+        {% endif %}
+    </td>
+
+    {% if edit_mode %}
+        <td>
+            <select name="father_id" class="select select-bordered select-xs font-mono text-xs w-full max-w-[160px]">
+                <option value="">—</option>
+                {% for fm in family_members %}
+                    <option value="{{ fm.pk }}" {% if member.father_id == fm.pk %}selected{% endif %}>{{ fm.primary_id }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td>
+            <select name="mother_id" class="select select-bordered select-xs font-mono text-xs w-full max-w-[160px]">
+                <option value="">—</option>
+                {% for fm in family_members %}
+                    <option value="{{ fm.pk }}" {% if member.mother_id == fm.pk %}selected{% endif %}>{{ fm.primary_id }}</option>
+                {% endfor %}
+            </select>
+        </td>
+    {% else %}
+        <td class="font-mono text-xs">
+            {% if member.father %}
+                <a href="{% url 'lab:individual_detail' member.father.pk %}"
+                   class="text-primary hover:underline">{{ member.father.primary_id }}</a>
+            {% else %}
+                <span class="text-base-content/40">—</span>
+            {% endif %}
+        </td>
+        <td class="font-mono text-xs">
+            {% if member.mother %}
+                <a href="{% url 'lab:individual_detail' member.mother.pk %}"
+                   class="text-primary hover:underline">{{ member.mother.primary_id }}</a>
+            {% else %}
+                <span class="text-base-content/40">—</span>
+            {% endif %}
+        </td>
+    {% endif %}
+
+    <td>
+        {% if member.status %}
+        <span class="badge badge-xs gap-1 font-normal">
+            {% if member.status.icon %}
+                <i class="fa-solid {{ member.status.icon }}" style="color: {{ member.status.color }};"></i>
+            {% else %}
+                <span class="size-1.5 rounded-full" style="background-color: {{ member.status.color }};"></span>
+            {% endif %}
+            {{ member.status.name }}
+        </span>
+        {% else %}—{% endif %}
+    </td>
+    <td class="space-x-1">
+        {% if member.is_index %}
+            <span class="badge badge-xs badge-primary">Index Case</span>
+        {% endif %}
+        {% if member.mother_id == individual.pk or member.father_id == individual.pk %}
+            <span class="badge badge-xs badge-ghost">Parent</span>
+        {% endif %}
+        {% if individual.mother_id == member.pk %}
+            <span class="badge badge-xs badge-ghost">Mother</span>
+        {% endif %}
+        {% if individual.father_id == member.pk %}
+            <span class="badge badge-xs badge-ghost">Father</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if edit_mode %}
+            {% csrf_token %}
+            <input type="hidden" name="individual_pk" value="{{ individual.pk }}">
+            <div class="flex gap-1">
+                <button hx-post="{% url 'lab:individual_parents_save' member.pk %}"
+                        hx-include="closest tr"
+                        hx-target="#member-row-{{ member.pk }}"
+                        hx-swap="outerHTML"
+                        class="btn btn-primary btn-xs">
+                    Save
+                </button>
+                <button hx-get="{% url 'lab:individual_parents_display' member.pk %}?individual_pk={{ individual.pk }}"
+                        hx-target="#member-row-{{ member.pk }}"
+                        hx-swap="outerHTML"
+                        class="btn btn-ghost btn-xs">
+                    Cancel
+                </button>
+            </div>
+        {% else %}
+            <button hx-get="{% url 'lab:individual_parents_edit' member.pk %}?individual_pk={{ individual.pk }}"
+                    hx-target="#member-row-{{ member.pk }}"
+                    hx-swap="outerHTML"
+                    class="btn btn-ghost btn-xs btn-square text-base-content/40 hover:text-primary"
+                    title="Edit parents">
+                <i class="fa-solid fa-pencil text-[10px]"></i>
+            </button>
+        {% endif %}
+    </td>
+</tr>

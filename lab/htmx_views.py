@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.views.generic import View
 from django.apps import apps
-from .models import Individual, Family
+from .models import Individual, Family, Project
 
 
 
@@ -432,6 +432,45 @@ def family_search(request):
     
     context = {"page_obj": page_obj, "query": query}
     return render(request, "lab/partials/family_picker_results.html", context)
+
+
+@login_required
+def individual_parents_edit(request, pk):
+    member = get_object_or_404(Individual, pk=pk)
+    individual_pk = request.GET.get("individual_pk")
+    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+    family_members = member.family.individuals.exclude(pk=pk) if member.family else Individual.objects.none()
+    context = {"member": member, "individual": individual, "family_members": family_members, "edit_mode": True}
+    return render(request, "lab/partials/family_member_row.html", context)
+
+
+@login_required
+def individual_parents_display(request, pk):
+    member = get_object_or_404(Individual, pk=pk)
+    individual_pk = request.GET.get("individual_pk")
+    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+    context = {"member": member, "individual": individual, "edit_mode": False}
+    return render(request, "lab/partials/family_member_row.html", context)
+
+
+@login_required
+@require_POST
+def individual_parents_save(request, pk):
+    member = get_object_or_404(Individual, pk=pk)
+    individual_pk = request.POST.get("individual_pk")
+    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+
+    father_id = request.POST.get("father_id") or None
+    mother_id = request.POST.get("mother_id") or None
+
+    member.father_id = int(father_id) if father_id else None
+    member.mother_id = int(mother_id) if mother_id else None
+    member.save()
+    member.refresh_from_db()
+
+    family_members = member.family.individuals.exclude(pk=pk) if member.family else Individual.objects.none()
+    context = {"member": member, "individual": individual, "family_members": family_members, "edit_mode": False}
+    return render(request, "lab/partials/family_member_row.html", context)
 
 
 @login_required
@@ -866,12 +905,58 @@ def individual_projects_save(request, pk):
 
 @login_required
 def project_search(request):
-    from .models import Project
     query = request.GET.get("q", "")
     projects = Project.objects.all()
     if query:
         projects = projects.filter(name__icontains=query)
     return render(request, "lab/partials/project_picker_results.html", {"projects": projects[:10]})
+
+
+@login_required
+def project_individual_search(request, pk):
+    project = get_object_or_404(Project, pk=pk)
+    query = request.GET.get("q", "").strip()
+    individuals = Individual.objects.none()
+    if query:
+        individuals = (
+            Individual.objects
+            .prefetch_related("cross_ids__id_type", "status")
+            .filter(cross_ids__id_value__icontains=query)
+            .distinct()[:15]
+        )
+    already_in_project = set(project.individuals.values_list("pk", flat=True))
+    return render(request, "lab/partials/project_individual_search_results.html", {
+        "individuals": individuals,
+        "project": project,
+        "already_in_project": already_in_project,
+        "query": query,
+    })
+
+
+@login_required
+@require_POST
+def project_individual_add(request, project_pk, individual_pk):
+    project = get_object_or_404(Project, pk=project_pk)
+    individual = get_object_or_404(Individual, pk=individual_pk)
+    project.individuals.add(individual)
+    project.refresh_from_db()
+    project = (
+        Project.objects
+        .prefetch_related("individuals__cross_ids__id_type", "individuals__status")
+        .get(pk=project_pk)
+    )
+    return render(request, "lab/partials/tabs/_project_individuals.html", {"project": project})
+
+
+@login_required
+def project_individual_remove(request, project_pk, individual_pk):
+    if request.method not in ("DELETE", "POST"):
+        from django.http import HttpResponseNotAllowed
+        return HttpResponseNotAllowed(["DELETE", "POST"])
+    project = get_object_or_404(Project, pk=project_pk)
+    individual = get_object_or_404(Individual, pk=individual_pk)
+    project.individuals.remove(individual)
+    return HttpResponse("")
 
 
 @login_required

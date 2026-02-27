@@ -41,9 +41,13 @@
                     <i class="fa-solid fa-filter text-lg"></i>
                 </button>
                 <h1 class="text-2xl font-bold text-base-content whitespace-nowrap">Individuals</h1>
-                <div id="table-counts" class="badge badge-lg badge-ghost">
+                <div id="table-counts" class="flex items-center gap-2">
                     <!-- HTMX OOB Target -->
-                    {{ family_count }} Families with {{ table.page.paginator.count }} Individuals
+                    <div class="tooltip tooltip-bottom" data-tip="{{ family_count }} Famil{{ family_count|pluralize:'y,ies' }} · {{ affected_count }} Affected · {{ index_count }} Index">
+                        <span class="badge badge-lg badge-ghost font-normal cursor-default">
+                            {{ table.page.paginator.count }} Individual{{ table.page.paginator.count|pluralize }}
+                        </span>
+                    </div>
                 </div>
 
                 <div class="max-w-md w-full ml-4">

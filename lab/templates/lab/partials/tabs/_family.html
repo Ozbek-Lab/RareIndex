@@ -1,0 +1,66 @@
+{% if individual.family %}
+{% with family=individual.family %}
+<div class="space-y-4">
+    <!-- Family Header -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm">
+        <div class="card-body p-4">
+            <div class="flex items-start justify-between">
+                <div>
+                    <h3 class="card-title text-sm uppercase text-base-content/50 mb-1">Family</h3>
+                    <div class="flex items-center gap-3">
+                        <span class="font-mono font-bold text-xl">{{ family.family_id }}</span>
+                        {% if family.is_consanguineous %}
+                            <span class="badge badge-sm badge-warning gap-1">
+                                <i class="fa-solid fa-circle-nodes text-[10px]"></i> Consanguineous
+                            </span>
+                        {% elif family.is_consanguineous == False %}
+                            <span class="badge badge-sm badge-ghost text-base-content/40">Non-consanguineous</span>
+                        {% endif %}
+                    </div>
+                    {% if family.description %}
+                        <p class="text-sm text-base-content/60 mt-1">{{ family.description }}</p>
+                    {% endif %}
+                </div>
+                <span class="badge badge-ghost badge-sm text-base-content/50">
+                    {{ family.individuals.count }} member{{ family.individuals.count|pluralize }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Members Table -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm">
+        <div class="card-body p-4">
+            <h3 class="card-title text-sm uppercase text-base-content/50 mb-3">Members</h3>
+            <div class="overflow-x-auto rounded-lg border border-base-200">
+                <table class="table table-sm w-full">
+                    <thead class="bg-base-200/50">
+                        <tr>
+                            <th class="text-xs font-semibold text-base-content/60">Primary ID</th>
+                            <th class="text-xs font-semibold text-base-content/60">Secondary ID</th>
+                            <th class="text-xs font-semibold text-base-content/60">Sex</th>
+                            <th class="text-xs font-semibold text-base-content/60">Father ID</th>
+                            <th class="text-xs font-semibold text-base-content/60">Mother ID</th>
+                            <th class="text-xs font-semibold text-base-content/60">Status</th>
+                            <th class="text-xs font-semibold text-base-content/60">Role</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for member in family.individuals.all %}
+                            {% include "lab/partials/family_member_row.html" with member=member individual=individual edit_mode=False %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endwith %}
+{% else %}
+<div class="flex flex-col items-center justify-center py-16 text-base-content/40">
+    <i class="fa-solid fa-people-group text-4xl mb-3 opacity-30"></i>
+    <span class="font-medium">No family assigned</span>
+    <span class="text-sm mt-1">Edit Demographics to assign this individual to a family.</span>
+</div>
+{% endif %}

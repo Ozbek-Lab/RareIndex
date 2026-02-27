@@ -641,6 +641,8 @@ class Pipeline(HistoryMixin, models.Model):
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
     type = models.ForeignKey(PipelineType, on_delete=models.PROTECT)
     status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    input_location = models.TextField(blank=True, help_text="Path to the input file(s) used by this pipeline run")
+    output_location = models.TextField(blank=True, help_text="Path to the output directory or file(s) produced by this pipeline run")
     notes = GenericRelation("Note")
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_pipelines"

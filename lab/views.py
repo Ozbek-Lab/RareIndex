@@ -3,7 +3,7 @@ from django.http import HttpResponse, HttpResponseForbidden
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, DetailView
 from django_tables2 import SingleTableMixin
 from django_filters.views import FilterView
 from django.core.cache import cache
@@ -11,7 +11,7 @@ from django.db.models import Count
 from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual, Sample, Task, Note, Project, Test, Pipeline, Analysis,
-    Status, SampleType, TestType, PipelineType, AnalysisType,
+    Status, SampleType, TestType, PipelineType, AnalysisType, IdentifierType,
 )
 from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
 from .filters import IndividualFilter, ProjectFilter, VariantFilter
@@ -421,6 +421,8 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         
         # Count distinct non-null families the filtered individuals belong to
         context['family_count'] = qs.exclude(family__isnull=True).values('family').distinct().count()
+        context['affected_count'] = qs.filter(is_affected=True).count()
+        context['index_count'] = qs.filter(is_index=True).count()
 
         # Load Selected HPO Terms
         hpo_term_ids = self.request.GET.getlist('hpo_terms')
@@ -642,6 +644,21 @@ class SampleListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         if self.request.htmx:
             return ["lab/partials/sample_table.html"]
 
+class ProjectDetailView(LoginRequiredMixin, DetailView):
+    model = Project
+    template_name = "lab/project_detail.html"
+    context_object_name = "project"
+
+    def get_queryset(self):
+        return Project.objects.prefetch_related(
+            'individuals',
+            'individuals__cross_ids__id_type',
+            'individuals__status',
+            'status',
+            'created_by',
+        )
+
+
 class IndividualDetailView(LoginRequiredMixin, DetailView):
     model = Individual
     template_name = "lab/individual_detail.html"
@@ -655,14 +672,25 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
             'samples__tests',
             'samples__tests__pipelines',
             'cross_ids',
+            'cross_ids__id_type',
             'hpo_terms',
-            'family',
             'institution',
             'physicians',
             'projects',
+            'family__individuals',
+            'family__individuals__cross_ids__id_type',
+            'family__individuals__status',
         ).get(pk=self.kwargs['pk'])
         
         context['individual'] = individual
+
+        primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+        secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+        context['primary_id_type_name'] = primary_type.name if primary_type else "Primary ID"
+        context['secondary_id_type_name'] = secondary_type.name if secondary_type else "Secondary ID"
+
+        primary_xid = individual.cross_ids.filter(id_type__use_priority=1).order_by("id_type__id").first()
+        context['display_id'] = primary_xid.id_value if primary_xid else individual.pk
         
         # Explicitly pass history to context with field diffs
         history_qs = individual.history.all().select_related('history_user')[:20]

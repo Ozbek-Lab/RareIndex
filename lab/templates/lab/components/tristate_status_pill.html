@@ -4,6 +4,7 @@
         value: '{{ value }}',
         name: '{{ name }}',
         color: '{{ color|default:'gray' }}',
+        textColor: '{{ color|default:'gray'|contrast_color }}',
         icon: '{{ icon|default:'' }}',
         init() {
             // Check initial state from server-rendered active lists
@@ -36,12 +37,7 @@
             if (this.state === 'neutral') {
                 return classes + ' bg-base-100 border-base-300 text-base-content/70 hover:border-base-content/50';
             } else if (this.state === 'include') {
-                // Use style binding for dynamic colors, or map basic colors to tailwind classes if possible
-                // For now, let's use a generic 'primary' look or try to use the color.
-                // If we want to use the specific color passed, we might need style attribute.
-                // But let's assume 'color' is a valid CSS color string or tailwind class suffix.
-                // If it's a hex code, we need style. 
-                return classes + ' border-transparent text-white shadow-sm';
+                return classes + ' border-transparent shadow-sm';
             } else if (this.state === 'exclude') {
                 return classes + ' bg-error/10 border-error text-error';
             }
@@ -54,7 +50,7 @@
                 if (activeColor === 'gray') {
                     activeColor = '#22c55e'; // Tailwind green-500
                 }
-                return `background-color: ${activeColor}; border-color: ${activeColor};`;
+                return `background-color: ${activeColor}; border-color: ${activeColor}; color: ${this.textColor};`;
             }
             return '';
         }

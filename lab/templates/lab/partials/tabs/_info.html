@@ -26,6 +26,7 @@
             {% partial demographics_content %}
         </div>
     </div>
+
 </div>
 
 {% partialdef identification_content %}
@@ -424,9 +425,7 @@
                     <div class="font-bold text-sm">{{ project.name }}</div>
                     <div class="text-xs text-base-content/60">{{ project.description|truncatechars:50 }}</div>
                 </div>
-                <span class="badge badge-sm" style="background-color: {{ project.status.color }}; color: white;">
-                    {{ project.status.name }}
-                </span>
+                <span class="badge badge-sm whitespace-nowrap shrink-0" style="background-color: {{ project.status.color }}; color: {{ project.status.color|contrast_color }};">{{ project.status.name }}</span>
             </div>
             {% endfor %}
         </div>

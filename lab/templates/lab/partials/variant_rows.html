@@ -20,8 +20,9 @@
 
 {% for row in table.paginated_rows %}
 <tr {{ row.attrs.as_html }}
-    class="hover:bg-base-200/50 transition-colors border-b-0"
-    :class="{'bg-base-200': expandedId === '{{ row.record.pk }}'}"
+    class="hover:bg-base-200/50 transition-colors border-b-0 cursor-pointer"
+    :class="{'bg-base-200': expandedId === '{{ row.record.pk }}', 'cursor-pointer': true}"
+    @click="if (!$event.target.closest('button, a, input, select')) { expandedId = expandedId === '{{ row.record.pk }}' ? null : '{{ row.record.pk }}' }"
     {% if forloop.first %}
     x-data
     x-intersect.threshold.20="history.replaceState(null, '', '{% clean_pagination_url table.page.number %}')"
@@ -29,17 +30,9 @@
     {% for column, cell in row.items %}
     <td {{ column.attrs.td.as_html }}>
         {% if forloop.first %}
-            <div class="flex items-center gap-1">
-                <button type="button"
-                        class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary transition-transform duration-200"
-                        :class="{'rotate-90': expandedId === '{{ row.record.pk }}'}"
-                        @click.stop="expandedId = expandedId === '{{ row.record.pk }}' ? null : '{{ row.record.pk }}'">
-                    <i class="fa-solid fa-chevron-right"></i>
-                </button>
-                <span class="ml-1">
-                    {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
-                </span>
-            </div>
+            <span>
+                {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
+            </span>
         {% else %}
             {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
         {% endif %}

@@ -21,11 +21,23 @@
             HPO Terms
             <span class="badge badge-sm badge-ghost ml-2">{{ individual.hpo_terms.count }}</span>
         </div>
-        <button hx-get="{% url 'lab:hpo_edit' individual.pk %}" 
-                hx-target="closest .hpo-container"
-                class="btn btn-ghost btn-xs btn-circle">
-            <i class="fa-solid fa-pencil text-xs"></i>
-        </button>
+        <div class="flex items-center gap-1">
+            <button x-data="{ copied: false }"
+                    @click="
+                        const terms = [...document.querySelectorAll('#hpo-card-container-{{ individual.pk }} .badge-outline .font-mono')].map(el => el.textContent.trim()).join(', ');
+                        navigator.clipboard.writeText(terms).then(() => { copied = true; setTimeout(() => copied = false, 2000); });
+                    "
+                    class="btn btn-ghost btn-xs btn-circle tooltip tooltip-left"
+                    :data-tip="copied ? 'Copied!' : 'Copy HPO IDs'">
+                <i class="fa-solid text-xs" :class="copied ? 'fa-check text-success' : 'fa-copy'"></i>
+            </button>
+            <button hx-get="{% url 'lab:hpo_edit' individual.pk %}"
+                    hx-target="closest .hpo-container"
+                    class="btn btn-ghost btn-xs btn-circle tooltip tooltip-left"
+                    data-tip="Edit HPO Terms">
+                <i class="fa-solid fa-pencil text-xs"></i>
+            </button>
+        </div>
     </h3>
     
     {% if individual.hpo_terms.exists %}

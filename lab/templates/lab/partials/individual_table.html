@@ -10,7 +10,11 @@
 </div>
 
 {% if request.htmx %}
-<div id="table-counts" hx-swap-oob="true" class="badge badge-lg badge-ghost">
-    {{ family_count }} Families with {{ table.page.paginator.count }} Individuals
+<div id="table-counts" hx-swap-oob="true" class="flex items-center gap-2">
+    <div class="tooltip tooltip-bottom" data-tip="{{ family_count }} Famil{{ family_count|pluralize:'y,ies' }} · {{ affected_count }} Affected · {{ index_count }} Index">
+        <span class="badge badge-lg badge-ghost font-normal cursor-default">
+            {{ table.page.paginator.count }} Individual{{ table.page.paginator.count|pluralize }}
+        </span>
+    </div>
 </div>
 {% endif %}
