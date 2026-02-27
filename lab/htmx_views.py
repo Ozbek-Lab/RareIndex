@@ -942,7 +942,11 @@ def project_individual_add(request, project_pk, individual_pk):
     project.refresh_from_db()
     project = (
         Project.objects
-        .prefetch_related("individuals__cross_ids__id_type", "individuals__status")
+        .prefetch_related(
+            "individuals__cross_ids__id_type",
+            "individuals__status",
+            "individuals__institution",
+        )
         .get(pk=project_pk)
     )
     return render(request, "lab/partials/tabs/_project_individuals.html", {"project": project})
@@ -956,7 +960,17 @@ def project_individual_remove(request, project_pk, individual_pk):
     project = get_object_or_404(Project, pk=project_pk)
     individual = get_object_or_404(Individual, pk=individual_pk)
     project.individuals.remove(individual)
-    return HttpResponse("")
+    project.refresh_from_db()
+    project = (
+        Project.objects
+        .prefetch_related(
+            "individuals__cross_ids__id_type",
+            "individuals__status",
+            "individuals__institution",
+        )
+        .get(pk=project_pk)
+    )
+    return render(request, "lab/partials/tabs/_project_individuals.html", {"project": project})
 
 
 @login_required

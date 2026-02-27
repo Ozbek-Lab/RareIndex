@@ -5,7 +5,7 @@
     <!-- Search / Add Bar -->
     <div class="mb-4" x-data="{ searchOpen: false }">
         <div class="flex items-center justify-between mb-2">
-            <h4 class="text-xs uppercase text-base-content/50 font-bold flex items-center gap-1">
+            <h4 id="project-individuals-heading" class="text-xs uppercase text-base-content/50 font-bold flex items-center gap-1">
                 <i class="fa-solid fa-users"></i>
                 {{ project.individuals.count }} Individual{{ project.individuals.count|pluralize }}
             </h4>
@@ -39,66 +39,100 @@
     </div>
 
     <!-- Individuals Table -->
-    {% partialdef individuals_list inline %}
-    {% if project.individuals.exists %}
-    <div class="overflow-x-auto rounded-lg border border-base-200">
-        <table class="table table-sm w-full">
-            <thead class="bg-base-200/50">
-                <tr>
-                    <th class="text-xs font-semibold text-base-content/60">Primary ID</th>
-                    <th class="text-xs font-semibold text-base-content/60">Secondary ID</th>
-                    <th class="text-xs font-semibold text-base-content/60">Status</th>
-                    <th class="text-xs font-semibold text-base-content/60">Sex</th>
-                    <th class="text-xs font-semibold text-base-content/60">Added</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for individual in project.individuals.all %}
-                <tr class="hover:bg-base-200/30 transition-colors" id="project-individual-row-{{ individual.pk }}">
-                    <td>
-                        <a href="{% url 'lab:individual_detail' individual.pk %}"
-                           class="font-mono text-sm text-primary hover:underline font-medium">
-                            {{ individual.primary_id }}
-                        </a>
-                    </td>
-                    <td class="font-mono text-xs text-base-content/60">{{ individual.secondary_id|default:"—" }}</td>
-                    <td>
-                        {% if individual.status %}
-                        <span class="badge badge-xs gap-1 font-normal">
-                            {% if individual.status.icon %}
-                                <i class="fa-solid {{ individual.status.icon }}" style="color: {{ individual.status.color }};"></i>
-                            {% else %}
-                                <span class="size-1.5 rounded-full" style="background-color: {{ individual.status.color }};"></span>
-                            {% endif %}
-                            {{ individual.status.name }}
-                        </span>
-                        {% else %}—{% endif %}
-                    </td>
-                    <td class="text-xs text-base-content/60 capitalize">{{ individual.sex|default:"—" }}</td>
-                    <td class="text-xs text-base-content/50">{{ individual.created_at|date:"M d, Y" }}</td>
-                    <td class="text-right">
-                        <button class="btn btn-ghost btn-xs text-error hover:bg-error/10"
-                                hx-delete="{% url 'lab:project_individual_remove' project.pk individual.pk %}"
-                                hx-target="#project-individual-row-{{ individual.pk }}"
-                                hx-swap="outerHTML swap:200ms"
-                                hx-confirm="Remove {{ individual.primary_id }} from this project?"
-                                title="Remove from project">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div id="project-individuals-table">
+        {% partial individuals_list %}
     </div>
-    {% else %}
-    <div class="flex flex-col items-center justify-center py-10 border-2 border-dashed border-base-200 rounded-box text-base-content/40">
-        <i class="fa-solid fa-users text-3xl mb-2 opacity-30"></i>
-        <span class="font-medium text-sm">No individuals in this project yet</span>
-        <span class="text-xs mt-1">Use the "Add Individual" button to get started</span>
-    </div>
-    {% endif %}
+
+    {% partialdef individuals_list %}
+        {% if project.individuals.exists %}
+        <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-sm w-full">
+                <thead class="bg-base-200/50">
+                    <tr>
+                        <th class="text-xs font-semibold text-base-content/60">Primary ID</th>
+                        <th class="text-xs font-semibold text-base-content/60">Secondary ID</th>
+                        <th class="text-xs font-semibold text-base-content/60">Status</th>
+                        <th class="text-xs font-semibold text-base-content/60">Institution</th>
+                        <th class="text-xs font-semibold text-base-content/60">Sex</th>
+                        <th class="text-xs font-semibold text-base-content/60">Added</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for individual in project.individuals.all %}
+                    <tr class="hover:bg-base-200/30 transition-colors" id="project-individual-row-{{ individual.pk }}">
+                        <td>
+                            <a href="{% url 'lab:individual_detail' individual.pk %}"
+                               class="font-mono text-sm text-primary hover:underline font-medium">
+                                {{ individual.primary_id }}
+                            </a>
+                        </td>
+                        <td class="font-mono text-xs text-base-content/60">{{ individual.secondary_id|default:"—" }}</td>
+                        <td>
+                            {% if individual.status %}
+                            <span class="badge badge-xs gap-1 font-normal">
+                                {% if individual.status.icon %}
+                                    <i class="fa-solid {{ individual.status.icon }}" style="color: {{ individual.status.color }};"></i>
+                                {% else %}
+                                    <span class="size-1.5 rounded-full" style="background-color: {{ individual.status.color }};"></span>
+                                {% endif %}
+                                {{ individual.status.name }}
+                            </span>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td class="text-xs text-base-content/60">
+                            {% with insts=individual.institution.all %}
+                                {% if insts %}
+                                    <span class="block max-w-xs truncate">
+                                        {{ insts|join:", " }}
+                                    </span>
+                                {% else %}
+                                    —
+                                {% endif %}
+                            {% endwith %}
+                        </td>
+                        <td class="text-xs text-base-content/60 capitalize">{{ individual.sex|default:"—" }}</td>
+                        <td class="text-xs text-base-content/50">{{ individual.created_at|date:"M d, Y" }}</td>
+                        <td class="text-right">
+                            <button class="btn btn-ghost btn-xs text-error hover:bg-error/10"
+                                    hx-delete="{% url 'lab:project_individual_remove' project.pk individual.pk %}"
+                                    hx-swap="none"
+                                    hx-confirm="Remove {{ individual.primary_id }} from this project?"
+                                    title="Remove from project">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="flex flex-col items-center justify-center py-10 border-2 border-dashed border-base-200 rounded-box text-base-content/40">
+            <i class="fa-solid fa-users text-3xl mb-2 opacity-30"></i>
+            <span class="font-medium text-sm">No individuals in this project yet</span>
+            <span class="text-xs mt-1">Use the "Add Individual" button to get started</span>
+        </div>
+        {% endif %}
     {% endpartialdef %}
+
+    {% if request.htmx %}
+    <h4 id="project-individuals-heading"
+        class="text-xs uppercase text-base-content/50 font-bold flex items-center gap-1"
+        hx-swap-oob="outerHTML">
+        <i class="fa-solid fa-users"></i>
+        {{ project.individuals.count }} Individual{{ project.individuals.count|pluralize }}
+    </h4>
+
+    <div id="project-individuals-table" hx-swap-oob="outerHTML">
+        {% partial individuals_list %}
+    </div>
+
+    <span id="project-individual-count-badge"
+          class="ml-2 badge badge-sm badge-ghost"
+          hx-swap-oob="outerHTML">
+        {{ project.individuals.count }}
+    </span>
+    {% endif %}
 
 </div>

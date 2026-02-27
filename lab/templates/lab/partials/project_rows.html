@@ -48,6 +48,10 @@
                             <div>
                                 <h4 class="font-semibold text-sm text-base-content/60 mb-2">Description</h4>
                                 <p class="text-sm text-base-content">{{ row.record.description|default:"No description provided." }}</p>
+                                <div class="mt-3 flex items-center gap-2 text-sm">
+                                    <span class="font-medium">Notes:</span>
+                                    {% include "lab/partials/notes/summary.html" with object=row.record content_type="project" note_count=row.record.notes|visible_to:user|length %}
+                                </div>
                             </div>
                             <div>
                                 <h4 class="font-semibold text-sm text-base-content/60 mb-2">Details</h4>
@@ -61,7 +65,8 @@
                         </div>
                         <div class="mt-3 pt-3 border-t border-base-200 flex justify-end">
                             <a href="{% url 'lab:project_detail' row.record.pk %}"
-                               class="btn btn-sm btn-primary gap-2 font-normal">
+                               class="btn btn-sm btn-primary gap-2 font-normal"
+                               hx-boost="false">
                                 <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
                                 View Detail
                             </a>

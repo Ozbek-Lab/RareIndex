@@ -44,7 +44,10 @@
                    :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'individuals' }"
                    @click="currentTab = 'individuals'">
                     <i class="fa-solid fa-users mr-2"></i>Individuals
-                    <span class="ml-2 badge badge-sm badge-ghost">{{ project.individuals.count }}</span>
+                    <span id="project-individual-count-badge"
+                          class="ml-2 badge badge-sm badge-ghost">
+                        {{ project.individuals.count }}
+                    </span>
                 </a>
             </div>
 

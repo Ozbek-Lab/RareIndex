@@ -28,8 +28,9 @@
         {% else %}
         <button class="btn btn-primary btn-xs gap-1 font-normal"
                 hx-post="{% url 'lab:project_individual_add' project.pk individual.pk %}"
-                hx-target="#project-individuals-panel"
-                hx-swap="outerHTML">
+                hx-swap="none"
+                hx-on::after-request="if(!event.detail.failed){this.outerHTML='<span class=&quot;badge badge-sm badge-ghost text-base-content/40 gap-1&quot;><i class=&quot;fa-solid fa-check text-xs&quot;></i> Already added</span>';}"
+        >
             <i class="fa-solid fa-plus text-[10px]"></i> Add
         </button>
         {% endif %}

@@ -654,6 +654,7 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
             'individuals',
             'individuals__cross_ids__id_type',
             'individuals__status',
+            'individuals__institution',
             'status',
             'created_by',
         )
