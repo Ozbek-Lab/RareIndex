@@ -10,8 +10,21 @@ from django.core.cache import cache
 from django.db.models import Count
 from django.contrib.contenttypes.models import ContentType
 from .models import (
-    Individual, Sample, Task, Note, Project, Test, Pipeline, Analysis,
-    Status, SampleType, TestType, PipelineType, AnalysisType, IdentifierType,
+    Individual,
+    Sample,
+    Task,
+    Note,
+    Project,
+    Test,
+    Pipeline,
+    Analysis,
+    Status,
+    SampleType,
+    TestType,
+    PipelineType,
+    AnalysisType,
+    IdentifierType,
+    Institution,
 )
 from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
 from .filters import IndividualFilter, ProjectFilter, VariantFilter
@@ -308,9 +321,29 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             status__name__iexact="completed"
         ).order_by('-id')[:5]
 
-        # 1.5 Header Stats
+        # 1.5 Header Stats & breakdowns
         context['individual_count'] = Individual.objects.count()
         context['sample_count'] = Sample.objects.count()
+        context['project_count'] = Project.objects.count()
+        context['variant_count'] = Variant.objects.count()
+        context['test_count'] = Test.objects.count()
+        context['pipeline_count'] = Pipeline.objects.count()
+        context['analysis_count'] = Analysis.objects.count()
+        context['institution_count'] = Institution.objects.count()
+
+        # Cached breakdowns reused from filter sidebars
+        context['individual_filter_counts'] = _individual_filter_counts()
+        context['project_filter_counts'] = _project_filter_counts()
+        context['variant_filter_counts'] = _variant_filter_counts()
+
+        # Lightweight institution breakdown (top cities)
+        context['institution_city_counts'] = (
+            Institution.objects.exclude(city__isnull=True)
+            .exclude(city__exact="")
+            .values('city')
+            .annotate(c=Count('id'))
+            .order_by('-c', 'city')[:10]
+        )
         
         # 2. News Feed - Aggregated History
         from itertools import chain

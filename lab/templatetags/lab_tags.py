@@ -74,6 +74,25 @@ def class_name(obj):
 
 
 @register.filter
+def status_display(name):
+    """
+    Given a Status.name string, return its short display name if defined,
+    otherwise fall back to the original name.
+    """
+    if not name:
+        return ""
+    try:
+        from lab.models import Status  # Local import to avoid circulars at import time
+        status = Status.objects.filter(name=name).first()
+        if not status:
+            return name
+        # Status.display_name already prefers short_name over name
+        return status.display_name
+    except Exception:
+        return name
+
+
+@register.filter
 def grch_to_hg(value):
     """Convert GRCh38/GRCh37 assembly names to UCSC hg38/hg19 style."""
     return {'GRCh38': 'hg38', 'GRCh37': 'hg19'}.get(str(value), str(value))
