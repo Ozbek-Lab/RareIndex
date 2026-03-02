@@ -79,8 +79,10 @@
         }
     </style>
 </head>
-<body class="bg-base-100 min-h-screen flex flex-col" x-data="{ 
-    sidebarOpen: localStorage.getItem('sidebarOpen') === 'true',
+<body class="bg-base-100 min-h-screen flex flex-col" 
+      @resize.window="if (window.innerWidth < 1024) sidebarOpen = false"
+      x-data="{ 
+    sidebarOpen: window.innerWidth < 1024 ? false : localStorage.getItem('sidebarOpen') === 'true',
     theme: '{{ user_theme|default:"light" }}',
     init() {
         document.documentElement.setAttribute('data-theme', this.theme);
@@ -97,7 +99,7 @@
     
 
     <div class="drawer flex-1" :class="{ 'lg:drawer-open': sidebarOpen }">
-        <input id="my-drawer-2" type="checkbox" class="drawer-toggle" />
+        <input id="my-drawer-2" type="checkbox" class="drawer-toggle" x-model="sidebarOpen" />
         <div class="drawer-content flex flex-col">
             {% if user.is_authenticated %}
             <!-- Desktop Sidebar Expander (Thin band on left) -->

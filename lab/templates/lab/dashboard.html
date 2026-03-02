@@ -2,42 +2,45 @@
 {% load lab_tags %}
 
 {% block content %}
-<div class="p-4 lg:p-6 min-h-full" x-data="{ sidebarOpen: JSON.parse(localStorage.getItem('dashboardSidebarOpen')) ?? true }" 
-     x-init="$watch('sidebarOpen', val => localStorage.setItem('dashboardSidebarOpen', JSON.stringify(val)))">
+<div class="p-4 lg:p-6 flex-1 flex flex-col overflow-hidden w-full relative" 
+     x-data="{ sidebarOpen: window.innerWidth < 1024 ? false : (JSON.parse(localStorage.getItem('dashboardSidebarOpen')) ?? true) }" 
+     x-init="$watch('sidebarOpen', val => localStorage.setItem('dashboardSidebarOpen', JSON.stringify(val)))"
+     @resize.window="if (window.innerWidth < 1024) sidebarOpen = false">
     
-    <div class="flex flex-col md:flex-row gap-6" hx-trigger="taskChanged from:body" hx-get="{% url 'lab:dashboard' %}" hx-select=".dashboard-content-refresh" hx-target=".dashboard-content-refresh" hx-swap="outerHTML">
+    <div class="flex flex-row gap-0 md:gap-6 flex-1 overflow-hidden relative" hx-trigger="taskChanged from:body" hx-get="{% url 'lab:dashboard' %}" hx-select=".dashboard-content-refresh" hx-target=".dashboard-content-refresh" hx-swap="outerHTML">
         
         <!-- Main Content Area: Stats + Tasks -->
-        <div class="flex-1 dashboard-content-refresh">
+        <div class="flex-1 dashboard-content-refresh flex flex-col overflow-y-auto overflow-x-hidden pr-2">
             <!-- Top Stats Strip -->
-            <div class="overflow-x-auto mb-2">
-                <div class="stats stats-horizontal shadow min-w-1/2 gap-2">
+            <div class="overflow-x-auto mb-2 shrink-0">
+                <div class="stats stats-horizontal shadow w-max gap-2 min-w-full pb-2">
                     <!-- Individuals -->
-                    <div class="stat p-4 order-1" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 order-1" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="stat-figure text-primary">
+                                <div class="stat-figure text-primary flex items-center gap-1">
                                     <i class="fa-solid fa-users text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
                                 </div>
                                 <div class="stat-title text-xs lg:text-sm">Individuals</div>
                                 <div class="stat-value text-xl lg:text-2xl text-primary">{{ individual_count|default:"..." }}</div>
                                 <div class="stat-desc text-[10px]">Registered patients</div>
-                                <button type="button"
-                                        @click.stop="open = !open"
-                                        class="btn btn-ghost btn-xs btn-circle mt-1">
-                                    <i class="fa-solid fa-chevron-down text-[11px]"
-                                       :class="{ 'rotate-180': open }"></i>
-                                </button>
+                                
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
                             {% with status_counts=individual_filter_counts.status sex_counts=individual_filter_counts.sex is_alive_counts=individual_filter_counts.is_alive %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|status_display }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|status_display }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
@@ -45,10 +48,10 @@
                             </div>
                             <div class="mt-2">
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sex</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for name, count in sex_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|title }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|title }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
@@ -56,10 +59,10 @@
                             </div>
                             <div class="mt-2">
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By vital status</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for alive, count in is_alive_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">
+                                        <div class="flex justify-between ">
+                                            <span>
                                                 {% if alive %}Alive{% else %}Deceased / Unknown{% endif %}
                                             </span>
                                             <span class="font-semibold">{{ count }}</span>
@@ -72,40 +75,41 @@
                     </div>
 
                     <!-- Samples -->
-                    <div class="stat p-4 border-l border-base-200 order-2" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-2" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="stat-figure text-secondary">
+                                <div class="stat-figure text-secondary flex items-center gap-1">
                                     <i class="fa-solid fa-vial text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
                                 </div>
                                 <div class="stat-title text-xs lg:text-sm">Samples</div>
                                 <div class="stat-value text-xl lg:text-2xl text-secondary">{{ sample_count|default:"..." }}</div>
                                 <div class="stat-desc text-[10px]">Processed samples</div>
-                                <button type="button"
-                                        @click.stop="open = !open"
-                                        class="btn btn-ghost btn-xs btn-circle mt-1">
-                                    <i class="fa-solid fa-chevron-down text-[11px]"
-                                       :class="{ 'rotate-180': open }"></i>
-                                </button>
+                                
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
                             {% with type_counts=individual_filter_counts.sample_type status_counts=individual_filter_counts.sample_status %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sample type</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+                                <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sample status</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|status_display }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|status_display }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
@@ -116,40 +120,41 @@
                     </div>
 
                     <!-- Projects -->
-                    <div class="stat p-4 border-l border-base-200 order-7" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-7" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="stat-figure text-info">
+                                <div class="stat-figure text-info flex items-center gap-1">
                                     <i class="fa-solid fa-briefcase text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
                                 </div>
                                 <div class="stat-title text-xs lg:text-sm">Projects</div>
                                 <div class="stat-value text-xl lg:text-2xl text-info">{{ project_count|default:"..." }}</div>
                                 <div class="stat-desc text-[10px]">Active & archived</div>
-                                <button type="button"
-                                        @click.stop="open = !open"
-                                        class="btn btn-ghost btn-xs btn-circle mt-1">
-                                    <i class="fa-solid fa-chevron-down text-[11px]"
-                                       :class="{ 'rotate-180': open }"></i>
-                                </button>
+                                
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
                             {% with status_counts=project_filter_counts.status priority_counts=project_filter_counts.priority %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+                                <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|status_display }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|status_display }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By priority</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for name, count in priority_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|title }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|title }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
@@ -160,49 +165,50 @@
                     </div>
 
                     <!-- Variants -->
-                    <div class="stat p-4 border-l border-base-200 order-6" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-6" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="stat-figure text-accent">
+                                <div class="stat-figure text-accent flex items-center gap-1">
                                     <i class="fa-solid fa-dna text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
                                 </div>
                                 <div class="stat-title text-xs lg:text-sm">Variants</div>
                                 <div class="stat-value text-xl lg:text-2xl text-accent">{{ variant_count|default:"..." }}</div>
                                 <div class="stat-desc text-[10px]">Total curated variants</div>
-                                <button type="button"
-                                        @click.stop="open = !open"
-                                        class="btn btn-ghost btn-xs btn-circle mt-1">
-                                    <i class="fa-solid fa-chevron-down text-[11px]"
-                                       :class="{ 'rotate-180': open }"></i>
-                                </button>
+                                
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
                             {% with type_counts=variant_filter_counts.variant_type class_counts=variant_filter_counts.classification status_counts=variant_filter_counts.status %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By type</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+                                <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By classification</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+                                <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in class_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|status_display }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|status_display }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
@@ -213,40 +219,41 @@
                     </div>
 
                     <!-- Tests -->
-                    <div class="stat p-4 border-l border-base-200 order-3" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-3" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="stat-figure text-secondary">
+                                <div class="stat-figure text-secondary flex items-center gap-1">
                                     <i class="fa-solid fa-flask-vial text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
                                 </div>
                                 <div class="stat-title text-xs lg:text-sm">Tests</div>
                                 <div class="stat-value text-xl lg:text-2xl text-secondary">{{ test_count|default:"..." }}</div>
                                 <div class="stat-desc text-[10px]">Total tests</div>
-                                <button type="button"
-                                        @click.stop="open = !open"
-                                        class="btn btn-ghost btn-xs btn-circle mt-1">
-                                    <i class="fa-solid fa-chevron-down text-[11px]"
-                                       :class="{ 'rotate-180': open }"></i>
-                                </button>
+                                
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
                             {% with type_counts=individual_filter_counts.test_type status_counts=individual_filter_counts.test_status %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By test type</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+                                <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|status_display }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|status_display }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
@@ -257,40 +264,41 @@
                     </div>
 
                     <!-- Pipelines -->
-                    <div class="stat p-4 border-l border-base-200 order-4" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-4" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="stat-figure text-info">
+                                <div class="stat-figure text-info flex items-center gap-1">
                                     <i class="fa-solid fa-diagram-project text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
                                 </div>
                                 <div class="stat-title text-xs lg:text-sm">Pipelines</div>
                                 <div class="stat-value text-xl lg:text-2xl text-info">{{ pipeline_count|default:"..." }}</div>
                                 <div class="stat-desc text-[10px]">Total pipelines</div>
-                                <button type="button"
-                                        @click.stop="open = !open"
-                                        class="btn btn-ghost btn-xs btn-circle mt-1">
-                                    <i class="fa-solid fa-chevron-down text-[11px]"
-                                       :class="{ 'rotate-180': open }"></i>
-                                </button>
+                                
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
                             {% with type_counts=individual_filter_counts.pipeline_type status_counts=individual_filter_counts.pipeline_status %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By pipeline type</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+                                <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|status_display }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|status_display }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
@@ -301,40 +309,41 @@
                     </div>
 
                     <!-- Analyses -->
-                    <div class="stat p-4 border-l border-base-200 order-5" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-5" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="stat-figure text-warning">
+                                <div class="stat-figure text-warning flex items-center gap-1">
                                     <i class="fa-solid fa-microscope text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
                                 </div>
                                 <div class="stat-title text-xs lg:text-sm">Analyses</div>
                                 <div class="stat-value text-xl lg:text-2xl text-warning">{{ analysis_count|default:"..." }}</div>
                                 <div class="stat-desc text-[10px]">Total analyses</div>
-                                <button type="button"
-                                        @click.stop="open = !open"
-                                        class="btn btn-ghost btn-xs btn-circle mt-1">
-                                    <i class="fa-solid fa-chevron-down text-[11px]"
-                                       :class="{ 'rotate-180': open }"></i>
-                                </button>
+                                
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
                             {% with type_counts=individual_filter_counts.analysis_type status_counts=individual_filter_counts.analysis_status %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By analysis type</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+                                <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ name|status_display }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|status_display }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
                                     {% endfor %}
@@ -345,30 +354,31 @@
                     </div>
 
                     <!-- Institutions -->
-                    <div class="stat p-4 border-l border-base-200 order-8" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-8" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="stat-figure text-primary">
+                                <div class="stat-figure text-primary flex items-center gap-1">
                                     <i class="fa-solid fa-hospital text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
                                 </div>
                                 <div class="stat-title text-xs lg:text-sm">Institutions</div>
                                 <div class="stat-value text-xl lg:text-2xl text-primary">{{ institution_count|default:"..." }}</div>
                                 <div class="stat-desc text-[10px]">Registered centers</div>
-                                <button type="button"
-                                        @click.stop="open = !open"
-                                        class="btn btn-ghost btn-xs btn-circle mt-1">
-                                    <i class="fa-solid fa-chevron-down text-[11px]"
-                                       :class="{ 'rotate-180': open }"></i>
-                                </button>
+                                
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">Top cities</div>
-                                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+                                <div class="flex flex-col gap-y-1">
                                     {% for row in institution_city_counts %}
-                                        <div class="flex justify-between {% if forloop.counter|divisibleby:2 %}border-l border-base-300 pl-3{% endif %}">
-                                            <span class="truncate">{{ row.city|default:"(Unknown)" }}</span>
+                                        <div class="flex justify-between ">
+                                            <span>{{ row.city|default:"(Unknown)" }}</span>
                                             <span class="font-semibold">{{ row.c }}</span>
                                         </div>
                                     {% endfor %}
@@ -379,41 +389,23 @@
                 </div>
             </div>
 
-            <!-- My Tasks Section -->
-            <div id="dashboard-tasks-container">
-                {% include "lab/partials/dashboard/my_tasks.html" %}
-            </div>
-        </div>
-
-        <!-- Sidebar Area: News Feed -->
-        <div class="transition-all duration-300 relative z-20 shrink-0" 
-             :class="sidebarOpen ? 'w-64 lg:w-80' : 'w-0 md:w-6'">
-            
-            <!-- Sidebar Content -->
-            <div class="h-[80vh] bg-base-100 rounded-l-xl shadow-xl flex flex-col border-l border-y border-base-200 sticky top-4 overflow-hidden" 
-                 x-show="sidebarOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0">
-                <div class="p-3 border-b border-base-200 flex items-center bg-base-100 shrink-0 gap-3">
-                    <!-- Toggle Button (Matches main sidebar style) -->
-                    <button @click="sidebarOpen = false" class="btn btn-square btn-ghost btn-sm">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                    <h2 class="font-bold text-[10px] uppercase tracking-wider flex items-center truncate opacity-70">
-                        <i class="fas fa-rss mr-2 text-secondary"></i>
+            <!-- Main Dashboard Body Area -->
+            <div id="dashboard-body-container" class="flex-1 pb-8 flex flex-col gap-6">
+                <!-- My Tasks Section -->
+                <div>
+                    {% include "lab/partials/dashboard/my_tasks.html" %}
+                </div>
+                
+                <!-- Recent Activity Section -->
+                <div>
+                    <h2 class="font-bold text-lg mb-4 flex items-center gap-2">
+                        <i class="fas fa-rss text-secondary pl-2"></i>
                         Recent Activity
                     </h2>
+                    <div class="bg-base-100 rounded-xl shadow-sm border border-base-200 overflow-y-auto text-sm h-96">
+                        {% include "lab/partials/dashboard/news_feed.html" %}
+                    </div>
                 </div>
-                <div class="flex-1 overflow-y-auto text-xs">
-                    {% include "lab/partials/dashboard/news_feed.html" %}
-                </div>
-            </div>
-
-            <!-- Collapsed Placeholder (shown only when sidebar is closed) -->
-            <div @click="sidebarOpen = true"
-                 x-show="!sidebarOpen"
-                 x-cloak
-                 class="fixed inset-y-0 right-0 w-6 bg-base-200 hover:bg-base-300 cursor-pointer flex items-center justify-center z-10 transition-colors md:flex"
-                 title="Expand Activity Feed">
-                 <i class="fas fa-chevron-left text-xs opacity-50"></i>
             </div>
         </div>
     </div>
