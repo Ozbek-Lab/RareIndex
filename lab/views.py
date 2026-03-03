@@ -7,7 +7,7 @@ from django.views.generic import TemplateView, DetailView
 from django_tables2 import SingleTableMixin
 from django_filters.views import FilterView
 from django.core.cache import cache
-from django.db.models import Count
+from django.db.models import Count, Min
 from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual,
@@ -424,6 +424,15 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     template_name = "lab/individual_list.html"
     paginate_by = 25
     
+    
+    def get_queryset(self):
+        """
+        Base queryset for the individual table & filters.
+        Annotates first_institution_name so the Institution column can be sorted.
+        """
+        qs = super().get_queryset()
+        qs = qs.prefetch_related("institution")
+        return qs.annotate(first_institution_name=Min("institution__name"))
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

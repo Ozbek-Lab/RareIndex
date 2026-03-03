@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation
+from django.core.validators import RegexValidator
 from simple_history.models import HistoricalRecords
 from lab.models import Pipeline, Individual, HistoryMixin
 
@@ -61,10 +62,17 @@ class Variant(HistoryMixin, models.Model):
             return "Repeat"
         return "Variant"
 
+allele_validator = RegexValidator(
+    regex=r"^[ATGC]+$",
+    message="Alleles must consist only of the uppercase characters A, T, G, or C.",
+    code="invalid_allele",
+)
+
+
 class SNV(Variant):
     """Single Nucleotide Variant"""
-    reference = models.CharField(max_length=255)
-    alternate = models.CharField(max_length=255)
+    reference = models.CharField(max_length=255, validators=[allele_validator])
+    alternate = models.CharField(max_length=255, validators=[allele_validator])
     
     def __str__(self):
         return f"{self.chromosome}:{self.start} {self.reference}>{self.alternate}"

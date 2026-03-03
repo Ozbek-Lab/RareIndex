@@ -8,10 +8,10 @@ from variant.models import Variant
 class IndividualTable(tables.Table):
     """Static column set: Primary ID, Secondary ID, Other IDs, Institution, Name, Sex, Status."""
 
-    primary_id = tables.Column(verbose_name="Primary ID", order_by=("id"))
-    secondary_id = tables.Column(verbose_name="Secondary ID", order_by=("id"))
+    primary_id = tables.Column(verbose_name="Primary ID", order_by=("id",))
+    secondary_id = tables.Column(verbose_name="Secondary ID", order_by=("id",))
     other_table_ids = tables.Column(verbose_name="Other IDs", orderable=False)
-    institution = tables.Column(verbose_name="Institution", orderable=False)
+    institution = tables.Column(verbose_name="Institution", order_by=("first_institution_name",))
     full_name = tables.Column(verbose_name="Name")
     sex = tables.Column(verbose_name="Sex")
     status = tables.Column(verbose_name="Status")

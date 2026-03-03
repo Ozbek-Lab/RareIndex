@@ -803,9 +803,11 @@ class StatusConfigForm(BaseForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Show a human-readable label for the content_type choices
-        self.fields["content_type"].queryset = ContentType.objects.filter(
-            app_label__in=["lab", "variant"]
-        ).order_by("app_label", "model")
+        self.fields["content_type"].queryset = (
+            ContentType.objects.filter(app_label__in=["lab", "variant"])
+            .exclude(model__startswith="historical")
+            .order_by("app_label", "model")
+        )
         self.fields["content_type"].required = False
         self.fields["content_type"].empty_label = "— Global (applies to all) —"
         # If the stored value is a hex string, the color input handles it natively
