@@ -71,6 +71,17 @@
                     </label>
                 </div>
              </div>
+             <div class="flex items-center gap-2">
+                 <button
+                     class="btn btn-primary btn-sm"
+                     hx-get="{% url 'lab:project_create_modal' %}"
+                     hx-target="#generic-modal-content"
+                     hx-swap="innerHTML"
+                     onclick="document.getElementById('generic-modal').showModal()">
+                     <i class="fa-solid fa-plus mr-1"></i>
+                     Add Project
+                 </button>
+             </div>
         </header>
 
          <!-- Table Area -->
@@ -87,4 +98,9 @@
          </div>
     </main>
 </div>
+<!-- Generic Modal for project actions -->
+<dialog id="generic-modal" class="modal">
+    <div class="modal-box max-w-2xl" id="generic-modal-content"></div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
 {% endblock %}

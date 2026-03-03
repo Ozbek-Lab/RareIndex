@@ -13,8 +13,18 @@ class Variant(HistoryMixin, models.Model):
     end = models.IntegerField()
     
     # Linkage
-    individual = models.ForeignKey(Individual, on_delete=models.PROTECT, related_name="variants")
-    pipeline = models.ForeignKey(Pipeline, on_delete=models.PROTECT, related_name="found_variants", null=True, blank=True)
+    individual = models.ForeignKey(
+        Individual,
+        on_delete=models.PROTECT,
+        related_name="variants",
+    )
+    pipeline = models.ForeignKey(
+        Pipeline,
+        on_delete=models.PROTECT,
+        related_name="found_variants",
+        null=True,
+        blank=True,
+    )
     
     # Metadata
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
@@ -76,6 +86,28 @@ class SNV(Variant):
     
     def __str__(self):
         return f"{self.chromosome}:{self.start} {self.reference}>{self.alternate}"
+
+    def save(self, *args, **kwargs):
+        # For SNVs we always normalize to end == start so the interval API
+        # stays consistent across all Variant subclasses.
+        if self.start is not None:
+            self.end = self.start
+        super().save(*args, **kwargs)
+
+
+class delins(Variant):
+    """Simple deletion/insertion anchored at a single position."""
+    reference = models.CharField(max_length=255, validators=[allele_validator])
+    alternate = models.CharField(max_length=255, validators=[allele_validator])
+    
+    def __str__(self):
+        return f"{self.chromosome}:{self.start} {self.reference}>{self.alternate}"
+
+    def save(self, *args, **kwargs):
+        # For basic delins we also keep end == start.
+        if self.start is not None:
+            self.end = self.start
+        super().save(*args, **kwargs)
 
 class CNV(Variant):
     """Copy Number Variant"""

@@ -6,6 +6,7 @@ from django.views.decorators.http import require_POST
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.views.generic import View
+from django.urls import reverse
 from django.apps import apps
 from .models import Individual, Family, Project
 
@@ -933,6 +934,58 @@ def project_individual_search(request, pk):
     })
 
 
+def _project_individuals_page_context(request, project, per_page: int = 25):
+    """Build paginated context for the project individuals table."""
+    from django.db.models import Q, Min
+
+    individuals_qs = (
+        project.individuals.all()
+        .select_related("status")
+        .prefetch_related("institution")
+    ).annotate(first_institution_name=Min("institution__name"))
+
+    search = request.GET.get("search", "").strip()
+    if search:
+        individuals_qs = individuals_qs.filter(
+            Q(cross_ids__id_value__icontains=search)
+            | Q(institution__name__icontains=search)
+        ).distinct()
+
+    sort = request.GET.get("sort") or "added"
+    direction = request.GET.get("dir") or "desc"
+    sort_map = {
+        "primary": "id",
+        "secondary": "id",
+        "status": "status__name",
+        "institution": "first_institution_name",
+        "sex": "sex",
+        "added": "created_at",
+    }
+    sort_field = sort_map.get(sort, "created_at")
+    if direction == "desc":
+        sort_field = f"-{sort_field}"
+    individuals_qs = individuals_qs.order_by(sort_field, "id")
+    paginator = Paginator(individuals_qs, per_page)
+    page_number = request.GET.get("page") or 1
+    page_obj = paginator.get_page(page_number)
+    return {
+        "project": project,
+        "individual_page": page_obj,
+        "project_individuals_search": search,
+        "project_individuals_sort": sort,
+        "project_individuals_dir": direction,
+    }
+
+
+@login_required
+def project_individuals_page(request, pk):
+    """Return only the next chunk of project-individual rows for infinite scroll."""
+    project = get_object_or_404(Project, pk=pk)
+    context = _project_individuals_page_context(request, project)
+    # Only return table rows; outer template wraps them in <tbody>.
+    return render(request, "lab/partials/project_individual_rows.html", context)
+
+
 @login_required
 @require_POST
 def project_individual_add(request, project_pk, individual_pk):
@@ -949,7 +1002,8 @@ def project_individual_add(request, project_pk, individual_pk):
         )
         .get(pk=project_pk)
     )
-    return render(request, "lab/partials/tabs/_project_individuals.html", {"project": project})
+    context = _project_individuals_page_context(request, project)
+    return render(request, "lab/partials/tabs/_project_individuals.html", context)
 
 
 @login_required
@@ -970,7 +1024,8 @@ def project_individual_remove(request, project_pk, individual_pk):
         )
         .get(pk=project_pk)
     )
-    return render(request, "lab/partials/tabs/_project_individuals.html", {"project": project})
+    context = _project_individuals_page_context(request, project)
+    return render(request, "lab/partials/tabs/_project_individuals.html", context)
 
 
 @login_required
@@ -995,6 +1050,69 @@ def document_preview(request, model_name, pk):
     response = render(request, "lab/partials/preview_drawer.html", context)
     response["HX-Trigger"] = "open-preview"
     return response
+
+
+@login_required
+def project_create_modal(request):
+    """Render a project creation form or handle submission.
+
+    Includes a QoL option to copy individuals from existing projects into the
+    newly created project.
+    """
+    from .forms import ProjectCreateWithCopyForm
+
+    if request.method == "POST":
+        form = ProjectCreateWithCopyForm(request.POST)
+        if form.is_valid():
+            # BaseForm.save handles created_by when possible
+            project = form.save()
+
+            copy_from = form.cleaned_data.get("copy_from_projects")
+            if copy_from:
+                individual_ids = (
+                    Individual.objects.filter(projects__in=copy_from)
+                    .values_list("id", flat=True)
+                    .distinct()
+                )
+                if individual_ids:
+                    project.individuals.add(*individual_ids)
+
+            # Ask HTMX to refresh the page so the project list updates.
+            response = HttpResponse(status=204)
+            response["HX-Refresh"] = "true"
+            return response
+    else:
+        form = ProjectCreateWithCopyForm()
+
+    context = {
+        "form": form,
+        "title": "Add Project",
+        "action_url": request.path,
+        "hx_target": "#project-table-container",
+    }
+    return render(request, "lab/partials/generic_modal_form.html", context)
+
+
+@login_required
+def project_delete_modal(request, pk):
+    """Confirm and delete a project from the project detail page."""
+    project = get_object_or_404(Project, pk=pk)
+
+    if not request.user.has_perm("lab.delete_project"):
+        return HttpResponseForbidden("You do not have permission to delete projects.")
+
+    if request.method == "POST":
+        project.delete()
+        response = HttpResponse(status=204)
+        # After deletion, send user back to the project list.
+        response["HX-Redirect"] = reverse("lab:project_list")
+        return response
+
+    context = {
+        "project": project,
+        "action_url": request.path,
+    }
+    return render(request, "lab/partials/modals/project_delete_confirm.html", context)
 
 
 @login_required
@@ -1067,16 +1185,25 @@ def variant_create_modal(request, pipeline_id):
     individual = pipeline.test.sample.individual
     
     if request.method == "POST":
-        form = SNVForm(request.POST) # SNV formulation doesn't expect FILES currently but standard structure
+        form = SNVForm(request.POST)  # SNV formulation doesn't expect FILES currently but standard structure
         if form.is_valid():
             variant = form.save(commit=False)
             variant.pipeline = pipeline
             variant.individual = individual
             variant.created_by = request.user
             variant.save()
-            
-            # Refresh the workflow tab
-            return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+
+            # Refresh the workflow tab and close the modal.
+            html = render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
+            close_oob = (
+                '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
+                '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
+                "</div>"
+            )
+            response = HttpResponse(html + close_oob)
+            response["HX-Retarget"] = "#workflow-content"
+            response["HX-Reswap"] = "innerHTML"
+            return response
     else:
         form = SNVForm()
 
@@ -1095,6 +1222,55 @@ def variant_create_modal(request, pipeline_id):
         "form": form,
         "title": f"Add SNV for {pipeline.type.name}",
         "action_url": request.path,
+        "hx_target": "#generic-modal-content",
+    }
+    return render(request, "lab/partials/generic_modal_form.html", context)
+
+
+@login_required
+def variant_create_for_individual_modal(request, individual_id):
+    """Render a basic SNV variant creation modal or handle submission for an individual (no pipeline)."""
+    from variant.forms import SNVForm
+    from lab.models import Individual
+
+    individual = get_object_or_404(Individual, pk=individual_id)
+
+    if request.method == "POST":
+        form = SNVForm(request.POST)
+        if form.is_valid():
+            variant = form.save(commit=False)
+            variant.individual = individual
+            variant.created_by = request.user
+            variant.save()
+
+            # Refresh the workflow tab and close the modal.
+            html = render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
+            close_oob = (
+                '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
+                '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
+                "</div>"
+            )
+            response = HttpResponse(html + close_oob)
+            response["HX-Retarget"] = "#workflow-content"
+            response["HX-Reswap"] = "innerHTML"
+            return response
+    else:
+        form = SNVForm()
+
+    for field_name, field in form.fields.items():
+        current_classes = field.widget.attrs.get("class", "")
+        if isinstance(field.widget, forms.TextInput) or isinstance(field.widget, forms.NumberInput) or isinstance(field.widget, forms.Select):
+            if "select" not in current_classes and "input" not in current_classes:
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs["class"] = f"select select-bordered w-full {current_classes}"
+                else:
+                    field.widget.attrs["class"] = f"input input-bordered w-full {current_classes}"
+
+    context = {
+        "form": form,
+        "title": f"Add Variant for {individual.primary_id}",
+        "action_url": request.path,
+        "hx_target": "#generic-modal-content",
     }
     return render(request, "lab/partials/generic_modal_form.html", context)
 

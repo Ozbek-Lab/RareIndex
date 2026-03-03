@@ -15,6 +15,23 @@ class IndividualTable(tables.Table):
     full_name = tables.Column(verbose_name="Name")
     sex = tables.Column(verbose_name="Sex")
     status = tables.Column(verbose_name="Status")
+    # Created date from the Individual record
+    created_at = tables.DateTimeColumn(
+        verbose_name="Created",
+        accessor="created_at",
+        # Force explicit day-first, 24-hour format for this column.
+        format="d/m/Y H:i",
+        short=False,
+    )
+    # Aggregated "last activity" timestamp across Individual + related
+    # Sample, Test, Pipeline, Analysis, Variant, AnalysisReport.
+    last_activity = tables.DateTimeColumn(
+        verbose_name="Last Activity",
+        accessor="last_activity",
+        order_by=("last_activity",),
+        format="d/m/Y H:i",
+        short=False,
+    )
 
     def before_render(self, request):
         self.total_count = Individual.objects.count()
@@ -28,7 +45,17 @@ class IndividualTable(tables.Table):
     class Meta:
         model = Individual
         template_name = "lab/partials/individual_expandable_table.html"
-        fields = ("primary_id", "secondary_id", "other_table_ids", "institution", "full_name", "sex", "status")
+        fields = (
+            "primary_id",
+            "secondary_id",
+            "other_table_ids",
+            "institution",
+            "full_name",
+            "sex",
+            "status",
+            "created_at",
+            "last_activity",
+        )
         attrs = {
             "class": "table table-zebra table-sm",
             "thead": {
@@ -65,6 +92,17 @@ class IndividualTable(tables.Table):
             record.pk,
             badge_html,
         )
+
+    def render_created_at(self, value):
+        if not value:
+            return "—"
+        # Explicit day/month/year and 24-hour time.
+        return value.strftime("%d/%m/%Y %H:%M")
+
+    def render_last_activity(self, value):
+        if not value:
+            return "—"
+        return value.strftime("%d/%m/%Y %H:%M")
 
     def render_full_name(self, value, record):
         # Check permissions

@@ -3,37 +3,44 @@
 <div id="project-individuals-panel">
 
     <!-- Search / Add Bar -->
-    <div class="mb-4" x-data="{ searchOpen: false }">
-        <div class="flex items-center justify-between mb-2">
+    <div class="mb-4">
+        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <h4 id="project-individuals-heading" class="text-xs uppercase text-base-content/50 font-bold flex items-center gap-1">
                 <i class="fa-solid fa-users"></i>
                 {{ project.individuals.count }} Individual{{ project.individuals.count|pluralize }}
             </h4>
-            <button @click="searchOpen = !searchOpen"
-                    class="btn btn-primary btn-xs gap-1 font-normal">
-                <i class="fa-solid fa-plus text-[10px]"></i>
-                Add Individual
-            </button>
-        </div>
-
-        <!-- Inline Individual Search -->
-        <div x-show="searchOpen" x-collapse x-cloak class="mb-3">
-            <div class="card bg-base-200/50 border border-base-200 p-3 space-y-2">
-                <label class="input input-bordered input-sm flex items-center gap-2">
-                    <i class="fa-solid fa-magnifying-glass text-base-content/40 text-xs"></i>
-                    <input type="text"
-                           class="grow"
-                           placeholder="Search by ID, name..."
-                           hx-get="{% url 'lab:project_individual_search' project.pk %}"
-                           hx-trigger="keyup changed delay:300ms"
-                           hx-target="#individual-search-results"
-                           name="q"
-                           autocomplete="off" />
-                    <span class="htmx-indicator loading loading-spinner loading-xs text-primary"></span>
-                </label>
-                <div id="individual-search-results" class="space-y-1 max-h-60 overflow-y-auto">
-                    <p class="text-xs text-base-content/40 italic text-center py-2">Start typing to search…</p>
-                </div>
+            <div class="flex items-center gap-2 w-full md:w-auto">
+                <form method="get" class="flex-1">
+                    <input type="hidden" name="page" value="1">
+                    {% if project_individuals_sort %}
+                    <input type="hidden" name="sort" value="{{ project_individuals_sort }}">
+                    {% endif %}
+                    {% if project_individuals_dir %}
+                    <input type="hidden" name="dir" value="{{ project_individuals_dir }}">
+                    {% endif %}
+                    <label class="input input-bordered input-xs md:input-sm flex items-center gap-2 w-full">
+                        <i class="fa-solid fa-magnifying-glass text-base-content/40 text-[10px] md:text-xs"></i>
+                        <input type="text"
+                               name="search"
+                               value="{{ project_individuals_search|default:'' }}"
+                               class="grow"
+                               placeholder="Search ID or institution…"
+                               autocomplete="off" />
+                    </label>
+                </form>
+                {% if project_individuals_search %}
+                <a href="?{% if project_individuals_sort %}sort={{ project_individuals_sort }}&dir={{ project_individuals_dir }}{% endif %}"
+                   class="btn btn-ghost btn-xs whitespace-nowrap">
+                    Clear
+                </a>
+                {% endif %}
+                <button
+                    class="btn btn-primary btn-xs gap-1 font-normal whitespace-nowrap"
+                    @click="searchOpen = true"
+                    x-data="{ searchOpen: false }">
+                    <i class="fa-solid fa-plus text-[10px]"></i>
+                    Add Individual
+                </button>
             </div>
         </div>
     </div>
@@ -48,62 +55,50 @@
         <div class="overflow-x-auto rounded-lg border border-base-200">
             <table class="table table-sm w-full">
                 <thead class="bg-base-200/50">
+                    {% with sort=project_individuals_sort dir=project_individuals_dir %}
                     <tr>
-                        <th class="text-xs font-semibold text-base-content/60">Primary ID</th>
-                        <th class="text-xs font-semibold text-base-content/60">Secondary ID</th>
-                        <th class="text-xs font-semibold text-base-content/60">Status</th>
-                        <th class="text-xs font-semibold text-base-content/60">Institution</th>
-                        <th class="text-xs font-semibold text-base-content/60">Sex</th>
-                        <th class="text-xs font-semibold text-base-content/60">Added</th>
+                        <th class="text-xs font-semibold">
+                            <a href="?sort=primary&dir={% if sort == 'primary' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if project_individuals_search %}&search={{ project_individuals_search|urlencode }}{% endif %}"
+                               class="flex items-center gap-1 {% if sort == 'primary' %}text-primary{% else %}text-base-content/60{% endif %}">
+                                Primary ID
+                            </a>
+                        </th>
+                        <th class="text-xs font-semibold">
+                            <a href="?sort=secondary&dir={% if sort == 'secondary' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if project_individuals_search %}&search={{ project_individuals_search|urlencode }}{% endif %}"
+                               class="flex items-center gap-1 {% if sort == 'secondary' %}text-primary{% else %}text-base-content/60{% endif %}">
+                                Secondary ID
+                            </a>
+                        </th>
+                        <th class="text-xs font-semibold">
+                            <a href="?sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if project_individuals_search %}&search={{ project_individuals_search|urlencode }}{% endif %}"
+                               class="flex items-center gap-1 {% if sort == 'status' %}text-primary{% else %}text-base-content/60{% endif %}">
+                                Status
+                            </a>
+                        </th>
+                        <th class="text-xs font-semibold">
+                            <a href="?sort=institution&dir={% if sort == 'institution' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if project_individuals_search %}&search={{ project_individuals_search|urlencode }}{% endif %}"
+                               class="flex items-center gap-1 {% if sort == 'institution' %}text-primary{% else %}text-base-content/60{% endif %}">
+                                Institution
+                            </a>
+                        </th>
+                        <th class="text-xs font-semibold">
+                            <a href="?sort=sex&dir={% if sort == 'sex' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if project_individuals_search %}&search={{ project_individuals_search|urlencode }}{% endif %}"
+                               class="flex items-center gap-1 {% if sort == 'sex' %}text-primary{% else %}text-base-content/60{% endif %}">
+                                Sex
+                            </a>
+                        </th>
+                        <th class="text-xs font-semibold">
+                            <a href="?sort=added&dir={% if sort == 'added' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if project_individuals_search %}&search={{ project_individuals_search|urlencode }}{% endif %}"
+                               class="flex items-center gap-1 {% if sort == 'added' or not sort %}text-primary{% else %}text-base-content/60{% endif %}">
+                                Added
+                            </a>
+                        </th>
                         <th></th>
                     </tr>
+                    {% endwith %}
                 </thead>
-                <tbody>
-                    {% for individual in project.individuals.all %}
-                    <tr class="hover:bg-base-200/30 transition-colors" id="project-individual-row-{{ individual.pk }}">
-                        <td>
-                            <a href="{% url 'lab:individual_detail' individual.pk %}"
-                               class="font-mono text-sm text-primary hover:underline font-medium">
-                                {{ individual.primary_id }}
-                            </a>
-                        </td>
-                        <td class="font-mono text-xs text-base-content/60">{{ individual.secondary_id|default:"—" }}</td>
-                        <td>
-                            {% if individual.status %}
-                            <span class="badge badge-xs gap-1 font-normal">
-                                {% if individual.status.icon %}
-                                    <i class="fa-solid {{ individual.status.icon }}" style="color: {{ individual.status.color }};"></i>
-                                {% else %}
-                                    <span class="size-1.5 rounded-full" style="background-color: {{ individual.status.color }};"></span>
-                                {% endif %}
-                                {{ individual.status.name }}
-                            </span>
-                            {% else %}—{% endif %}
-                        </td>
-                        <td class="text-xs text-base-content/60">
-                            {% with insts=individual.institution.all %}
-                                {% if insts %}
-                                    <span class="block max-w-xs truncate">
-                                        {{ insts|join:", " }}
-                                    </span>
-                                {% else %}
-                                    —
-                                {% endif %}
-                            {% endwith %}
-                        </td>
-                        <td class="text-xs text-base-content/60 capitalize">{{ individual.sex|default:"—" }}</td>
-                        <td class="text-xs text-base-content/50">{{ individual.created_at|date:"M d, Y" }}</td>
-                        <td class="text-right">
-                            <button class="btn btn-ghost btn-xs text-error hover:bg-error/10"
-                                    hx-delete="{% url 'lab:project_individual_remove' project.pk individual.pk %}"
-                                    hx-swap="none"
-                                    hx-confirm="Remove {{ individual.primary_id }} from this project?"
-                                    title="Remove from project">
-                                <i class="fa-solid fa-xmark"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
+                <tbody id="project-individuals-tbody">
+                    {% include "lab/partials/project_individual_rows.html" %}
                 </tbody>
             </table>
         </div>

@@ -162,11 +162,21 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Europe/Istanbul"
 
 USE_I18N = True
 
 USE_TZ = True
+
+# Global date / datetime display formats
+# Use day-month-year with slashes, matching Turkish conventions.
+DATE_FORMAT = "d/m/Y"
+DATETIME_FORMAT = "d/m/Y H:i"
+SHORT_DATE_FORMAT = "d/m/Y"
+SHORT_DATETIME_FORMAT = "d/m/Y H:i"
+
+# Use custom format module so localization uses our formats
+FORMAT_MODULE_PATH = "rareindex.formats"
 
 
 # Static files (CSS, JavaScript, Images)

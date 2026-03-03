@@ -2,6 +2,8 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from encrypted_model_fields.fields import (
     EncryptedCharField,
     EncryptedBigIntegerField,
@@ -10,6 +12,27 @@ from encrypted_model_fields.fields import (
 from simple_history.models import HistoricalRecords
 from django.utils import timezone
 from .middleware import get_current_user
+
+
+RAREBOOST_ID_VALUE_REGEX = r"^RB_20[0-9][0-9]_[0-9]+(\.1)?\.[0-9]+$"
+validate_rareboost_id_value = RegexValidator(
+    regex=RAREBOOST_ID_VALUE_REGEX,
+    message=(
+        "RareBoost ID must match RB_20YY_<n>[.1].<n> "
+        "(e.g. RB_2025_12.2 or RB_2025_12.1.3)."
+    ),
+    code="invalid",
+)
+
+BIOBANK_ID_VALUE_REGEX = r"^RD[0-9]+\.F[0-9]+(\.1)?\.[0-9]+$"
+validate_biobank_id_value = RegexValidator(
+    regex=BIOBANK_ID_VALUE_REGEX,
+    message=(
+        "Biobank ID must match RD3.F<n>[.1].<n> "
+        "(e.g. RD3.F12.2 or RD3.F12.1.3)."
+    ),
+    code="invalid",
+)
 
 
 class HistoryMixin:
@@ -768,6 +791,23 @@ class CrossIdentifier(HistoryMixin, models.Model):
 
     def __str__(self):
         return f"{self.individual} - {self.id_type} - {self.id_value}"
+
+    def clean(self):
+        super().clean()
+        if not self.id_type_id or not self.id_type:
+            return
+
+        validator = None
+        if self.id_type.name == "RareBoost":
+            validator = validate_rareboost_id_value
+        elif self.id_type.name == "Biobank":
+            validator = validate_biobank_id_value
+
+        if validator is not None:
+            try:
+                validator(self.id_value)
+            except ValidationError as e:
+                raise ValidationError({"id_value": e.messages})
 
     class Meta:
         unique_together = ["individual", "id_type"]

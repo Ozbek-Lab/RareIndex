@@ -7,7 +7,9 @@ from django.views.generic import TemplateView, DetailView
 from django_tables2 import SingleTableMixin
 from django_filters.views import FilterView
 from django.core.cache import cache
-from django.db.models import Count, Min
+from django.core.paginator import Paginator
+from django.db.models import Count, Min, Max, DateTimeField
+from django.db.models.functions import Cast, Coalesce
 from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual,
@@ -432,7 +434,42 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         """
         qs = super().get_queryset()
         qs = qs.prefetch_related("institution")
-        return qs.annotate(first_institution_name=Min("institution__name"))
+
+        # Per-individual aggregate timestamps for related objects that belong
+        # exclusively to a single Individual (no shared multi-individual models).
+        # We rely on domain timestamps rather than history tables so everything
+        # can be expressed as ORM joins.
+        qs = qs.annotate(
+            first_institution_name=Min("institution__name"),
+            individual_created_at=Max("created_at"),
+            sample_last_date=Max("samples__receipt_date"),
+            test_last_date=Max("samples__tests__performed_date"),
+            pipeline_last_date=Max("samples__tests__pipelines__performed_date"),
+            analysis_last_date=Max(
+                "samples__tests__pipelines__analyses__performed_date"
+            ),
+            variant_last_dt=Max("variants__created_at"),
+            report_last_dt=Max("samples__tests__pipelines__reports__created_at"),
+        )
+
+        # Last activity: pick the most downstream non-null timestamp in the
+        # workflow order (Report -> Variant -> Analysis -> Pipeline -> Test
+        # -> Sample -> Individual created). This avoids backend-specific
+        # issues with Greatest across mixed date/datetime fields while still
+        # giving a meaningful "last touched" value.
+        qs = qs.annotate(
+            last_activity=Coalesce(
+                "report_last_dt",
+                "variant_last_dt",
+                Cast("analysis_last_date", output_field=DateTimeField()),
+                Cast("pipeline_last_date", output_field=DateTimeField()),
+                Cast("test_last_date", output_field=DateTimeField()),
+                Cast("sample_last_date", output_field=DateTimeField()),
+                "individual_created_at",
+            )
+        )
+
+        return qs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -700,6 +737,50 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
             'status',
             'created_by',
         )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Paginate + filter + sort individuals within this project detail view
+        from django.db.models import Q, Min
+
+        request = self.request
+        individuals_qs = (
+            self.object.individuals.all()
+            .select_related("status")
+            .prefetch_related("institution")
+        ).annotate(first_institution_name=Min("institution__name"))
+
+        # Search by any ID value or institution name
+        search = request.GET.get("search", "").strip()
+        if search:
+            individuals_qs = individuals_qs.filter(
+                Q(cross_ids__id_value__icontains=search)
+                | Q(institution__name__icontains=search)
+            ).distinct()
+
+        # Sorting
+        sort = request.GET.get("sort") or "added"
+        direction = request.GET.get("dir") or "desc"
+        sort_map = {
+            "primary": "id",  # approximate by PK
+            "secondary": "id",
+            "status": "status__name",
+            "institution": "first_institution_name",
+            "sex": "sex",
+            "added": "created_at",
+        }
+        sort_field = sort_map.get(sort, "created_at")
+        if direction == "desc":
+            sort_field = f"-{sort_field}"
+        individuals_qs = individuals_qs.order_by(sort_field, "id")
+
+        paginator = Paginator(individuals_qs, 25)
+        page_number = request.GET.get("page") or 1
+        context["individual_page"] = paginator.get_page(page_number)
+        context["project_individuals_search"] = search
+        context["project_individuals_sort"] = sort
+        context["project_individuals_dir"] = direction
+        return context
 
 
 class IndividualDetailView(LoginRequiredMixin, DetailView):

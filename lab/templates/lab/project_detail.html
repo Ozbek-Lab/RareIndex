@@ -19,7 +19,7 @@
                         {% get_content_type_id project as project_ct %}
                         <div class="flex flex-col items-end text-xs text-base-content/50 gap-0.5">
                             <span>Created by <span class="font-medium text-base-content/70">{{ project.created_by.get_full_name|default:project.created_by.username }}</span></span>
-                            <span>{{ project.created_at|date:"M d, Y" }}</span>
+                            <span>{{ project.created_at|date:"d/m/Y H:i" }}</span>
                         </div>
                         {% if project.status %}
                         <div class="badge badge-sm gap-1.5 font-normal">
@@ -31,6 +31,15 @@
                             {{ project.status.name }}
                         </div>
                         {% endif %}
+                        <button
+                            class="btn btn-ghost btn-xs text-error border-error/30 hover:border-error hover:bg-error/10"
+                            hx-get="{% url 'lab:project_delete_modal' project.pk %}"
+                            hx-target="#generic-modal-content"
+                            hx-swap="innerHTML"
+                            onclick="document.getElementById('generic-modal').showModal()">
+                            <i class="fa-solid fa-trash-can mr-1"></i>
+                            Remove
+                        </button>
                     </div>
                 </div>
             </div>

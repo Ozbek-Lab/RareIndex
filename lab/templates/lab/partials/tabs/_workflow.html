@@ -101,8 +101,19 @@
     {% for v in external_variants %}{% if not v.pipeline_id %}{% with has_external=True %}{% endwith %}{% endif %}{% endfor %}
     <div class="card bg-base-100 border border-base-200 shadow-sm">
         <div class="card-body">
-            <h4 class="text-xs uppercase text-base-content/50 mb-2 font-bold flex items-center gap-1">
-                <i class="fa-solid fa-dna"></i> Previously Identified Variants
+            <h4 class="text-xs uppercase text-base-content/50 mb-2 font-bold flex items-center justify-between gap-1">
+                <span class="flex items-center gap-1">
+                    <i class="fa-solid fa-dna"></i> Previously Identified Variants
+                </span>
+                <button
+                    class="btn btn-primary btn-xs gap-1 font-normal"
+                    hx-get="{% url 'lab:variant_create_for_individual_modal' individual.id %}"
+                    hx-target="#generic-modal-content"
+                    hx-swap="innerHTML"
+                    onclick="document.getElementById('generic-modal').showModal()">
+                    <i class="fa-solid fa-plus text-[10px]"></i>
+                    Add Variant
+                </button>
             </h4>
             <table class="table table-xs w-full">
                 <thead>
@@ -244,7 +255,7 @@
                                             <div class="absolute pointer-events-none" style="top:0;bottom:0;left:0;width:4px;background-color:oklch(var(--p)/0.35);border-radius:var(--rounded-box,1rem) 0 0 var(--rounded-box,1rem);z-index:20;"></div>
                                             <div class="card-body p-0">
                                                 <div class="flex justify-between items-center bg-primary/10 px-2 py-2 border-b border-base-200 rounded-t-lg relative z-30">
-                                                    <div class="flex items-center gap-1">
+                                                                            <div class="flex items-center gap-1">
                                                         <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
                                                             <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
                                                         </button>
@@ -468,6 +479,15 @@
                                                                                         <i class="fa-solid fa-list-check"></i> {{ analysis.tasks.count }}
                                                                                     </div>
                                                                                 </div>
+                                                                                <button
+                                                                                    class="btn btn-primary btn-xs h-5 min-h-0 px-2 text-[9px] font-normal"
+                                                                                    hx-get="{% url 'lab:variant_create_modal' pipeline.id %}"
+                                                                                    hx-target="#generic-modal-content"
+                                                                                    hx-swap="innerHTML"
+                                                                                    onclick="document.getElementById('generic-modal').showModal()">
+                                                                                    <i class="fa-solid fa-plus text-[8px]"></i>
+                                                                                    Add Variant
+                                                                                </button>
                                                                             </div>
                                                                         </div>
                                 

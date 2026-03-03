@@ -20,6 +20,8 @@ from .models import (
     AnalysisRequestForm,
     AnalysisReport,
     IdentifierType,
+    validate_rareboost_id_value,
+    validate_biobank_id_value,
 )
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
@@ -97,6 +99,18 @@ class ProjectForm(BaseForm):
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 3}),
         }
+
+
+class ProjectCreateWithCopyForm(ProjectForm):
+    """Project create form with optional 'copy individuals from other projects'."""
+
+    copy_from_projects = forms.ModelMultipleChoiceField(
+        queryset=Project.objects.all().order_by("name"),
+        required=False,
+        label="Copy Individuals From Projects",
+        help_text="Individuals from the selected projects will be added to this new project after creation.",
+        widget=forms.SelectMultiple(attrs={"size": 6}),
+    )
 
 
 # Update the TaskForm to include project field
@@ -550,6 +564,65 @@ class IndividualIdentificationForm(BaseForm):
     class Meta:
         model = Individual
         fields = ["full_name", "tc_identity"]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        import json
+
+        def _validate_by_type_name(id_type_name: str, value: str, field_name: str):
+            if id_type_name == "RareBoost":
+                try:
+                    validate_rareboost_id_value(value)
+                except DjangoValidationError as e:
+                    self.add_error(field_name, " ".join(e.messages))
+            elif id_type_name == "Biobank":
+                try:
+                    validate_biobank_id_value(value)
+                except DjangoValidationError as e:
+                    self.add_error(field_name, " ".join(e.messages))
+
+        primary_id_val = cleaned_data.get("primary_id") or ""
+        secondary_id_val = cleaned_data.get("secondary_id") or ""
+
+        # Validate primary/secondary IDs based on their configured IdentifierType
+        if primary_id_val:
+            primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+            if primary_type:
+                _validate_by_type_name(primary_type.name, primary_id_val, "primary_id")
+
+        if secondary_id_val:
+            secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+            if secondary_type:
+                _validate_by_type_name(secondary_type.name, secondary_id_val, "secondary_id")
+
+        # Validate any dynamic cross IDs that are RareBoost
+        cross_ids_json = cleaned_data.get("cross_identifiers_json")
+        if cross_ids_json:
+            try:
+                cross_ids_data = json.loads(cross_ids_json)
+            except json.JSONDecodeError:
+                # Hidden field, ignore parse errors (existing behavior)
+                return cleaned_data
+
+            type_ids = [
+                item.get("type_id")
+                for item in cross_ids_data
+                if item.get("type_id") and item.get("value")
+            ]
+            if type_ids:
+                id_types_by_id = IdentifierType.objects.in_bulk(type_ids)
+                for item in cross_ids_data:
+                    type_id = item.get("type_id")
+                    value = item.get("value")
+                    if not type_id or not value:
+                        continue
+                    id_type = id_types_by_id.get(int(type_id)) if str(type_id).isdigit() else id_types_by_id.get(type_id)
+                    if id_type:
+                        # attach the error to the hidden field; the UI can show a generic message
+                        _validate_by_type_name(id_type.name, value, "cross_identifiers_json")
+
+        return cleaned_data
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

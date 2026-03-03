@@ -138,8 +138,8 @@ class Command(BaseCommand):
                     "Proband", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True, creation_date=child_creation_date
                 )
                 self._create_note(proband, user, creation_date=child_creation_date)
-                rb_code = f"{family_id}.1"
-                biobank_code = f"RD3.F{i+1:02d}.1"
+                rb_code = f"{family_id}.1.1"
+                biobank_code = f"RD3.F{i+1:02d}.1.1"
                 self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
                 children.append(proband)
             all_individuals.extend(children)
