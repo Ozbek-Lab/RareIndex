@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.validators import RegexValidator
 from simple_history.models import HistoricalRecords
-from lab.models import Pipeline, Individual, HistoryMixin
+from lab.models import Analysis, Individual, HistoryMixin
 
 class Variant(HistoryMixin, models.Model):
     """Base class for all variant types"""
@@ -18,8 +18,8 @@ class Variant(HistoryMixin, models.Model):
         on_delete=models.PROTECT,
         related_name="variants",
     )
-    pipeline = models.ForeignKey(
-        Pipeline,
+    analysis = models.ForeignKey(
+        Analysis,
         on_delete=models.PROTECT,
         related_name="found_variants",
         null=True,
