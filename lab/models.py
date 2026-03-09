@@ -701,9 +701,19 @@ class Pipeline(HistoryMixin, models.Model):
 
     @property
     def unreported_variants(self):
-        """Return pipeline variants that are not linked to any report."""
-        reported_ids = self.reports.values_list('variants', flat=True)
-        return self.found_variants.exclude(pk__in=reported_ids)
+        """Return variants for this pipeline that are not linked to any report.
+
+        Variants are now attached to ``Analysis`` (via ``Variant.analysis``)
+        rather than directly to ``Pipeline``. We therefore gather variants
+        from all analyses on this pipeline.
+        """
+        from variant.models import Variant
+
+        reported_ids = self.reports.values_list("variants", flat=True)
+        return (
+            Variant.objects.filter(analysis__pipeline=self)
+            .exclude(pk__in=reported_ids)
+        )
 
 
 class AnalysisType(HistoryMixin, models.Model):

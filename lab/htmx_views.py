@@ -773,7 +773,7 @@ def analysis_create_modal(request, pipeline_id):
 def task_create_modal(request, content_type_id, object_id):
     """Render a task creation form or handle submission"""
     from .forms import TaskForm
-    from .models import Status, Individual, Sample, Test, Pipeline
+    from .models import Status, Individual, Sample, Test, Pipeline, Project
     from django.contrib.contenttypes.models import ContentType
     
     ct = get_object_or_404(ContentType, pk=content_type_id)
@@ -805,18 +805,33 @@ def task_create_modal(request, content_type_id, object_id):
     elif isinstance(obj, Pipeline):
         # Pipeline tasks might need similar handling if added to the view
         individual = obj.test.sample.individual
-        pass
+    elif isinstance(obj, Project):
+        # Tasks created directly on a Project are fixed to that project
+        # (individual is not strictly needed here)
+        individual = None
 
     if request.method == "POST":
-        form = TaskForm(request.POST)
+        form = TaskForm(
+            request.POST,
+            content_object=obj,
+            individual=individual,
+            project=obj if isinstance(obj, Project) else None,
+        )
         if form.is_valid():
             task = form.save(commit=False)
             task.content_type = ct
             task.object_id = object_id
             task.created_by = request.user
+            # If this is a project task, enforce the project link here
+            if isinstance(obj, Project):
+                task.project = obj
             # Ensure status is set
             if not task.status_id:
-                status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                status = (
+                    Status.objects.filter(name__iexact="Active").first()
+                    or Status.objects.filter(name__iexact="Registered").first()
+                    or Status.objects.first()
+                )
                 task.status = status
             task.save()
             
@@ -844,11 +859,20 @@ def task_create_modal(request, content_type_id, object_id):
             
     else:
         initial = {"content_type": ct.pk, "object_id": object_id}
-        status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.filter(content_type__model="task").first() or Status.objects.first()
+        status = (
+            Status.objects.filter(name__iexact="Active").first()
+            or Status.objects.filter(name__iexact="Registered").first()
+            or Status.objects.filter(content_type__model="task").first()
+            or Status.objects.first()
+        )
         if status:
             initial["status"] = status
-            
-        form = TaskForm(initial=initial, content_object=obj)
+        form = TaskForm(
+            initial=initial,
+            content_object=obj,
+            individual=individual,
+            project=obj if isinstance(obj, Project) else None,
+        )
         # Hide generic fields
         form.fields["content_type"].widget = forms.HiddenInput()
         form.fields["object_id"].widget = forms.HiddenInput()
@@ -857,7 +881,8 @@ def task_create_modal(request, content_type_id, object_id):
     from django import forms as dj_forms
     form.fields["content_type"].disabled = True
     form.fields["content_type"].label = "Associated Type"
-    form.fields["content_type"].initial = Model._meta.verbose_name.title()
+    # Display the human-readable model name instead of the ContentType ID
+    form.initial["content_type"] = Model._meta.verbose_name.title()
     form.fields["content_type"].widget = dj_forms.TextInput(
         attrs={
             "class": "input input-bordered w-full pointer-events-none bg-base-200/60",
@@ -867,7 +892,8 @@ def task_create_modal(request, content_type_id, object_id):
 
     form.fields["object_id"].disabled = True
     form.fields["object_id"].label = "Associated Object"
-    form.fields["object_id"].initial = str(obj)
+    # Display the object's __str__ representation instead of its numeric ID
+    form.initial["object_id"] = str(obj)
     form.fields["object_id"].widget = dj_forms.TextInput(
         attrs={
             "class": "input input-bordered w-full pointer-events-none bg-base-200/60",
@@ -881,6 +907,7 @@ def task_create_modal(request, content_type_id, object_id):
         "title": f"Add Task for {obj}",
         "action_url": request.path,
         "hx_target": target_id,
+        "submit_label": "Create Task",
     }
     return render(request, "lab/partials/generic_modal_form.html", context)
 
@@ -1431,11 +1458,13 @@ def variant_detail_partial(request, pk):
             "individual",
             "status",
             "created_by",
-            "pipeline__type",
-            "pipeline__status",
-            "pipeline__performed_by",
-            "pipeline__test__test_type",
-            "pipeline__test__sample__sample_type",
+            # Variant is now linked to Analysis, which links to Pipeline.
+            "analysis",
+            "analysis__pipeline__type",
+            "analysis__pipeline__status",
+            "analysis__pipeline__performed_by",
+            "analysis__pipeline__test__test_type",
+            "analysis__pipeline__test__sample__sample_type",
         ).prefetch_related(
             "genes",
             "classifications__user",
@@ -1462,35 +1491,40 @@ def variant_detail_partial(request, pk):
     # Gene-in-cohort: for each gene, collect all variants (and their workflow) sharing that gene
     gene_cohort_data = []
     for gene in variant.genes.all():
-        gene_variants = Variant.objects.filter(
-            genes=gene
-        ).select_related(
-            "individual",
-            "individual__status",
-            "pipeline__type",
-            "pipeline__test__test_type",
-        ).prefetch_related(
-            "pipeline__analyses__type",
-            "individual__hpo_terms",
-            "individual__institution",
-            "individual__cross_ids__id_type",
-        ).order_by("individual__id")
+        gene_variants = (
+            Variant.objects.filter(genes=gene)
+            .select_related(
+                "individual",
+                "individual__status",
+                "analysis",
+                "analysis__pipeline__type",
+                "analysis__pipeline__test__test_type",
+            )
+            .prefetch_related(
+                "analysis__pipeline__analyses__type",
+                "individual__hpo_terms",
+                "individual__institution",
+                "individual__cross_ids__id_type",
+            )
+            .order_by("individual__id")
+        )
 
         entries = []
         for v in gene_variants:
-            test = v.pipeline.test if v.pipeline_id else None
-            analysis = (
-                v.pipeline.analyses.select_related("type").first()
-                if v.pipeline_id else None
+            analysis = v.analysis
+            pipeline = analysis.pipeline if analysis and getattr(analysis, "pipeline_id", None) else None
+            test = pipeline.test if pipeline and getattr(pipeline, "test_id", None) else None
+
+            entries.append(
+                {
+                    "variant": v,
+                    "individual": v.individual,
+                    "is_current": v.pk == variant.pk,
+                    "pipeline": pipeline,
+                    "test": test,
+                    "analysis": analysis,
+                }
             )
-            entries.append({
-                "variant": v,
-                "individual": v.individual,
-                "is_current": v.pk == variant.pk,
-                "pipeline": v.pipeline if v.pipeline_id else None,
-                "test": test,
-                "analysis": analysis,
-            })
 
         gene_cohort_data.append({
             "gene": gene,

@@ -1,0 +1,289 @@
+<div class="h-[calc(100vh-64px)] bg-base-100 flex flex-col">
+  <header class="h-16 flex items-center justify-between px-6 border-b border-base-200 bg-base-100 flex-shrink-0 z-10">
+    <div class="flex items-center gap-4 flex-1">
+      <h1 class="text-2xl font-bold text-base-content whitespace-nowrap">Visualizations</h1>
+      <p class="text-xs text-base-content/60">
+        Example choropleth map of Turkey rendered with D3 / Observable.
+      </p>
+    </div>
+  </header>
+
+  <main class="flex-1 overflow-y-auto p-6 bg-base-200/50">
+    <div class="bg-base-100 rounded-box shadow-sm border border-base-200 p-4">
+      <h2 class="text-sm font-semibold text-base-content/70 mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-map text-primary"></i>
+        Turkey Choropleth
+      </h2>
+      <div class="mb-3 flex items-center gap-3 text-[11px] text-base-content/70">
+        <span class="font-semibold">View:</span>
+        <label class="inline-flex items-center gap-1 cursor-pointer">
+          <input type="radio" name="map-mode" value="individuals" class="radio radio-xs" checked>
+          <span>Individuals</span>
+        </label>
+        <label class="inline-flex items-center gap-1 cursor-pointer">
+          <input type="radio" name="map-mode" value="families" class="radio radio-xs">
+          <span>Families</span>
+        </label>
+        <label class="inline-flex items-center gap-1 cursor-pointer">
+          <input type="radio" name="map-mode" value="probands" class="radio radio-xs">
+          <span>Probands</span>
+        </label>
+      </div>
+      <div id="turkey-map-container" class="w-full overflow-auto mb-4">
+        <!-- Map will be injected here by the script below -->
+      </div>
+      <p class="mb-3 text-[11px] text-base-content/50">
+        Values represent the number of individuals per city (based on their institutions).
+      </p>
+
+      {% if city_counts_sorted %}
+      <div class="mt-2 border-t border-base-200 pt-3">
+        <h3 class="text-xs uppercase text-base-content/50 mb-2 font-bold">
+          City Counts
+        </h3>
+        <div class="overflow-x-auto max-h-64 max-w-md">
+          <table class="table table-xs w-auto">
+            <thead>
+              <tr class="text-[11px]">
+                <th>City</th>
+                <th class="text-right">Individuals</th>
+              </tr>
+            </thead>
+            <tbody class="text-[11px]">
+              {% for city, count in city_counts_sorted %}
+                {% if count %}
+                <tr>
+                  <td class="pr-2">{{ city }}</td>
+                  <td class="text-right font-mono">{{ count }}</td>
+                </tr>
+                {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </main>
+</div>
+
+{{ city_counts_individuals|json_script:"city-counts-individuals" }}
+{{ city_counts_families|json_script:"city-counts-families" }}
+{{ city_counts_probands|json_script:"city-counts-probands" }}
+
+<script type="module">
+  import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+  import * as topojson from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
+
+  const CITY_COUNTS_INDIVIDUALS = JSON.parse(
+    document.getElementById("city-counts-individuals").textContent
+  );
+  const CITY_COUNTS_FAMILIES = JSON.parse(
+    document.getElementById("city-counts-families").textContent
+  );
+  const CITY_COUNTS_PROBANDS = JSON.parse(
+    document.getElementById("city-counts-probands").textContent
+  );
+
+  function buildData(mode) {
+    let source;
+    if (mode === "families") {
+      source = CITY_COUNTS_FAMILIES;
+    } else if (mode === "probands") {
+      source = CITY_COUNTS_PROBANDS;
+    } else {
+      source = CITY_COUNTS_INDIVIDUALS;
+    }
+    const m = new Map(Object.entries(source));
+    if (mode === "families") {
+      m.title = "Families per city (by institution)";
+    } else if (mode === "probands") {
+      m.title = "Probands per city (by institution)";
+    } else {
+      m.title = "Individuals per city (by institution)";
+    }
+    return m;
+  }
+
+  let currentMode = "individuals";
+  let data = buildData(currentMode);
+
+  const TURKEY_TOPOJSON_URL =
+    "https://static.observableusercontent.com/files/6109f5f630487b36dae403853b1adb5c534371e095f5d80e0176a4b99966d7b5aaa5ee28dc42bb5a076771aa1a28c0d90baa12e1a4776c84c54dcf41322ab573";
+
+  const width = 975;
+  const height = 410;
+
+  // Use a log1p-based color mapping so large cities don't dominate.
+  // Work only with positive values for the domain.
+  function computeDomain(currentData) {
+    const vals = Array.from(currentData.values()).filter((v) => v > 0);
+    if (!vals.length) {
+      return [1, 1];
+    }
+    return [d3.min(vals), d3.max(vals)];
+  }
+
+  let [minVal, maxVal] = computeDomain(data);
+
+  const color = d3.scaleSequential()
+    .domain([0, Math.log1p(maxVal)])
+    .interpolator(t => d3.interpolateBlues(0.1 + 0.6 * t));
+
+  const projection = d3.geoMercator()
+    .scale(2000)
+    .center([38, 38]);
+
+  const path = d3.geoPath().projection(projection);
+
+  async function drawMap() {
+    const container = document.getElementById("turkey-map-container");
+    if (!container) return;
+
+    const turkey = await d3.json(TURKEY_TOPOJSON_URL);
+
+    const svg = d3.create("svg")
+      .attr("viewBox", [0, 0, width, height]);
+
+    // Sea background
+    svg.append("rect")
+      .attr("x", 0)
+      .attr("y", 0)
+      .attr("width", width)
+      .attr("height", height)
+      .attr("fill", "#e5e7eb");  // light grey sea
+
+    // Wrap all map content in a <g> so zoom can transform it.
+    const g = svg.append("g");
+
+    const features = topojson.feature(turkey, turkey.objects.collection).features;
+
+    // Provinces
+    const provinces = g.append("g")
+      .selectAll("path")
+      .data(features)
+      .join("path")
+        .attr("d", path)
+        .on("click", zoomToFeature);
+
+    provinces.append("title");
+
+    // Province borders (make internal city lines clearly visible)
+    g.append("path")
+      .datum(topojson.mesh(turkey, turkey.objects.collection, (a, b) => a !== b))
+      .attr("fill", "none")
+      .attr("stroke", "#cbd5f5")       // soft bluish-grey border
+      .attr("stroke-width", 0.75)
+      .attr("stroke-linejoin", "round")
+      .attr("d", path);
+
+    // Numeric labels on provinces
+    const labels = g.append("g")
+      .selectAll("text")
+      .data(features)
+      .join("text")
+        .attr("transform", d => {
+          const [x, y] = path.centroid(d);
+          return `translate(${x},${y})`;
+        })
+        .attr("text-anchor", "middle")
+        .attr("dy", "0.35em")
+        .attr("font-size", 11)
+        .attr("font-family", "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif")
+        .attr("pointer-events", "none");
+
+    function applyDataToMap() {
+      // Recompute domain and update color scale (log1p transform)
+      [minVal, maxVal] = computeDomain(data);
+      color.domain([0, Math.log1p(maxVal)]);
+
+      provinces
+        .attr("fill", d => {
+          const v = data.get(d.properties.name) || 0;
+          const x = Math.log1p(v);  // 0 -> 0, 1 -> log(2), ...
+          return color(x);
+        });
+
+      provinces.select("title")
+        .text(d => {
+          const v = data.get(d.properties.name);
+          return `${d.properties.name}: ${v != null ? v : 0}`;
+        });
+
+      labels
+        .attr("display", d => {
+          const v = data.get(d.properties.name) || 0;
+          return v > 0 ? null : "none";
+        })
+        .attr("fill", d => {
+          const v = data.get(d.properties.name) || 0;
+          const x = Math.log1p(v || minVal);
+          const c = color(x);
+          const rgb = d3.color(c);
+          if (!rgb) return "#111827";
+          const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+          return luminance < 0.5 ? "#F9FAFB" : "#111827"; // white on dark, dark on light
+        })
+        .text(d => {
+          const v = data.get(d.properties.name);
+          return v > 0 ? v : "";
+        });
+    }
+
+    // Initial draw
+    applyDataToMap();
+
+    // Zoom behavior (similar to Observable's zoom-to-bounding-box example).
+    const zoom = d3.zoom()
+      .scaleExtent([1, 8])
+      .on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      });
+
+    svg.call(zoom);
+
+    function zoomToFeature(event, d) {
+      // Prevent the SVG-level click handler from immediately resetting zoom.
+      event.stopPropagation();
+
+      const [[x0, y0], [x1, y1]] = path.bounds(d);
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const x = (x0 + x1) / 2;
+      const y = (y0 + y1) / 2;
+      const scale = Math.min(8, 0.9 / Math.max(dx / width, dy / height));
+      const translate = [width / 2 - scale * x, height / 2 - scale * y];
+
+      svg.transition()
+        .duration(750)
+        .call(
+          zoom.transform,
+          d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+        );
+    }
+
+    // Click on empty background to reset zoom.
+    svg.on("click", () => {
+      svg.transition()
+        .duration(750)
+        .call(zoom.transform, d3.zoomIdentity);
+    });
+
+    container.innerHTML = "";
+    container.appendChild(svg.node());
+
+    // Wire up mode radio buttons to update the map
+    const modeInputs = document.querySelectorAll('input[name="map-mode"]');
+    modeInputs.forEach((input) => {
+      input.addEventListener("change", (event) => {
+        if (!event.target.checked) return;
+        currentMode = event.target.value;
+        data = buildData(currentMode);
+        applyDataToMap();
+      });
+    });
+  }
+
+  drawMap();
+</script>
+

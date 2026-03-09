@@ -35,6 +35,12 @@
                 Variants
             </a>
         </li>
+        <li>
+            <a href="{% url 'lab:map_visualization' %}" class="{% if request.resolver_match.view_name == 'lab:map_visualization' %}active{% endif %}">
+                <i class="fa-solid fa-chart-area text-[18px] w-5 text-center"></i>
+                Map Visualization
+            </a>
+        </li>
         {% if perms.lab.change_sampletype or perms.lab.change_testtype or perms.lab.change_institution or perms.lab.change_pipelinetype or perms.lab.change_analysistype or perms.lab.change_identifiertype or perms.lab.change_status %}
         <li>
             <a href="{% url 'lab:configurations' %}" class="{% if request.resolver_match.view_name == 'lab:configurations' %}active{% endif %}">

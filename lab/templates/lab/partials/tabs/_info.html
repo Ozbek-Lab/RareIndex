@@ -420,12 +420,47 @@
     {% if individual.projects.exists %}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             {% for project in individual.projects.all %}
-            <div class="flex items-center justify-between p-3 bg-base-200/50 rounded-lg">
-                <div>
-                    <div class="font-bold text-sm">{{ project.name }}</div>
-                    <div class="text-xs text-base-content/60">{{ project.description|truncatechars:50 }}</div>
+            <div class="p-3 bg-base-200/50 rounded-lg space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <div class="font-bold text-sm">{{ project.name }}</div>
+                        <div class="text-xs text-base-content/60">{{ project.description|truncatechars:50 }}</div>
+                    </div>
+                    <span class="badge badge-sm whitespace-nowrap shrink-0"
+                          style="background-color: {{ project.status.color }}; color: {{ project.status.color|contrast_color }};">
+                        {{ project.status.name }}
+                    </span>
                 </div>
-                <span class="badge badge-sm whitespace-nowrap shrink-0" style="background-color: {{ project.status.color }}; color: {{ project.status.color|contrast_color }};">{{ project.status.name }}</span>
+                <div class="flex items-center justify-between gap-2 text-[11px] text-base-content/60">
+                    <div class="flex items-center gap-1">
+                        <i class="fa-solid fa-list-check text-[10px]"></i>
+                        {% with total=project.tasks.count %}
+                            <span>{{ total }} task{{ total|pluralize }}</span>
+                        {% endwith %}
+                    </div>
+                    {% get_content_type_id project as project_ct %}
+                    <button
+                        class="btn btn-ghost btn-[22px] min-h-0 px-2 text-[10px] gap-1"
+                        hx-get="{% url 'lab:task_create_modal' project_ct project.id %}"
+                        hx-target="#generic-modal-content"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('generic-modal').showModal()">
+                        <i class="fa-solid fa-plus text-[9px]"></i>
+                        Add Task
+                    </button>
+                </div>
+                {% if project.tasks.exists %}
+                    <div class="mt-1 space-y-1">
+                        {% for task in project.tasks.all|slice:":3" %}
+                            <div class="flex items-center justify-between text-[11px] bg-base-100/70 px-2 py-1 rounded">
+                                <span class="truncate mr-2">{{ task.title }}</span>
+                                <span class="text-[10px] text-base-content/50">
+                                    {{ task.due_date|date:"d/m/Y H:i"|default:"--" }}
+                                </span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
             </div>
             {% endfor %}
         </div>

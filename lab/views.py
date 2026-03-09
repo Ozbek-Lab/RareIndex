@@ -636,6 +636,66 @@ class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
             return ["lab/variant_list.html"]
         return ["lab/variant_list.html"]
 
+
+class MapVisualizationView(LoginRequiredMixin, TemplateView):
+    template_name = "lab/visualizations.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Aggregate counts by institution city for different views:
+        # - individuals: distinct individuals per city
+        # - families: distinct family units per city (family if present, otherwise individual)
+        # - probands: distinct index individuals (is_index=True) per city
+        qs = (
+            Individual.objects.filter(institution__city__isnull=False)
+            .values("id", "family_id", "is_index", "institution__city")
+            .order_by("institution__city")
+        )
+
+        city_individuals = {}
+        city_families = {}
+        city_probands = {}
+
+        for row in qs:
+            city = row["institution__city"]
+            if city is None:
+                continue
+            indiv_id = row["id"]
+            family_id = row["family_id"]
+            is_index = row["is_index"]
+
+            # Initialise per-city containers
+            entry_indiv = city_individuals.setdefault(city, set())
+            entry_fam = city_families.setdefault(city, set())
+            entry_prob = city_probands.setdefault(city, set())
+
+            # Individuals: distinct individuals per city
+            entry_indiv.add(indiv_id)
+
+            # Families: family if present, otherwise treat individual as a one-person family
+            family_key = family_id if family_id is not None else f"self-{indiv_id}"
+            entry_fam.add(family_key)
+
+            # Probands: index individuals only
+            if is_index:
+                entry_prob.add(indiv_id)
+
+        city_counts_individuals = {city: len(ids) for city, ids in city_individuals.items()}
+        city_counts_families = {city: len(keys) for city, keys in city_families.items()}
+        city_counts_probands = {city: len(ids) for city, ids in city_probands.items()}
+
+        # Use individuals as the default sorted table display.
+        city_counts_sorted = sorted(
+            city_counts_individuals.items(), key=lambda item: item[1], reverse=True
+        )
+
+        context["city_counts_individuals"] = city_counts_individuals
+        context["city_counts_families"] = city_counts_families
+        context["city_counts_probands"] = city_counts_probands
+        # Also provide a list sorted by count descending for display.
+        context["city_counts_sorted"] = city_counts_sorted
+        return context
+
 from django.views.generic import ListView, DetailView
 from django.db.models import Q
 from ontologies.models import Term

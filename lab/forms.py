@@ -144,11 +144,28 @@ class TaskForm(BaseForm):
             "description": forms.Textarea(attrs={"rows": 3}),
         }
 
-    def __init__(self, *args, content_object=None, **kwargs):
+    def __init__(self, *args, content_object=None, individual=None, project=None, **kwargs):
         instance = kwargs.get("instance")
         super().__init__(*args, **kwargs)
-        # Remove StatusLog filtering logic; just show all Status objects
-        self.fields["project"].queryset = Project.objects.all().order_by("name")
+
+        # Limit available projects based on context
+        project_qs = Project.objects.all()
+        if project is not None:
+            # Task explicitly attached to a single Project: fix and lock the field
+            project_qs = project_qs.filter(pk=project.pk)
+            self.initial.setdefault("project", project)
+            self.fields["project"].required = False  # value will be set in the view
+            self.fields["project"].disabled = True
+        elif individual is not None:
+            # Only show projects the individual belongs to
+            project_qs = project_qs.filter(individuals=individual)
+        self.fields["project"].queryset = project_qs.order_by("name")
+
+        # Default Task.status to "Active" on creation (when not editing).
+        if not getattr(instance, "pk", None) and not self.initial.get("status"):
+            active_status = Status.objects.filter(name__iexact="Active").first()
+            if active_status:
+                self.initial["status"] = active_status
         
         # Set up content_type choices - models that can have tasks
         from variant.models import Variant

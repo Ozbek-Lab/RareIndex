@@ -1,9 +1,20 @@
 from django.urls import path
 from .views import (
-    DashboardView, IndividualListView, ProjectListView, SampleListView, IndividualDetailView,
+    DashboardView,
+    IndividualListView,
+    ProjectListView,
+    SampleListView,
+    IndividualDetailView,
     ProjectDetailView,
-    VariantListView, FamilyCreateView, HPOTermSearchView, RenderSelectedHPOTermView,
-    CompleteTaskView, ReopenTaskView, IndividualExportView, configurations_view,
+    VariantListView,
+    FamilyCreateView,
+    HPOTermSearchView,
+    RenderSelectedHPOTermView,
+    CompleteTaskView,
+    ReopenTaskView,
+    IndividualExportView,
+    configurations_view,
+    MapVisualizationView,
 )
 from .profile_views import ProfileView, UpdateThemeView
 from .htmx_views import (
@@ -65,6 +76,8 @@ urlpatterns = [
     path("projects/", ProjectListView.as_view(), name="project_list"),
     path("projects/<int:pk>/detail/", ProjectDetailView.as_view(), name="project_detail"),
     path("variants/", VariantListView.as_view(), name="variant_list"),
+    # Map visualization (current and default at /visualizations/)
+    path("visualizations/", MapVisualizationView.as_view(), name="map_visualization"),
     path("individuals/export/", IndividualExportView.as_view(), name="individual_export"),
     path("individuals/create-family/", FamilyCreateView.as_view(), name="create_family"),
     path("samples/", SampleListView.as_view(), name="sample_list"),
