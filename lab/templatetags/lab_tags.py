@@ -38,10 +38,34 @@ def get_statuses(obj):
     """Fetch available statuses for an object's ContentType"""
     from django.contrib.contenttypes.models import ContentType
     from lab.models import Status
-    
+
+    from django.db.models import F
     ct = ContentType.objects.get_for_model(obj)
-    # Exclusively return statuses specific to this content type
-    return Status.objects.filter(content_type=ct).order_by('name')
+    return Status.objects.filter(content_type=ct).select_related("group").order_by(
+        F("group__name").asc(nulls_last=True), "name"
+    )
+
+
+@register.simple_tag
+def get_object_statuses(obj):
+    """Fetch the statuses currently assigned to a specific object."""
+    if obj is None:
+        return []
+    try:
+        return list(obj.statuses.all())
+    except AttributeError:
+        return []
+
+
+@register.simple_tag
+def is_status_active(obj, status):
+    """Return True if the given status is currently tagged on the object."""
+    if obj is None:
+        return False
+    try:
+        return obj.statuses.filter(pk=status.pk).exists()
+    except AttributeError:
+        return False
 
 @register.simple_tag(takes_context=True)
 def clean_pagination_url(context, page):
@@ -68,9 +92,32 @@ def get_content_type_id(obj):
     from django.contrib.contenttypes.models import ContentType
     return ContentType.objects.get_for_model(obj).id
 
+
+@register.simple_tag
+def id_type_label(priority):
+    """Return '{IdentifierType.name} ID' for the given use_priority (1=primary, 2=secondary).
+    Falls back to 'Primary ID' / 'Secondary ID' if no type is configured."""
+    from lab.models import IdentifierType
+    fallbacks = {1: "Primary ID", 2: "Secondary ID"}
+    id_type = IdentifierType.objects.filter(use_priority=priority).order_by("id").first()
+    if id_type:
+        return f"{id_type.name} ID"
+    return fallbacks.get(priority, f"ID (priority {priority})")
+
 @register.filter
 def class_name(obj):
     return obj.__class__.__name__
+
+
+@register.filter
+def has_status(obj, status_name):
+    """Return True if the object has a status with the given name (case-insensitive)."""
+    if obj is None:
+        return False
+    try:
+        return obj.statuses.filter(name__iexact=status_name).exists()
+    except AttributeError:
+        return False
 
 
 @register.filter

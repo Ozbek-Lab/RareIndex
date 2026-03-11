@@ -4,7 +4,7 @@ from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual, Sample, Project, SampleType, TestType, Status, PipelineType,
-    Institution, Test, Pipeline, Analysis, AnalysisType
+    Institution, Test, Pipeline, Analysis, AnalysisType, TaggedStatus,
 )
 from variant.models import Classification, Variant, Annotation
 
@@ -69,68 +69,108 @@ class OpenMultipleChoiceField(forms.MultipleChoiceField):
 class OpenMultipleChoiceFilter(django_filters.MultipleChoiceFilter):
     field_class = OpenMultipleChoiceField
 
+def _filter_by_tagged_status(queryset, model_class, status_values, exclude=False):
+    """
+    Filter a queryset by statuses applied via TaggedStatus.
+    status_values: queryset or list of Status instances.
+    """
+    ct = ContentType.objects.get_for_model(model_class)
+    matched_ids = TaggedStatus.objects.filter(
+        content_type=ct,
+        tag__in=status_values,
+    ).values_list("object_id", flat=True)
+    if exclude:
+        return queryset.exclude(pk__in=matched_ids)
+    return queryset.filter(pk__in=matched_ids)
+
+
+def _filter_related_by_tagged_status(queryset, related_model_class, relation_path, status_values, exclude=False):
+    """
+    Filter a queryset by statuses on a related model (e.g. Individual filtered by Sample statuses).
+    relation_path: ORM path from the root model to the related model (e.g. 'samples').
+    """
+    ct = ContentType.objects.get_for_model(related_model_class)
+    matched_related_ids = TaggedStatus.objects.filter(
+        content_type=ct,
+        tag__in=status_values,
+    ).values_list("object_id", flat=True)
+    lookup = f"{relation_path}__in"
+    if exclude:
+        return queryset.exclude(**{lookup: matched_related_ids})
+    return queryset.filter(**{lookup: matched_related_ids})
+
+
 class IndividualFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")
-    
+
     # Individual Fields
-    status = TristateModelMultipleChoiceFilter(queryset=Status.objects.all(), to_field_name='name')
+    status = TristateModelMultipleChoiceFilter(
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        method='filter_individual_status',
+        label="Individual Status",
+    )
     sex = TristateMultipleChoiceFilter(choices=Individual._meta.get_field('sex').choices)
     is_alive = TristateMultipleChoiceFilter(choices=[(True, 'Alive'), (False, 'Deceased')])
-    
+
     # Sample Fields
     samples__status = TristateModelMultipleChoiceFilter(
-        queryset=Status.objects.all(), 
-        to_field_name='name', 
-        label="Sample Status"
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        method='filter_sample_status',
+        label="Sample Status",
     )
     samples__sample_type = TristateModelMultipleChoiceFilter(
-        queryset=SampleType.objects.all(), 
-        to_field_name='name', 
-        label="Sample Type"
+        queryset=SampleType.objects.all(),
+        to_field_name='name',
+        label="Sample Type",
     )
-    
+
     # Test Fields
     samples__tests__status = TristateModelMultipleChoiceFilter(
         queryset=Status.objects.all(),
         to_field_name='name',
-        label="Test Status"
+        method='filter_test_status',
+        label="Test Status",
     )
     samples__tests__test_type = TristateModelMultipleChoiceFilter(
         queryset=TestType.objects.all(),
         to_field_name='name',
-        label="Test Type"
+        label="Test Type",
     )
 
     # Pipeline Fields
     samples__tests__pipelines__status = TristateModelMultipleChoiceFilter(
         queryset=Status.objects.all(),
         to_field_name='name',
-        label="Pipeline Status"
+        method='filter_pipeline_status',
+        label="Pipeline Status",
     )
     samples__tests__pipelines__type = TristateModelMultipleChoiceFilter(
         queryset=PipelineType.objects.all(),
         to_field_name='name',
-        label="Pipeline Type"
+        label="Pipeline Type",
     )
-    
-    # Analysis (Human Interpretation) Fields
+
+    # Analysis Fields
     samples__tests__pipelines__analyses__status = TristateModelMultipleChoiceFilter(
         queryset=Status.objects.all(),
         to_field_name='name',
-        label="Analysis Status"
+        method='filter_analysis_status',
+        label="Analysis Status",
     )
     samples__tests__pipelines__analyses__type = TristateModelMultipleChoiceFilter(
         queryset=AnalysisType.objects.all(),
         to_field_name='name',
-        label="Analysis Type"
+        label="Analysis Type",
     )
-    
+
     # Variant Fields
-    # status, type, classifications
     variants__status = TristateModelMultipleChoiceFilter(
         queryset=Status.objects.all(),
         to_field_name='name',
-        label="Variant Status"
+        method='filter_variant_status',
+        label="Variant Status",
     )
     # Note: Variant 'type' is a property, not a field, so we can't filter directly easily 
     # unless we annotate or it's stored. Looking at models.py, SNV/CNV/etc are subclasses.
@@ -217,28 +257,15 @@ class IndividualFilter(django_filters.FilterSet):
 
     class Meta:
         model = Individual
-        fields = ['status', 'sex', 'family']
-        
+        fields = ['sex', 'family']
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Dynamically load HPO terms to avoid circular imports or excessively large lists if not needed immediately
-        # But for a filter sidebar, we ideally want a manageable list or an autocomplete.
-        # Given the requirements "filter individuals by everything... hpo terms", 
-        # listing ALL HPO terms in a checkbox list is bad (there are thousands).
-        # The user said "sidebar... toggle... click again to negate".
-        # This implies a set of available options. 
-        # Maybe we only show HPO terms that are actually used in the DB?
         if 'hpo_terms' in self.filters:
-            # OPTIMIZATION: Do not load all used terms into choices.
-            # We use a search-based UI now.
-            # Django-Filter mostly uses choices for validation and widget rendering.
-            # For validation, ModelMultipleChoiceFilter checks existence in queryset.
-            # We must ensure the queryset covers all valid terms.
             from ontologies.models import Term
             self.filters['hpo_terms'].queryset = Term.objects.all()
 
-
-        # Restrict Status choices by ContentType
+        # Restrict Status filter querysets by ContentType
         self._restrict_status_queryset('status', Individual)
         self._restrict_status_queryset('samples__status', Sample)
         self._restrict_status_queryset('samples__tests__status', Test)
@@ -250,6 +277,85 @@ class IndividualFilter(django_filters.FilterSet):
         if field_name in self.filters:
             ct = ContentType.objects.get_for_model(model_class)
             self.filters[field_name].queryset = Status.objects.filter(content_type=ct)
+
+    # --- Custom method filters for status fields (TaggedStatus/GenericFK based) ---
+
+    def _get_exclude_statuses(self, field_name, model_class):
+        """Return a Status queryset for the excluded values in the __exclude param."""
+        data = self.data
+        exclude_key = f"{field_name}__exclude"
+        if hasattr(data, 'getlist'):
+            excluded_names = data.getlist(exclude_key)
+        else:
+            excluded_names = data.get(exclude_key, [])
+            if not isinstance(excluded_names, list):
+                excluded_names = [excluded_names] if excluded_names else []
+        if excluded_names:
+            return Status.objects.filter(name__in=excluded_names)
+        return Status.objects.none()
+
+    def filter_individual_status(self, queryset, name, value):
+        if value:
+            queryset = _filter_by_tagged_status(queryset, Individual, value)
+        excluded = self._get_exclude_statuses('status', Individual)
+        if excluded.exists():
+            queryset = _filter_by_tagged_status(queryset, Individual, excluded, exclude=True)
+        return queryset.distinct()
+
+    def filter_sample_status(self, queryset, name, value):
+        sample_ct = ContentType.objects.get_for_model(Sample)
+        if value:
+            sample_ids = TaggedStatus.objects.filter(content_type=sample_ct, tag__in=value).values_list("object_id", flat=True)
+            queryset = queryset.filter(samples__id__in=sample_ids)
+        excluded = self._get_exclude_statuses('samples__status', Sample)
+        if excluded.exists():
+            excl_sample_ids = TaggedStatus.objects.filter(content_type=sample_ct, tag__in=excluded).values_list("object_id", flat=True)
+            queryset = queryset.exclude(samples__id__in=excl_sample_ids)
+        return queryset.distinct()
+
+    def filter_test_status(self, queryset, name, value):
+        test_ct = ContentType.objects.get_for_model(Test)
+        if value:
+            test_ids = TaggedStatus.objects.filter(content_type=test_ct, tag__in=value).values_list("object_id", flat=True)
+            queryset = queryset.filter(samples__tests__id__in=test_ids)
+        excluded = self._get_exclude_statuses('samples__tests__status', Test)
+        if excluded.exists():
+            excl_ids = TaggedStatus.objects.filter(content_type=test_ct, tag__in=excluded).values_list("object_id", flat=True)
+            queryset = queryset.exclude(samples__tests__id__in=excl_ids)
+        return queryset.distinct()
+
+    def filter_pipeline_status(self, queryset, name, value):
+        pipeline_ct = ContentType.objects.get_for_model(Pipeline)
+        if value:
+            pipe_ids = TaggedStatus.objects.filter(content_type=pipeline_ct, tag__in=value).values_list("object_id", flat=True)
+            queryset = queryset.filter(samples__tests__pipelines__id__in=pipe_ids)
+        excluded = self._get_exclude_statuses('samples__tests__pipelines__status', Pipeline)
+        if excluded.exists():
+            excl_ids = TaggedStatus.objects.filter(content_type=pipeline_ct, tag__in=excluded).values_list("object_id", flat=True)
+            queryset = queryset.exclude(samples__tests__pipelines__id__in=excl_ids)
+        return queryset.distinct()
+
+    def filter_analysis_status(self, queryset, name, value):
+        analysis_ct = ContentType.objects.get_for_model(Analysis)
+        if value:
+            analysis_ids = TaggedStatus.objects.filter(content_type=analysis_ct, tag__in=value).values_list("object_id", flat=True)
+            queryset = queryset.filter(samples__tests__pipelines__analyses__id__in=analysis_ids)
+        excluded = self._get_exclude_statuses('samples__tests__pipelines__analyses__status', Analysis)
+        if excluded.exists():
+            excl_ids = TaggedStatus.objects.filter(content_type=analysis_ct, tag__in=excluded).values_list("object_id", flat=True)
+            queryset = queryset.exclude(samples__tests__pipelines__analyses__id__in=excl_ids)
+        return queryset.distinct()
+
+    def filter_variant_status(self, queryset, name, value):
+        variant_ct = ContentType.objects.get_for_model(Variant)
+        if value:
+            variant_ids = TaggedStatus.objects.filter(content_type=variant_ct, tag__in=value).values_list("object_id", flat=True)
+            queryset = queryset.filter(variants__id__in=variant_ids)
+        excluded = self._get_exclude_statuses('variants__status', Variant)
+        if excluded.exists():
+            excl_ids = TaggedStatus.objects.filter(content_type=variant_ct, tag__in=excluded).values_list("object_id", flat=True)
+            queryset = queryset.exclude(variants__id__in=excl_ids)
+        return queryset.distinct()
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(
@@ -306,6 +412,7 @@ class VariantFilter(django_filters.FilterSet):
     status = TristateModelMultipleChoiceFilter(
         queryset=Status.objects.all(),
         to_field_name='name',
+        method='filter_variant_status',
         label="Status",
     )
     zygosity = TristateMultipleChoiceFilter(
@@ -341,7 +448,7 @@ class VariantFilter(django_filters.FilterSet):
 
     class Meta:
         model = Variant
-        fields = ['status', 'zygosity']
+        fields = ['zygosity']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -365,6 +472,24 @@ class VariantFilter(django_filters.FilterSet):
             .order_by('source')
         )
         self.filters['annotation_source'].field.choices = [(s, s) for s in sources if s]
+
+    def filter_variant_status(self, queryset, name, value):
+        variant_ct = ContentType.objects.get_for_model(Variant)
+        if value:
+            matched_ids = TaggedStatus.objects.filter(
+                content_type=variant_ct,
+                tag__in=value,
+            ).values_list("object_id", flat=True)
+            queryset = queryset.filter(pk__in=matched_ids)
+        data = self.data
+        excluded_names = data.getlist("status__exclude") if hasattr(data, 'getlist') else []
+        if excluded_names:
+            excl_ids = TaggedStatus.objects.filter(
+                content_type=variant_ct,
+                tag__name__in=excluded_names,
+            ).values_list("object_id", flat=True)
+            queryset = queryset.exclude(pk__in=excl_ids)
+        return queryset.distinct()
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(
@@ -430,23 +555,31 @@ class VariantFilter(django_filters.FilterSet):
 
 class ProjectFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")
-    
+
     # Project Fields
-    status = TristateModelMultipleChoiceFilter(queryset=Status.objects.all(), to_field_name='name')
-    priority = TristateMultipleChoiceFilter(choices=[], label="Priority")  # Will be set in __init__
-    created_by = TristateModelMultipleChoiceFilter(
-        queryset=None,  # Will be set in __init__
-        to_field_name='username',
-        label="Created By"
+    status = TristateModelMultipleChoiceFilter(
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        method='filter_project_status',
+        label="Status",
     )
-    
+    priority = TristateMultipleChoiceFilter(choices=[], label="Priority")
+    created_by = TristateModelMultipleChoiceFilter(
+        queryset=None,
+        to_field_name='username',
+        label="Created By",
+    )
+
     class Meta:
         model = Project
-        fields = ['status', 'priority']
-        
+        fields = ['priority']
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Set created_by queryset to User model
+        # Restrict Status choices to Project content type
+        ct = ContentType.objects.get_for_model(Project)
+        self.filters['status'].queryset = Status.objects.filter(content_type=ct)
+
         from django.contrib.auth import get_user_model
         User = get_user_model()
         if 'created_by' in self.filters:
@@ -465,9 +598,27 @@ class ProjectFilter(django_filters.FilterSet):
             ct = ContentType.objects.get_for_model(model_class)
             self.filters[field_name].queryset = Status.objects.filter(content_type=ct)
 
+    def filter_project_status(self, queryset, name, value):
+        project_ct = ContentType.objects.get_for_model(Project)
+        if value:
+            matched_ids = TaggedStatus.objects.filter(
+                content_type=project_ct,
+                tag__in=value,
+            ).values_list("object_id", flat=True)
+            queryset = queryset.filter(pk__in=matched_ids)
+        data = self.data
+        excluded_names = data.getlist("status__exclude") if hasattr(data, 'getlist') else []
+        if excluded_names:
+            excl_ids = TaggedStatus.objects.filter(
+                content_type=project_ct,
+                tag__name__in=excluded_names,
+            ).values_list("object_id", flat=True)
+            queryset = queryset.exclude(pk__in=excl_ids)
+        return queryset.distinct()
+
     def filter_search(self, queryset, name, value):
         return queryset.filter(
-            Q(name__icontains=value) | 
+            Q(name__icontains=value) |
             Q(description__icontains=value) |
             Q(id__icontains=value)
         ).distinct()

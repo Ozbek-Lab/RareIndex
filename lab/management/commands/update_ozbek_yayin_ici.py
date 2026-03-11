@@ -290,8 +290,8 @@ class Command(BaseCommand):
                     status_obj = Status.objects.filter(
                         name=note_status_name, content_type=ct_individual
                     ).first()
-                    if status_obj and individual.status_id != status_obj.id:
-                        individual.status = status_obj
+                    if status_obj and not individual.statuses.filter(pk=status_obj.pk).exists():
+                        individual.statuses.set([status_obj])
                         changed = True
 
             if changed:

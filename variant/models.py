@@ -3,7 +3,8 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.validators import RegexValidator
 from simple_history.models import HistoricalRecords
-from lab.models import Analysis, Individual, HistoryMixin
+from taggit.managers import TaggableManager
+from lab.models import Analysis, Individual, HistoryMixin, TaggedStatus
 
 class Variant(HistoryMixin, models.Model):
     """Base class for all variant types"""
@@ -40,7 +41,7 @@ class Variant(HistoryMixin, models.Model):
     def __str__(self):
         return f"{self.chromosome}:{self.start}-{self.end}"
 
-    status = models.ForeignKey("lab.Status", on_delete=models.PROTECT, null=True, blank=True)
+    statuses = TaggableManager(through=TaggedStatus, blank=True, verbose_name="Statuses")
 
     ZYGOSITY_CHOICES = [
         ("het", "Heterozygous"),

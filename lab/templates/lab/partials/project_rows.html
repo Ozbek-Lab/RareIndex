@@ -94,7 +94,7 @@
                             {% if row.record.tasks.exists %}
                                 <div class="grid grid-cols-1 gap-1">
                                 {% for task in row.record.tasks.all %}
-                                    {% if task.status.name != "Completed" %}
+                                    {% if not task|has_status:"Completed" %}
                                     <div class="p-1 border border-base-200 rounded-lg bg-base-100/50 text-[10px]">
                                         <div class="flex justify-between items-start mb-0.5">
                                             <span class="font-semibold">{{ task.title }}</span>

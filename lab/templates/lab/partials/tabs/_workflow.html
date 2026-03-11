@@ -70,7 +70,7 @@
                     {% if individual.tasks.exists %}
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
                         {% for task in individual.tasks.all %}
-                            {% if task.status.name != "Completed" %}
+                            {% if not task|has_status:"Completed" %}
                             <div class="p-1 border border-base-200 rounded-lg hover:shadow-sm transition-shadow bg-base-50">
                                 <div class="flex justify-between items-start mb-0.5">
                                     <span class="font-medium text-sm">{{ task.title }}</span>
@@ -215,10 +215,10 @@
                             </h4>
                             <div id="sample-tasks-{{ sample.id }}">
                                 {% partialdef sample_tasks %}
-                                {% if sample.tasks.exists %}
+                                    {% if sample.tasks.exists %}
                                     <div class="grid grid-cols-1 gap-1">
                                     {% for task in sample.tasks.all %}
-                                        {% if task.status.name != "Completed" %}
+                                        {% if not task|has_status:"Completed" %}
                                         <div class="p-1 border border-base-200 rounded-lg bg-base-100/50 text-[10px]">
                                             <div class="flex justify-between items-start mb-0.5">
                                                 <span class="font-semibold">{{ task.title }}</span>
@@ -317,7 +317,7 @@
                                                             {% if test.tasks.exists %}
                                                                 <div class="space-y-1">
                                                                 {% for task in test.tasks.all %}
-                                                                    {% if task.status.name != "Completed" %}
+                                                                    {% if not task|has_status:"Completed" %}
                                                                     <div class="p-1 border border-base-200 rounded-md bg-base-200/20 text-[9px]">
                                                                         <div class="flex justify-between items-start">
                                                                             <span class="font-medium truncate mr-1">{{ task.title }}</span>
@@ -414,7 +414,7 @@
                                                                         {% if pipeline.tasks.exists %}
                                                                             <div class="space-y-1">
                                                                             {% for task in pipeline.tasks.all %}
-                                                                                {% if task.status.name != "Completed" %}
+                                                                                {% if not task|has_status:"Completed" %}
                                                                                 <div class="p-1 border border-base-200 rounded-md bg-base-200/20 text-[9px]">
                                                                                     <div class="flex justify-between items-start">
                                                                                         <span class="font-medium truncate mr-1">{{ task.title }}</span>
@@ -518,7 +518,7 @@
                                                                                         {% if analysis.tasks.exists %}
                                                                                             <div class="space-y-1">
                                                                                             {% for task in analysis.tasks.all %}
-                                                                                                {% if task.status.name != "Completed" %}
+                                                                                                {% if not task|has_status:"Completed" %}
                                                                                                 <div class="p-1 border border-base-200 rounded-md bg-base-200/20 text-[8px]">
                                                                                                     <div class="flex justify-between items-start">
                                                                                                         <span class="font-medium truncate mr-1">{{ task.title }}</span>
@@ -687,36 +687,56 @@
 
 {% partialdef sample_status_badge %}
     <div class="dropdown dropdown-end dropdown-bottom" id="sample-status-{{ sample.id }}">
-        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-2 font-normal text-xs text-base-content hover:bg-base-200 transition-all border-base-content/10">
-            {% if sample.status.icon %}
-                <i class="fa-solid {{ sample.status.icon }} text-xs" style="color: {{ sample.status.color }};"></i>
+        <div tabindex="0" role="button" class="flex items-center gap-1 cursor-pointer rounded-md hover:bg-base-200 px-1 py-0.5 transition-all">
+            {% get_object_statuses sample as active_statuses %}
+            {% if active_statuses %}
+                {% for s in active_statuses %}
+                    <span class="badge badge-sm badge-ghost gap-1 font-normal text-xs border-base-content/10">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        {{ s.display_name }}
+                    </span>
+                {% endfor %}
             {% else %}
-                <span class="size-2 rounded-full ring-1 ring-base-content/10 border border-base-100" style="background-color: {{ sample.status.color }};"></span>
+                <span class="badge badge-sm badge-ghost font-normal text-xs opacity-40"><i class="fa-solid fa-tag text-xs"></i> No Status</span>
             {% endif %}
-            {{ sample.status.name }}
             <i class="fa-solid fa-chevron-down text-[10px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-56 mt-2">
-            <li class="menu-title text-[10px] uppercase opacity-40 px-3 py-2">Update Sample Status</li>
-            {% get_statuses sample as statuses %}
+            <li class="menu-title text-[10px] uppercase opacity-40 px-3 py-2">Toggle Sample Status</li>
+            {% get_statuses sample as available_statuses %}
             {% get_content_type_id sample as ct_id %}
-            {% for s in statuses %}
-            <li>
-                <a hx-post="{% url 'lab:update_status' ct_id sample.id s.id %}" 
-                   hx-target="#sample-status-{{ sample.id }}" 
-                   hx-swap="outerHTML"
-                   class="flex items-center gap-3 py-3 px-4 hover:bg-base-200 {% if s == sample.status %}bg-base-200 font-semibold{% endif %}">
-                    {% if s.icon %}
-                        <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
-                    {% else %}
-                        <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
-                    {% endif %}
-                    <span class="flex-1">{{ s.name }}</span>
-                    {% if s == sample.status %}
-                        <i class="fa-solid fa-check text-xs opacity-50"></i>
-                    {% endif %}
-                </a>
-            </li>
+            {% regroup available_statuses by group.name as grouped_statuses %}
+            {% for grp in grouped_statuses %}
+                {% if grp.grouper %}
+                <li class="menu-title text-[9px] uppercase opacity-50 px-3 pt-2 pb-0.5 flex items-center gap-1">
+                    <i class="fa-regular fa-circle-dot text-[8px]"></i> {{ grp.grouper }}
+                </li>
+                {% endif %}
+                {% for s in grp.list %}
+                {% is_status_active sample s as s_active %}
+                <li>
+                    <a hx-post="{% url 'lab:update_status' ct_id sample.id s.id %}"
+                       hx-target="#sample-status-{{ sample.id }}"
+                       hx-swap="outerHTML"
+                       class="flex items-center gap-3 py-3 px-4 hover:bg-base-200 {% if s_active %}bg-base-200/60 font-semibold{% endif %}">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        <span class="flex-1">{{ s.name }}</span>
+                        {% if grp.grouper %}
+                            <i class="fa-{% if s_active %}solid fa-circle-dot{% else %}regular fa-circle{% endif %} text-[10px] {% if s_active %}opacity-60{% else %}opacity-20{% endif %}"></i>
+                        {% elif s_active %}
+                            <i class="fa-solid fa-check text-xs opacity-50"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                {% endfor %}
             {% endfor %}
         </ul>
     </div>
@@ -724,36 +744,56 @@
 
 {% partialdef test_status_badge %}
     <div class="dropdown dropdown-end dropdown-bottom" id="test-status-{{ test.id }}">
-        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-2 font-normal text-xs text-base-content hover:bg-base-200 transition-all border-base-content/5">
-            {% if test.status.icon %}
-                <i class="fa-solid {{ test.status.icon }} text-[10px]" style="color: {{ test.status.color }};"></i>
+        <div tabindex="0" role="button" class="flex items-center gap-1 cursor-pointer rounded-md hover:bg-base-200 px-1 py-0.5 transition-all">
+            {% get_object_statuses test as active_statuses %}
+            {% if active_statuses %}
+                {% for s in active_statuses %}
+                    <span class="badge badge-sm badge-ghost gap-1 font-normal text-xs border-base-content/5">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[10px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        {{ s.display_name }}
+                    </span>
+                {% endfor %}
             {% else %}
-                <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ test.status.color }};"></span>
+                <span class="badge badge-sm badge-ghost font-normal text-xs opacity-40"><i class="fa-solid fa-tag text-[10px]"></i> No Status</span>
             {% endif %}
-            {{ test.status.name }}
             <i class="fa-solid fa-chevron-down text-[8px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu menu-sm p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-48 mt-2">
-            <li class="menu-title text-[9px] uppercase opacity-40 px-3 py-2">Update Test Status</li>
-            {% get_statuses test as statuses %}
+            <li class="menu-title text-[9px] uppercase opacity-40 px-3 py-2">Toggle Test Status</li>
+            {% get_statuses test as available_statuses %}
             {% get_content_type_id test as ct_id %}
-            {% for s in statuses %}
-            <li>
-                <a hx-post="{% url 'lab:update_status' ct_id test.id s.id %}" 
-                   hx-target="#test-status-{{ test.id }}" 
-                   hx-swap="outerHTML"
-                   class="flex items-center gap-2.5 py-2.5 px-3 hover:bg-base-200 {% if s == test.status %}bg-base-200 font-semibold{% endif %}">
-                    {% if s.icon %}
-                        <i class="fa-solid {{ s.icon }} text-[10px]" style="color: {{ s.color }};"></i>
-                    {% else %}
-                        <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
-                    {% endif %}
-                    <span class="flex-1">{{ s.name }}</span>
-                    {% if s == test.status %}
-                        <i class="fa-solid fa-check text-[10px] opacity-50"></i>
-                    {% endif %}
-                </a>
-            </li>
+            {% regroup available_statuses by group.name as grouped_statuses %}
+            {% for grp in grouped_statuses %}
+                {% if grp.grouper %}
+                <li class="menu-title text-[8px] uppercase opacity-50 px-3 pt-2 pb-0.5 flex items-center gap-1">
+                    <i class="fa-regular fa-circle-dot text-[7px]"></i> {{ grp.grouper }}
+                </li>
+                {% endif %}
+                {% for s in grp.list %}
+                {% is_status_active test s as s_active %}
+                <li>
+                    <a hx-post="{% url 'lab:update_status' ct_id test.id s.id %}"
+                       hx-target="#test-status-{{ test.id }}"
+                       hx-swap="outerHTML"
+                       class="flex items-center gap-2.5 py-2.5 px-3 hover:bg-base-200 {% if s_active %}bg-base-200/60 font-semibold{% endif %}">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[10px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        <span class="flex-1">{{ s.name }}</span>
+                        {% if grp.grouper %}
+                            <i class="fa-{% if s_active %}solid fa-circle-dot{% else %}regular fa-circle{% endif %} text-[10px] {% if s_active %}opacity-60{% else %}opacity-20{% endif %}"></i>
+                        {% elif s_active %}
+                            <i class="fa-solid fa-check text-[10px] opacity-50"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                {% endfor %}
             {% endfor %}
         </ul>
     </div>
@@ -761,36 +801,56 @@
 
 {% partialdef pipeline_status_badge %}
     <div class="dropdown dropdown-end dropdown-bottom" id="pipeline-status-{{ pipeline.id }}">
-        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-1.5 font-normal text-xs text-base-content hover:bg-base-200 transition-all border-base-content/5">
-            {% if pipeline.status.icon %}
-                <i class="fa-solid {{ pipeline.status.icon }} text-[10px]" style="color: {{ pipeline.status.color }};"></i>
+        <div tabindex="0" role="button" class="flex items-center gap-1 cursor-pointer rounded-md hover:bg-base-200 px-1 py-0.5 transition-all">
+            {% get_object_statuses pipeline as active_statuses %}
+            {% if active_statuses %}
+                {% for s in active_statuses %}
+                    <span class="badge badge-sm badge-ghost gap-1 font-normal text-xs border-base-content/5">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[10px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        {{ s.display_name }}
+                    </span>
+                {% endfor %}
             {% else %}
-                <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ pipeline.status.color }};"></span>
+                <span class="badge badge-sm badge-ghost font-normal text-xs opacity-40"><i class="fa-solid fa-tag text-[10px]"></i> No Status</span>
             {% endif %}
-            {{ pipeline.status.name }}
             <i class="fa-solid fa-chevron-down text-[8px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu menu-sm p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-48 mt-2">
-            <li class="menu-title text-[9px] uppercase opacity-40 px-3 py-2">Update Pipeline Status</li>
-            {% get_statuses pipeline as statuses %}
+            <li class="menu-title text-[9px] uppercase opacity-40 px-3 py-2">Toggle Pipeline Status</li>
+            {% get_statuses pipeline as available_statuses %}
             {% get_content_type_id pipeline as ct_id %}
-            {% for s in statuses %}
-            <li>
-                <a hx-post="{% url 'lab:update_status' ct_id pipeline.id s.id %}" 
-                   hx-target="#pipeline-status-{{ pipeline.id }}" 
-                   hx-swap="outerHTML"
-                   class="flex items-center gap-2.5 py-2.5 px-3 hover:bg-base-200 {% if s == pipeline.status %}bg-base-200 font-semibold{% endif %}">
-                    {% if s.icon %}
-                        <i class="fa-solid {{ s.icon }} text-[10px]" style="color: {{ s.color }};"></i>
-                    {% else %}
-                        <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
-                    {% endif %}
-                    <span class="flex-1 text-xs">{{ s.name }}</span>
-                    {% if s == pipeline.status %}
-                        <i class="fa-solid fa-check text-[10px] opacity-50"></i>
-                    {% endif %}
-                </a>
-            </li>
+            {% regroup available_statuses by group.name as grouped_statuses %}
+            {% for grp in grouped_statuses %}
+                {% if grp.grouper %}
+                <li class="menu-title text-[8px] uppercase opacity-50 px-3 pt-2 pb-0.5 flex items-center gap-1">
+                    <i class="fa-regular fa-circle-dot text-[7px]"></i> {{ grp.grouper }}
+                </li>
+                {% endif %}
+                {% for s in grp.list %}
+                {% is_status_active pipeline s as s_active %}
+                <li>
+                    <a hx-post="{% url 'lab:update_status' ct_id pipeline.id s.id %}"
+                       hx-target="#pipeline-status-{{ pipeline.id }}"
+                       hx-swap="outerHTML"
+                       class="flex items-center gap-2.5 py-2.5 px-3 hover:bg-base-200 {% if s_active %}bg-base-200/60 font-semibold{% endif %}">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[10px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        <span class="flex-1 text-xs">{{ s.name }}</span>
+                        {% if grp.grouper %}
+                            <i class="fa-{% if s_active %}solid fa-circle-dot{% else %}regular fa-circle{% endif %} text-[10px] {% if s_active %}opacity-60{% else %}opacity-20{% endif %}"></i>
+                        {% elif s_active %}
+                            <i class="fa-solid fa-check text-[10px] opacity-50"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                {% endfor %}
             {% endfor %}
         </ul>
     </div>
@@ -798,36 +858,56 @@
 
 {% partialdef analysis_status_badge %}
     <div class="dropdown dropdown-end dropdown-bottom" id="analysis-status-{{ analysis.id }}">
-        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-1 font-normal text-xs hover:bg-base-200 transition-all border-base-content/5">
-            {% if analysis.status.icon %}
-                <i class="fa-solid {{ analysis.status.icon }} text-[9px]" style="color: {{ analysis.status.color }};"></i>
+        <div tabindex="0" role="button" class="flex items-center gap-0.5 cursor-pointer rounded-md hover:bg-base-200 px-1 py-0.5 transition-all">
+            {% get_object_statuses analysis as active_statuses %}
+            {% if active_statuses %}
+                {% for s in active_statuses %}
+                    <span class="badge badge-sm badge-ghost gap-1 font-normal text-xs border-base-content/5">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[9px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        {{ s.display_name }}
+                    </span>
+                {% endfor %}
             {% else %}
-                <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ analysis.status.color }};"></span>
+                <span class="badge badge-sm badge-ghost font-normal text-xs opacity-40"><i class="fa-solid fa-tag text-[9px]"></i> No Status</span>
             {% endif %}
-            {{ analysis.status.name }}
             <i class="fa-solid fa-chevron-down text-[6px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu menu-xs p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-40 mt-1">
-            <li class="menu-title text-[8px] uppercase opacity-40 px-3 py-1.5">Update Analysis Status</li>
-            {% get_statuses analysis as statuses %}
+            <li class="menu-title text-[8px] uppercase opacity-40 px-3 py-1.5">Toggle Analysis Status</li>
+            {% get_statuses analysis as available_statuses %}
             {% get_content_type_id analysis as ct_id %}
-            {% for s in statuses %}
-            <li>
-                <a hx-post="{% url 'lab:update_status' ct_id analysis.id s.id %}" 
-                   hx-target="#analysis-status-{{ analysis.id }}" 
-                   hx-swap="outerHTML"
-                   class="flex items-center gap-2 py-2 px-2.5 hover:bg-base-200 {% if s == analysis.status %}bg-base-200 font-semibold{% endif %}">
-                    {% if s.icon %}
-                        <i class="fa-solid {{ s.icon }} text-[9px]" style="color: {{ s.color }};"></i>
-                    {% else %}
-                        <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
-                    {% endif %}
-                    <span class="flex-1 text-[10px]">{{ s.name }}</span>
-                    {% if s == analysis.status %}
-                        <i class="fa-solid fa-check text-[9px] opacity-50"></i>
-                    {% endif %}
-                </a>
-            </li>
+            {% regroup available_statuses by group.name as grouped_statuses %}
+            {% for grp in grouped_statuses %}
+                {% if grp.grouper %}
+                <li class="menu-title text-[7px] uppercase opacity-50 px-2.5 pt-1.5 pb-0.5 flex items-center gap-1">
+                    <i class="fa-regular fa-circle-dot text-[6px]"></i> {{ grp.grouper }}
+                </li>
+                {% endif %}
+                {% for s in grp.list %}
+                {% is_status_active analysis s as s_active %}
+                <li>
+                    <a hx-post="{% url 'lab:update_status' ct_id analysis.id s.id %}"
+                       hx-target="#analysis-status-{{ analysis.id }}"
+                       hx-swap="outerHTML"
+                       class="flex items-center gap-2 py-2 px-2.5 hover:bg-base-200 {% if s_active %}bg-base-200/60 font-semibold{% endif %}">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[9px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        <span class="flex-1 text-[10px]">{{ s.name }}</span>
+                        {% if grp.grouper %}
+                            <i class="fa-{% if s_active %}solid fa-circle-dot{% else %}regular fa-circle{% endif %} text-[9px] {% if s_active %}opacity-60{% else %}opacity-20{% endif %}"></i>
+                        {% elif s_active %}
+                            <i class="fa-solid fa-check text-[9px] opacity-50"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                {% endfor %}
             {% endfor %}
         </ul>
     </div>
@@ -835,36 +915,56 @@
 
 {% partialdef individual_status_badge %}
     <div class="dropdown dropdown-end dropdown-bottom" id="individual-status-{{ individual.id }}">
-        <div tabindex="0" role="button" class="badge badge-sm badge-ghost gap-2 font-normal text-xs text-base-content hover:bg-base-200 transition-all border-base-content/10">
-            {% if individual.status.icon %}
-                <i class="fa-solid {{ individual.status.icon }} text-sm" style="color: {{ individual.status.color }};"></i>
+        <div tabindex="0" role="button" class="flex items-center gap-1 cursor-pointer rounded-md hover:bg-base-200 px-1 py-0.5 transition-all">
+            {% get_object_statuses individual as active_statuses %}
+            {% if active_statuses %}
+                {% for s in active_statuses %}
+                    <span class="badge badge-sm badge-ghost gap-1.5 font-normal text-xs border-base-content/10">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-2 rounded-full ring-1 ring-base-content/10 border border-base-100" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        {{ s.display_name }}
+                    </span>
+                {% endfor %}
             {% else %}
-                <span class="size-2.5 rounded-full ring-1 ring-base-content/10 border border-base-100" style="background-color: {{ individual.status.color }};"></span>
+                <span class="badge badge-sm badge-ghost font-normal text-xs opacity-40"><i class="fa-solid fa-tag text-xs"></i> No Status</span>
             {% endif %}
-            {{ individual.status.name }}
             <i class="fa-solid fa-chevron-down text-[10px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-64 mt-2">
-            <li class="menu-title text-[10px] uppercase opacity-40 px-3 py-2">Update Individual Status</li>
-            {% get_statuses individual as statuses %}
+            <li class="menu-title text-[10px] uppercase opacity-40 px-3 py-2">Toggle Individual Status</li>
+            {% get_statuses individual as available_statuses %}
             {% get_content_type_id individual as ct_id %}
-            {% for s in statuses %}
-            <li>
-                <a hx-post="{% url 'lab:update_status' ct_id individual.id s.id %}" 
-                   hx-target="#individual-status-{{ individual.id }}" 
-                   hx-swap="outerHTML"
-                   class="flex items-center gap-3 py-3 px-4 hover:bg-base-200 {% if s == individual.status %}bg-base-200 font-semibold{% endif %}">
-                    {% if s.icon %}
-                        <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
-                    {% else %}
-                        <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
-                    {% endif %}
-                    <span class="flex-1">{{ s.name }}</span>
-                    {% if s == individual.status %}
-                        <i class="fa-solid fa-check text-xs opacity-50"></i>
-                    {% endif %}
-                </a>
-            </li>
+            {% regroup available_statuses by group.name as grouped_statuses %}
+            {% for grp in grouped_statuses %}
+                {% if grp.grouper %}
+                <li class="menu-title text-[9px] uppercase opacity-50 px-3 pt-2 pb-0.5 flex items-center gap-1">
+                    <i class="fa-regular fa-circle-dot text-[8px]"></i> {{ grp.grouper }}
+                </li>
+                {% endif %}
+                {% for s in grp.list %}
+                {% is_status_active individual s as s_active %}
+                <li>
+                    <a hx-post="{% url 'lab:update_status' ct_id individual.id s.id %}"
+                       hx-target="#individual-status-{{ individual.id }}"
+                       hx-swap="outerHTML"
+                       class="flex items-center gap-3 py-3 px-4 hover:bg-base-200 {% if s_active %}bg-base-200/60 font-semibold{% endif %}">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        <span class="flex-1">{{ s.name }}</span>
+                        {% if grp.grouper %}
+                            <i class="fa-{% if s_active %}solid fa-circle-dot{% else %}regular fa-circle{% endif %} text-xs {% if s_active %}opacity-60{% else %}opacity-20{% endif %}"></i>
+                        {% elif s_active %}
+                            <i class="fa-solid fa-check text-xs opacity-50"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                {% endfor %}
             {% endfor %}
         </ul>
     </div>

@@ -21,16 +21,17 @@
                             <span>Created by <span class="font-medium text-base-content/70">{{ project.created_by.get_full_name|default:project.created_by.username }}</span></span>
                             <span>{{ project.created_at|date:"d/m/Y H:i" }}</span>
                         </div>
-                        {% if project.status %}
+                        {% get_object_statuses project as project_active_statuses %}
+                        {% for s in project_active_statuses %}
                         <div class="badge badge-sm gap-1.5 font-normal">
-                            {% if project.status.icon %}
-                                <i class="fa-solid {{ project.status.icon }} text-xs" style="color: {{ project.status.color }};"></i>
+                            {% if s.icon %}
+                                <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
                             {% else %}
-                                <span class="size-2 rounded-full" style="background-color: {{ project.status.color }};"></span>
+                                <span class="size-2 rounded-full" style="background-color: {{ s.color }};"></span>
                             {% endif %}
-                            {{ project.status.name }}
+                            {{ s.display_name }}
                         </div>
-                        {% endif %}
+                        {% endfor %}
                         <button
                             class="btn btn-ghost btn-xs text-error border-error/30 hover:border-error hover:bg-error/10"
                             hx-get="{% url 'lab:project_delete_modal' project.pk %}"

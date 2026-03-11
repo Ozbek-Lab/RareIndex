@@ -95,7 +95,7 @@ class IndividualAdmin(SimpleHistoryAdmin):
     list_display = [
         "full_name",
         "id",
-        "status",
+        "get_statuses",
         "family",
         "mother",
         "father",
@@ -105,7 +105,7 @@ class IndividualAdmin(SimpleHistoryAdmin):
         "get_updated_at",
         "get_hpo_terms",
     ]
-    list_filter = ["status", "family", "mother", "father"]
+    list_filter = ["family", "mother", "father"]
     search_fields = [
         "id",
         "full_name",
@@ -127,29 +127,23 @@ class IndividualAdmin(SimpleHistoryAdmin):
     autocomplete_fields = ["hpo_terms", "mother", "father", "family", "institution"]
     inlines = [IndividualProjectsInline]
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "status":
-            ct = ContentType.objects.get_for_model(self.model)
-            kwargs["queryset"] = models.Status.objects.filter(
-                content_type=ct
-            ) | models.Status.objects.filter(content_type__isnull=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
     def get_hpo_terms(self, obj):
         return ", ".join([term.label for term in obj.hpo_terms.all()])
-
     get_hpo_terms.short_description = "HPO Terms"
 
     def get_institutions(self, obj):
         return ", ".join(obj.institution.values_list("name", flat=True))
-
     get_institutions.short_description = "Institutions"
+
+    def get_statuses(self, obj):
+        return ", ".join(obj.statuses.values_list("name", flat=True)) or "—"
+    get_statuses.short_description = "Statuses"
 
 
 @admin.register(models.Sample)
 class SampleAdmin(SimpleHistoryAdmin):
-    list_display = ["individual", "sample_type", "status", "receipt_date", "created_by", "get_created_at", "get_updated_at"]
-    list_filter = ["status", "sample_type", "receipt_date"]
+    list_display = ["individual", "sample_type", "get_statuses", "receipt_date", "created_by", "get_created_at", "get_updated_at"]
+    list_filter = ["sample_type", "receipt_date"]
     search_fields = [
         "individual__full_name",  # Only direct or forward fields!
     ]
@@ -166,13 +160,9 @@ class SampleAdmin(SimpleHistoryAdmin):
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "status":
-            ct = ContentType.objects.get_for_model(self.model)
-            kwargs["queryset"] = models.Status.objects.filter(
-                content_type=ct
-            ) | models.Status.objects.filter(content_type__isnull=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def get_statuses(self, obj):
+        return ", ".join(obj.statuses.values_list("name", flat=True)) or "—"
+    get_statuses.short_description = "Statuses"
 
     def get_search_results(self, request, queryset, search_term):
         # Get the default search results
@@ -189,8 +179,8 @@ class SampleAdmin(SimpleHistoryAdmin):
 
 @admin.register(models.Test)
 class TestAdmin(SimpleHistoryAdmin):
-    list_display = ["sample", "pk", "test_type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
-    list_filter = ["status", "performed_date", "test_type"]
+    list_display = ["sample", "pk", "test_type", "get_statuses", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
+    list_filter = ["performed_date", "test_type"]
     search_fields = ["sample__individual__lab_id", "test_type__name"]
     date_hierarchy = "performed_date"
     autocomplete_fields = ["sample", "test_type", "performed_by"]
@@ -205,13 +195,9 @@ class TestAdmin(SimpleHistoryAdmin):
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "status":
-            ct = ContentType.objects.get_for_model(self.model)
-            kwargs["queryset"] = models.Status.objects.filter(
-                content_type=ct
-            ) | models.Status.objects.filter(content_type__isnull=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def get_statuses(self, obj):
+        return ", ".join(obj.statuses.values_list("name", flat=True)) or "—"
+    get_statuses.short_description = "Statuses"
 
 
 @admin.register(models.Status)
@@ -297,8 +283,8 @@ class AnalysisTypeAdmin(SimpleHistoryAdmin):
 
 @admin.register(models.Pipeline)
 class PipelineAdmin(SimpleHistoryAdmin):
-    list_display = ["test", "type", "status", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
-    list_filter = ["type", "status", "performed_date"]
+    list_display = ["test", "type", "get_statuses", "performed_date", "performed_by", "get_created_at", "get_updated_at"]
+    list_filter = ["type", "performed_date"]
     search_fields = ["test__sample__individual__lab_id", "type__name"]
     date_hierarchy = "performed_date"
     autocomplete_fields = ["test", "type", "performed_by"]
@@ -313,13 +299,9 @@ class PipelineAdmin(SimpleHistoryAdmin):
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "status":
-            ct = ContentType.objects.get_for_model(self.model)
-            kwargs["queryset"] = models.Status.objects.filter(
-                content_type=ct
-            ) | models.Status.objects.filter(content_type__isnull=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def get_statuses(self, obj):
+        return ", ".join(obj.statuses.values_list("name", flat=True)) or "—"
+    get_statuses.short_description = "Statuses"
 
 
 @admin.register(models.Analysis)
@@ -327,36 +309,30 @@ class AnalysisAdmin(SimpleHistoryAdmin):
     list_display = [
         "pipeline",
         "type",
-        "status",
+        "get_statuses",
         "performed_date",
         "performed_by",
         "get_created_at",
         "get_updated_at",
     ]
-    list_filter = ["type", "status", "performed_date"]
+    list_filter = ["type", "performed_date"]
     search_fields = ["pipeline__test__sample__individual__lab_id", "performed_by__username"]
     date_hierarchy = "performed_date"
     autocomplete_fields = ["pipeline", "type", "performed_by"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
-
     get_created_at.short_description = "Created At"
     get_created_at.admin_order_field = "id"
 
     def get_updated_at(self, obj):
         return obj.get_updated_at()
-
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "status":
-            ct = ContentType.objects.get_for_model(self.model)
-            kwargs["queryset"] = models.Status.objects.filter(
-                content_type=ct
-            ) | models.Status.objects.filter(content_type__isnull=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def get_statuses(self, obj):
+        return ", ".join(obj.statuses.values_list("name", flat=True)) or "—"
+    get_statuses.short_description = "Statuses"
 
 
 @admin.register(models.Task)
@@ -368,13 +344,12 @@ class TaskAdmin(SimpleHistoryAdmin):
         "assigned_to",
         "created_by",
         "priority",
-        "status",
+        "get_statuses",
         "due_date",
         "get_created_at",
         "get_updated_at",
     ]
     list_filter = [
-        "status",
         "priority",
         "due_date",
         "assigned_to",
@@ -394,13 +369,9 @@ class TaskAdmin(SimpleHistoryAdmin):
 
     autocomplete_fields = ["project", "assigned_to", "created_by"]
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "status":
-            ct = ContentType.objects.get_for_model(self.model)
-            kwargs["queryset"] = models.Status.objects.filter(
-                content_type=ct
-            ) | models.Status.objects.filter(content_type__isnull=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def get_statuses(self, obj):
+        return ", ".join(obj.statuses.values_list("name", flat=True)) or "—"
+    get_statuses.short_description = "Statuses"
 
 
 @admin.register(models.Project)
@@ -409,13 +380,13 @@ class ProjectAdmin(SimpleHistoryAdmin):
         "name",
         "created_by",
         "priority",
-        "status",
+        "get_statuses",
         "due_date",
         "get_created_at",
         "get_updated_at",
         "get_completion_percentage",
     ]
-    list_filter = ["status", "priority", "due_date", "created_by"]
+    list_filter = ["priority", "due_date", "created_by"]
     search_fields = ["name", "description"]
 
     def get_created_at(self, obj):
@@ -432,17 +403,12 @@ class ProjectAdmin(SimpleHistoryAdmin):
     inlines = [ProjectIndividualsInline]
     exclude = ("individuals",)
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "status":
-            ct = ContentType.objects.get_for_model(self.model)
-            kwargs["queryset"] = models.Status.objects.filter(
-                content_type=ct
-            ) | models.Status.objects.filter(content_type__isnull=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def get_statuses(self, obj):
+        return ", ".join(obj.statuses.values_list("name", flat=True)) or "—"
+    get_statuses.short_description = "Statuses"
 
     def get_completion_percentage(self, obj):
         return f"{obj.get_completion_percentage()}%"
-
     get_completion_percentage.short_description = "Completion %"
 
 
