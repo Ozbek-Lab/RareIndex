@@ -758,8 +758,11 @@
 {% endpartialdef table %}
 
 {% partialdef status-badge inline %}
+  {% load lab_tags %}
+  {% get_content_type_id item as variant_ct_id %}
+  {% get_object_statuses item as item_active_statuses %}
   {% if perms.variant.change_variant %}
-    <div 
+    <div
       id="status-badge-container"
       class="relative"
       x-data="{ open: false }"
@@ -768,13 +771,19 @@
       <button
         type="button"
         @click="open = !open"
-        class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white hover:bg-opacity-40 transition-all cursor-pointer flex items-center gap-1"
-        title="Click to change status"
+        class="flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium border border-white hover:bg-white/20 transition-all cursor-pointer"
+        title="Click to toggle statuses"
       >
-        {{ item.status.name|default:"Set Status" }}
-        <i class="fas fa-chevron-down text-xs"></i>
+        {% if item_active_statuses %}
+          {% for s in item_active_statuses %}
+            <span class="text-white">{% if s.icon %}<i class="fa-solid {{ s.icon }} mr-1" style="color:{{ s.color }};"></i>{% endif %}{{ s.display_name }}</span>{% if not forloop.last %}, {% endif %}
+          {% endfor %}
+        {% else %}
+          <span class="opacity-60">Set Status</span>
+        {% endif %}
+        <i class="fas fa-chevron-down text-xs opacity-60"></i>
       </button>
-      
+
       <div
         x-show="open"
         x-transition:enter="transition ease-out duration-100"
@@ -787,23 +796,37 @@
         style="display: none;"
       >
         <div class="py-1 max-h-60 overflow-y-auto">
+          {% get_statuses item as variant_statuses %}
+          {% regroup variant_statuses by group.name as grouped_variant_statuses %}
           {% if variant_statuses %}
-            {% for status in variant_statuses %}
-              <button
-                type="button"
-                hx-post="{% url 'lab:update_status' %}"
-                hx-vals='{"model_name": "Variant", "app_label": "variant", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "detail", "refresh_detail": "true", "detail_target_id": "variant-detail"}'
-                hx-target="#status-badge-container"
-                hx-swap="outerHTML"
-                @click="open = false"
-                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
-              >
-                <span
-                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+            {% for grp in grouped_variant_statuses %}
+              {% if grp.grouper %}
+              <div class="px-3 pt-2 pb-0.5 text-[9px] uppercase tracking-wider opacity-50 flex items-center gap-1">
+                <i class="fa-regular fa-circle-dot text-[8px]"></i> {{ grp.grouper }}
+              </div>
+              {% endif %}
+              {% for status in grp.list %}
+              {% is_status_active item status as s_active %}
+                <button
+                  type="button"
+                  hx-post="{% url 'lab:update_status' variant_ct_id item.id status.id %}"
+                  hx-target="#status-badge-container"
+                  hx-swap="outerHTML"
+                  @click="open = false"
+                  class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if s_active %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
                 >
-                  {{ status.name }}
-                </span>
-              </button>
+                  <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
+                        style="color:{{ status.color }}; border-color:{{ status.color }}30;">
+                    {% if status.icon %}<i class="fa-solid {{ status.icon }} mr-1"></i>{% endif %}
+                    {{ status.name }}
+                  </span>
+                  {% if grp.grouper %}
+                    <i class="fa-{% if s_active %}solid fa-circle-dot{% else %}regular fa-circle{% endif %} text-xs ml-auto {% if s_active %}opacity-60{% else %}opacity-20{% endif %}"></i>
+                  {% elif s_active %}
+                    <i class="fas fa-check text-xs ml-auto opacity-50"></i>
+                  {% endif %}
+                </button>
+              {% endfor %}
             {% endfor %}
           {% else %}
             <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
@@ -814,17 +837,23 @@
       </div>
     </div>
   {% else %}
-    {% if item.status %}
-      <span class="px-3 py-1 rounded-full text-sm font-medium bg-{{ item.status.color|default:'gray' }}-100 bg-opacity-25 text-white border border-white">
-        {{ item.status.name }}
+    {% if item_active_statuses %}
+      {% for s in item_active_statuses %}
+      <span class="px-3 py-1 rounded-full text-sm font-medium border border-white text-white" style="border-color:{{ s.color }}30;">
+        {% if s.icon %}<i class="fa-solid {{ s.icon }} mr-1" style="color:{{ s.color }};"></i>{% endif %}
+        {{ s.display_name }}
       </span>
+      {% endfor %}
     {% endif %}
   {% endif %}
 {% endpartialdef %}
 
 {% partialdef status-badge-card inline %}
+  {% load lab_tags %}
+  {% get_content_type_id item as variant_ct_id %}
+  {% get_object_statuses item as item_active_statuses %}
   {% if perms.variant.change_variant %}
-    <div 
+    <div
       id="status-badge-card-container-{{ item.pk }}"
       class="relative"
       x-data="{ open: false }"
@@ -833,13 +862,19 @@
       <button
         type="button"
         @click="open = !open"
-        class="px-2 py-1 rounded-md text-xs font-medium bg-{{ item.status.color|default:'gray' }}-100 text-{{ item.status.color|default:'gray' }}-800 dark:bg-{{ item.status.color|default:'gray' }}-900 dark:text-{{ item.status.color|default:'gray' }}-200 border border-{{ item.status.color|default:'gray' }}-200 dark:border-{{ item.status.color|default:'gray' }}-700 hover:bg-{{ item.status.color|default:'gray' }}-200 transition-all cursor-pointer flex items-center gap-1"
-        title="Click to change status"
+        class="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border border-base-200 hover:bg-base-200 transition-all cursor-pointer"
+        title="Click to toggle statuses"
       >
-        {{ item.status.name|default:"Set Status" }}
-        <i class="fas fa-chevron-down text-[10px]"></i>
+        {% if item_active_statuses %}
+          {% for s in item_active_statuses %}
+            <span style="color:{{ s.color }};">{% if s.icon %}<i class="fa-solid {{ s.icon }} mr-0.5"></i>{% endif %}{{ s.display_name }}</span>{% if not forloop.last %}, {% endif %}
+          {% endfor %}
+        {% else %}
+          <span class="opacity-40">Set Status</span>
+        {% endif %}
+        <i class="fas fa-chevron-down text-[10px] opacity-40 ml-1"></i>
       </button>
-      
+
       <div
         x-show="open"
         x-transition:enter="transition ease-out duration-100"
@@ -852,23 +887,37 @@
         style="display: none;"
       >
         <div class="py-1 max-h-60 overflow-y-auto">
-          {% if variant_statuses %}
-            {% for status in variant_statuses %}
-              <button
-                type="button"
-                hx-post="{% url 'lab:update_status' %}"
-                hx-vals='{"model_name": "Variant", "app_label": "variant", "object_id": "{{ item.id }}", "status_id": "{{ status.id }}", "view": "card", "refresh_detail": "false"}'
-                hx-target="#status-badge-card-container-{{ item.pk }}"
-                hx-swap="outerHTML"
-                @click="open = false"
-                class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if status.id == item.status.id %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
-              >
-                <span
-                  class="inline-flex items-center rounded-md bg-{{ status.color|default:'gray' }}-50 dark:bg-{{ status.color|default:'gray' }}-900 px-2 py-0.5 text-xs font-medium text-{{ status.color|default:'gray' }}-600 dark:text-{{ status.color|default:'gray' }}-200 ring-1 ring-{{ status.color|default:'gray' }}-500/10 dark:ring-{{ status.color|default:'gray' }}-700/40 ring-inset"
+          {% get_statuses item as variant_statuses_card %}
+          {% regroup variant_statuses_card by group.name as grouped_variant_statuses_card %}
+          {% if variant_statuses_card %}
+            {% for grp in grouped_variant_statuses_card %}
+              {% if grp.grouper %}
+              <div class="px-3 pt-2 pb-0.5 text-[9px] uppercase tracking-wider opacity-50 flex items-center gap-1">
+                <i class="fa-regular fa-circle-dot text-[7px]"></i> {{ grp.grouper }}
+              </div>
+              {% endif %}
+              {% for status in grp.list %}
+              {% is_status_active item status as s_active %}
+                <button
+                  type="button"
+                  hx-post="{% url 'lab:update_status' variant_ct_id item.id status.id %}"
+                  hx-target="#status-badge-card-container-{{ item.pk }}"
+                  hx-swap="outerHTML"
+                  @click="open = false"
+                  class="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if s_active %}bg-gray-100 dark:bg-gray-700 font-semibold{% endif %}"
                 >
-                  {{ status.name }}
-                </span>
-              </button>
+                  <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
+                        style="color:{{ status.color }}; border-color:{{ status.color }}30;">
+                    {% if status.icon %}<i class="fa-solid {{ status.icon }} mr-1"></i>{% endif %}
+                    {{ status.name }}
+                  </span>
+                  {% if grp.grouper %}
+                    <i class="fa-{% if s_active %}solid fa-circle-dot{% else %}regular fa-circle{% endif %} text-xs ml-auto {% if s_active %}opacity-60{% else %}opacity-20{% endif %}"></i>
+                  {% elif s_active %}
+                    <i class="fas fa-check text-xs ml-auto opacity-50"></i>
+                  {% endif %}
+                </button>
+              {% endfor %}
             {% endfor %}
           {% else %}
             <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
@@ -879,10 +928,13 @@
       </div>
     </div>
   {% else %}
-    {% if item.status %}
-      <span class="px-2 py-1 rounded-md text-xs font-medium bg-{{ item.status.color|default:'gray' }}-100 text-{{ item.status.color|default:'gray' }}-800 dark:bg-{{ item.status.color|default:'gray' }}-900 dark:text-{{ item.status.color|default:'gray' }}-200 border border-{{ item.status.color|default:'gray' }}-200 dark:border-{{ item.status.color|default:'gray' }}-700">
-        {{ item.status.name }}
+    {% if item_active_statuses %}
+      {% for s in item_active_statuses %}
+      <span class="px-2 py-1 rounded-md text-xs font-medium border" style="color:{{ s.color }}; border-color:{{ s.color }}30;">
+        {% if s.icon %}<i class="fa-solid {{ s.icon }} mr-1"></i>{% endif %}
+        {{ s.display_name }}
       </span>
+      {% endfor %}
     {% endif %}
   {% endif %}
 {% endpartialdef %}

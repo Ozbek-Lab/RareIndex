@@ -29,6 +29,14 @@
 
 </div>
 
+<div class="mt-6"
+     id="family-section-{{ individual.pk }}"
+     hx-get="{% url 'lab:individual_family_section' individual.pk %}"
+     hx-trigger="familyUpdated from:body"
+     hx-swap="innerHTML">
+    {% include "lab/partials/tabs/_family.html" %}
+</div>
+
 {% partialdef identification_content %}
     <div class="flex justify-between items-center mb-4">
         <h3 class="card-title text-sm uppercase text-base-content/50">Identification</h3>
@@ -177,14 +185,14 @@
             </div>
 
             <div class="grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-base-content/70">Primary ID</dt>
+                <dt class="text-sm font-medium text-base-content/70">{% id_type_label 1 %}</dt>
                 <dd class="text-sm text-base-content col-span-2 font-mono bg-base-200 px-2 py-0.5 rounded w-fit select-all text-xs">
                     {{ individual.primary_id }}
                 </dd>
             </div>
 
             <div class="grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-base-content/70">Secondary ID</dt>
+                <dt class="text-sm font-medium text-base-content/70">{% id_type_label 2 %}</dt>
                 <dd class="text-sm text-base-content col-span-2 font-mono bg-base-200 px-2 py-0.5 rounded w-fit select-all text-xs">
                     {{ individual.secondary_id }}
                 </dd>
@@ -426,10 +434,13 @@
                         <div class="font-bold text-sm">{{ project.name }}</div>
                         <div class="text-xs text-base-content/60">{{ project.description|truncatechars:50 }}</div>
                     </div>
+                    {% get_object_statuses project as proj_active_statuses %}
+                    {% for s in proj_active_statuses %}
                     <span class="badge badge-sm whitespace-nowrap shrink-0"
-                          style="background-color: {{ project.status.color }}; color: {{ project.status.color|contrast_color }};">
-                        {{ project.status.name }}
+                          style="background-color: {{ s.color }}; color: {{ s.color|contrast_color }};">
+                        {{ s.display_name }}
                     </span>
+                    {% endfor %}
                 </div>
                 <div class="flex items-center justify-between gap-2 text-[11px] text-base-content/60">
                     <div class="flex items-center gap-1">

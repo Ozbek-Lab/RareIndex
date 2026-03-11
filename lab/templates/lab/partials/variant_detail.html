@@ -85,12 +85,17 @@
                 <dt class="text-base-content/50">Type</dt>
                 <dd><span class="badge badge-sm badge-ghost">{{ variant.type }}</span></dd>
               </div>
-              {% if variant.status %}
+              {% get_object_statuses variant as variant_active_statuses %}
+              {% if variant_active_statuses %}
               <div class="flex justify-between gap-2">
                 <dt class="text-base-content/50">Status</dt>
-                <dd style="color:{{ variant.status.color }};" class="font-medium text-xs">
-                  {% if variant.status.icon %}<i class="fa-solid {{ variant.status.icon }} mr-1"></i>{% endif %}
-                  {{ variant.status.display_name }}
+                <dd class="flex flex-wrap gap-1 justify-end">
+                  {% for s in variant_active_statuses %}
+                  <span class="font-medium text-xs" style="color:{{ s.color }};">
+                    {% if s.icon %}<i class="fa-solid {{ s.icon }} mr-1"></i>{% endif %}
+                    {{ s.display_name }}
+                  </span>
+                  {% endfor %}
                 </dd>
               </div>
               {% endif %}
@@ -158,7 +163,7 @@
               </div>
               <div class="flex justify-between gap-2">
                 <dt class="text-base-content/50">Status</dt>
-                <dd>{{ variant.pipeline.status.name }}</dd>
+                <dd>{% for s in variant.pipeline.statuses.all %}{{ s.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
               </div>
               <div class="flex justify-between gap-2">
                 <dt class="text-base-content/50">Performed</dt>

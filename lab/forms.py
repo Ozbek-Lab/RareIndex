@@ -20,6 +20,7 @@ from .models import (
     AnalysisRequestForm,
     AnalysisReport,
     IdentifierType,
+    StatusGroup,
     validate_rareboost_id_value,
     validate_biobank_id_value,
 )
@@ -33,13 +34,13 @@ class BaseForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Limit status choices strictly to model-specific statuses
-        if "status" in self.fields and hasattr(self, '_meta') and hasattr(self._meta, 'model'):
+        # Limit statuses choices strictly to model-specific statuses
+        if "statuses" in self.fields and hasattr(self, '_meta') and hasattr(self._meta, 'model'):
             from django.contrib.contenttypes.models import ContentType
             from .models import Status
             try:
                 model_ct = ContentType.objects.get_for_model(self._meta.model)
-                self.fields["status"].queryset = Status.objects.filter(content_type=model_ct).order_by("name")
+                self.fields["statuses"].queryset = Status.objects.filter(content_type=model_ct).order_by("name")
             except Exception:
                 pass
                 
@@ -85,16 +86,29 @@ class BaseForm(forms.ModelForm):
         if commit:
             obj.save()
             self.save_m2m()
+            # Handle statuses (TaggableManager) which isn't part of standard save_m2m
+            if "statuses" in self.cleaned_data and hasattr(obj, "statuses"):
+                obj.statuses.set(self.cleaned_data["statuses"])
 
         return obj
 
 
 class ProjectForm(BaseForm):
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial["statuses"] = self.instance.statuses.all()
+
     class Meta:
         model = Project
-        fields = ["name", "description", "due_date", "priority", "status"]
+        fields = ["name", "description", "due_date", "priority"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 3}),
@@ -128,6 +142,13 @@ class TaskForm(BaseForm):
         help_text="Select the specific object",
     )
 
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
     class Meta:
         model = Task
         fields = [
@@ -136,7 +157,6 @@ class TaskForm(BaseForm):
             "assigned_to",
             "due_date",
             "priority",
-            "status",
             "project",
         ]
         widgets = {
@@ -161,11 +181,15 @@ class TaskForm(BaseForm):
             project_qs = project_qs.filter(individuals=individual)
         self.fields["project"].queryset = project_qs.order_by("name")
 
-        # Default Task.status to "Active" on creation (when not editing).
-        if not getattr(instance, "pk", None) and not self.initial.get("status"):
+        # Populate statuses initial value when editing
+        if instance and getattr(instance, "pk", None):
+            self.initial["statuses"] = instance.statuses.all()
+
+        # Default Task statuses to "Active" on creation (when not editing).
+        if not getattr(instance, "pk", None) and not self.initial.get("statuses"):
             active_status = Status.objects.filter(name__iexact="Active").first()
             if active_status:
-                self.initial["status"] = active_status
+                self.initial["statuses"] = [active_status]
         
         # Set up content_type choices - models that can have tasks
         from variant.models import Variant
@@ -188,8 +212,18 @@ class TaskForm(BaseForm):
 
 
 class IndividualForm(BaseForm):
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial["statuses"] = self.instance.statuses.all()
+
     class Meta:
         model = Individual
         fields = [
@@ -205,7 +239,6 @@ class IndividualForm(BaseForm):
             "diagnosis",
             "diagnosis_date",
             "institution",
-            "status",
             "hpo_terms",
             "sex",
             "is_index",
@@ -230,8 +263,18 @@ class IndividualForm(BaseForm):
 
 
 class SampleForm(BaseForm):
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial["statuses"] = self.instance.statuses.all()
+
     class Meta:
         model = Sample
         fields = [
@@ -241,7 +284,6 @@ class SampleForm(BaseForm):
             "processing_date",
             "isolation_by",
             "sample_measurements",
-            "status",
         ]
         widgets = {
             "receipt_date": forms.DateInput(attrs={"type": "date"}),
@@ -281,8 +323,18 @@ class SampleTypeForm(BaseForm):
 
 
 class TestForm(BaseForm):
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial["statuses"] = self.instance.statuses.all()
+
     class Meta:
         model = Test
         fields = [
@@ -290,7 +342,6 @@ class TestForm(BaseForm):
             "test_type",
             "performed_date",
             "performed_by",
-            "status",
             "service_send_date",
             "data_receipt_date",
         ]
@@ -302,8 +353,18 @@ class TestForm(BaseForm):
 
 
 class PipelineForm(BaseForm):
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial["statuses"] = self.instance.statuses.all()
+
     class Meta:
         model = Pipeline
         fields = [
@@ -311,7 +372,6 @@ class PipelineForm(BaseForm):
             "type",
             "performed_date",
             "performed_by",
-            "status",
         ]
         widgets = {
             "performed_date": forms.DateInput(attrs={"type": "date"}),
@@ -319,17 +379,30 @@ class PipelineForm(BaseForm):
 
 
 class AnalysisForm(BaseForm):
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial["statuses"] = self.instance.statuses.all()
+
     class Meta:
         model = Analysis
         fields = [
             "type",
             "performed_date",
             "performed_by",
-            "status",
-            "pipeline"
+            "pipeline",
         ]
+        widgets = {
+            "performed_date": forms.DateInput(attrs={"type": "date"}),
+            "pipeline": forms.HiddenInput(),
+        }
         widgets = {
             "performed_date": forms.DateInput(attrs={"type": "date"}),
             "pipeline": forms.HiddenInput(),
@@ -521,6 +594,13 @@ class FamilyMemberForm(BaseForm):
         self.fields["council_date"].widget = forms.DateInput(attrs={"type": "date"})
         
 
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
     class Meta:
         model = Individual
         fields = [
@@ -528,7 +608,6 @@ class FamilyMemberForm(BaseForm):
             "tc_identity",
             "birth_date",
             "sex",
-            "status",
             "is_index",
             "is_affected",
             "council_date",
@@ -575,6 +654,15 @@ FORMS_MAPPING = {
 class IndividualIdentificationForm(BaseForm):
     primary_id = forms.CharField(required=False, label="Primary ID")
     secondary_id = forms.CharField(required=False, label="Secondary ID")
+
+    def _get_id_labels(self):
+        from .models import IdentifierType
+        p = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+        s = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+        return (
+            f"{p.name} ID" if p else "Primary ID",
+            f"{s.name} ID" if s else "Secondary ID",
+        )
     tc_identity = forms.IntegerField(required=False, label="TC Identity")
     cross_identifiers_json = forms.CharField(required=False, widget=forms.HiddenInput())
 
@@ -643,6 +731,9 @@ class IndividualIdentificationForm(BaseForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        primary_label, secondary_label = self._get_id_labels()
+        self.fields["primary_id"].label = primary_label
+        self.fields["secondary_id"].label = secondary_label
         if self.instance and self.instance.pk:
             pid = self.instance.primary_id
             sid = self.instance.secondary_id
@@ -874,6 +965,22 @@ class IdentifierTypeForm(BaseForm):
         }
 
 
+class StatusGroupConfigForm(BaseForm):
+    class Meta:
+        model = StatusGroup
+        fields = ["name", "content_type"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["content_type"].queryset = (
+            ContentType.objects.filter(app_label__in=["lab", "variant"])
+            .exclude(model__startswith="historical")
+            .order_by("app_label", "model")
+        )
+        self.fields["content_type"].required = False
+        self.fields["content_type"].empty_label = "— Global (applies to all) —"
+
+
 class StatusConfigForm(BaseForm):
     color = forms.CharField(
         required=False,
@@ -884,7 +991,7 @@ class StatusConfigForm(BaseForm):
 
     class Meta:
         model = Status
-        fields = ["name", "short_name", "description", "color", "content_type", "icon"]
+        fields = ["name", "short_name", "description", "color", "content_type", "icon", "group"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "icon": forms.TextInput(attrs={"placeholder": "e.g. fa-solid fa-check"}),
@@ -900,9 +1007,19 @@ class StatusConfigForm(BaseForm):
         )
         self.fields["content_type"].required = False
         self.fields["content_type"].empty_label = "— Global (applies to all) —"
+        # Filter group dropdown to match the current content_type
+        instance = self.instance
+        if instance and instance.pk and instance.content_type_id:
+            self.fields["group"].queryset = StatusGroup.objects.filter(
+                content_type_id=instance.content_type_id
+            )
+        else:
+            self.fields["group"].queryset = StatusGroup.objects.all()
+        self.fields["group"].required = False
+        self.fields["group"].empty_label = "— No group (freely toggleable) —"
         # If the stored value is a hex string, the color input handles it natively
-        if self.instance and self.instance.pk:
-            raw = self.instance.color or ""
+        if instance and instance.pk:
+            raw = instance.color or ""
             if raw and not raw.startswith("#"):
                 # Stored as a named colour – keep as-is; color input might not show it
                 self.fields["color"].widget = forms.TextInput(
@@ -917,4 +1034,50 @@ class FamilyConfigForm(BaseForm):
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
         }
+
+
+class QuickAddMemberForm(forms.ModelForm):
+    """Minimal form for adding a new individual to a family from the manage-members modal."""
+
+    primary_id = forms.CharField(required=False, label="Primary ID")
+    secondary_id = forms.CharField(required=False, label="Secondary ID")
+
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.none(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={"class": "select select-bordered select-sm w-full", "size": "3"}),
+    )
+
+    class Meta:
+        model = Individual
+        fields = ["full_name", "sex", "is_index", "is_affected"]
+        widgets = {
+            "full_name": forms.TextInput(attrs={
+                "class": "input input-bordered input-sm w-full",
+                "placeholder": "Full name",
+            }),
+            "sex": forms.Select(attrs={"class": "select select-bordered select-sm w-full"}),
+            "is_index": forms.CheckboxInput(attrs={"class": "checkbox checkbox-sm checkbox-primary"}),
+            "is_affected": forms.CheckboxInput(attrs={"class": "checkbox checkbox-sm checkbox-warning"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from django.contrib.contenttypes.models import ContentType
+        ct = ContentType.objects.get_for_model(Individual)
+        self.fields["statuses"].queryset = Status.objects.filter(content_type=ct).order_by("name")
+        self.fields["full_name"].required = True
+        # Set dynamic labels from IdentifierType
+        primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+        secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+        self.fields["primary_id"].label = f"{primary_type.name} ID" if primary_type else "Primary ID"
+        self.fields["secondary_id"].label = f"{secondary_type.name} ID" if secondary_type else "Secondary ID"
+        self.fields["primary_id"].widget = forms.TextInput(attrs={
+            "class": "input input-bordered input-sm w-full",
+            "placeholder": self.fields["primary_id"].label,
+        })
+        self.fields["secondary_id"].widget = forms.TextInput(attrs={
+            "class": "input input-bordered input-sm w-full",
+            "placeholder": self.fields["secondary_id"].label,
+        })
 

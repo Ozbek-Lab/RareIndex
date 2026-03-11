@@ -11,6 +11,8 @@ from encrypted_model_fields.fields import (
 )
 from simple_history.models import HistoricalRecords
 from django.utils import timezone
+from taggit.managers import TaggableManager
+from taggit.models import GenericTaggedItemBase
 from .middleware import get_current_user
 
 
@@ -91,14 +93,14 @@ class Task(HistoryMixin, models.Model):
     priority = models.CharField(
         max_length=10, choices=PRIORITY_CHOICES, default="medium"
     )
-    status = models.ForeignKey("Status", on_delete=models.PROTECT)
+    statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     previous_status = models.ForeignKey(
         "Status",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="tasks_previous_status",
-        help_text="Stores the task status before it was last completed",
+        help_text="Stores the primary task status before it was last completed",
     )
     notes = GenericRelation("Note")
     history = HistoricalRecords()
@@ -110,23 +112,17 @@ class Task(HistoryMixin, models.Model):
         return self.title
 
     def complete(self, user, notes=""):
-
-        # Set status to a 'completed' Status instance
         completed_status = Status.objects.filter(name__iexact="completed").first()
         if not completed_status:
             raise ValueError("No 'completed' status found in Status model.")
-        if self.status == completed_status:
+        if self.statuses.filter(pk=completed_status.pk).exists():
             return False
-        self.previous_status = self.status
-        self.status = completed_status
-        # Update the related object's status
-        if hasattr(self.content_object, "update_status"):
-            self.content_object.update_status(
-                completed_status,
-                user,
-                f"Status updated via task completion: {self.title}",
-            )
-        self.save()
+        # Store the first current status as "previous" for possible restoration
+        first_prev = self.statuses.first()
+        if first_prev:
+            self.previous_status = first_prev
+            self.save(update_fields=["previous_status"])
+        self.statuses.set([completed_status])
         return True
 
     def save(self, *args, **kwargs):
@@ -153,7 +149,7 @@ class Project(HistoryMixin, models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     due_date = models.DateField(null=True, blank=True)
-    status = models.ForeignKey("Status", on_delete=models.PROTECT)
+    statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_projects"
     )
@@ -180,7 +176,14 @@ class Project(HistoryMixin, models.Model):
         completed_status = Status.objects.filter(name__iexact="completed").first()
         if not completed_status:
             return 0
-        return self.tasks.filter(status=completed_status).count()
+        from django.contrib.contenttypes.models import ContentType
+        task_ct = ContentType.objects.get_for_model(Task)
+        completed_task_ids = TaggedStatus.objects.filter(
+            content_type=task_ct,
+            tag=completed_status,
+            object_id__in=self.tasks.values_list("id", flat=True),
+        ).values_list("object_id", flat=True)
+        return len(set(completed_task_ids))
 
     def get_completion_percentage(self):
         total = self.get_task_count()
@@ -308,13 +311,42 @@ class Family(HistoryMixin, models.Model):
         return self.family_id
 
     @property
-    def is_solved(self): # Check if all index individuals are solved - P/LP or VUS
-        solved_qs = self.individuals.filter(
-            is_index=True,
-            status__name__in=["Solved - P/LP", "Solved - VUS"],
+    def is_solved(self):
+        """True if every index individual has at least one 'solved' status tag."""
+        index_ids = list(self.individuals.filter(is_index=True).values_list("id", flat=True))
+        total_index = len(index_ids)
+        if total_index == 0:
+            return False
+        individual_ct = ContentType.objects.get_for_model(Individual)
+        solved_individual_ids = set(
+            TaggedStatus.objects.filter(
+                content_type=individual_ct,
+                object_id__in=index_ids,
+                tag__name__in=["Solved - P/LP", "Solved - VUS"],
+            ).values_list("object_id", flat=True)
         )
-        total_index = self.individuals.filter(is_index=True).count()
-        return solved_qs.count() == total_index and total_index > 0
+        return len(solved_individual_ids) == total_index
+
+class StatusGroup(HistoryMixin, models.Model):
+    """A named group of mutually exclusive statuses scoped to a content type."""
+
+    name = models.CharField(max_length=100)
+    content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE, null=True, blank=True
+    )
+    history = HistoricalRecords()
+
+    class Meta:
+        unique_together = [("name", "content_type")]
+        ordering = ["content_type__model", "name"]
+        verbose_name = "Status Group"
+        verbose_name_plural = "Status Groups"
+
+    def __str__(self):
+        if self.content_type:
+            return f"{self.name} ({self.content_type.model.title()})"
+        return self.name
+
 
 class Status(HistoryMixin, models.Model):
     name = models.CharField(max_length=100)
@@ -331,6 +363,14 @@ class Status(HistoryMixin, models.Model):
         ContentType, on_delete=models.CASCADE, null=True, blank=True
     )
     icon = models.CharField(max_length=255, null=True)
+    group = models.ForeignKey(
+        "StatusGroup",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statuses",
+        help_text="Statuses in the same group are mutually exclusive — selecting one removes the others.",
+    )
     history = HistoricalRecords()
 
     @property
@@ -344,6 +384,21 @@ class Status(HistoryMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+
+class TaggedStatus(GenericTaggedItemBase):
+    """Through model linking any object to a Status tag via a generic FK."""
+
+    tag = models.ForeignKey(
+        Status,
+        on_delete=models.CASCADE,
+        related_name="tagged_items",
+    )
+
+    class Meta:
+        unique_together = [("content_type", "object_id", "tag")]
+        verbose_name = "Tagged Status"
+        verbose_name_plural = "Tagged Statuses"
 
 
 class Individual(HistoryMixin, models.Model):
@@ -390,7 +445,7 @@ class Individual(HistoryMixin, models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_individuals"
     )
-    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     history = HistoricalRecords()
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
@@ -509,7 +564,7 @@ class Sample(HistoryMixin, models.Model):
         Individual, on_delete=models.PROTECT, related_name="samples"
     )
     sample_type = models.ForeignKey(SampleType, on_delete=models.PROTECT)
-    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     history = HistoricalRecords()
 
     # Dates
@@ -586,7 +641,7 @@ class Test(HistoryMixin, models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_tests"
     )
-    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     notes = GenericRelation("Note")
     tasks = GenericRelation("Task")
     history = HistoricalRecords()
@@ -663,7 +718,7 @@ class Pipeline(HistoryMixin, models.Model):
     performed_date = models.DateField()
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
     type = models.ForeignKey(PipelineType, on_delete=models.PROTECT)
-    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     input_location = models.TextField(blank=True, help_text="Path to the input file(s) used by this pipeline run")
     output_location = models.TextField(blank=True, help_text="Path to the output directory or file(s) produced by this pipeline run")
     notes = GenericRelation("Note")
@@ -750,7 +805,7 @@ class Analysis(HistoryMixin, models.Model):
     )
     performed_date = models.DateField(null=True, blank=True)
     performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
-    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     notes = GenericRelation("Note")
     created_by = models.ForeignKey(
         User,

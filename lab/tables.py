@@ -1,9 +1,27 @@
 import django_tables2 as tables
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 from django.urls import reverse
 
 from .models import Individual, Sample, Project
 from variant.models import Variant
+
+def _render_status_badges(statuses):
+    """Return HTML for a list of status badges."""
+    badges = []
+    for status in statuses:
+        icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', status.icon) if status.icon else ""
+        style = f"color: {status.color}; filter: brightness(0.9);" if status.color else ""
+        badges.append(format_html(
+            '<div class="badge badge-sm bg-transparent border-0 font-medium whitespace-nowrap" style="{}" title="{}"> {}{} </div>',
+            style,
+            status.name,
+            icon_html,
+            status.display_name,
+        ))
+    if not badges:
+        return mark_safe('<span class="text-base-content/30 text-xs">—</span>')
+    return mark_safe("".join(badges))
+
 
 class IndividualTable(tables.Table):
     """Static column set: Primary ID, Secondary ID, Other IDs, Institution, Name, Sex, Status."""
@@ -14,13 +32,12 @@ class IndividualTable(tables.Table):
     institution = tables.Column(verbose_name="Institution", order_by=("first_institution_name",))
     full_name = tables.Column(verbose_name="Name")
     sex = tables.Column(verbose_name="Sex")
-    status = tables.Column(verbose_name="Status")
+    statuses = tables.Column(verbose_name="Status", orderable=False, empty_values=())
     # Created date from the Individual record
     created_at = tables.DateTimeColumn(
         verbose_name="Created",
         accessor="created_at",
-        # Force explicit day-first, 24-hour format for this column.
-        format="d/m/Y H:i",
+        format="m/y",
         short=False,
     )
     # Aggregated "last activity" timestamp across Individual + related
@@ -29,7 +46,7 @@ class IndividualTable(tables.Table):
         verbose_name="Last Activity",
         accessor="last_activity",
         order_by=("last_activity",),
-        format="d/m/Y H:i",
+        format="m/y",
         short=False,
     )
 
@@ -37,6 +54,14 @@ class IndividualTable(tables.Table):
         self.total_count = Individual.objects.count()
         self.verbose_name = Individual._meta.verbose_name
         self.verbose_name_plural = Individual._meta.verbose_name_plural
+
+        from .models import IdentifierType
+        primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+        secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+        if primary_type:
+            self.columns["primary_id"].column.verbose_name = f"{primary_type.name} ID"
+        if secondary_type:
+            self.columns["secondary_id"].column.verbose_name = f"{secondary_type.name} ID"
 
     def render_institution(self, value, record):
         names = [i.name for i in record.institution.all()]
@@ -52,7 +77,7 @@ class IndividualTable(tables.Table):
             "institution",
             "full_name",
             "sex",
-            "status",
+            "statuses",
             "created_at",
             "last_activity",
         )
@@ -69,40 +94,25 @@ class IndividualTable(tables.Table):
             }
         }
 
-    def render_status(self, value, record):
-        """Wrap status in a span with ID for OOB swaps"""
-        status = record.status
-        icon_html = ""
-        style = f"color: {status.color}; filter: brightness(0.9);"
-
-        if status.icon:
-            icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', status.icon)
-
-        label = status.display_name
-
-        badge_html = format_html(
-            '<div class="badge badge-sm bg-transparent border-0 font-medium whitespace-nowrap" style="{}" title="{}"> {}{} </div>',
-            style,
-            status.name,
-            icon_html,
-            label,
-        )
+    def render_statuses(self, value, record):
+        """Render multiple status badges wrapped in a span for OOB swaps."""
+        all_statuses = list(record.statuses.all())
+        badges_html = _render_status_badges(all_statuses)
         return format_html(
             '<span id="individual-row-status-{}">{}</span>',
             record.pk,
-            badge_html,
+            badges_html,
         )
 
     def render_created_at(self, value):
         if not value:
             return "—"
-        # Explicit day/month/year and 24-hour time.
-        return value.strftime("%d/%m/%Y %H:%M")
+        return value.strftime("%m/%y")
 
     def render_last_activity(self, value):
         if not value:
             return "—"
-        return value.strftime("%d/%m/%Y %H:%M")
+        return value.strftime("%m/%y")
 
     def render_full_name(self, value, record):
         # Check permissions
@@ -133,16 +143,20 @@ class IndividualTable(tables.Table):
 class SampleTable(tables.Table):
     id = tables.Column()
     individual = tables.Column()
-    
+    statuses = tables.Column(verbose_name="Status", orderable=False, empty_values=())
+
     def before_render(self, request):
         self.total_count = Sample.objects.count()
         self.verbose_name = Sample._meta.verbose_name
         self.verbose_name_plural = Sample._meta.verbose_name_plural
 
+    def render_statuses(self, value, record):
+        return _render_status_badges(list(record.statuses.all()))
+
     class Meta:
         model = Sample
         template_name = "lab/partials/infinite_table.html"
-        fields = ("id", "individual", "sample_type", "status", "receipt_date")
+        fields = ("id", "individual", "sample_type", "statuses", "receipt_date")
         attrs = {
              "class": "table table-zebra table-sm",
             "thead": {
@@ -158,14 +172,14 @@ class SampleTable(tables.Table):
 
 class ProjectTable(tables.Table):
     name = tables.Column(verbose_name="Name")
-    status = tables.Column(verbose_name="Status")
+    statuses = tables.Column(verbose_name="Status", orderable=False, empty_values=())
     priority = tables.Column(verbose_name="Priority")
     individuals_count = tables.Column(
         verbose_name="Individuals",
         orderable=False,
-        empty_values=(),  # Force render_individuals_count to run (no model field)
+        empty_values=(),
     )
-    
+
     def before_render(self, request):
         self.total_count = Project.objects.count()
         self.verbose_name = Project._meta.verbose_name
@@ -173,8 +187,8 @@ class ProjectTable(tables.Table):
 
     class Meta:
         model = Project
-        template_name = "lab/partials/project_expandable_table.html" 
-        fields = ("name", "status", "priority", "due_date", "individuals_count")
+        template_name = "lab/partials/project_expandable_table.html"
+        fields = ("name", "statuses", "priority", "due_date", "individuals_count")
         attrs = {
             "class": "table table-zebra table-sm",
             "thead": {
@@ -188,28 +202,14 @@ class ProjectTable(tables.Table):
             }
         }
 
-    def render_status(self, value, record):
-        """Wrap status in a span with ID for OOB swaps"""
-        status = record.status
-        icon_html = ""
-        style = f"color: {status.color}; filter: brightness(0.9);"
-
-        if status.icon:
-            icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', status.icon)
-
-        label = status.display_name
-
-        badge_html = format_html(
-            '<div class="badge badge-sm bg-transparent border-0 font-medium whitespace-nowrap" style="{}" title="{}"> {}{} </div>',
-            style,
-            status.name,
-            icon_html,
-            label,
-        )
+    def render_statuses(self, value, record):
+        """Render multiple status badges wrapped in a span for OOB swaps."""
+        all_statuses = list(record.statuses.all())
+        badges_html = _render_status_badges(all_statuses)
         return format_html(
             '<span id="project-row-status-{}">{}</span>',
             record.pk,
-            badge_html,
+            badges_html,
         )
 
     def render_name(self, value, record):
@@ -288,7 +288,7 @@ class VariantTable(tables.Table):
     zygosity = tables.Column(verbose_name="Zygosity")
     genes = tables.Column(verbose_name="Genes", accessor="genes", orderable=False)
     individual = tables.Column(verbose_name="Individual", accessor="individual__primary_id")
-    status = tables.Column(verbose_name="Status")
+    statuses = tables.Column(verbose_name="Status", orderable=False, empty_values=())
 
     def before_render(self, request):
         self.total_count = Variant.objects.count()
@@ -337,7 +337,7 @@ class VariantTable(tables.Table):
             "zygosity",
             "genes",
             "individual",
-            "status",
+            "statuses",
         )
         attrs = {
             "class": "table table-zebra table-sm",
@@ -346,28 +346,11 @@ class VariantTable(tables.Table):
             "td": {"class": ""},
         }
 
-    def render_status(self, value, record):
-        status = record.status
-        if not status:
-            return "-"
-
-        icon_html = ""
-        style = f"color: {status.color}; filter: brightness(0.9);" if status.color else ""
-
-        if status.icon:
-            icon_html = format_html('<i class="fa-solid {} mr-1.5"></i>', status.icon)
-
-        label = status.display_name
-
-        badge_html = format_html(
-            '<div class="badge badge-sm bg-transparent border-0 font-medium whitespace-nowrap" style="{}" title="{}"> {}{} </div>',
-            style,
-            status.name,
-            icon_html,
-            label,
-        )
+    def render_statuses(self, value, record):
+        all_statuses = list(record.statuses.all())
+        badges_html = _render_status_badges(all_statuses)
         return format_html(
             '<span id="variant-row-status-{}">{}</span>',
             record.pk,
-            badge_html,
+            badges_html,
         )

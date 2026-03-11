@@ -739,15 +739,16 @@ class Command(BaseCommand):
                     if projects_field:
                         project_names = [p.strip() for p in str(projects_field).split(',') if p and str(p).strip()]
                         for pname in project_names:
-                            project_obj, _ = Project.objects.get_or_create(
+                            project_obj, created = Project.objects.get_or_create(
                                 name=pname,
                                 defaults={
                                     'description': '',
                                     'created_by': admin_user,
-                                    'status': imported_project_status,
                                     'priority': 'medium'
                                 }
                             )
+                            if created and imported_project_status:
+                                project_obj.statuses.set([imported_project_status])
                             project_obj.individuals.add(individual)
                 else:
                     if individual.is_index != is_index:
@@ -857,23 +858,26 @@ class Command(BaseCommand):
             individual.icd11_code = row_dict.get('ICD11', individual.icd11_code)
             if institution_objs:
                 individual.institution.set(institution_objs)
-            individual.status = Status.objects.get(name='Registered', content_type=ContentType.objects.get(app_label='lab', model='individual'))
             individual.is_index = is_index
             individual.save()
+            registered_status = Status.objects.filter(name='Registered', content_type=ContentType.objects.get(app_label='lab', model='individual')).first()
+            if registered_status:
+                individual.statuses.set([registered_status])
             # Add/ensure individual-project associations from 'Projeler'
             projects_field = row_dict.get('Projeler')
             if projects_field:
                 project_names = [p.strip() for p in str(projects_field).split(',') if p and str(p).strip()]
                 for pname in project_names:
-                    project_obj, _ = Project.objects.get_or_create(
+                    project_obj, created = Project.objects.get_or_create(
                         name=pname,
                         defaults={
                             'description': '',
                             'created_by': admin_user,
-                            'status': imported_project_status,
                             'priority': 'medium'
                         }
                     )
+                    if created and imported_project_status:
+                        project_obj.statuses.set([imported_project_status])
                     project_obj.individuals.add(individual)
             hpo_terms = self._get_hpo_terms(row_dict.get('HPO kodları'))
             if hpo_terms:
@@ -901,27 +905,34 @@ class Command(BaseCommand):
                         sample_type=sample_type
                     ).first()
                 if existing_sample:
+                    available_status = Status.objects.filter(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample')).first()
                     if not existing_sample.receipt_date:
                         existing_sample.receipt_date = self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl'))
-                        if existing_sample.receipt_date:
-                            existing_sample.status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample'))
+                        if existing_sample.receipt_date and available_status:
+                            existing_sample.statuses.set([available_status])
                     if not existing_sample.isolation_by:
                         existing_sample.isolation_by = isolation_by
-                    if not existing_sample.status:
-                        existing_sample.status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample'))
+                    if available_status and not existing_sample.statuses.exists():
+                        existing_sample.statuses.set([available_status])
                     existing_sample.save()
                     self.stdout.write(self.style.SUCCESS(f'Updated existing sample: {existing_sample}'))
                     samples_touched.append(existing_sample)
                 else:
-                    initial_status = Status.objects.get(name='Available', content_type=ContentType.objects.get(app_label='lab', model='sample')) if self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl')) else Status.objects.get(name='Pending Blood Recovery', content_type=ContentType.objects.get(app_label='lab', model='sample'))
+                    sample_ct = ContentType.objects.get(app_label='lab', model='sample')
+                    initial_status = Status.objects.filter(
+                        name='Available', content_type=sample_ct
+                    ).first() if self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl')) else Status.objects.filter(
+                        name='Pending Blood Recovery', content_type=sample_ct
+                    ).first()
                     sample = Sample.objects.create(
                         individual=individual,
                         sample_type=sample_type,
-                        status=initial_status,
                         receipt_date=self._parse_date(row_dict.get('Geliş Tarihi/ay/gün/yıl')),
                         isolation_by=isolation_by,
                         created_by=admin_user,
                     )
+                    if initial_status:
+                        sample.statuses.set([initial_status])
                     self.stdout.write(self.style.SUCCESS(f'Created new sample: {sample}'))
                     samples_touched.append(sample)
             # After touching samples for this row, add sample-level notes to all

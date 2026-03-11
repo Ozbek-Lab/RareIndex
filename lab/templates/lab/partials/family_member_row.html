@@ -1,4 +1,7 @@
-<tr id="member-row-{{ member.pk }}" class="{% if member.pk == individual.pk %}bg-primary/5 font-medium{% elif edit_mode %}bg-warning/5{% else %}hover:bg-base-200/30{% endif %} transition-colors">
+{% load lab_tags %}
+<tr id="member-row-{{ member.pk }}"
+    x-data="{ isIndex: {{ member.is_index|yesno:'true,false' }}, isAffected: {{ member.is_affected|yesno:'true,false' }} }"
+    class="{% if member.pk == individual.pk %}bg-primary/5 font-medium{% elif edit_mode %}bg-warning/5{% else %}hover:bg-base-200/30{% endif %} transition-colors">
     <td>
         <div class="flex items-center gap-1">
             <span class="font-mono text-sm text-primary">{{ member.primary_id }}</span>
@@ -17,13 +20,10 @@
         </div>
     </td>
     <td class="font-mono text-xs text-base-content/50">{{ member.secondary_id|default:"—" }}</td>
-    <td class="text-xs">
-        {% if member.sex == "male" %}
-            <i class="fa-solid fa-mars text-blue-500"></i>
-        {% elif member.sex == "female" %}
-            <i class="fa-solid fa-venus text-pink-500"></i>
-        {% else %}
-            <span class="text-base-content/40">—</span>
+    <td class="text-xs text-base-content/70">
+        {% if member.sex == "male" %}Male
+        {% elif member.sex == "female" %}Female
+        {% else %}<span class="text-base-content/30">—</span>
         {% endif %}
     </td>
 
@@ -64,29 +64,50 @@
     {% endif %}
 
     <td>
-        {% if member.status %}
-        <span class="badge badge-xs gap-1 font-normal">
-            {% if member.status.icon %}
-                <i class="fa-solid {{ member.status.icon }}" style="color: {{ member.status.color }};"></i>
-            {% else %}
-                <span class="size-1.5 rounded-full" style="background-color: {{ member.status.color }};"></span>
-            {% endif %}
-            {{ member.status.name }}
-        </span>
+        {% get_object_statuses member as member_active_statuses %}
+        {% if member_active_statuses %}
+            {% for s in member_active_statuses %}
+            <span class="badge badge-xs gap-1 font-normal">
+                {% if s.icon %}
+                    <i class="fa-solid {{ s.icon }}" style="color: {{ s.color }};"></i>
+                {% else %}
+                    <span class="size-1.5 rounded-full" style="background-color: {{ s.color }};"></span>
+                {% endif %}
+                {{ s.display_name }}
+            </span>
+            {% endfor %}
         {% else %}—{% endif %}
     </td>
-    <td class="space-x-1">
-        {% if member.is_index %}
-            <span class="badge badge-xs badge-primary">Index Case</span>
+    {# Is Index? #}
+    <td class="text-center">
+        {% if edit_mode and perms.lab.change_individual %}
+        <input type="hidden" name="is_index" :value="isIndex ? '1' : '0'">
+        <button type="button" @click="isIndex = !isIndex" class="btn btn-ghost btn-xs btn-square">
+            <i x-show="isIndex" class="fa-solid fa-circle-check text-primary text-sm"></i>
+            <i x-show="!isIndex" class="fa-regular fa-circle text-base-content/25 text-sm"></i>
+        </button>
+        {% else %}
+            {% if member.is_index %}
+                <i class="fa-solid fa-circle-check text-primary text-sm"></i>
+            {% else %}
+                <i class="fa-regular fa-circle text-base-content/25 text-sm"></i>
+            {% endif %}
         {% endif %}
-        {% if member.mother_id == individual.pk or member.father_id == individual.pk %}
-            <span class="badge badge-xs badge-ghost">Parent</span>
-        {% endif %}
-        {% if individual.mother_id == member.pk %}
-            <span class="badge badge-xs badge-ghost">Mother</span>
-        {% endif %}
-        {% if individual.father_id == member.pk %}
-            <span class="badge badge-xs badge-ghost">Father</span>
+    </td>
+    {# Is Affected? #}
+    <td class="text-center">
+        {% if edit_mode and perms.lab.change_individual %}
+        <input type="hidden" name="is_affected" :value="isAffected ? '1' : '0'">
+        <button type="button" @click="isAffected = !isAffected" class="btn btn-ghost btn-xs btn-square">
+            <i x-show="isAffected" class="fa-solid fa-circle-check text-warning text-sm"></i>
+            <i x-show="!isAffected" class="fa-regular fa-circle text-base-content/25 text-sm"></i>
+        </button>
+        {% else %}
+            {% if member.is_affected %}
+                <i class="fa-solid fa-circle-check text-warning text-sm"></i>
+            {% else %}
+                <i class="fa-regular fa-circle text-base-content/25 text-sm"></i>
+            {% endif %}
         {% endif %}
     </td>
     <td>

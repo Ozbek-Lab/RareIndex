@@ -1,3 +1,4 @@
+{% load lab_tags %}
 {% if individual_page %}
     {% for individual in individual_page %}
         {% if forloop.last and individual_page.has_next %}
@@ -19,15 +20,18 @@
             </td>
             <td class="font-mono text-xs text-base-content/60">{{ individual.secondary_id|default:"—" }}</td>
             <td>
-                {% if individual.status %}
-                <span class="badge badge-xs gap-1 font-normal">
-                    {% if individual.status.icon %}
-                        <i class="fa-solid {{ individual.status.icon }}" style="color: {{ individual.status.color }};"></i>
-                    {% else %}
-                        <span class="size-1.5 rounded-full" style="background-color: {{ individual.status.color }};"></span>
-                    {% endif %}
-                    {{ individual.status.name }}
-                </span>
+                {% get_object_statuses individual as indiv_active_statuses %}
+                {% if indiv_active_statuses %}
+                    {% for s in indiv_active_statuses %}
+                    <span class="badge badge-xs gap-1 font-normal">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }}" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1.5 rounded-full" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        {{ s.display_name }}
+                    </span>
+                    {% endfor %}
                 {% else %}—{% endif %}
             </td>
             <td class="text-xs text-base-content/60">

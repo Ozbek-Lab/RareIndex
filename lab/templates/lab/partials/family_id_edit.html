@@ -1,0 +1,28 @@
+{% load lab_tags %}
+<div class="flex items-center justify-between mb-3" id="family-title-{{ family.pk }}">
+    <form hx-post="{% url 'lab:family_id_save' family.pk %}"
+          hx-target="#family-title-{{ family.pk }}"
+          hx-swap="outerHTML"
+          class="flex items-center gap-2">
+        {% csrf_token %}
+        <input type="hidden" name="individual_pk" value="{{ individual_pk }}">
+        <span class="text-sm uppercase font-bold text-base-content/50">Family</span>
+        <input type="text"
+               name="family_id"
+               value="{{ value|default:family.family_id }}"
+               class="input input-bordered input-xs font-mono w-44 {% if error %}input-error{% endif %}"
+               autofocus>
+        {% if error %}
+            <span class="text-error text-xs">{{ error }}</span>
+        {% endif %}
+        <button type="submit" class="btn btn-primary btn-xs">Save</button>
+        <button type="button"
+                hx-get="{% url 'lab:family_id_edit' family.pk %}?cancel=1&individual_pk={{ individual_pk }}"
+                hx-target="#family-title-{{ family.pk }}"
+                hx-swap="outerHTML"
+                class="btn btn-ghost btn-xs">Cancel</button>
+    </form>
+    <span class="badge badge-ghost badge-sm text-base-content/50">
+        {{ family.individuals.count }} member{{ family.individuals.count|pluralize }}
+    </span>
+</div>

@@ -71,14 +71,15 @@ def _variant_filter_counts():
         if row['classification']
     })
 
+    from .models import TaggedStatus
     variant_ct = ContentType.objects.get_for_model(Variant)
     status_counts = {s: 0 for s in Status.objects.filter(content_type=variant_ct).values_list('name', flat=True)}
     status_counts.update({
-        row['status__name']: row['c']
-        for row in Variant.objects.filter(status__isnull=False)
-        .values('status__name')
-        .annotate(c=Count('id'))
-        if row['status__name']
+        row['tag__name']: row['c']
+        for row in TaggedStatus.objects.filter(content_type=variant_ct)
+        .values('tag__name')
+        .annotate(c=Count('object_id', distinct=True))
+        if row['tag__name']
     })
     assembly_counts = {
         row['assembly_version']: row['c']
@@ -114,6 +115,7 @@ def _individual_filter_counts():
     if counts is not None:
         return counts
 
+    from .models import TaggedStatus
     individual_ct = ContentType.objects.get_for_model(Individual)
     sample_ct = ContentType.objects.get_for_model(Sample)
     test_ct = ContentType.objects.get_for_model(Test)
@@ -121,12 +123,13 @@ def _individual_filter_counts():
     analysis_ct = ContentType.objects.get_for_model(Analysis)
     variant_ct = ContentType.objects.get_for_model(Variant)
 
-    # Status (keyed by status name)
+    # Status (keyed by status name, counting distinct objects tagged with each status)
     status_counts = {s: 0 for s in Status.objects.filter(content_type=individual_ct).values_list('name', flat=True)}
     status_counts.update({
-        row['status__name']: row['c']
-        for row in Individual.objects.values('status__name').annotate(c=Count('id'))
-        if row['status__name']
+        row['tag__name']: row['c']
+        for row in TaggedStatus.objects.filter(content_type=individual_ct)
+        .values('tag__name').annotate(c=Count('object_id', distinct=True))
+        if row['tag__name']
     })
 
     # Sex (keyed by sex value: 'male', 'female', 'other')
@@ -155,10 +158,10 @@ def _individual_filter_counts():
     # Sample status
     sample_status_counts = {s: 0 for s in Status.objects.filter(content_type=sample_ct).values_list('name', flat=True)}
     sample_status_counts.update({
-        row['status__name']: row['c']
-        for row in Sample.objects.values('status__name')
-        .annotate(c=Count('individual_id', distinct=True))
-        if row['status__name']
+        row['tag__name']: row['c']
+        for row in TaggedStatus.objects.filter(content_type=sample_ct)
+        .values('tag__name').annotate(c=Count('object_id', distinct=True))
+        if row['tag__name']
     })
 
     # Test type
@@ -173,10 +176,10 @@ def _individual_filter_counts():
     # Test status
     test_status_counts = {s: 0 for s in Status.objects.filter(content_type=test_ct).values_list('name', flat=True)}
     test_status_counts.update({
-        row['status__name']: row['c']
-        for row in Test.objects.filter(sample__isnull=False).values('status__name')
-        .annotate(c=Count('sample__individual_id', distinct=True))
-        if row['status__name']
+        row['tag__name']: row['c']
+        for row in TaggedStatus.objects.filter(content_type=test_ct)
+        .values('tag__name').annotate(c=Count('object_id', distinct=True))
+        if row['tag__name']
     })
 
     # Pipeline type
@@ -191,10 +194,10 @@ def _individual_filter_counts():
     # Pipeline status
     pipeline_status_counts = {s: 0 for s in Status.objects.filter(content_type=pipeline_ct).values_list('name', flat=True)}
     pipeline_status_counts.update({
-        row['status__name']: row['c']
-        for row in Pipeline.objects.values('status__name')
-        .annotate(c=Count('test__sample__individual_id', distinct=True))
-        if row['status__name']
+        row['tag__name']: row['c']
+        for row in TaggedStatus.objects.filter(content_type=pipeline_ct)
+        .values('tag__name').annotate(c=Count('object_id', distinct=True))
+        if row['tag__name']
     })
 
     # Analysis type
@@ -209,10 +212,10 @@ def _individual_filter_counts():
     # Analysis status
     analysis_status_counts = {s: 0 for s in Status.objects.filter(content_type=analysis_ct).values_list('name', flat=True)}
     analysis_status_counts.update({
-        row['status__name']: row['c']
-        for row in Analysis.objects.values('status__name')
-        .annotate(c=Count('pipeline__test__sample__individual_id', distinct=True))
-        if row['status__name']
+        row['tag__name']: row['c']
+        for row in TaggedStatus.objects.filter(content_type=analysis_ct)
+        .values('tag__name').annotate(c=Count('object_id', distinct=True))
+        if row['tag__name']
     })
 
     # Variant type (distinct individuals with that variant subtype)
@@ -226,10 +229,10 @@ def _individual_filter_counts():
     # Variant status (distinct individuals)
     variant_status_counts = {s: 0 for s in Status.objects.filter(content_type=variant_ct).values_list('name', flat=True)}
     variant_status_counts.update({
-        row['status__name']: row['c']
-        for row in Variant.objects.filter(status__isnull=False).values('status__name')
-        .annotate(c=Count('individual_id', distinct=True))
-        if row['status__name']
+        row['tag__name']: row['c']
+        for row in TaggedStatus.objects.filter(content_type=variant_ct)
+        .values('tag__name').annotate(c=Count('object_id', distinct=True))
+        if row['tag__name']
     })
 
     # ACMG classification (distinct individuals)
@@ -273,14 +276,16 @@ def _project_filter_counts():
     if counts is not None:
         return counts
 
+    from .models import TaggedStatus
     project_ct = ContentType.objects.get_for_model(Project)
 
     # Status (keyed by status name)
     status_counts = {s: 0 for s in Status.objects.filter(content_type=project_ct).values_list('name', flat=True)}
     status_counts.update({
-        row['status__name']: row['c']
-        for row in Project.objects.values('status__name').annotate(c=Count('id'))
-        if row['status__name']
+        row['tag__name']: row['c']
+        for row in TaggedStatus.objects.filter(content_type=project_ct)
+        .values('tag__name').annotate(c=Count('object_id', distinct=True))
+        if row['tag__name']
     })
 
     # Priority (keyed by priority value: 'low', 'medium', 'high', 'urgent')
@@ -314,13 +319,21 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context['now'] = timezone.now()
         
+        from .models import TaggedStatus
+        from django.contrib.contenttypes.models import ContentType as CT
+        task_ct = CT.objects.get_for_model(Task)
+        completed_task_ids = TaggedStatus.objects.filter(
+            content_type=task_ct,
+            tag__name__iexact="completed",
+        ).values_list("object_id", flat=True)
+
         tasks = Task.objects.filter(assigned_to=self.request.user)
         context['my_tasks'] = tasks.exclude(
-            status__name__iexact="completed"
+            pk__in=completed_task_ids
         ).order_by('due_date', '-priority')[:10]
-        
+
         context['completed_tasks'] = tasks.filter(
-            status__name__iexact="completed"
+            pk__in=completed_task_ids
         ).order_by('-id')[:5]
 
         # 1.5 Header Stats & breakdowns
@@ -550,8 +563,8 @@ class ProjectListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         return super().get_queryset().prefetch_related(
             'individuals',
             'individuals__family',
-            'status',
-            'created_by'
+            'statuses',
+            'created_by',
         )
     
     def get_context_data(self, **kwargs):
@@ -601,7 +614,7 @@ class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     paginate_by = 25
 
     def get_queryset(self):
-        return super().get_queryset().select_related("individual", "status").prefetch_related("genes")
+        return super().get_queryset().select_related("individual").prefetch_related("statuses", "genes")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -792,9 +805,9 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
         return Project.objects.prefetch_related(
             'individuals',
             'individuals__cross_ids__id_type',
-            'individuals__status',
+            'individuals__statuses',
             'individuals__institution',
-            'status',
+            'statuses',
             'created_by',
         )
 
@@ -806,8 +819,7 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
         request = self.request
         individuals_qs = (
             self.object.individuals.all()
-            .select_related("status")
-            .prefetch_related("institution")
+            .prefetch_related("statuses", "institution")
         ).annotate(first_institution_name=Min("institution__name"))
 
         # Search by any ID value or institution name
@@ -824,7 +836,7 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
         sort_map = {
             "primary": "id",  # approximate by PK
             "secondary": "id",
-            "status": "status__name",
+            "status": "id",  # status is now M2M, sort by id as fallback
             "institution": "first_institution_name",
             "sex": "sex",
             "added": "created_at",
@@ -863,7 +875,7 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
             'projects',
             'family__individuals',
             'family__individuals__cross_ids__id_type',
-            'family__individuals__status',
+            'family__individuals__statuses',
         ).get(pk=self.kwargs['pk'])
         
         context['individual'] = individual
@@ -983,16 +995,18 @@ class FamilyCreateView(LoginRequiredMixin, CreateView):
                     individual.family = self.object
                     individual.created_by = self.request.user
                     
-                    # Ensure status is set if missing (though form requires it usually)
-                    if not individual.status_id:
-                        from .models import Status
-                        status = Status.objects.first()
-                        if status:
-                            individual.status = status
-                    
                     individual.save()
                     individual.institution.set(inline_form.cleaned_data['institution'])
                     individual.hpo_terms.set(inline_form.cleaned_data['hpo_terms'])
+                    # Set statuses from the form
+                    selected_statuses = inline_form.cleaned_data.get('statuses')
+                    if selected_statuses:
+                        individual.statuses.set(selected_statuses)
+                    elif not individual.statuses.exists():
+                        from .models import Status
+                        default_status = Status.objects.first()
+                        if default_status:
+                            individual.statuses.add(default_status)
                     
                     saved_individuals[i] = individual
                     
@@ -1083,18 +1097,19 @@ class ReopenTaskView(LoginRequiredMixin, TemplateView):
             return HttpResponseForbidden("You cannot reopen this task.")
 
         # Reopen logic
-        if task.status.name.lower() == "completed":
+        if task.statuses.filter(name__iexact="completed").exists():
             if task.previous_status:
-                task.status = task.previous_status
+                task.statuses.set([task.previous_status])
                 task.previous_status = None
             else:
-                # Fallback if no previous status (e.g. historical data)
-                # Try to find a 'pending' or 'in progress' status
-                pending_status = Status.objects.filter(name__iexact="pending").first() or \
-                                 Status.objects.all().first()
-                task.status = pending_status
-            
-            task.save()
+                pending_status = (
+                    Status.objects.filter(name__iexact="pending").first()
+                    or Status.objects.first()
+                )
+                if pending_status:
+                    task.statuses.set([pending_status])
+
+            task.save(update_fields=["previous_status"])
             
             # If we want to refresh both the active list and finished list, 
             # we need to return something that triggers a refresh or use OOB.
@@ -1176,7 +1191,7 @@ class IndividualExportView(LoginRequiredMixin, View):
             
             dob = individual.birth_date
             sex = individual.get_sex_display() if individual.sex else ""
-            status = individual.status.name if individual.status else ""
+            status = ", ".join(individual.statuses.values_list("name", flat=True))
             
             icd11 = individual.icd11_code or ""
             hpo = "; ".join([t.identifier for t in individual.hpo_terms.all()])

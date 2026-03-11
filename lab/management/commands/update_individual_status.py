@@ -33,7 +33,7 @@ class Command(BaseCommand):
             try:
                 cross_identifier = CrossIdentifier.objects.get(id_type=identifier_type, id_value=individual_id)
                 individual = cross_identifier.individual
-                individual.status = new_status
+                individual.statuses.set([new_status])
                 individual.save()
                 self.stdout.write(self.style.SUCCESS(
                     f'Successfully updated status for individual with {id_type_name} ID "{individual_id}" to "{status_name}".'

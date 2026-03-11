@@ -446,6 +446,186 @@ def individual_parents_edit(request, pk):
 
 
 @login_required
+def family_id_edit(request, pk):
+    """Render inline edit form, or display mode when cancel=1."""
+    from .models import Family
+    family = get_object_or_404(Family, pk=pk)
+    individual_pk = request.GET.get("individual_pk", "")
+    if request.GET.get("cancel"):
+        individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else family.individuals.first()
+        return render(request, "lab/partials/family_title_display.html", {
+            "family": family,
+            "individual": individual,
+        })
+    return render(request, "lab/partials/family_id_edit.html", {
+        "family": family,
+        "individual_pk": individual_pk,
+    })
+
+
+@login_required
+@require_POST
+def family_id_save(request, pk):
+    """Save the new family_id and re-render the title row."""
+    from .models import Family
+    from django.core.exceptions import ValidationError
+    family = get_object_or_404(Family, pk=pk)
+    if not request.user.has_perm("lab.change_family"):
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden()
+    individual_pk = request.POST.get("individual_pk", "")
+    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else None
+    new_id = request.POST.get("family_id", "").strip()
+    error = None
+    if not new_id:
+        error = "Family name cannot be empty."
+    elif Family.objects.filter(family_id=new_id).exclude(pk=pk).exists():
+        error = f'"{new_id}" is already used by another family.'
+    if error:
+        return render(request, "lab/partials/family_id_edit.html", {
+            "family": family,
+            "individual_pk": individual_pk,
+            "error": error,
+            "value": new_id,
+        })
+    family.family_id = new_id
+    family.save(update_fields=["family_id"])
+    # Re-render the title div (display mode)
+    ctx = {
+        "family": family,
+        "individual": individual or (family.individuals.first()),
+    }
+    return render(request, "lab/partials/family_title_display.html", ctx)
+
+
+@login_required
+def family_manage_members(request, pk):
+    """Render the manage-members modal content for a family."""
+    from .models import Family
+    from .forms import QuickAddMemberForm
+    family = get_object_or_404(Family, pk=pk)
+    individual_pk = request.GET.get("individual_pk", "")
+    form = QuickAddMemberForm()
+    members = family.individuals.select_related("family").prefetch_related("statuses").order_by("pk")
+    return render(request, "lab/partials/family_manage_members.html", {
+        "family": family,
+        "members": members,
+        "individual_pk": individual_pk,
+        "form": form,
+    })
+
+
+@login_required
+@require_POST
+def family_add_member(request, pk):
+    """Create a new individual and assign to the family."""
+    from .models import Family
+    from .forms import QuickAddMemberForm
+    from django.http import HttpResponseForbidden
+    family = get_object_or_404(Family, pk=pk)
+    if not request.user.has_perm("lab.add_individual"):
+        return HttpResponseForbidden()
+    individual_pk = request.POST.get("individual_pk", "")
+    form = QuickAddMemberForm(request.POST)
+    if form.is_valid():
+        member = form.save(commit=False)
+        member.family = family
+        member.created_by = request.user
+        member.save()
+        # Save statuses
+        selected_statuses = form.cleaned_data.get("statuses")
+        if selected_statuses:
+            member.statuses.set(selected_statuses)
+        # Save primary and secondary IDs as CrossIdentifier objects
+        from .models import IdentifierType, CrossIdentifier
+        def _save_priority_id(priority, value):
+            if not value:
+                return
+            id_type = IdentifierType.objects.filter(use_priority=priority).order_by("id").first()
+            if not id_type:
+                return
+            CrossIdentifier.objects.get_or_create(
+                individual=member,
+                id_type=id_type,
+                defaults={"id_value": value, "created_by": request.user},
+            )
+        _save_priority_id(1, form.cleaned_data.get("primary_id"))
+        _save_priority_id(2, form.cleaned_data.get("secondary_id"))
+        form = QuickAddMemberForm()
+        members = family.individuals.select_related("family").prefetch_related("statuses").order_by("pk")
+        response = render(request, "lab/partials/family_manage_members.html", {
+            "family": family,
+            "members": members,
+            "individual_pk": individual_pk,
+            "form": form,
+            "success_msg": f"Added {member.primary_id or member.full_name or 'new member'} to the family.",
+        })
+        response["HX-Trigger"] = "familyUpdated"
+        return response
+    members = family.individuals.select_related("family").prefetch_related("statuses").order_by("pk")
+    return render(request, "lab/partials/family_manage_members.html", {
+        "family": family,
+        "members": members,
+        "individual_pk": individual_pk,
+        "form": form,
+    })
+
+
+@login_required
+@require_POST
+def family_remove_member(request, pk):
+    """Remove an individual from their family (set family=None)."""
+    from django.http import HttpResponseForbidden
+    member = get_object_or_404(Individual, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden()
+    member.family = None
+    member.save(update_fields=["family"])
+    response = HttpResponse("")
+    response["HX-Trigger"] = "familyUpdated"
+    return response
+
+
+@login_required
+def individual_family_section(request, pk):
+    """Return the family section partial for OOB refresh."""
+    individual = get_object_or_404(Individual, pk=pk)
+    return render(request, "lab/partials/tabs/_family.html", {"individual": individual})
+
+
+@login_required
+@require_POST
+def individual_toggle_index(request, pk):
+    """Toggle the is_index flag on a family member and re-render the row."""
+    member = get_object_or_404(Individual, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden()
+    member.is_index = not member.is_index
+    member.save(update_fields=["is_index"])
+    individual_pk = request.POST.get("individual_pk")
+    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+    context = {"member": member, "individual": individual, "edit_mode": False}
+    return render(request, "lab/partials/family_member_row.html", context)
+
+
+@login_required
+@require_POST
+def individual_toggle_affected(request, pk):
+    """Toggle the is_affected flag on a family member and re-render the row."""
+    member = get_object_or_404(Individual, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden()
+    member.is_affected = not member.is_affected
+    member.save(update_fields=["is_affected"])
+    individual_pk = request.POST.get("individual_pk")
+    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+    context = {"member": member, "individual": individual, "edit_mode": False}
+    return render(request, "lab/partials/family_member_row.html", context)
+
+
+@login_required
 def individual_parents_display(request, pk):
     member = get_object_or_404(Individual, pk=pk)
     individual_pk = request.GET.get("individual_pk")
@@ -466,6 +646,8 @@ def individual_parents_save(request, pk):
 
     member.father_id = int(father_id) if father_id else None
     member.mother_id = int(mother_id) if mother_id else None
+    member.is_index = request.POST.get("is_index") == "1"
+    member.is_affected = request.POST.get("is_affected") == "1"
     member.save()
     member.refresh_from_db()
 
@@ -512,57 +694,59 @@ def individual_clinical_summary_display(request, pk):
 @require_POST
 def update_status(request, content_type_id, object_id, status_id):
     """
-    Update the status of an object.
-    Targets Sample, Test, or Pipeline in this context.
+    Toggle a status tag on an object. Adds if not present, removes if already tagged.
     """
     from django.contrib.contenttypes.models import ContentType
     from .models import Status
-    
+
     ct = get_object_or_404(ContentType, pk=content_type_id)
     Model = ct.model_class()
     obj = get_object_or_404(Model, pk=object_id)
-    new_status = get_object_or_404(Status, pk=status_id)
-    
-    # Permission check (generic for now, can be specialized)
-    # Check if user can change the specific model
+    toggle_status = get_object_or_404(Status, pk=status_id)
+
     perm = f"{ct.app_label}.change_{ct.model}"
     if not request.user.has_perm(perm):
-         return HttpResponseForbidden("You do not have permission to change this status.")
-    
-    obj.status = new_status
-    obj.save()
-    
-    # Return the updated badge partial. 
-    # Since the badge depends on the object type (Sample vs Test vs Pipeline),
-    # we need to know which partial to render.
-    # In _workflow.html, we'll define partialdefs for these badges to make it easy.
-    
+        return HttpResponseForbidden("You do not have permission to change this status.")
+
+    # Toggle: remove if already present, add if not
+    if obj.statuses.filter(pk=toggle_status.pk).exists():
+        obj.statuses.remove(toggle_status)
+    else:
+        # If this status belongs to an exclusive group, remove all other
+        # statuses in that group before adding the new one.
+        if toggle_status.group:
+            from .models import Status as StatusModel
+            group_siblings = StatusModel.objects.filter(
+                group=toggle_status.group
+            ).exclude(pk=toggle_status.pk)
+            for sibling in group_siblings:
+                obj.statuses.remove(sibling)
+        obj.statuses.add(toggle_status)
+
     context = {
-        ct.model: obj, # e.g. 'sample': obj
-        "status": new_status,
+        ct.model: obj,
         "individual": obj if isinstance(obj, Individual) else (
-            getattr(obj, "individual", None) or 
-            getattr(getattr(obj, "sample", None), "individual", None) or 
+            getattr(obj, "individual", None) or
+            getattr(getattr(obj, "sample", None), "individual", None) or
             getattr(getattr(getattr(obj, "test", None), "sample", None), "individual", None)
-        )
+        ),
     }
-    
-    # Determine which partial to return
+
     partial_name = f"{ct.model}_status_badge"
-    
-    # We need a template that has these partialdefs. _workflow.html is perfect.
     response = render(request, f"lab/partials/tabs/_workflow.html#{partial_name}", context)
-    
-    # If updating an Individual, also trigger an OOB swap for the table row
+
+    # If updating an Individual, also send an OOB swap for the table row badge
     if isinstance(obj, Individual):
-        from lab.tables import IndividualTable
-        table = IndividualTable([])
-        status_html = table.render_status(obj.status.name, obj)
-        # The span needs hx-swap-oob="true" for HTMX to match it by ID
-        oob_html = status_html.replace('<span ', '<span hx-swap-oob="true" ')
-        # Append to response content
+        from lab.tables import _render_status_badges
+        from django.utils.html import format_html
+        badges_html = _render_status_badges(list(obj.statuses.all()))
+        oob_html = format_html(
+            '<span id="individual-row-status-{}" hx-swap-oob="true">{}</span>',
+            obj.pk,
+            badges_html,
+        )
         response.content += oob_html.encode("utf-8")
-        
+
     return response
 
 @login_required
@@ -581,11 +765,15 @@ def sample_create_modal(request, individual_id):
             sample = form.save(commit=False)
             sample.individual = individual
             sample.created_by = request.user
-            # Ensure status is set if not in form
-            if not sample.status_id:
-                status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
-                sample.status = status
             sample.save()
+            # Set statuses from form or default to "Registered"
+            selected_statuses = form.cleaned_data.get("statuses")
+            if selected_statuses:
+                sample.statuses.set(selected_statuses)
+            elif not sample.statuses.exists():
+                default_status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                if default_status:
+                    sample.statuses.add(default_status)
             
             response = HttpResponse(status=204)
             response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
@@ -632,11 +820,14 @@ def test_create_modal(request, sample_id):
             test = form.save(commit=False)
             test.sample = sample
             test.created_by = request.user
-            # Ensure status is set
-            if not test.status_id:
-                status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
-                test.status = status
             test.save()
+            selected_statuses = form.cleaned_data.get("statuses")
+            if selected_statuses:
+                test.statuses.set(selected_statuses)
+            elif not test.statuses.exists():
+                default_status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                if default_status:
+                    test.statuses.add(default_status)
             
             response = HttpResponse(status=204)
             response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
@@ -686,11 +877,14 @@ def pipeline_create_modal(request, test_id):
             pipeline = form.save(commit=False)
             pipeline.test = test
             pipeline.created_by = request.user
-            # Ensure status is set
-            if not pipeline.status_id:
-                status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
-                pipeline.status = status
             pipeline.save()
+            selected_statuses = form.cleaned_data.get("statuses")
+            if selected_statuses:
+                pipeline.statuses.set(selected_statuses)
+            elif not pipeline.statuses.exists():
+                default_status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                if default_status:
+                    pipeline.statuses.add(default_status)
             
             response = HttpResponse(status=204)
             response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
@@ -737,11 +931,14 @@ def analysis_create_modal(request, pipeline_id):
             analysis = form.save(commit=False)
             analysis.pipeline = pipeline
             analysis.created_by = request.user
-            # Ensure status is set
-            if not analysis.status_id:
-                status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
-                analysis.status = status
             analysis.save()
+            selected_statuses = form.cleaned_data.get("statuses")
+            if selected_statuses:
+                analysis.statuses.set(selected_statuses)
+            elif not analysis.statuses.exists():
+                default_status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                if default_status:
+                    analysis.statuses.add(default_status)
             
             response = HttpResponse(status=204)
             response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
@@ -822,18 +1019,20 @@ def task_create_modal(request, content_type_id, object_id):
             task.content_type = ct
             task.object_id = object_id
             task.created_by = request.user
-            # If this is a project task, enforce the project link here
             if isinstance(obj, Project):
                 task.project = obj
-            # Ensure status is set
-            if not task.status_id:
-                status = (
+            task.save()
+            selected_statuses = form.cleaned_data.get("statuses")
+            if selected_statuses:
+                task.statuses.set(selected_statuses)
+            elif not task.statuses.exists():
+                default_status = (
                     Status.objects.filter(name__iexact="Active").first()
                     or Status.objects.filter(name__iexact="Registered").first()
                     or Status.objects.first()
                 )
-                task.status = status
-            task.save()
+                if default_status:
+                    task.statuses.add(default_status)
             
             # Targeted update for task list
             context = {
@@ -859,14 +1058,14 @@ def task_create_modal(request, content_type_id, object_id):
             
     else:
         initial = {"content_type": ct.pk, "object_id": object_id}
-        status = (
+        default_status = (
             Status.objects.filter(name__iexact="Active").first()
             or Status.objects.filter(name__iexact="Registered").first()
             or Status.objects.filter(content_type__model="task").first()
             or Status.objects.first()
         )
-        if status:
-            initial["status"] = status
+        if default_status:
+            initial["statuses"] = [default_status]
         form = TaskForm(
             initial=initial,
             content_object=obj,
@@ -948,7 +1147,7 @@ def project_individual_search(request, pk):
     if query:
         individuals = (
             Individual.objects
-            .prefetch_related("cross_ids__id_type", "status")
+            .prefetch_related("cross_ids__id_type", "statuses")
             .filter(cross_ids__id_value__icontains=query)
             .distinct()[:15]
         )
@@ -967,8 +1166,7 @@ def _project_individuals_page_context(request, project, per_page: int = 25):
 
     individuals_qs = (
         project.individuals.all()
-        .select_related("status")
-        .prefetch_related("institution")
+        .prefetch_related("statuses", "institution")
     ).annotate(first_institution_name=Min("institution__name"))
 
     search = request.GET.get("search", "").strip()
@@ -983,7 +1181,7 @@ def _project_individuals_page_context(request, project, per_page: int = 25):
     sort_map = {
         "primary": "id",
         "secondary": "id",
-        "status": "status__name",
+        "status": "id",  # status is now M2M tags, sort by id as fallback
         "institution": "first_institution_name",
         "sex": "sex",
         "added": "created_at",
@@ -1024,7 +1222,7 @@ def project_individual_add(request, project_pk, individual_pk):
         Project.objects
         .prefetch_related(
             "individuals__cross_ids__id_type",
-            "individuals__status",
+            "individuals__statuses",
             "individuals__institution",
         )
         .get(pk=project_pk)
@@ -1046,7 +1244,7 @@ def project_individual_remove(request, project_pk, individual_pk):
         Project.objects
         .prefetch_related(
             "individuals__cross_ids__id_type",
-            "individuals__status",
+            "individuals__statuses",
             "individuals__institution",
         )
         .get(pk=project_pk)
@@ -1456,12 +1654,10 @@ def variant_detail_partial(request, pk):
     variant = get_object_or_404(
         Variant.objects.select_related(
             "individual",
-            "status",
             "created_by",
             # Variant is now linked to Analysis, which links to Pipeline.
             "analysis",
             "analysis__pipeline__type",
-            "analysis__pipeline__status",
             "analysis__pipeline__performed_by",
             "analysis__pipeline__test__test_type",
             "analysis__pipeline__test__sample__sample_type",
@@ -1470,15 +1666,15 @@ def variant_detail_partial(request, pk):
             "classifications__user",
             "annotations",
             "individual__samples__sample_type",
-            "individual__samples__status",
+            "individual__samples__statuses",
             "individual__samples__tests__test_type",
-            "individual__samples__tests__status",
+            "individual__samples__tests__statuses",
             "individual__samples__tests__performed_by",
             "individual__samples__tests__pipelines__type",
-            "individual__samples__tests__pipelines__status",
+            "individual__samples__tests__pipelines__statuses",
             "individual__samples__tests__pipelines__performed_by",
             "individual__samples__tests__pipelines__analyses__type",
-            "individual__samples__tests__pipelines__analyses__status",
+            "individual__samples__tests__pipelines__analyses__statuses",
             "individual__samples__tests__pipelines__analyses__performed_by",
         ),
         pk=pk,
@@ -1495,7 +1691,6 @@ def variant_detail_partial(request, pk):
             Variant.objects.filter(genes=gene)
             .select_related(
                 "individual",
-                "individual__status",
                 "analysis",
                 "analysis__pipeline__type",
                 "analysis__pipeline__test__test_type",
@@ -1544,11 +1739,11 @@ def variant_detail_partial(request, pk):
 # ---------------------------------------------------------------------------
 
 def _get_config_registry():
-    from .models import SampleType, TestType, Institution, PipelineType, AnalysisType, IdentifierType, Status
+    from .models import SampleType, TestType, Institution, PipelineType, AnalysisType, IdentifierType, Status, StatusGroup
     from .forms import (
         SampleTypeForm, TestTypeForm, InstitutionConfigForm,
         PipelineTypeForm, AnalysisTypeForm, IdentifierTypeForm,
-        StatusConfigForm,
+        StatusConfigForm, StatusGroupConfigForm,
     )
     return {
         "sampletype": {
@@ -1585,6 +1780,13 @@ def _get_config_registry():
             "fields": ["name", "use_priority", "is_shown_in_table"],
             "usage_relation": "crossidentifier",
             "usage_label": "identifiers",
+        },
+        "statusgroup": {
+            "model": StatusGroup, "form": StatusGroupConfigForm,
+            "label": "Status Groups", "icon": "fa-regular fa-circle-dot",
+            "fields": ["name", "content_type"],
+            "usage_relation": "statuses",
+            "usage_label": "statuses",
         },
         "status": {
             "model": Status, "form": StatusConfigForm,
@@ -1634,27 +1836,14 @@ def _check_m2m_protections(obj, config):
 
 
 def _compute_status_usage():
-    """Return {status_id: total_usage_count} across all models that hold a status FK."""
+    """Return {status_id: total_usage_count} across all TaggedStatus records."""
     from collections import defaultdict
     from django.db.models import Count
-    from .models import Individual, Sample, Test, Pipeline, Analysis, Task, Project
-
-    models_with_status = [Individual, Sample, Test, Pipeline, Analysis, Task, Project]
-    try:
-        from variant.models import Variant
-        models_with_status.append(Variant)
-    except ImportError:
-        pass
+    from .models import TaggedStatus
 
     usage = defaultdict(int)
-    for model_cls in models_with_status:
-        for row in (
-            model_cls.objects
-            .filter(status__isnull=False)
-            .values("status_id")
-            .annotate(c=Count("id"))
-        ):
-            usage[row["status_id"]] += row["c"]
+    for row in TaggedStatus.objects.values("tag_id").annotate(c=Count("id")):
+        usage[row["tag_id"]] += row["c"]
     return dict(usage)
 
 
@@ -1685,8 +1874,10 @@ def _build_section_context(request, key, config):
     if key == "status":
         from .models import Status
         usage_map = _compute_status_usage()
-        statuses = Status.objects.select_related("content_type").order_by(
-            "content_type__app_label", "content_type__model", "name"
+        from django.db.models import F
+        statuses = Status.objects.select_related("content_type", "group").order_by(
+            "content_type__app_label", "content_type__model",
+            F("group__name").asc(nulls_last=True), "name"
         )
         # Attach pre-computed usage count to each status object
         for s in statuses:
