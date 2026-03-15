@@ -1034,7 +1034,32 @@ def task_create_modal(request, content_type_id, object_id):
                 if default_status:
                     task.statuses.add(default_status)
             
-            # Targeted update for task list
+            if isinstance(obj, Project):
+                # For project dropdown tasks: return the paginated tasks partial
+                # as an OOB innerHTML swap so the panel refreshes to page 1.
+                from django.core.paginator import Paginator
+                from django.template.loader import render_to_string
+                tasks_qs = (
+                    obj.tasks
+                    .exclude(statuses__name__iexact="Completed")
+                    .select_related("assigned_to")
+                    .prefetch_related("statuses")
+                    .order_by("-id")
+                    .distinct()
+                )
+                page_obj = Paginator(tasks_qs, 5).get_page(1)
+                tasks_html = render_to_string(
+                    "lab/partials/project_tasks_partial.html",
+                    {"project": obj, "tasks_page": page_obj},
+                    request=request,
+                )
+                oob_tasks = (
+                    f'<div id="project-tasks-{obj.pk}" hx-swap-oob="innerHTML">'
+                    f'{tasks_html}</div>'
+                )
+                return HttpResponse(oob_tasks)
+
+            # Targeted update for task list (Individual / Sample / Test)
             context = {
                 "individual": individual, 
                 "sample": obj if isinstance(obj, Sample) else None,
@@ -1209,6 +1234,67 @@ def project_individuals_page(request, pk):
     context = _project_individuals_page_context(request, project)
     # Only return table rows; outer template wraps them in <tbody>.
     return render(request, "lab/partials/project_individual_rows.html", context)
+
+
+@login_required
+def task_detail_edit(request, pk):
+    """Return the edit form partial for a task's details."""
+    from .forms import TaskEditForm
+    task = get_object_or_404(Task, pk=pk)
+    form = TaskEditForm(instance=task)
+    return render(request, "lab/task_detail.html#task_details", {
+        "task": task,
+        "form": form,
+        "edit_mode": True,
+    })
+
+
+@login_required
+@require_POST
+def task_detail_save(request, pk):
+    """Save edited task details and return the display partial."""
+    from .forms import TaskEditForm
+    task = get_object_or_404(Task, pk=pk)
+    form = TaskEditForm(request.POST, instance=task)
+    if form.is_valid():
+        task = form.save()
+        selected_statuses = form.cleaned_data.get("statuses")
+        if selected_statuses is not None:
+            task.statuses.set(selected_statuses)
+        task.refresh_from_db()
+        return render(request, "lab/task_detail.html#task_details", {
+            "task": task,
+            "edit_mode": False,
+        })
+    return render(request, "lab/task_detail.html#task_details", {
+        "task": task,
+        "form": form,
+        "edit_mode": True,
+    })
+
+
+@login_required
+def project_tasks_page(request, pk):
+    """Return a paginated tasks partial for the project dropdown."""
+    from .models import Task
+    from django.core.paginator import Paginator
+
+    project = get_object_or_404(Project, pk=pk)
+    per_page = 5
+    tasks_qs = (
+        project.tasks
+        .exclude(statuses__name__iexact="Completed")
+        .select_related("assigned_to")
+        .prefetch_related("statuses")
+        .order_by("-id")
+        .distinct()
+    )
+    paginator = Paginator(tasks_qs, per_page)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
+    return render(request, "lab/partials/project_tasks_partial.html", {
+        "project": project,
+        "tasks_page": page_obj,
+    })
 
 
 @login_required

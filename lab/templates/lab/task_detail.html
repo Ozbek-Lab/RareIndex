@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% load lab_tags %}
+
+{% block content %}
+<div class="p-6 bg-base-200/50 min-h-full">
+    <div class="max-w-5xl mx-auto">
+
+        <!-- Header -->
+        <div class="flex items-start gap-4 mb-6">
+            <a href="{% if task.project %}{% url 'lab:project_detail' task.project.pk %}{% else %}{% url 'lab:project_list' %}{% endif %}"
+               class="btn btn-ghost btn-sm btn-circle mt-1">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div class="flex-1 min-w-0">
+                <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap mb-1">
+                            <span class="text-xs font-bold uppercase tracking-wider text-base-content/40">Task</span>
+                            {% if task.project %}
+                            <span class="text-base-content/30">/</span>
+                            <a href="{% url 'lab:project_detail' task.project.pk %}"
+                               class="text-xs text-primary hover:underline truncate max-w-[200px]">
+                                {{ task.project.name }}
+                            </a>
+                            {% endif %}
+                        </div>
+                        <h1 class="text-2xl font-bold text-base-content leading-tight">{{ task.title }}</h1>
+                        <div class="flex items-center flex-wrap gap-2 mt-2">
+                            <!-- Priority badge -->
+                            {% if task.priority == "urgent" %}
+                            <span class="badge badge-error gap-1 font-medium">
+                                <i class="fa-solid fa-circle-exclamation text-[10px]"></i> Urgent
+                            </span>
+                            {% elif task.priority == "high" %}
+                            <span class="badge badge-warning gap-1 font-medium">
+                                <i class="fa-solid fa-arrow-up text-[10px]"></i> High
+                            </span>
+                            {% elif task.priority == "medium" %}
+                            <span class="badge badge-ghost gap-1 font-medium">
+                                <i class="fa-solid fa-minus text-[10px]"></i> Medium
+                            </span>
+                            {% else %}
+                            <span class="badge badge-ghost gap-1 font-medium opacity-60">
+                                <i class="fa-solid fa-arrow-down text-[10px]"></i> Low
+                            </span>
+                            {% endif %}
+                            <!-- Status badges -->
+                            {% get_object_statuses task as task_statuses %}
+                            {% for s in task_statuses %}
+                            <span class="badge badge-sm gap-1.5 font-normal">
+                                {% if s.icon %}
+                                    <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
+                                {% else %}
+                                    <span class="size-2 rounded-full" style="background-color: {{ s.color }};"></span>
+                                {% endif %}
+                                {{ s.display_name }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        {% if task|has_status:"Completed" %}
+                        <form method="post" action="{% url 'lab:reopen_task' task.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-ghost border border-base-300 gap-2">
+                                <i class="fa-solid fa-rotate-left text-xs"></i>
+                                Reopen
+                            </button>
+                        </form>
+                        {% else %}
+                        <form method="post" action="{% url 'lab:complete_task' task.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-success gap-2">
+                                <i class="fa-solid fa-check text-xs"></i>
+                                Mark Complete
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Meta row -->
+                <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-base-content/50">
+                    <span>
+                        <i class="fa-solid fa-user mr-1"></i>
+                        Assigned to <span class="font-medium text-base-content/70">{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</span>
+                    </span>
+                    <span>
+                        <i class="fa-solid fa-circle-user mr-1"></i>
+                        Created by <span class="font-medium text-base-content/70">{{ task.created_by.get_full_name|default:task.created_by.username }}</span>
+                    </span>
+                    {% if task.due_date %}
+                    <span class="{% if task.due_date < now and not task|has_status:'Completed' %}text-error font-medium{% endif %}">
+                        <i class="fa-solid fa-calendar mr-1"></i>
+                        Due {{ task.due_date|date:"d M Y, H:i" }}
+                    </span>
+                    {% else %}
+                    <span><i class="fa-solid fa-calendar mr-1"></i>No due date</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Main grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+
+            <!-- Left column: Details + Associated Object -->
+            <div class="lg:col-span-3 flex flex-col gap-4">
+
+                <!-- Details card (inline-editable) -->
+                <div class="bg-base-100 rounded-box border border-base-200 p-4">
+                    {% partialdef task_details inline %}
+                    {% if edit_mode %}
+                    <!-- Edit mode -->
+                    <form hx-post="{% url 'lab:task_detail_save' task.pk %}"
+                          hx-target="this"
+                          hx-swap="outerHTML">
+                        {% csrf_token %}
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-semibold text-sm text-base-content/70 uppercase tracking-wider">Details</h3>
+                            <div class="flex gap-2">
+                                <a href="{% url 'lab:task_detail' task.pk %}"
+                                   class="btn btn-ghost btn-xs">Cancel</a>
+                                <button type="submit" class="btn btn-primary btn-xs">Save</button>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <!-- Title -->
+                            <div>
+                                <label class="label py-0 mb-1">
+                                    <span class="label-text text-xs font-medium text-base-content/60">Title</span>
+                                </label>
+                                <input type="text"
+                                       name="title"
+                                       value="{{ form.title.value|default:task.title }}"
+                                       class="input input-bordered input-sm w-full {% if form.title.errors %}input-error{% endif %}"
+                                       required />
+                                {% for e in form.title.errors %}<p class="text-error text-xs mt-0.5">{{ e }}</p>{% endfor %}
+                            </div>
+                            <!-- Description -->
+                            <div>
+                                <label class="label py-0 mb-1">
+                                    <span class="label-text text-xs font-medium text-base-content/60">Description</span>
+                                </label>
+                                <textarea name="description"
+                                          class="textarea textarea-bordered textarea-sm w-full leading-normal"
+                                          rows="4"
+                                          placeholder="Add a description…">{{ form.description.value|default:task.description }}</textarea>
+                            </div>
+                            <!-- Priority + Assigned To (2 col) -->
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="label py-0 mb-1">
+                                        <span class="label-text text-xs font-medium text-base-content/60">Priority</span>
+                                    </label>
+                                    <select name="priority" class="select select-bordered select-sm w-full">
+                                        {% for val, label in form.fields.priority.choices %}
+                                        <option value="{{ val }}" {% if val == task.priority %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="label py-0 mb-1">
+                                        <span class="label-text text-xs font-medium text-base-content/60">Assigned To</span>
+                                    </label>
+                                    <select name="assigned_to" class="select select-bordered select-sm w-full">
+                                        {% for user in form.fields.assigned_to.queryset %}
+                                        <option value="{{ user.pk }}" {% if user.pk == task.assigned_to_id %}selected{% endif %}>
+                                            {{ user.get_full_name|default:user.username }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <!-- Due Date -->
+                            <div>
+                                <label class="label py-0 mb-1">
+                                    <span class="label-text text-xs font-medium text-base-content/60">Due Date</span>
+                                </label>
+                                <input type="datetime-local"
+                                       name="due_date"
+                                       value="{{ form.due_date.value|default:'' }}"
+                                       class="input input-bordered input-sm w-full" />
+                            </div>
+                            <!-- Statuses -->
+                            <div>
+                                <label class="label py-0 mb-1">
+                                    <span class="label-text text-xs font-medium text-base-content/60">Statuses</span>
+                                </label>
+                                <select name="statuses" multiple class="select select-bordered select-sm w-full h-24">
+                                    {% for status in form.fields.statuses.queryset %}
+                                    <option value="{{ status.pk }}"
+                                        {% if status in task.statuses.all %}selected{% endif %}>
+                                        {{ status.display_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <p class="text-xs text-base-content/40 mt-0.5">Hold Ctrl/Cmd to select multiple</p>
+                            </div>
+                        </div>
+                    </form>
+
+                    {% else %}
+                    <!-- Display mode -->
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-semibold text-sm text-base-content/70 uppercase tracking-wider">Details</h3>
+                            <button class="btn btn-ghost btn-xs gap-1"
+                                    hx-get="{% url 'lab:task_detail_edit' task.pk %}"
+                                    hx-target="this"
+                                    hx-swap="outerHTML">
+                                <i class="fa-solid fa-pencil text-[10px]"></i>
+                                Edit
+                            </button>
+                        </div>
+                        <!-- Description -->
+                        <div class="mb-4">
+                            {% if task.description %}
+                            <p class="text-sm text-base-content/70 whitespace-pre-wrap leading-relaxed">{{ task.description }}</p>
+                            {% else %}
+                            <p class="text-sm text-base-content/30 italic">No description provided.</p>
+                            {% endif %}
+                        </div>
+                        <!-- Attributes grid -->
+                        <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm border-t border-base-200 pt-4">
+                            <div>
+                                <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider block mb-0.5">Priority</span>
+                                <span class="capitalize font-medium">{{ task.get_priority_display }}</span>
+                            </div>
+                            <div>
+                                <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider block mb-0.5">Assigned To</span>
+                                <span>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</span>
+                            </div>
+                            <div>
+                                <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider block mb-0.5">Due Date</span>
+                                <span>{{ task.due_date|date:"d M Y, H:i"|default:"Not set" }}</span>
+                            </div>
+                            <div>
+                                <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider block mb-0.5">Created By</span>
+                                <span>{{ task.created_by.get_full_name|default:task.created_by.username }}</span>
+                            </div>
+                            <div class="col-span-2">
+                                <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider block mb-0.5">Statuses</span>
+                                <div class="flex flex-wrap gap-1.5">
+                                    {% get_object_statuses task as task_statuses_detail %}
+                                    {% for s in task_statuses_detail %}
+                                    <span class="badge badge-sm gap-1.5 font-normal">
+                                        {% if s.icon %}
+                                            <i class="fa-solid {{ s.icon }} text-xs" style="color: {{ s.color }};"></i>
+                                        {% else %}
+                                            <span class="size-2 rounded-full" style="background-color: {{ s.color }};"></span>
+                                        {% endif %}
+                                        {{ s.display_name }}
+                                    </span>
+                                    {% empty %}
+                                    <span class="text-base-content/30 italic text-xs">None</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endpartialdef %}
+                </div>
+
+                <!-- Associated object card -->
+                {% if task.content_object %}
+                <div class="bg-base-100 rounded-box border border-base-200 p-4">
+                    <h3 class="font-semibold text-sm text-base-content/70 uppercase tracking-wider mb-3">Associated With</h3>
+                    <div class="flex items-center gap-3">
+                        <div class="bg-primary/10 rounded-lg p-2">
+                            <i class="fa-solid fa-link text-primary text-sm"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-base-content/40 uppercase font-medium tracking-wider">{{ task.content_type.model|title }}</p>
+                            <p class="text-sm font-medium text-base-content">{{ task.content_object }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+
+            <!-- Right column: Notes -->
+            <div class="lg:col-span-2">
+                <div class="bg-base-100 rounded-box border border-base-200 p-4">
+                    <h3 class="font-semibold text-sm text-base-content/70 uppercase tracking-wider mb-3">
+                        <i class="fa-solid fa-comment-dots mr-1.5"></i>Notes
+                    </h3>
+                    {% get_content_type_id task as task_ct %}
+                    {% include "lab/partials/notes/list.html" with notes=task.notes|visible_to:user object=task content_type="Task" %}
+                </div>
+            </div>
+        </div>
+
+        <!-- History -->
+        <div class="bg-base-100 rounded-box border border-base-200 p-4 mt-4">
+            <h3 class="font-semibold text-sm text-base-content/70 uppercase tracking-wider mb-4">
+                <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>History
+            </h3>
+            {% include "lab/partials/tabs/_history.html" %}
+        </div>
+
+    </div>
+</div>
+{% endblock %}

@@ -1,163 +1,271 @@
-from django.core.management.base import BaseCommand
+"""Clear all non-essential data from the database.
+
+Deletion order respects FK constraints:
+  1  Variant subclasses → Variant base → Gene
+  2  AnalysisReport / AnalysisRequestForm
+  3  Analysis → Pipeline → Test → Sample
+  4  CrossIdentifier → Individual (after nullifying self-refs) → Family
+  5  Note · Task · TaggedStatus · Project
+  6  Status (preserving defaults) · StatusGroup
+  7  Lookup tables: AnalysisType, PipelineType, TestType, SampleType, IdentifierType
+  8  Institution
+  9  Ontologies (optional, --keep-ontologies)
+ 10  Non-superuser Users
+
+Flags:
+  --include-history   Also wipe simple_history records for our apps
+  --keep-genes        Keep HGNC Gene data
+  --keep-ontologies   Keep Ontology / Term data
+  --yes               Skip the confirmation prompt
+"""
+
 from django.contrib.auth.models import User
-from lab.models import (
-    Task,
-    Project,
-    Note,
-    TestType,
-    SampleType,
-    Institution,
-    Family,
-    Status,
-    Individual,
-    Sample,
-    Test,
-    PipelineType,
-    Pipeline,
-    Analysis,
-    AnalysisType,
-    AnalysisReport,
-    AnalysisRequestForm,
-    IdentifierType,
-    CrossIdentifier,
-)
+from django.core.management.base import BaseCommand
+
 from lab import history_notifications
 from simple_history.signals import post_create_historical_record
 
 
+DEFAULT_STATUSES = [
+    "Registered", "Active", "Completed", "Cancelled",
+    "Pending", "In Progress", "Awaiting Data Arrival",
+]
+
+
 class Command(BaseCommand):
-    help = (
-        "Clear all entries from the database except the superuser and default statuses"
-    )
+    help = "Clear all entries from the database except the superuser and default statuses."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--include-history",
+            action="store_true",
+            help="Also delete simple_history historical records for lab / variant models.",
+        )
+        parser.add_argument(
+            "--keep-genes",
+            action="store_true",
+            help="Keep imported HGNC Gene data.",
+        )
+        parser.add_argument(
+            "--keep-ontologies",
+            action="store_true",
+            help="Keep loaded Ontology / Term / Synonym / Relationship data.",
+        )
+        parser.add_argument(
+            "--yes", "-y",
+            action="store_true",
+            dest="yes",
+            help="Skip the confirmation prompt.",
+        )
 
     def handle(self, *args, **options):
-        self.stdout.write("Clearing database...")
+        if not options["yes"]:
+            confirm = input(
+                "This will delete ALL lab data (variants, individuals, analyses, etc.).\n"
+                "Type 'yes' to continue: "
+            )
+            if confirm.strip().lower() != "yes":
+                self.stdout.write(self.style.WARNING("Aborted."))
+                return
 
-        # Delete Variant related data FIRST because Variant depends on Analysis, Individual, etc.
-        self.stdout.write("Deleting Variant related entries...")
-        try:
-            from variant.models import Variant, SNV, CNV, SV, Repeat, Gene, Classification, Annotation
-            
-            Classification.objects.all().delete()
-            Annotation.objects.all().delete()
-            SNV.objects.all().delete()
-            CNV.objects.all().delete()
-            SV.objects.all().delete()
-            Repeat.objects.all().delete()
-            Variant.objects.all().delete()
-            Gene.objects.all().delete()
-        except ImportError:
-            self.stdout.write("Variant models not found, skipping...")
-
-        # Delete all data in reverse order of dependencies
-        self.stdout.write("Deleting Analysis entries...")
-        Analysis.objects.all().delete()
-        self.stdout.write("Deleting AnalysisReport entries...")
-        AnalysisReport.objects.all().delete()
-        self.stdout.write("Deleting AnalysisRequestForm entries...")
-        AnalysisRequestForm.objects.all().delete()
-        self.stdout.write("Deleting AnalysisType entries...")
-        AnalysisType.objects.all().delete()
-
-        self.stdout.write("Deleting Pipeline entries...")
-        Pipeline.objects.all().delete()
-
-        self.stdout.write("Deleting PipelineType entries...")
-        PipelineType.objects.all().delete()
-
-        self.stdout.write("Deleting Test entries...")
-        Test.objects.all().delete()
-
-        self.stdout.write("Deleting Sample entries...")
-        Sample.objects.all().delete()
-
-        # First nullify the self-referential fields and related FKs
-        self.stdout.write("Nullifying Individual self-references...")
-        Individual.objects.all().update(mother=None, father=None)
-        self.stdout.write("Nullifying Sample.individual...")
-        Sample.objects.all().update(individual=None)
-        self.stdout.write("Nullifying Test.sample...")
-        Test.objects.all().update(sample=None)
-        self.stdout.write("Nullifying Analysis.pipeline...")
-        Analysis.objects.all().update(pipeline=None)
-        self.stdout.write("Nullifying Pipeline.test...")
-        Pipeline.objects.all().update(test=None)
-        # Nullifying CrossIdentifier.individual is not possible due to NOT NULL constraint; delete instead
-        self.stdout.write("Deleting CrossIdentifier entries...")
-        CrossIdentifier.objects.all().delete()
-
-        # Temporarily disconnect history notification signal to avoid errors during destructive delete
+        # Disconnect history signal to prevent notification errors during bulk deletes
         post_create_historical_record.disconnect(
             receiver=history_notifications.notify_on_history
         )
         try:
-            # Delete all Task objects before deleting Project objects
-            self.stdout.write("Deleting Task entries...")
-            Task.objects.all().delete()
-            self.stdout.write("Deleting Project entries...")
-            Project.objects.all().delete()
-
-            # Delete all objects that reference Status before deleting Status itself
-            self.stdout.write("Deleting Analysis entries...")
-            Analysis.objects.all().delete()
-            self.stdout.write("Deleting Pipeline entries...")
-            Pipeline.objects.all().delete()
-            self.stdout.write("Deleting Test entries...")
-            Test.objects.all().delete()
-            self.stdout.write("Deleting Sample entries...")
-            Sample.objects.all().delete()
-            self.stdout.write("Deleting Individual entries...")
-            Individual.objects.all().delete()
+            self._clear(options)
         finally:
-            # Reconnect the signal after deletion
             post_create_historical_record.connect(
                 receiver=history_notifications.notify_on_history
             )
 
-        # Preserve default baseline statuses
-        # These are generic status names that are reused across models
-        # and recreated by management commands if missing.
-        default_statuses = ["Registered", "Active", "Completed", "Cancelled", "Pending", "In Progress"]
-        self.stdout.write("Preserving default statuses...")
-        Status.objects.exclude(name__in=default_statuses).delete()
+        self.stdout.write(self.style.SUCCESS("Database cleared successfully."))
 
-        self.stdout.write("Deleting Institution entries...")
-        Institution.objects.all().delete()
+    # ------------------------------------------------------------------
 
-        self.stdout.write("Deleting SampleType entries...")
-        SampleType.objects.all().delete()
+    def _delete(self, qs, label: str):
+        count, _ = qs.delete()
+        self.stdout.write(f"  Deleted {count:>6}  {label}")
 
-        self.stdout.write("Deleting TestType entries...")
-        TestType.objects.all().delete()
+    def _clear(self, options):
+        from lab.models import (
+            Analysis,
+            AnalysisReport,
+            AnalysisRequestForm,
+            AnalysisType,
+            CrossIdentifier,
+            Family,
+            IdentifierType,
+            Individual,
+            Institution,
+            Note,
+            Pipeline,
+            PipelineType,
+            Project,
+            Sample,
+            SampleType,
+            Status,
+            StatusGroup,
+            TaggedStatus,
+            Task,
+            Test,
+            TestType,
+        )
+        from variant.models import (
+            Annotation,
+            Classification,
+            CNV,
+            delins,
+            Gene,
+            Repeat,
+            SNV,
+            SV,
+            Variant,
+        )
 
-        # Delete IdentifierTypes after CrossIdentifiers
-        self.stdout.write("Deleting IdentifierType entries...")
-        IdentifierType.objects.all().delete()
+        # ── 1. Variant data ───────────────────────────────────────────
+        self.stdout.write("Phase 1: Variant data")
+        self._delete(Classification.objects.all(), "Classification")
+        self._delete(Annotation.objects.all(), "Annotation")
+        # Delete concrete subclasses before the polymorphic base
+        self._delete(SNV.objects.all(), "SNV")
+        self._delete(CNV.objects.all(), "CNV")
+        self._delete(SV.objects.all(), "SV")
+        self._delete(Repeat.objects.all(), "Repeat")
+        self._delete(delins.objects.all(), "delins")
+        self._delete(Variant.objects.all(), "Variant (base)")
+        if not options["keep_genes"]:
+            self._delete(Gene.objects.all(), "Gene")
 
-        self.stdout.write("Deleting Note entries...")
-        Note.objects.all().delete()
+        # ── 2. Reports and request forms ──────────────────────────────
+        self.stdout.write("Phase 2: Reports / request forms")
+        self._delete(AnalysisReport.objects.all(), "AnalysisReport")
+        self._delete(AnalysisRequestForm.objects.all(), "AnalysisRequestForm")
 
-        self.stdout.write("Deleting Project entries...")
-        Project.objects.all().delete()
+        # ── 3. Analysis chain (leaf → root) ───────────────────────────
+        self.stdout.write("Phase 3: Analysis → Pipeline → Test → Sample")
+        # Analysis.performed_by is M2M — cleared automatically on delete
+        self._delete(Analysis.objects.all(), "Analysis")
+        self._delete(Pipeline.objects.all(), "Pipeline")
+        self._delete(Test.objects.all(), "Test")
+        self._delete(Sample.objects.all(), "Sample")
 
-        # Delete objects with required User references before nullifying others
-        self.stdout.write("Deleting objects with required User references...")
-        Family.objects.all().delete()  # Family has NOT NULL created_by
-        Sample.objects.all().delete()  # Sample has NOT NULL created_by
-        Test.objects.all().delete()  # Test has NOT NULL created_by
-        Analysis.objects.all().delete()  # Analysis has NOT NULL created_by
-        Pipeline.objects.all().delete()  # Pipeline has NOT NULL created_by
-        Project.objects.all().delete()  # Project has NOT NULL created_by
-        Note.objects.all().delete()  # Note has NOT NULL created_by
-        Institution.objects.all().delete()  # Institution has NOT NULL created_by
-        SampleType.objects.all().delete()  # SampleType has NOT NULL created_by
-        TestType.objects.all().delete()  # TestType has NOT NULL created_by
-        PipelineType.objects.all().delete()  # PipelineType has NOT NULL created_by
-        IdentifierType.objects.all().delete()  # IdentifierType has NOT NULL created_by
-        Individual.objects.all().delete()  # Individual has NOT NULL created_by
+        # ── 4. Individuals ────────────────────────────────────────────
+        self.stdout.write("Phase 4: CrossIdentifier → Individual → Family")
+        # Nullify self-referential FKs before deletion
+        Individual.objects.all().update(mother=None, father=None)
+        self._delete(CrossIdentifier.objects.all(), "CrossIdentifier")
+        self._delete(Individual.objects.all(), "Individual")
+        self._delete(Family.objects.all(), "Family")
 
-        # Keep superuser, delete other users
-        self.stdout.write("Deleting non-superuser User entries...")
-        User.objects.filter(is_superuser=False).delete()
+        # ── 5. Notes / Tasks / TaggedStatuses / Projects ──────────────
+        self.stdout.write("Phase 5: Notes · Tasks · TaggedStatuses · Projects")
+        self._delete(Note.objects.all(), "Note")
+        self._delete(Task.objects.all(), "Task")
+        self._delete(TaggedStatus.objects.all(), "TaggedStatus")
+        self._delete(Project.objects.all(), "Project")
 
-        self.stdout.write(self.style.SUCCESS("Successfully cleared database"))
+        # ── 6. Statuses ───────────────────────────────────────────────
+        self.stdout.write("Phase 6: Status · StatusGroup")
+        removed, _ = Status.objects.exclude(name__in=DEFAULT_STATUSES).delete()
+        self.stdout.write(f"  Deleted {removed:>6}  Status (non-default)")
+        self.stdout.write(f"  Kept           Status (defaults: {DEFAULT_STATUSES})")
+        self._delete(StatusGroup.objects.all(), "StatusGroup")
+
+        # ── 7. Lookup / type tables ───────────────────────────────────
+        self.stdout.write("Phase 7: Lookup tables")
+        self._delete(AnalysisType.objects.all(), "AnalysisType")
+        self._delete(PipelineType.objects.all(), "PipelineType")
+        self._delete(TestType.objects.all(), "TestType")
+        self._delete(SampleType.objects.all(), "SampleType")
+        self._delete(IdentifierType.objects.all(), "IdentifierType")
+
+        # ── 8. Institutions ───────────────────────────────────────────
+        self.stdout.write("Phase 8: Institution")
+        self._delete(Institution.objects.all(), "Institution")
+
+        # ── 9. Ontologies (optional) ──────────────────────────────────
+        if not options["keep_ontologies"]:
+            self.stdout.write("Phase 9: Ontologies")
+            try:
+                from ontologies.models import (
+                    CrossReference,
+                    Relationship,
+                    Synonym,
+                    Term,
+                    Ontology,
+                )
+                self._delete(CrossReference.objects.all(), "CrossReference")
+                self._delete(Relationship.objects.all(), "Relationship")
+                self._delete(Synonym.objects.all(), "Synonym")
+                self._delete(Term.objects.all(), "Term")
+                self._delete(Ontology.objects.all(), "Ontology")
+            except ImportError:
+                self.stdout.write("  ontologies app not found, skipping.")
+        else:
+            self.stdout.write("Phase 9: Ontologies — kept (--keep-ontologies).")
+
+        # ── 10. simple_history records (optional) ─────────────────────
+        if options["include_history"]:
+            self.stdout.write("Phase 10: Historical records")
+            self._clear_history()
+
+        # ── 11. Users ─────────────────────────────────────────────────
+        self.stdout.write("Phase 11: Users")
+        self._delete(User.objects.filter(is_superuser=False), "User (non-superuser)")
+
+    def _clear_history(self):
+        """Delete all simple_history records for lab and variant models."""
+        from lab.models import (
+            HistoricalAnalysis,
+            HistoricalAnalysisReport,
+            HistoricalAnalysisRequestForm,
+            HistoricalAnalysisType,
+            HistoricalCrossIdentifier,
+            HistoricalFamily,
+            HistoricalIdentifierType,
+            HistoricalIndividual,
+            HistoricalInstitution,
+            HistoricalNote,
+            HistoricalPipeline,
+            HistoricalPipelineType,
+            HistoricalProject,
+            HistoricalSample,
+            HistoricalSampleType,
+            HistoricalStatus,
+            HistoricalStatusGroup,
+            HistoricalTask,
+            HistoricalTest,
+            HistoricalTestType,
+        )
+        lab_historical = [
+            HistoricalAnalysis, HistoricalAnalysisReport, HistoricalAnalysisRequestForm,
+            HistoricalAnalysisType, HistoricalCrossIdentifier, HistoricalFamily,
+            HistoricalIdentifierType, HistoricalIndividual, HistoricalInstitution,
+            HistoricalNote, HistoricalPipeline, HistoricalPipelineType,
+            HistoricalProject, HistoricalSample, HistoricalSampleType,
+            HistoricalStatus, HistoricalStatusGroup, HistoricalTask,
+            HistoricalTest, HistoricalTestType,
+        ]
+        for model in lab_historical:
+            self._delete(model.objects.all(), model.__name__)
+
+        try:
+            from variant.models import (
+                HistoricalAnnotation,
+                HistoricalClassification,
+                HistoricalCNV,
+                Historicaldelins,
+                HistoricalRepeat,
+                HistoricalSNV,
+                HistoricalSV,
+                HistoricalVariant,
+            )
+            for model in [
+                HistoricalAnnotation, HistoricalClassification, HistoricalCNV,
+                Historicaldelins, HistoricalRepeat, HistoricalSNV,
+                HistoricalSV, HistoricalVariant,
+            ]:
+                self._delete(model.objects.all(), model.__name__)
+        except ImportError:
+            pass

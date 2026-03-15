@@ -4,6 +4,7 @@
   x-data="{ 
         expanded: JSON.parse(localStorage.getItem('filterSidebarExpanded')) || {
             'individual': true, 
+            'institution': false,
             'sample': false, 
             'test': false, 
             'pipeline': false, 
@@ -182,6 +183,113 @@
               <!-- Results injected here -->
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Institution Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.institution" @change.stop />
+      <div
+        class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent"
+      >
+        <span>Institution</span>
+        <span
+          @click.stop="expanded.institution = !expanded.institution"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10"
+          ><i
+            class="fa-solid fa-chevron-right transition-transform duration-200"
+            :class="{ 'rotate-90': expanded.institution }"
+          ></i
+        ></span>
+      </div>
+      <div class="collapse-content">
+        <div class="space-y-6 pt-2">
+
+          <!-- Name search -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
+              Name
+            </h3>
+            <label class="input input-bordered input-sm flex items-center w-full rounded-lg">
+              <input
+                type="text"
+                name="institution_name"
+                class="grow min-w-0"
+                placeholder="Search institution…"
+                value="{{ request.GET.institution_name|default:'' }}"
+                @keyup.debounce.500ms="$el.closest('form').dispatchEvent(new Event('filter-changed', {bubbles:true}))"
+                autocomplete="off"
+              />
+              {% if request.GET.institution_name %}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content -mr-2"
+                  @click="$el.previousElementSibling.value=''; $el.closest('form').dispatchEvent(new Event('filter-changed', {bubbles:true}))"
+                >
+                  <i class="fa-solid fa-times"></i>
+                </button>
+              {% endif %}
+              <div class="text-base-content/40">
+                <i class="fa-solid fa-search text-xs"></i>
+              </div>
+            </label>
+          </div>
+
+          <!-- City -->
+          {% with choices=filter.form.institution__city.field.choices %}
+            {% if choices %}
+              <div class="space-y-2">
+                <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
+                  City
+                </h3>
+                <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
+                  {% for value, label in choices %}
+                    {% with count=filter_counts.institution_city|get_item:value %}
+                      {% include "lab/components/tristate_status_pill.html" with name="institution__city" value=value label=label count=count current_values=request.GET|get_list:'institution__city' excluded_values=request.GET|get_list:'institution__city__exclude' %}
+                    {% endwith %}
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          {% endwith %}
+
+          <!-- Speciality -->
+          {% with choices=filter.form.institution__speciality.field.choices %}
+            {% if choices %}
+              <div class="space-y-2">
+                <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
+                  Speciality
+                </h3>
+                <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
+                  {% for value, label in choices %}
+                    {% with count=filter_counts.institution_speciality|get_item:value %}
+                      {% include "lab/components/tristate_status_pill.html" with name="institution__speciality" value=value label=label count=count current_values=request.GET|get_list:'institution__speciality' excluded_values=request.GET|get_list:'institution__speciality__exclude' %}
+                    {% endwith %}
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          {% endwith %}
+
+          <!-- Center -->
+          {% with choices=filter.form.institution__center_name.field.choices %}
+            {% if choices %}
+              <div class="space-y-2">
+                <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
+                  Center
+                </h3>
+                <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
+                  {% for value, label in choices %}
+                    {% with count=filter_counts.institution_center|get_item:value %}
+                      {% include "lab/components/tristate_status_pill.html" with name="institution__center_name" value=value label=label count=count current_values=request.GET|get_list:'institution__center_name' excluded_values=request.GET|get_list:'institution__center_name__exclude' %}
+                    {% endwith %}
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          {% endwith %}
+
         </div>
       </div>
     </div>

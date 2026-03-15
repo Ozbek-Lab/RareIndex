@@ -1,524 +1,505 @@
+"""Generate realistic sample data for development and testing.
+
+Prerequisite checkpoints (mirrors import_all.py Step 0 / Step 1):
+  0a  Load ontologies_data.json fixture if ontology table is empty
+  0b  Import HGNC gene data if Gene table is empty
+  0c  Run ozbek_set_id_priorities so IdentifierType priorities are configured
+"""
+
 import random
-import time
 from datetime import timedelta
-from django.core.management.base import BaseCommand
-from django.contrib.auth.models import User
-from django.utils import timezone
+
+from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.core.management import call_command
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+
 from lab.models import (
-    Family,
-    Individual,
-    Sample,
-    Test,
-    Status,
-    SampleType,
-    Institution,
-    TestType,
-    PipelineType,
-    Pipeline,
-    Project,
-    Task,
-    IdentifierType,
-    CrossIdentifier,
-    Note,
     Analysis,
     AnalysisType,
+    CrossIdentifier,
+    Family,
+    IdentifierType,
+    Individual,
+    Institution,
+    Note,
+    Pipeline,
+    PipelineType,
+    Project,
+    Sample,
+    SampleType,
+    Status,
+    Task,
+    Test,
+    TestType,
 )
-from ontologies.models import Term
+from ontologies.models import Ontology, Term
+from variant.models import Classification, Gene, SNV
+
+User = get_user_model()
+
 
 class Command(BaseCommand):
-    help = 'Generate sample data for testing'
+    help = "Generate sample data for testing"
 
     def add_arguments(self, parser):
-        parser.add_argument('--families', type=int, default=15, help='Number of families to create')
-        parser.add_argument('--samples-per-individual', type=int, default=2, help='Number of samples per individual')
-        parser.add_argument('--tests-per-sample', type=int, default=2, help='Number of tests per sample')
-        parser.add_argument('--pipelines-per-test', type=int, default=1, help='Number of pipelines per test')
-        parser.add_argument('--analyses-per-pipeline', type=int, default=1, help='Number of analyses per pipeline')
-        parser.add_argument('--variants-per-analysis', type=int, default=2, help='Number of variants per analysis')
-        parser.add_argument('--tasks-per-object', type=int, default=1, help='Number of tasks per object')
+        parser.add_argument("--families", type=int, default=15,
+                            help="Number of families to create")
+        parser.add_argument("--samples-per-individual", type=int, default=1,
+                            help="Number of samples per individual")
+        parser.add_argument("--tests-per-sample", type=int, default=2,
+                            help="Number of tests per sample")
+        parser.add_argument("--pipelines-per-test", type=int, default=1,
+                            help="Number of pipelines per test")
+        parser.add_argument("--analyses-per-pipeline", type=int, default=1,
+                            help="Number of analyses per pipeline")
+        parser.add_argument("--variants-per-analysis", type=int, default=1,
+                            help="Number of variants per analysis")
+        parser.add_argument("--tasks-per-object", type=int, default=1,
+                            help="Number of tasks per object")
+        parser.add_argument("--skip-hgnc", dest="skip_hgnc", action="store_true",
+                            help="Skip HGNC gene data download check")
+
+    # ------------------------------------------------------------------
+    # Entry point
+    # ------------------------------------------------------------------
 
     def handle(self, *args, **options):
-        # Get or create default user
-        user = User.objects.first()
+        # ── Checkpoint 0a: ontologies ──────────────────────────────────
+        self._ensure_ontologies()
+
+        # ── Checkpoint 0b: HGNC genes ─────────────────────────────────
+        if not options["skip_hgnc"]:
+            if not Gene.objects.exists():
+                self.stdout.write(self.style.WARNING(
+                    "Step 0b: Gene table empty — running import_hgnc_data…"))
+                call_command("import_hgnc_data")
+            else:
+                self.stdout.write("Step 0b: Gene table already populated.")
+
+        # ── Checkpoint 0c: ID priorities ──────────────────────────────
+        self.stdout.write("Step 0c: Setting ID priorities…")
+        call_command("ozbek_set_id_priorities")
+
+        # ── Users ──────────────────────────────────────────────────────
+        user = User.objects.filter(is_superuser=True).first()
         if not user:
-            self.stdout.write('Creating default superuser...')
-            user = User.objects.create_superuser('admin', 'admin@example.com', 'admin')
-            self.stdout.write('Creating pleb user...')
-            pleb = User.objects.create_user('pleb', 'pleb@example.com', 'pleb')
-            self.stdout.write('Creating normal user...')
-            normal = User.objects.create_user('normal', 'normal@example.com', 'normal')
+            self.stdout.write("Creating default superuser…")
+            user = User.objects.create_superuser("admin", "admin@example.com", "admin")
+        if not User.objects.filter(username="pleb").exists():
+            self.stdout.write("Creating pleb user…")
+            User.objects.create_user("pleb", "pleb@example.com", "pleb")
+        if not User.objects.filter(username="normal").exists():
+            self.stdout.write("Creating normal user…")
+            User.objects.create_user("normal", "normal@example.com", "normal")
 
-        # Create statuses if they don't exist
-        all_statuses = self._create_statuses(user)
-
-        # Create sample types if they don't exist
-        sample_types = self._create_sample_types(user)
-
-        # Create test types if they don't exist
-        test_types = self._create_test_types(user)
-
-        # Create pipeline types if they don't exist
-        pipeline_types = self._create_pipeline_types(user)
-
-        # Create analysis types if they don't exist
-        analysis_types = self._create_analysis_types(user)
-
-        # Create institution if it doesn't exist
-        institution = self._get_or_create_institution(user)
-
-        # Create 'Ongoing' status for Project if it doesn't exist
-        project_content_type = ContentType.objects.get_for_model(Project)
-        project_status, _ = Status.objects.get_or_create(
-            name='Ongoing',
-            content_type=project_content_type,
-            defaults={
-                'color': 'purple',
-                'created_by': user
-            }
-        )
-
-        # Create a project with 'Ongoing' status
-        project = self._create_project(user, project_status)
-
-        # Create identifier types if they don't exist
+        # ── Setup ──────────────────────────────────────────────────────
+        all_statuses    = self._create_statuses(user)
+        sample_types    = self._create_sample_types(user)
+        test_types      = self._create_test_types(user)
+        pipeline_types  = self._create_pipeline_types(user)
+        analysis_types  = self._create_analysis_types(user)
+        institution     = self._get_or_create_institution(user)
+        project         = self._create_project(user, all_statuses)
         identifier_types = self._create_identifier_types(user)
 
-        # Get a random selection of HPO terms to use
-        hpo_terms = list(Term.objects.filter(ontology__type=1).order_by('?')[:50])  # Get 50 random HPO terms
-        self.stdout.write(f"Found {len(hpo_terms)} HPO terms to use")
+        hpo_terms = list(Term.objects.filter(ontology__type=1).order_by("?")[:50])
+        self.stdout.write(f"HPO terms available: {len(hpo_terms)}")
         if not hpo_terms:
-            self.stdout.write(self.style.WARNING('No HPO terms found in database!'))
-            # Continue anyway, hpo_terms will be empty
+            self.stdout.write(self.style.WARNING(
+                "No HPO terms found — run generate_sample_data after loading ontologies."))
 
-        # Generate families and their members
-
-        # Keep track of all individuals we create so we can
-        # associate them with the demo project via the
-        # Project.individuals many-to-many relation.
+        # ── Families ──────────────────────────────────────────────────
         all_individuals = []
-        for i in range(options['families']):
-            # Generate unique family ID that doesn't conflict with existing ones
-            family_id = self._generate_unique_family_id(i+1)
-            
-            # Family creation date - start of the process
-            family_creation_date = timezone.now() - timedelta(days=100)
-            family = self._create_family(family_id, user, family_creation_date)
-            self._create_note(family, user, creation_date=family_creation_date)
-            self._create_tasks(family, user, all_statuses, project, options['tasks_per_object'], family_creation_date)
-            
-            # Mother creation date - after family creation
-            mother_creation_date = family_creation_date + timedelta(days=random.randint(1, 3))
-            mother = self._create_individual("Mother", family, user, institution, all_statuses['individual']['registered'], hpo_terms, is_index=False, creation_date=mother_creation_date)
-            self._create_note(mother, user, creation_date=mother_creation_date)
-            self._create_identifiers(mother, identifier_types, f"{family_id}.2", f"RD3.F{i+1:02d}.2", user )
-            
-            # Father creation date - after family creation
-            father_creation_date = family_creation_date + timedelta(days=random.randint(1, 3))
-            father = self._create_individual("Father", family, user, institution, all_statuses['individual']['registered'], hpo_terms, is_index=False, creation_date=father_creation_date)
-            self._create_note(father, user, creation_date=father_creation_date)
-            self._create_identifiers(father, identifier_types, f"{family_id}.3", f"RD3.F{i+1:02d}.3", user)
+        for i in range(options["families"]):
+            family_id = self._generate_unique_family_id(i + 1)
+            family_date = timezone.now() - timedelta(days=100)
+            family = self._create_family(family_id, user)
+            self._create_note(family, user)
+            self._create_tasks(family, user, all_statuses, project,
+                                options["tasks_per_object"], family_date)
+
+            mother_date = family_date + timedelta(days=random.randint(1, 3))
+            mother = self._create_individual(
+                "Mother", family, user, institution,
+                all_statuses["individual"]["registered"],
+                hpo_terms, is_index=False, creation_date=mother_date)
+            self._create_note(mother, user)
+            self._create_identifiers(
+                mother, identifier_types, f"{family_id}.2",
+                f"RD3.F{i+1:02d}.2", user)
+
+            father_date = family_date + timedelta(days=random.randint(1, 3))
+            father = self._create_individual(
+                "Father", family, user, institution,
+                all_statuses["individual"]["registered"],
+                hpo_terms, is_index=False, creation_date=father_date)
+            self._create_note(father, user)
+            self._create_identifiers(
+                father, identifier_types, f"{family_id}.3",
+                f"RD3.F{i+1:02d}.3", user)
             all_individuals.extend([mother, father])
-            multi_child = (i % 2 == 0)
             children = []
-            if multi_child:
+            if i % 2 == 0:
                 for child_num in range(1, 3):
-                    child_creation_date = family_creation_date + timedelta(days=random.randint(2, 5))
+                    child_date = family_date + timedelta(days=random.randint(2, 5))
                     proband = self._create_individual(
-                        f"Proband{child_num}", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True, creation_date=child_creation_date
-                    )
-                    self._create_note(proband, user, creation_date=child_creation_date)
-                    rb_code = f"{family_id}.1.{child_num}"
-                    biobank_code = f"RD3.F{i+1:02d}.1.{child_num}"
-                    self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
+                        f"Proband{child_num}", family, user, institution,
+                        all_statuses["individual"]["active"],
+                        hpo_terms, mother=mother, father=father,
+                        is_index=True, creation_date=child_date)
+                    self._create_note(proband, user)
+                    self._create_identifiers(
+                        proband, identifier_types,
+                        f"{family_id}.1.{child_num}",
+                        f"RD3.F{i+1:02d}.1.{child_num}", user)
                     children.append(proband)
             else:
-                child_creation_date = family_creation_date + timedelta(days=random.randint(2, 5))
+                child_date = family_date + timedelta(days=random.randint(2, 5))
                 proband = self._create_individual(
-                    "Proband", family, user, institution, all_statuses['individual']['active'], hpo_terms, mother=mother, father=father, is_index=True, creation_date=child_creation_date
-                )
-                self._create_note(proband, user, creation_date=child_creation_date)
-                rb_code = f"{family_id}.1.1"
-                biobank_code = f"RD3.F{i+1:02d}.1.1"
-                self._create_identifiers(proband, identifier_types, rb_code, biobank_code, user)
+                    "Proband", family, user, institution,
+                    all_statuses["individual"]["active"],
+                    hpo_terms, mother=mother, father=father,
+                    is_index=True, creation_date=child_date)
+                self._create_note(proband, user)
+                self._create_identifiers(
+                    proband, identifier_types, f"{family_id}.1.1",
+                    f"RD3.F{i+1:02d}.1.1", user)
                 children.append(proband)
             all_individuals.extend(children)
-            for individual in [mother, father] + children:
-                # Create tasks for individual with future dates based on individual creation
-                individual_created_at = individual.get_created_at()
-                if individual_created_at:
-                    individual_base_date = individual_created_at + timedelta(days=random.randint(1, 21))
-                else:
-                    individual_base_date = timezone.now() - timedelta(days=random.randint(1, 21))
-                self._create_tasks(individual, user, all_statuses, project, options['tasks_per_object'], individual_base_date)
-            
-            for individual in [mother, father] + children:
+            for ind in [mother, father] + children:
+                base_date = (ind.get_created_at() or timezone.now()) + timedelta(
+                    days=random.randint(1, 21))
+                self._create_tasks(ind, user, all_statuses, project,
+                                    options["tasks_per_object"], base_date)
+
+            for ind in [mother, father] + children:
                 self._create_samples(
-                    individual,
-                    sample_types,
-                    test_types,
-                    pipeline_types,
+                    ind, institution, sample_types, test_types, pipeline_types,
                     options["samples_per_individual"],
                     options["tests_per_sample"],
                     options["pipelines_per_test"],
                     options["analyses_per_pipeline"],
                     options["variants_per_analysis"],
                     options["tasks_per_object"],
-                    user,
-                    all_statuses,
-                    project,
-                    analysis_types,
-                )
+                    user, all_statuses, project, analysis_types)
 
-        # Link all created individuals to the demo project so that the
-        # new Project.individuals M2M relation is populated and the UI
-        # can show per-project individuals correctly.
         if all_individuals:
             project.individuals.add(*all_individuals)
 
-        self.stdout.write(self.style.SUCCESS('Successfully generated sample data'))
+        self.stdout.write(self.style.SUCCESS("Successfully generated sample data"))
+
+    # ==================================================================
+    # Checkpoints
+    # ==================================================================
+
+    def _ensure_ontologies(self):
+        """Load ontologies_data.json fixture if the Ontology table is empty."""
+        if Ontology.objects.exists():
+            self.stdout.write("Step 0a: Ontologies already loaded.")
+            return
+        self.stdout.write(self.style.WARNING(
+            "Step 0a: Ontology table empty — loading ontologies_data.json fixture…"))
+        call_command("loaddata", "ontologies_data.json")
+        loaded = Ontology.objects.count()
+        if loaded:
+            self.stdout.write(self.style.SUCCESS(
+                f"Step 0a: Loaded {loaded} ontologies."))
+        else:
+            self.stdout.write(self.style.WARNING(
+                "Step 0a: Fixture loaded but no Ontology objects found. "
+                "Check that ontologies_data.json is in a fixtures/ directory."))
+
+    # ==================================================================
+    # Setup helpers
+    # ==================================================================
 
     def _create_statuses(self, user):
-        """Create statuses for each model type separately"""
+        """Create a status set per model type, returned as a nested dict."""
         all_statuses = {}
-        
-        for model_type in [Individual, Sample, Test, Pipeline, Task, Analysis]:
-            model_name = model_type.__name__
-            status_data = {
-                'registered': ('Registered', 'gray', 'fa-user-plus'),
-                'active': ('Active', 'green', 'fa-play'),
-                'completed': ('Completed', 'blue', 'fa-check-circle'),
-                'cancelled': ('Cancelled', 'red', 'fa-times-circle'),
-                'pending': ('Pending', 'yellow', 'fa-clock'),
-            }
-            
+        status_data = {
+            "registered": ("Registered", "gray",   "fa-user-plus"),
+            "active":     ("Active",     "green",  "fa-play"),
+            "completed":  ("Completed",  "blue",   "fa-check-circle"),
+            "cancelled":  ("Cancelled",  "red",    "fa-times-circle"),
+            "pending":    ("Pending",    "yellow", "fa-clock"),
+        }
+        from lab.models import Analysis as _Analysis, Sample as _Sample, Test as _Test
+        from lab.models import Pipeline as _Pipeline, Task as _Task
+        for model_type in [Individual, _Sample, _Test, _Pipeline, _Task, _Analysis]:
+            ct = ContentType.objects.get_for_model(model_type)
             model_statuses = {}
             for key, (name, color, icon) in status_data.items():
-                status, _ = Status.objects.get_or_create(
-                    name=name,
-                    content_type=ContentType.objects.get_for_model(model_type),
-                    defaults={
-                        'color': color,
-                        'icon': icon,
-                        'created_by': user
-                    }
-                )
-                # Update icon if it doesn't exist
-                if not status.icon:
-                    status.icon = icon
-                    status.save()
-                model_statuses[key] = status
-            
-            all_statuses[model_name.lower()] = model_statuses
-        
+                st, _ = Status.objects.get_or_create(
+                    name=name, content_type=ct,
+                    defaults={"color": color, "icon": icon, "created_by": user})
+                if not st.icon:
+                    st.icon = icon; st.save()
+                model_statuses[key] = st
+            all_statuses[model_type.__name__.lower()] = model_statuses
         return all_statuses
 
     def _create_sample_types(self, user):
-        types = ['DNA', 'RNA', 'Plasma', 'Serum', 'Whole Blood']
-        created = {}
-        for t in types:
-            st, _ = SampleType.objects.get_or_create(name=t, defaults={'created_by': user})
-            created[t.lower().replace(' ', '_')] = st
-        return created
+        types = ["DNA", "RNA", "Plasma", "Serum", "Whole Blood"]
+        return {t.lower().replace(" ", "_"):
+                SampleType.objects.get_or_create(name=t, defaults={"created_by": user})[0]
+                for t in types}
 
     def _create_test_types(self, user):
-        types = ['WGS', 'WES', 'Panel']
-        created = {}
-        for t in types:
-            tt, _ = TestType.objects.get_or_create(name=t, defaults={'created_by': user})
-            created[t.lower()] = tt
-        return created
+        types = ["WGS", "WES", "Panel"]
+        return {t.lower():
+                TestType.objects.get_or_create(name=t, defaults={"created_by": user})[0]
+                for t in types}
 
     def _create_pipeline_types(self, user):
-        types = ['Bioinformatics', 'Interpretation', 'Validation']
-        created = {}
-        for t in types:
-            pt, _ = PipelineType.objects.get_or_create(name=t, defaults={'created_by': user})
-            created[t.lower()] = pt
-        return created
+        types = ["Bioinformatics", "Interpretation", "Validation"]
+        return {t.lower():
+                PipelineType.objects.get_or_create(name=t, defaults={"created_by": user})[0]
+                for t in types}
 
     def _create_analysis_types(self, user):
-        """
-        Create a small set of AnalysisType records to be used when
-        generating sample Analyses.
-        """
-        types = ['Initial', 'Reanalysis']
-        created = {}
-        for t in types:
-            at, _ = AnalysisType.objects.get_or_create(
-                name=t,
-                defaults={
-                    'description': f'{t} clinical interpretation',
-                    'created_by': user,
-                },
-            )
-            created[t.lower()] = at
-        return created
+        types = ["Initial", "Reanalysis"]
+        return {t.lower():
+                AnalysisType.objects.get_or_create(
+                    name=t,
+                    defaults={"description": f"{t} clinical interpretation",
+                               "created_by": user})[0]
+                for t in types}
 
     def _get_or_create_institution(self, user):
-        inst, _ = Institution.objects.get_or_create(name="Rare Disease Lab", defaults={'created_by': user})
+        inst, _ = Institution.objects.get_or_create(
+            name="Rare Disease Lab",
+            defaults={
+                "created_by": user,
+                "city": "Ankara",
+                "center_name": "Genetics Center",
+                "speciality": "Medical Genetics",
+            })
         return inst
 
-    def _create_project(self, user, status):
-        proj, _ = Project.objects.get_or_create(
+    def _create_project(self, user, all_statuses):
+        proj, created = Project.objects.get_or_create(
             name="Rare Disease Pilot",
             defaults={
-                'description': "Pilot project for rare disease analysis",
-                'status': status,
-                'created_by': user,
-                'created_at': timezone.now()
-            }
-        )
+                "description": "Pilot project for rare disease analysis",
+                "created_by": user,
+            })
+        if created:
+            ct = ContentType.objects.get_for_model(Project)
+            p_status, _ = Status.objects.get_or_create(
+                name="Ongoing", content_type=ct,
+                defaults={"color": "purple", "created_by": user})
+            proj.statuses.set([p_status])
         return proj
 
     def _create_identifier_types(self, user):
-        """
-        Create IdentifierType records aligned with the new IdentifierType
-        fields (use_priority, is_shown_in_table).
-
-        Priorities:
-        - 1: RareBoost (primary ID / lab ID)
-        - 2: Biobank (secondary ID / biobank ID)
-        - 3: ERDERA (tertiary ID, not shown in tables by default)
-        """
         config = [
             ("RareBoost", "RareBoost", 1, True),
-            ("Biobank", "Biobank", 2, True),
-            ("ERDERA", "ERDERA", 3, False),
+            ("Biobank",   "Biobank",   2, True),
+            ("ERDERA",    "ERDERA",    3, False),
         ]
-
-        identifier_types = {}
+        result = {}
         for name, description, priority, show_in_table in config:
-            id_type, created = IdentifierType.objects.get_or_create(
+            id_type, _ = IdentifierType.objects.get_or_create(
                 name=name,
-                defaults={
-                    "description": description,
-                    "created_by": user,
-                    "use_priority": priority,
-                    "is_shown_in_table": show_in_table,
-                },
-            )
-
-            # If the IdentifierType already exists, make sure its new
-            # fields are consistent with the configuration so that the
-            # rest of the application (tables, forms, etc.) behaves
-            # correctly when using sample data.
-            updated = False
+                defaults={"description": description, "created_by": user,
+                           "use_priority": priority, "is_shown_in_table": show_in_table})
+            changed = False
             if id_type.use_priority != priority:
-                id_type.use_priority = priority
-                updated = True
+                id_type.use_priority = priority; changed = True
             if id_type.is_shown_in_table != show_in_table:
-                id_type.is_shown_in_table = show_in_table
-                updated = True
+                id_type.is_shown_in_table = show_in_table; changed = True
             if not id_type.description:
-                id_type.description = description
-                updated = True
-            if updated:
+                id_type.description = description; changed = True
+            if changed:
                 id_type.save()
+            result[name.lower()] = id_type
+        return result
 
-            identifier_types[name.lower()] = id_type
-
-        return identifier_types
-
-    def _create_identifiers(self, individual, identifier_types, lab_id, biobank_id, user):
-        """
-        Create CrossIdentifier entries for an individual using the configured
-        IdentifierTypes. Expects identifier_types to be a dict keyed by the
-        lower-cased IdentifierType.name (e.g. 'rareboost', 'biobank', 'erdera').
-        """
-        rareboost_type = identifier_types.get("rareboost")
-        biobank_type = identifier_types.get("biobank")
-        erdera_type = identifier_types.get("erdera")
-
-        # Create RareBoost identifier (primary ID)
-        if rareboost_type:
-            if not CrossIdentifier.objects.filter(
-                id_type=rareboost_type, id_value=lab_id
-            ).exists():
-                if not CrossIdentifier.objects.filter(
-                    individual=individual, id_type=rareboost_type
-                ).exists():
-                    CrossIdentifier.objects.create(
-                        individual=individual,
-                        id_type=rareboost_type,
-                        id_value=lab_id,
-                        link=f"https://www.rareboost.com/individual/{lab_id}",
-                        created_by=user,
-                    )
-
-        # Create Biobank identifier (secondary ID)
-        if biobank_type:
-            if not CrossIdentifier.objects.filter(
-                id_type=biobank_type, id_value=biobank_id
-            ).exists():
-                if not CrossIdentifier.objects.filter(
-                    individual=individual, id_type=biobank_type
-                ).exists():
-                    CrossIdentifier.objects.create(
-                        individual=individual,
-                        id_type=biobank_type,
-                        id_value=biobank_id,
-                        link=f"https://www.biobank.com/individual/{biobank_id}",
-                        created_by=user,
-                    )
-
-        # Create ERDERA identifier (tertiary ID with random value)
-        if erdera_type and not CrossIdentifier.objects.filter(
-            individual=individual, id_type=erdera_type
-        ).exists():
-            erdera_id = self._generate_unique_erdera_id()
-            CrossIdentifier.objects.create(
-                individual=individual,
-                id_type=erdera_type,
-                id_value=erdera_id,
-                link=f"https://www.erdera.com/individual/{erdera_id}",
-                created_by=user,
-            )
+    # ==================================================================
+    # Individual helpers
+    # ==================================================================
 
     def _generate_unique_family_id(self, family_number):
-        """Generate a unique family ID that doesn't conflict with existing ones."""
-        from lab.models import Family
-        
-        # Start with the base pattern
         base_id = f"RB_2025_{family_number:02d}"
-        
-        # Check if this ID already exists
         counter = 0
         family_id = base_id
         while Family.objects.filter(family_id=family_id).exists():
             counter += 1
             family_id = f"{base_id}_{counter}"
-        
         return family_id
 
     def _generate_unique_erdera_id(self):
-        """Generate a unique ERDERA ID that doesn't conflict with existing ones."""
-        from lab.models import CrossIdentifier
-        from lab.models import IdentifierType
-        
-        # Get the ERDERA identifier type
-        erdera_type = IdentifierType.objects.filter(name='ERDERA').first()
+        erdera_type = IdentifierType.objects.filter(name="ERDERA").first()
         if not erdera_type:
-            # If ERDERA type doesn't exist, just return a random number
-            return random.randint(1000000000, 9999999999)
-        
-        # Generate a unique random ID
-        max_attempts = 100
-        for attempt in range(max_attempts):
-            erdera_id = random.randint(1000000000, 9999999999)
-            if not CrossIdentifier.objects.filter(id_type=erdera_type, id_value=str(erdera_id)).exists():
-                return str(erdera_id)
-        
+            return str(random.randint(1000000000, 9999999999))
+        for _ in range(100):
+            erdera_id = str(random.randint(1000000000, 9999999999))
+            if not CrossIdentifier.objects.filter(
+                    id_type=erdera_type, id_value=erdera_id).exists():
+                return erdera_id
         return str(random.randint(1000000000, 9999999999))
 
-    def _create_note(self, obj, user, text=None, creation_date=None):
-        """Create a note for a given object."""
-        # Note model does not have created_at field, it uses simple_history
-        Note.objects.create(
-            content_object=obj,
-            content=text or f"Auto-generated note for {obj}",
-            user=user
-        )
+    def _create_family(self, family_id, user):
+        return Family.objects.create(family_id=family_id, created_by=user)
 
-    def _create_family(self, family_id, user, creation_date):
-        fam = Family.objects.create(
-            family_id=family_id,
-            created_by=user
-        )
-        return fam
-
-    def _create_individual(self, first_name, family, user, institution, status, hpo_terms, mother=None, father=None, is_index=False, creation_date=None):
+    def _create_individual(self, first_name, family, user, institution, status,
+                            hpo_terms, mother=None, father=None,
+                            is_index=False, creation_date=None):
         ind = Individual.objects.create(
             full_name=f"{first_name} {family.family_id}",
             family=family,
             mother=mother,
             father=father,
             is_index=is_index,
-            sex=random.choice(['male', 'female']),
-            birth_date=creation_date.date() - timedelta(days=random.randint(365*5, 365*50)),
-            status=status,
+            sex=random.choice(["male", "female"]),
+            birth_date=(creation_date or timezone.now()).date() - timedelta(
+                days=random.randint(365 * 5, 365 * 50)),
             created_by=user,
-            created_at=creation_date
+            created_at=creation_date or timezone.now(),
         )
+        # statuses is a TaggableManager — must be set AFTER save
+        if status:
+            ind.statuses.set([status])
         ind.institution.add(institution)
         if hpo_terms:
-            ind.hpo_terms.add(*random.sample(hpo_terms, random.randint(1, 5)))
+            ind.hpo_terms.add(*random.sample(hpo_terms, min(random.randint(1, 5), len(hpo_terms))))
         return ind
 
+    def _create_identifiers(self, individual, identifier_types, lab_id, biobank_id, user):
+        rareboost_type = identifier_types.get("rareboost")
+        biobank_type   = identifier_types.get("biobank")
+        erdera_type    = identifier_types.get("erdera")
+
+        if rareboost_type and not CrossIdentifier.objects.filter(
+                id_type=rareboost_type, id_value=lab_id).exists():
+            if not CrossIdentifier.objects.filter(
+                    individual=individual, id_type=rareboost_type).exists():
+                CrossIdentifier.objects.create(
+                    individual=individual, id_type=rareboost_type,
+                    id_value=lab_id,
+                    link=f"https://www.rareboost.com/individual/{lab_id}",
+                    created_by=user)
+
+        if biobank_type and not CrossIdentifier.objects.filter(
+                id_type=biobank_type, id_value=biobank_id).exists():
+            if not CrossIdentifier.objects.filter(
+                    individual=individual, id_type=biobank_type).exists():
+                CrossIdentifier.objects.create(
+                    individual=individual, id_type=biobank_type,
+                    id_value=biobank_id,
+                    link=f"https://www.biobank.com/individual/{biobank_id}",
+                    created_by=user)
+
+        if erdera_type and not CrossIdentifier.objects.filter(
+                individual=individual, id_type=erdera_type).exists():
+            CrossIdentifier.objects.create(
+                individual=individual, id_type=erdera_type,
+                id_value=self._generate_unique_erdera_id(),
+                link=f"https://www.erdera.com/individual/",
+                created_by=user)
+
+    # ==================================================================
+    # Note / Task helpers
+    # ==================================================================
+
+    def _create_note(self, obj, user, text=None):
+        Note.objects.create(
+            content_object=obj,
+            content=text or f"Auto-generated note for {obj}",
+            user=user)
+
     def _create_tasks(self, obj, user, all_statuses, project, num_tasks, base_date):
-        # Convert base_date to datetime if it's date
-        if hasattr(base_date, 'date'):
-            pass # it's datetime
-        else:
-            # assume it's date, convert to datetime
-            base_date = timezone.datetime.combine(base_date, timezone.datetime.min.time()).replace(tzinfo=timezone.get_current_timezone())
+        if not hasattr(base_date, "date"):
+            base_date = timezone.datetime.combine(
+                base_date, timezone.datetime.min.time()
+            ).replace(tzinfo=timezone.get_current_timezone())
+
+        # Assign a random subset (1–5) of available task statuses
+        task_statuses = list(all_statuses.get("task", {}).values())
 
         for i in range(num_tasks):
-            Task.objects.create(
+            task = Task.objects.create(
                 title=f"Task {i+1} for {obj}",
-                description=f"Auto-generated task",
+                description="Auto-generated task",
                 content_object=obj,
                 project=project,
-                status=all_statuses['task']['pending'],
-                priority=random.choice(['low', 'medium', 'high']),
+                priority=random.choice(["low", "medium", "high"]),
                 assigned_to=user,
                 created_by=user,
-                due_date=base_date + timedelta(days=random.randint(1, 30))
+                due_date=base_date + timedelta(days=random.randint(1, 30)),
             )
 
+            if task_statuses:
+                max_count = min(5, len(task_statuses))
+                count = random.randint(1, max_count)
+                selected_statuses = random.sample(task_statuses, count)
+                task.statuses.set(selected_statuses)
+
+    # ==================================================================
+    # Sample / Test / Pipeline / Analysis / Variant chain
+    # ==================================================================
+
     def _create_samples(
-        self,
-        individual,
-        sample_types,
-        test_types,
-        pipeline_types,
-        num_samples,
-        tests_per_sample,
-        pipelines_per_test,
-        analyses_per_pipeline,
-        variants_per_analysis,
-        tasks_per_object,
-        user,
-        all_statuses,
-        project,
+        self, individual, institution, sample_types, test_types, pipeline_types,
+        num_samples, tests_per_sample, pipelines_per_test, analyses_per_pipeline,
+        variants_per_analysis, tasks_per_object, user, all_statuses, project,
         analysis_types,
     ):
+        active_sample  = all_statuses["sample"].get("active")
+        active_test    = all_statuses["test"].get("active")
+        active_pipeline = all_statuses["pipeline"].get("active")
+
         for _ in range(num_samples):
             sample_type = random.choice(list(sample_types.values()))
+            receipt_date = (timezone.now() - timedelta(days=random.randint(10, 100))).date()
+
             sample = Sample.objects.create(
                 individual=individual,
                 sample_type=sample_type,
-                status=all_statuses['sample']['active'],
-                receipt_date=timezone.now().date() - timedelta(days=random.randint(10, 100)),
+                receipt_date=receipt_date,
+                isolation_by=user,
                 created_by=user,
-                isolation_by=user
             )
-            self._create_tasks(sample, user, all_statuses, project, tasks_per_object, sample.receipt_date)
-            
+            if active_sample:
+                sample.statuses.set([active_sample])
+            self._create_tasks(sample, user, all_statuses, project,
+                                tasks_per_object, receipt_date)
+
             for _ in range(tests_per_sample):
-                test_type = random.choice(list(test_types.values()))
+                test_type    = random.choice(list(test_types.values()))
+                performed_date = receipt_date + timedelta(days=random.randint(1, 10))
+
+                # Test.performed_by is now FK → Institution (nullable)
                 test = Test.objects.create(
                     sample=sample,
                     test_type=test_type,
-                    status=all_statuses['test']['active'],
+                    performed_date=performed_date,
+                    performed_by=institution,     # Institution FK
                     created_by=user,
-                    performed_date=sample.receipt_date + timedelta(days=random.randint(1, 10)),
-                    performed_by=user
                 )
-                self._create_tasks(test, user, all_statuses, project, tasks_per_object, test.performed_date)
-                
+                if active_test:
+                    test.statuses.set([active_test])
+                self._create_tasks(test, user, all_statuses, project,
+                                    tasks_per_object, performed_date)
+
                 for _ in range(pipelines_per_test):
-                    pipeline_type = random.choice(list(pipeline_types.values()))
+                    pipeline_type  = random.choice(list(pipeline_types.values()))
+                    pipeline_date  = performed_date + timedelta(days=random.randint(1, 5))
+
                     pipeline = Pipeline.objects.create(
                         test=test,
                         type=pipeline_type,
-                        status=all_statuses['pipeline']['active'],
+                        performed_date=pipeline_date,
+                        performed_by=user,        # Pipeline.performed_by is still FK → User
                         created_by=user,
-                        performed_date=test.performed_date + timedelta(days=random.randint(1, 5)),
-                        performed_by=user
                     )
-                    self._create_tasks(pipeline, user, all_statuses, project, tasks_per_object, pipeline.performed_date)
-                    # Create analyses and variants for this pipeline
+                    if active_pipeline:
+                        pipeline.statuses.set([active_pipeline])
+                    self._create_tasks(pipeline, user, all_statuses, project,
+                                        tasks_per_object, pipeline_date)
+
                     self._create_analyses(
                         individual=individual,
                         pipeline=pipeline,
@@ -532,142 +513,88 @@ class Command(BaseCommand):
                     )
 
     def _create_analyses(
-        self,
-        individual,
-        pipeline,
-        analysis_types,
-        analyses_per_pipeline,
-        variants_per_analysis,
-        tasks_per_object,
-        user,
-        all_statuses,
-        project,
+        self, individual, pipeline, analysis_types, analyses_per_pipeline,
+        variants_per_analysis, tasks_per_object, user, all_statuses, project,
     ):
-        """Create Analysis objects (and their variants) for a pipeline."""
-        from variant.models import SNV, Classification  # for variants
-
         if analyses_per_pipeline <= 0:
             return
+        active_analysis = all_statuses["analysis"].get("active")
+        types = list(analysis_types.values()) if analysis_types else []
 
-        available_types = list(analysis_types.values()) if analysis_types else []
         for _ in range(analyses_per_pipeline):
-            analysis_type = random.choice(available_types) if available_types else None
+            analysis_type  = random.choice(types) if types else None
             performed_date = pipeline.performed_date + timedelta(days=random.randint(1, 10))
 
+            # Analysis.performed_by is now M2M — cannot be passed to create()
             analysis = Analysis.objects.create(
                 pipeline=pipeline,
                 type=analysis_type,
                 performed_date=performed_date,
-                performed_by=user,
-                status=all_statuses["analysis"]["active"],
                 created_by=user,
             )
+            analysis.performed_by.add(user)    # M2M — set after creation
+            if active_analysis:
+                analysis.statuses.set([active_analysis])
 
-            # Tasks for the analysis itself
-            self._create_tasks(
-                analysis,
-                user,
-                all_statuses,
-                project,
-                tasks_per_object,
-                performed_date,
-            )
+            self._create_tasks(analysis, user, all_statuses, project,
+                                tasks_per_object, performed_date)
 
-            # Variants for this analysis
-            self._create_variants_for_analysis(
+            self._create_variants(
                 individual=individual,
-                pipeline=pipeline,
+                analysis=analysis,          # pass analysis, not pipeline
                 user=user,
                 all_statuses=all_statuses,
                 variants_per_analysis=variants_per_analysis,
-                SNV=SNV,
-                Classification=Classification,
             )
 
-    def _create_variants_for_analysis(
-        self,
-        individual,
-        pipeline,
-        user,
-        all_statuses,
-        variants_per_analysis,
-        SNV,
-        Classification,
+    def _create_variants(
+        self, individual, analysis, user, all_statuses, variants_per_analysis,
     ):
-        """Create variants for an individual's pipeline/analysis."""
         if variants_per_analysis <= 0:
             return
 
-        # Specific variants list provided by user
         specific_variants = [
-            "chr10-77984023 A>G",
-            "chr10-77982811 C>T",
-            "chr10-78009515 C>T",
-            "chr7-94053779 C>T",
-            "chr1-241959054 CAA>C",
-            "chrX-41437781 C>CCTAG",
-            "chr1-6825194 G>T",
-            "chr7-73683072 C>A",
-            "chr20-22584278 T>C",
-            "chr13-35645867 A>T",
-            "chr4-84794563 C>T",
-            "chr15-45152472 T>A",
-            "chrX-155898245 AG>C",
-            "chr8-96785174 CAA>C",
-            "chr9-841776 C>G",
-            "chr1-36091267 A>C",
-            "chr20-50892050 TTCA>T",
-            "chrX-120560586 T>C",
+            "chr10-77984023 A>G",    "chr10-77982811 C>T",
+            "chr10-78009515 C>T",    "chr7-94053779 C>T",
+            "chr1-241959054 CAA>C",  "chrX-41437781 C>CCTAG",
+            "chr1-6825194 G>T",      "chr7-73683072 C>A",
+            "chr20-22584278 T>C",    "chr13-35645867 A>T",
+            "chr4-84794563 C>T",     "chr15-45152472 T>A",
+            "chrX-155898245 AG>C",   "chr8-96785174 CAA>C",
+            "chr9-841776 C>G",       "chr1-36091267 A>C",
+            "chr20-50892050 TTCA>T", "chrX-120560586 T>C",
         ]
+        selected = (random.sample(specific_variants, variants_per_analysis)
+                    if variants_per_analysis <= len(specific_variants)
+                    else [random.choice(specific_variants)
+                          for _ in range(variants_per_analysis)])
 
-        if variants_per_analysis <= len(specific_variants):
-            selected_variants = random.sample(specific_variants, variants_per_analysis)
-        else:
-            selected_variants = [
-                random.choice(specific_variants) for _ in range(variants_per_analysis)
-            ]
-
-        for variant_str in selected_variants:
-            # Parse variant string: "chr10-77984023 A>G"
+        for variant_str in selected:
             loc_part, alleles_part = variant_str.split(" ")
-            chrom_part, pos_part = loc_part.split("-")
-            ref, alt = alleles_part.split(">")
-
-            chrom = chrom_part.replace("chr", "")
+            chrom_part, pos_part   = loc_part.split("-")
+            ref, alt               = alleles_part.split(">")
+            chrom = chrom_part        # keep "chr" prefix — Variant.save normalises
             start = int(pos_part)
-            end = start + len(ref)
 
-            common_args = {
-                "individual": individual,
-                "pipeline": pipeline,
-                "chromosome": chrom,
-                "start": start,
-                "end": end,
-                "created_by": user,
-                "zygosity": random.choice(["het", "hom", "het", "het"]),
-                "status": all_statuses["sample"]["active"],
-            }
-
-            # Create SNV (treating all as SNV/Indel which fits SNV model)
-            variant = SNV.objects.create(
-                **common_args,
+            # Variant.analysis replaces the old Variant.pipeline FK
+            snv = SNV.objects.create(
+                individual=individual,
+                analysis=analysis,
+                chromosome=chrom,
+                start=start,
+                end=start,
+                zygosity=random.choice(["het", "hom", "het", "het"]),
                 reference=ref,
                 alternate=alt,
+                created_by=user,
             )
 
-            # Add classification
             Classification.objects.create(
-                variant=variant,
+                variant=snv,
                 user=user,
-                classification=random.choice(
-                    [
-                        "pathogenic",
-                        "likely_pathogenic",
-                        "vus",
-                        "likely_benign",
-                        "benign",
-                    ]
-                ),
+                classification=random.choice([
+                    "pathogenic", "likely_pathogenic", "vus",
+                    "likely_benign", "benign"]),
                 inheritance=random.choice(["ad", "ar", "de_novo", "unknown"]),
                 notes="Auto-generated classification",
             )

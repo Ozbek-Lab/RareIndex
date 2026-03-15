@@ -184,6 +184,7 @@ class TestAdmin(SimpleHistoryAdmin):
     search_fields = ["sample__individual__lab_id", "test_type__name"]
     date_hierarchy = "performed_date"
     autocomplete_fields = ["sample", "test_type", "performed_by"]
+    raw_id_fields = []
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -311,14 +312,19 @@ class AnalysisAdmin(SimpleHistoryAdmin):
         "type",
         "get_statuses",
         "performed_date",
-        "performed_by",
+        "get_performed_by",
         "get_created_at",
         "get_updated_at",
     ]
     list_filter = ["type", "performed_date"]
     search_fields = ["pipeline__test__sample__individual__lab_id", "performed_by__username"]
     date_hierarchy = "performed_date"
-    autocomplete_fields = ["pipeline", "type", "performed_by"]
+    filter_horizontal = ["performed_by"]
+    autocomplete_fields = ["pipeline", "type"]
+
+    def get_performed_by(self, obj):
+        return ", ".join(u.get_full_name() or u.username for u in obj.performed_by.all())
+    get_performed_by.short_description = "Performed By"
 
     def get_created_at(self, obj):
         return obj.get_created_at()
