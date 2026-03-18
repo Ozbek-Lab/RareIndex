@@ -244,21 +244,50 @@ def _individual_filter_counts():
         if row['classification']
     })
 
+    # Institution sub-filters (distinct individuals per city / speciality / center_name)
+    institution_city_counts = {
+        row['institution__city']: row['c']
+        for row in Individual.objects.filter(institution__city__isnull=False)
+        .exclude(institution__city='')
+        .values('institution__city')
+        .annotate(c=Count('id', distinct=True))
+        if row['institution__city']
+    }
+    institution_speciality_counts = {
+        row['institution__speciality']: row['c']
+        for row in Individual.objects.filter(institution__speciality__isnull=False)
+        .exclude(institution__speciality='')
+        .values('institution__speciality')
+        .annotate(c=Count('id', distinct=True))
+        if row['institution__speciality']
+    }
+    institution_center_counts = {
+        row['institution__center_name']: row['c']
+        for row in Individual.objects.filter(institution__center_name__isnull=False)
+        .exclude(institution__center_name='')
+        .values('institution__center_name')
+        .annotate(c=Count('id', distinct=True))
+        if row['institution__center_name']
+    }
+
     counts = {
-        "status":           status_counts,
-        "sex":              sex_counts,
-        "is_alive":         is_alive_counts,
-        "sample_type":      sample_type_counts,
-        "sample_status":    sample_status_counts,
-        "test_type":        test_type_counts,
-        "test_status":      test_status_counts,
-        "pipeline_type":    pipeline_type_counts,
-        "pipeline_status":  pipeline_status_counts,
-        "analysis_type":    analysis_type_counts,
-        "analysis_status":  analysis_status_counts,
-        "variant_type":     variant_type_counts,
-        "variant_status":   variant_status_counts,
-        "classification":   classif_counts,
+        "status":                   status_counts,
+        "sex":                      sex_counts,
+        "is_alive":                 is_alive_counts,
+        "sample_type":              sample_type_counts,
+        "sample_status":            sample_status_counts,
+        "test_type":                test_type_counts,
+        "test_status":              test_status_counts,
+        "pipeline_type":            pipeline_type_counts,
+        "pipeline_status":          pipeline_status_counts,
+        "analysis_type":            analysis_type_counts,
+        "analysis_status":          analysis_status_counts,
+        "variant_type":             variant_type_counts,
+        "variant_status":           variant_status_counts,
+        "classification":           classif_counts,
+        "institution_city":         institution_city_counts,
+        "institution_speciality":   institution_speciality_counts,
+        "institution_center":       institution_center_counts,
     }
     cache.set(CACHE_KEY, counts, CACHE_TTL)
     return counts
@@ -947,6 +976,56 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
         return super().render_to_response(context, **response_kwargs)
 
 
+class TaskDetailView(LoginRequiredMixin, DetailView):
+    model = Task
+    template_name = "lab/task_detail.html"
+    context_object_name = "task"
+
+    def get_queryset(self):
+        return Task.objects.select_related(
+            "assigned_to", "created_by", "project", "content_type"
+        ).prefetch_related("statuses", "notes__user")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        task = self.object
+
+        history_qs = task.history.all().select_related("history_user")[:20]
+        history_list = list(history_qs)
+        for i, record in enumerate(history_list):
+            if record.history_type == "~":
+                prev = history_list[i + 1] if i + 1 < len(history_list) else None
+                record.diff_display = self._get_field_diff(record, prev) if prev else {}
+            else:
+                record.diff_display = {}
+        context["history_records"] = history_list
+
+        from django.db.models import Q
+        context["notes"] = task.notes.filter(
+            Q(private_owner__isnull=True) | Q(private_owner=self.request.user)
+        ).select_related("user").order_by("id")
+
+        context["edit_mode"] = False
+        context["now"] = timezone.now()
+        return context
+
+    def _get_field_diff(self, new_hist, old_hist):
+        if not old_hist:
+            return {}
+        changes = {}
+        ignore = {"history_id", "history_date", "history_type", "history_user", "history_change_reason", "id"}
+        for field in new_hist._meta.fields:
+            name = field.name
+            if name in ignore:
+                continue
+            new_val = getattr(new_hist, name, None)
+            old_val = getattr(old_hist, name, None)
+            if new_val != old_val:
+                label = name.replace("_", " ").title()
+                changes[label] = f"'{old_val if old_val is not None else '(empty)'}' → '{new_val if new_val is not None else '(empty)'}'"
+        return changes
+
+
 from django.views.generic import CreateView
 from django.shortcuts import redirect
 from django.forms import formset_factory
@@ -1075,16 +1154,16 @@ class CompleteTaskView(LoginRequiredMixin, TemplateView):
         from .models import Task
         task = get_object_or_404(Task, pk=pk)
         
-        # Only allow assigned user or creator to complete?
-        # For now, let's say assigned user or superuser
         if task.assigned_to != request.user and not request.user.is_superuser:
             return HttpResponseForbidden("You are not assigned to this task.")
             
         task.complete(request.user)
         
-        response = HttpResponse("")
-        response["HX-Trigger"] = "taskChanged"
-        return response
+        if request.htmx:
+            response = HttpResponse("")
+            response["HX-Trigger"] = "taskChanged"
+            return response
+        return redirect("lab:task_detail", pk=pk)
 
 
 class ReopenTaskView(LoginRequiredMixin, TemplateView):
@@ -1110,18 +1189,16 @@ class ReopenTaskView(LoginRequiredMixin, TemplateView):
                     task.statuses.set([pending_status])
 
             task.save(update_fields=["previous_status"])
-            
-            # If we want to refresh both the active list and finished list, 
-            # we need to return something that triggers a refresh or use OOB.
-            # For now, let's refresh the whole tasks partial.
-            # But the view logic for DashboardView is a TemplateView.
-            # We might want a dedicated partial view or just return a trigger.
-            
-            response = HttpResponse("")
-            response["HX-Trigger"] = "taskChanged"
-            return response
 
-        return HttpResponse("")
+            if request.htmx:
+                response = HttpResponse("")
+                response["HX-Trigger"] = "taskChanged"
+                return response
+            return redirect("lab:task_detail", pk=pk)
+
+        if request.htmx:
+            return HttpResponse("")
+        return redirect("lab:task_detail", pk=pk)
 
 import csv
 from django.views import View

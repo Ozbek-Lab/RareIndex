@@ -1,0 +1,101 @@
+{% load lab_tags %}
+
+{% if tasks_page.paginator.count > 0 %}
+
+    {% if tasks_page.paginator.num_pages > 1 %}
+    <div class="flex justify-between items-center text-[10px] text-base-content/50 mb-1.5">
+        <span>{{ tasks_page.start_index }}–{{ tasks_page.end_index }} of {{ tasks_page.paginator.count }} tasks</span>
+        <div class="flex items-center gap-0.5">
+            {% if tasks_page.has_previous %}
+            <button class="btn btn-ghost btn-xs px-1.5 h-5 min-h-0"
+                    hx-get="{% url 'lab:project_tasks_page' project.pk %}?page={{ tasks_page.previous_page_number }}"
+                    hx-target="#project-tasks-{{ project.pk }}"
+                    hx-swap="innerHTML">
+                <i class="fa-solid fa-chevron-left text-[9px]"></i>
+            </button>
+            {% else %}
+            <button disabled class="btn btn-ghost btn-xs px-1.5 h-5 min-h-0 opacity-30 cursor-default">
+                <i class="fa-solid fa-chevron-left text-[9px]"></i>
+            </button>
+            {% endif %}
+            <span class="font-medium px-1">{{ tasks_page.number }} / {{ tasks_page.paginator.num_pages }}</span>
+            {% if tasks_page.has_next %}
+            <button class="btn btn-ghost btn-xs px-1.5 h-5 min-h-0"
+                    hx-get="{% url 'lab:project_tasks_page' project.pk %}?page={{ tasks_page.next_page_number }}"
+                    hx-target="#project-tasks-{{ project.pk }}"
+                    hx-swap="innerHTML">
+                <i class="fa-solid fa-chevron-right text-[9px]"></i>
+            </button>
+            {% else %}
+            <button disabled class="btn btn-ghost btn-xs px-1.5 h-5 min-h-0 opacity-30 cursor-default">
+                <i class="fa-solid fa-chevron-right text-[9px]"></i>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="text-[10px] text-base-content/50 mb-1">
+        {{ tasks_page.paginator.count }} task{{ tasks_page.paginator.count|pluralize }}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 gap-1">
+        {% for task in tasks_page %}
+        <div class="p-1 border border-base-200 rounded-lg bg-base-100/50 text-[10px]">
+            <div class="flex justify-between items-start mb-0.5">
+                <a href="{% url 'lab:task_detail' task.pk %}"
+                   class="font-semibold hover:text-primary hover:underline leading-tight">
+                    {{ task.title }}
+                </a>
+                <span class="badge badge-xs {{ task.priority }} scale-90 origin-right ml-1 flex-shrink-0">{{ task.priority }}</span>
+            </div>
+            <div class="flex justify-between items-center opacity-50">
+                <span>{{ task.assigned_to.username }}</span>
+                <span>{{ task.due_date|date:"M d"|default:"--" }}</span>
+            </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-1 text-base-content/30 italic text-[10px]">
+            No active project tasks.
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if tasks_page.paginator.num_pages > 1 %}
+    <div class="flex justify-between items-center text-[10px] text-base-content/50 mt-1.5">
+        <span>{{ tasks_page.start_index }}–{{ tasks_page.end_index }} of {{ tasks_page.paginator.count }} tasks</span>
+        <div class="flex items-center gap-0.5">
+            {% if tasks_page.has_previous %}
+            <button class="btn btn-ghost btn-xs px-1.5 h-5 min-h-0"
+                    hx-get="{% url 'lab:project_tasks_page' project.pk %}?page={{ tasks_page.previous_page_number }}"
+                    hx-target="#project-tasks-{{ project.pk }}"
+                    hx-swap="innerHTML">
+                <i class="fa-solid fa-chevron-left text-[9px]"></i>
+            </button>
+            {% else %}
+            <button disabled class="btn btn-ghost btn-xs px-1.5 h-5 min-h-0 opacity-30 cursor-default">
+                <i class="fa-solid fa-chevron-left text-[9px]"></i>
+            </button>
+            {% endif %}
+            <span class="font-medium px-1">{{ tasks_page.number }} / {{ tasks_page.paginator.num_pages }}</span>
+            {% if tasks_page.has_next %}
+            <button class="btn btn-ghost btn-xs px-1.5 h-5 min-h-0"
+                    hx-get="{% url 'lab:project_tasks_page' project.pk %}?page={{ tasks_page.next_page_number }}"
+                    hx-target="#project-tasks-{{ project.pk }}"
+                    hx-swap="innerHTML">
+                <i class="fa-solid fa-chevron-right text-[9px]"></i>
+            </button>
+            {% else %}
+            <button disabled class="btn btn-ghost btn-xs px-1.5 h-5 min-h-0 opacity-30 cursor-default">
+                <i class="fa-solid fa-chevron-right text-[9px]"></i>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+{% else %}
+<div class="text-center py-1 text-base-content/30 italic text-[10px]">
+    No active project tasks.
+</div>
+{% endif %}

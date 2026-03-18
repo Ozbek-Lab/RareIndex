@@ -211,6 +211,30 @@ class TaskForm(BaseForm):
             self.fields["object_id"].initial = instance.object_id
 
 
+class TaskEditForm(forms.ModelForm):
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.all(),
+        required=False,
+        label="Statuses",
+        widget=forms.SelectMultiple(),
+    )
+
+    class Meta:
+        model = Task
+        fields = ["title", "description", "assigned_to", "due_date", "priority"]
+        widgets = {
+            "due_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "description": forms.Textarea(attrs={"rows": 4}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial["statuses"] = self.instance.statuses.all()
+            if self.instance.due_date:
+                self.initial["due_date"] = self.instance.due_date.strftime("%Y-%m-%dT%H:%M")
+
+
 class IndividualForm(BaseForm):
     statuses = forms.ModelMultipleChoiceField(
         queryset=Status.objects.all(),

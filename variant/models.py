@@ -47,6 +47,8 @@ class Variant(HistoryMixin, models.Model):
         ("het", "Heterozygous"),
         ("hom", "Homozygous"),
         ("hemi", "Hemizygous"),
+        ("hetpl", "Heteroplasmy"), #Check if chromosome is "MT"
+        ("homoplasmy", "Homoplasmy"), #Check if chromosome is "MT"
     ]
     zygosity = models.CharField(max_length=20, choices=ZYGOSITY_CHOICES)
 

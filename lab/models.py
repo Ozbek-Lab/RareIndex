@@ -452,6 +452,7 @@ class Individual(HistoryMixin, models.Model):
     institution = models.ManyToManyField(Institution, related_name="individuals")
     physicians = models.ManyToManyField(User, blank=True, related_name="patients")
     tasks = GenericRelation("Task")
+    registration_date = models.DateField(null=True, blank=True)
 
     class Meta:
         permissions = [
@@ -589,7 +590,7 @@ class Sample(HistoryMixin, models.Model):
     def variants(self):
         from django.apps import apps
         Variant = apps.get_model("variant", "Variant")
-        return Variant.objects.filter(analysis__test__sample=self).distinct()
+        return Variant.objects.filter(analysis__pipeline__test__sample=self).distinct()
 
     class Meta:
         ordering = ["-receipt_date"]
@@ -626,7 +627,7 @@ class Test(HistoryMixin, models.Model):
     test_type = models.ForeignKey(TestType, on_delete=models.PROTECT)
     performed_date = models.DateField(null=True, blank=True)
     performed_by = models.ForeignKey(
-        User,
+        "Institution",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -650,7 +651,7 @@ class Test(HistoryMixin, models.Model):
     def variants(self):
         from django.apps import apps
         Variant = apps.get_model("variant", "Variant")
-        return Variant.objects.filter(analysis__test=self).distinct()
+        return Variant.objects.filter(analysis__pipeline__test=self).distinct()
 
     def __str__(self):
         return f"{self.test_type} - {self.sample}"
@@ -804,7 +805,11 @@ class Analysis(HistoryMixin, models.Model):
         blank=True,
     )
     performed_date = models.DateField(null=True, blank=True)
-    performed_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    performed_by = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name="analyses_performed",
+    )
     statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     notes = GenericRelation("Note")
     created_by = models.ForeignKey(

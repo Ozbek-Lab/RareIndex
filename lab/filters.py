@@ -194,6 +194,24 @@ class IndividualFilter(django_filters.FilterSet):
         label="ACMG Classification"
     )
     
+    # Institution filters (all go through the M2M Individual.institution)
+    institution_name = django_filters.CharFilter(
+        method='filter_institution_name',
+        label="Institution Name",
+    )
+    institution__city = TristateMultipleChoiceFilter(
+        choices=[],  # populated in __init__
+        label="Institution City",
+    )
+    institution__speciality = TristateMultipleChoiceFilter(
+        choices=[],  # populated in __init__
+        label="Institution Speciality",
+    )
+    institution__center_name = TristateMultipleChoiceFilter(
+        choices=[],  # populated in __init__
+        label="Institution Center",
+    )
+
     # HPO Terms (Many-to-Many)
     # HPO Terms (Many-to-Many)
     # HPO Terms (Many-to-Many)
@@ -259,11 +277,36 @@ class IndividualFilter(django_filters.FilterSet):
         model = Individual
         fields = ['sex', 'family']
 
+    def filter_institution_name(self, queryset, name, value):
+        if value:
+            queryset = queryset.filter(institution__name__icontains=value)
+        return queryset.distinct()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if 'hpo_terms' in self.filters:
             from ontologies.models import Term
             self.filters['hpo_terms'].queryset = Term.objects.all()
+
+        # Populate dynamic choices for institution sub-filters
+        city_choices = [
+            (v, v) for v in
+            Institution.objects.exclude(city__isnull=True).exclude(city='')
+            .values_list('city', flat=True).distinct().order_by('city')
+        ]
+        speciality_choices = [
+            (v, v) for v in
+            Institution.objects.exclude(speciality__isnull=True).exclude(speciality='')
+            .values_list('speciality', flat=True).distinct().order_by('speciality')
+        ]
+        center_choices = [
+            (v, v) for v in
+            Institution.objects.exclude(center_name__isnull=True).exclude(center_name='')
+            .values_list('center_name', flat=True).distinct().order_by('center_name')
+        ]
+        self.filters['institution__city'].field.choices = city_choices
+        self.filters['institution__speciality'].field.choices = speciality_choices
+        self.filters['institution__center_name'].field.choices = center_choices
 
         # Restrict Status filter querysets by ContentType
         self._restrict_status_queryset('status', Individual)

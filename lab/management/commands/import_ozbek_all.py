@@ -290,17 +290,19 @@ class Command(BaseCommand):
         return pipeline_type
 
     def _get_or_create_placeholder_sample(self, individual, admin_user):
-        # Create a placeholder sample type if it doesn't exist
         placeholder_type = self._get_or_create_sample_type('Placeholder', admin_user)
-        
-        # Create a placeholder sample
         sample = Sample.objects.create(
             individual=individual,
             sample_type=placeholder_type,
-            status=Status.objects.get(name='Not Available', content_type=ContentType.objects.get(app_label='lab', model='sample')),
             isolation_by=admin_user,
-            created_by=admin_user
+            created_by=admin_user,
         )
+        not_available = Status.objects.filter(
+            name='Not Available',
+            content_type=ContentType.objects.get(app_label='lab', model='sample'),
+        ).first()
+        if not_available:
+            sample.statuses.set([not_available])
         return sample
 
     def _get_initials(self, full_name: str) -> str:
@@ -1016,26 +1018,36 @@ class Command(BaseCommand):
                 test_types[tt_name] = test_type
                 test = Test.objects.create(
                     test_type=test_type,
-                    status=Status.objects.get(name='Completed', content_type=ContentType.objects.get(app_label='lab', model='test')),
                     data_receipt_date=self._parse_date(row_dict.get('Data Geliş Tarihi')),
                     sample=sample,
-                    created_by=admin_user
+                    created_by=admin_user,
                 )
+                test_completed_status = Status.objects.filter(
+                    name='Completed',
+                    content_type=ContentType.objects.get(app_label='lab', model='test'),
+                ).first()
+                if test_completed_status:
+                    test.statuses.set([test_completed_status])
                 created_tests_for_row.append(test)
                 # Track touched/created test for this individual's lab id
                 tests_touched_by_lab_id.setdefault(lab_id, []).append(test)
             # Create Pipeline records for each created test, if upload date provided
             data_upload_date = self._parse_date(row_dict.get('Data yüklenme tarihi/emre'))
+            pipeline_completed_status = Status.objects.filter(
+                name='Completed',
+                content_type=ContentType.objects.get(app_label='lab', model='pipeline'),
+            ).first()
             if data_upload_date and created_tests_for_row:
                 for t in created_tests_for_row:
-                    Pipeline.objects.create(
+                    pipeline = Pipeline.objects.create(
                         type=gennext_type,
-                        status=Status.objects.get(name='In Progress', content_type=ContentType.objects.get(app_label='lab', model='pipeline')),
                         performed_date=data_upload_date,
                         performed_by=admin_user,
                         test=t,
-                        created_by=admin_user
+                        created_by=admin_user,
                     )
+                    if pipeline_completed_status:
+                        pipeline.statuses.set([pipeline_completed_status])
             # Add Test Notları for all tests touched for this individual
             test_notes = row_dict.get('Test Notları')
             if test_notes and tests_touched_by_lab_id.get(lab_id):
