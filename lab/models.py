@@ -760,12 +760,13 @@ class Pipeline(HistoryMixin, models.Model):
         """Return variants for this pipeline that are not linked to any report.
 
         Variants are now attached to ``Analysis`` (via ``Variant.analysis``)
-        rather than directly to ``Pipeline``. We therefore gather variants
-        from all analyses on this pipeline.
+        rather than directly to ``Pipeline``. Reports are also on Analysis.
         """
         from variant.models import Variant
 
-        reported_ids = self.reports.values_list("variants", flat=True)
+        reported_ids = AnalysisReport.objects.filter(
+            analysis__pipeline=self
+        ).values_list("variants", flat=True)
         return (
             Variant.objects.filter(analysis__pipeline=self)
             .exclude(pk__in=reported_ids)
@@ -959,8 +960,8 @@ def notify_status_change(sender, instance, **kwargs):
 
 
 class AnalysisReport(HistoryMixin, models.Model):
-    pipeline = models.ForeignKey(
-        Pipeline, on_delete=models.PROTECT, related_name="reports"
+    analysis = models.ForeignKey(
+        Analysis, on_delete=models.PROTECT, related_name="reports", null=True, blank=True
     )
     # Lazy reference to avoid circular import if Variant is in another app
     variants = models.ManyToManyField("variant.Variant", related_name="reports", blank=True)
@@ -974,7 +975,7 @@ class AnalysisReport(HistoryMixin, models.Model):
     history = HistoricalRecords()
 
     def __str__(self):
-        return f"Analysis Report for {self.pipeline} - {self.created_at.strftime('%Y-%m-%d')}"
+        return f"Analysis Report for {self.analysis} - {self.created_at.strftime('%Y-%m-%d')}"
 
 
 class AnalysisRequestForm(HistoryMixin, models.Model):

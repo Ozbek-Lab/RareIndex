@@ -1592,8 +1592,15 @@ class Command(BaseCommand):
                     if self.dry_run:
                         self.stdout.write(f"  [DRY] report: {fp.name}"); continue
                     with open(fp, "rb") as fh:
+                        # Find or create an Analysis on this pipeline
+                        target_analysis = target.analyses.first()
+                        if not target_analysis:
+                            target_analysis = Analysis.objects.create(
+                                pipeline=target,
+                                created_by=self.admin_user,
+                            )
                         rep = AnalysisReport(
-                            pipeline=target,
+                            analysis=target_analysis,
                             description=f"Imported from {fp.name}",
                             created_by=self.admin_user)
                         rep.file.save(fp.name, File(fh))

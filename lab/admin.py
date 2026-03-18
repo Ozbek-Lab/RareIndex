@@ -473,6 +473,24 @@ class CrossIdentifierAdmin(SimpleHistoryAdmin):
     get_institutions.short_description = "Institutions"
 
 
+@admin.register(models.AnalysisReport)
+class AnalysisReportAdmin(SimpleHistoryAdmin):
+    list_display = ["id", "analysis", "file", "description", "created_by", "created_at"]
+    list_filter = ["created_at", "created_by"]
+    search_fields = ["file", "description"]
+    autocomplete_fields = ["analysis", "created_by"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(models.AnalysisRequestForm)
+class AnalysisRequestFormAdmin(SimpleHistoryAdmin):
+    list_display = ["id", "individual", "file", "description", "created_by", "created_at"]
+    list_filter = ["created_at", "created_by"]
+    search_fields = ["file", "description"]
+    autocomplete_fields = ["individual", "created_by"]
+    readonly_fields = ["created_at"]
+
+
 class ProfileInline(admin.StackedInline):
     model = models.Profile
     can_delete = False

@@ -1457,19 +1457,19 @@ def request_form_create_modal(request, individual_id):
 
 
 @login_required
-def report_create_modal(request, pipeline_id):
+def report_create_modal(request, analysis_id):
     """Render an analysis report creation modal or handle submission"""
     from .forms import AnalysisReportForm
-    from .models import Pipeline
+    from .models import Analysis
     
-    pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
-    individual = pipeline.test.sample.individual
+    analysis = get_object_or_404(Analysis, pk=analysis_id)
+    individual = analysis.pipeline.test.sample.individual
     
     if request.method == "POST":
         form = AnalysisReportForm(request.POST, request.FILES)
         if form.is_valid():
             report = form.save(commit=False)
-            report.pipeline = pipeline
+            report.analysis = analysis
             report.created_by = request.user
             report.save()
             
@@ -1478,9 +1478,10 @@ def report_create_modal(request, pipeline_id):
     else:
         form = AnalysisReportForm()
 
+    title = f"Upload Analysis Report for {analysis.type.name}" if analysis.type else "Upload Analysis Report"
     context = {
         "form": form,
-        "title": f"Upload Analysis Report for {pipeline.type.name}",
+        "title": title,
         "action_url": request.path,
     }
     return render(request, "lab/partials/modals/upload_modal_form.html", context)

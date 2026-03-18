@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from django.core.files import File
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from lab.models import Individual, AnalysisRequestForm, Pipeline, AnalysisReport
+from lab.models import Individual, AnalysisRequestForm, Pipeline, Analysis, AnalysisReport
 
 User = get_user_model()
 
@@ -59,9 +59,6 @@ class Command(BaseCommand):
                             ).first()
 
                             if individual:
-                                # Check duplicate by filename in description or file name match
-                                # Ideally we should check if this specific file is already linked
-                                # Checking if any form for this individual has this filename
                                 if not AnalysisRequestForm.objects.filter(file__endswith=file_path.name).exists():
                                     with open(file_path, "rb") as f:
                                         form_obj = AnalysisRequestForm(
@@ -106,12 +103,10 @@ class Command(BaseCommand):
                         if individual:
                             # Find Pipeline
                             filename_lower = file_path.name.lower()
-                            # Get pipelines for this individual
                             pipeline_qs = Pipeline.objects.filter(test__sample__individual=individual)
 
                             target_pipeline = None
                             
-                            # Simple heuristic for mapping file type to pipeline type
                             if "wgs" in filename_lower:
                                 target_pipeline = pipeline_qs.filter(type__name__icontains="wgs").last()
                             elif "wes" in filename_lower:
@@ -119,22 +114,28 @@ class Command(BaseCommand):
                             elif "sanger" in filename_lower:
                                 target_pipeline = pipeline_qs.filter(type__name__icontains="sanger").last()
 
-                            # Fallback to latest if no specific type matched or found
                             if not target_pipeline:
                                 target_pipeline = pipeline_qs.last()
 
                             if target_pipeline:
+                                # Find or create an Analysis on this pipeline
+                                target_analysis = target_pipeline.analyses.first()
+                                if not target_analysis:
+                                    target_analysis = Analysis.objects.create(
+                                        pipeline=target_pipeline,
+                                        created_by=admin_user,
+                                    )
+
                                 if not AnalysisReport.objects.filter(file__endswith=file_path.name).exists():
                                     with open(file_path, "rb") as f:
                                         report_obj = AnalysisReport(
-                                            pipeline=target_pipeline,
+                                            analysis=target_analysis,
                                             description=f"Imported from {file_path.name}",
                                             created_by=admin_user
                                         )
-                                        # Saving file triggers the signal we just wrote to generate preview
                                         report_obj.file.save(file_path.name, File(f))
                                         report_obj.save()
-                                    self.stdout.write(self.style.SUCCESS(f"Imported report for {lab_id} -> Pipeline {target_pipeline}"))
+                                    self.stdout.write(self.style.SUCCESS(f"Imported report for {lab_id} -> Analysis {target_analysis}"))
                                 else:
                                     self.stdout.write(f"Skipping existing report for {lab_id} ({file_path.name})")
                             else:
@@ -146,3 +147,4 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"Reports directory not found: {reports_dir}"))
         else:
             self.stdout.write("\nNo --reports-dir provided, skipping analysis reports import.")
+

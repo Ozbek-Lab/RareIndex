@@ -539,6 +539,88 @@
                                                                         </div>
                                                                     </div>
                                                                 </div>
+
+                                                                <!-- Reports for this Analysis -->
+                                                                <div class="mt-2 border-t-2 border-base-200 pt-2">
+                                                                    <div class="flex items-center justify-between mb-2 px-1">
+                                                                        <h6 class="text-[10px] uppercase text-base-content/40 font-bold flex items-center gap-1">
+                                                                            <i class="fa-solid fa-file-invoice text-[9px]"></i> Reports
+                                                                        </h6>
+                                                                        <button hx-get="{% url 'lab:report_create_modal' analysis.id %}"
+                                                                                hx-target="#generic-modal-content"
+                                                                                onclick="document.getElementById('generic-modal').showModal()"
+                                                                                class="btn btn-primary btn-xs h-4 min-h-0 px-2 gap-1 text-[9px] font-normal tooltip tooltip-left"
+                                                                                data-tip="Upload Report">
+                                                                            <i class="fa-solid fa-upload text-[8px]"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                    {% if analysis.reports.exists %}
+                                                                    <div class="space-y-1.5">
+                                                                        {% for report in analysis.reports.all|dictsortreversed:"created_at" %}
+                                                                        <div class="bg-base-200/50 rounded-lg group hover:bg-base-200 transition-colors overflow-hidden">
+                                                                            <div class="flex items-center justify-between p-2">
+                                                                                <div class="flex items-center gap-2">
+                                                                                    <div class="h-8 w-8 rounded bg-white flex items-center justify-center border border-base-200 shrink-0">
+                                                                                        {% if report.file.name|lower|slice:"-4:" == ".pdf" %}
+                                                                                            <i class="fa-solid fa-file-pdf text-red-500 text-sm"></i>
+                                                                                        {% elif report.file.name|lower|slice:"-5:" == ".docx" %}
+                                                                                            <i class="fa-solid fa-file-word text-blue-500 text-sm"></i>
+                                                                                        {% else %}
+                                                                                            <i class="fa-solid fa-file text-base-content/40 text-sm"></i>
+                                                                                        {% endif %}
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <div class="font-medium text-xs flex items-center gap-1.5">
+                                                                                            <a href="{{ report.file.url }}" target="_blank" class="hover:underline hover:text-primary">
+                                                                                                {{ report.file.name|basename|truncatechars:25 }}
+                                                                                            </a>
+                                                                                            {% if report.preview_file %}
+                                                                                            <button hx-get="{% url 'lab:document_preview' 'AnalysisReport' report.pk %}"
+                                                                                                    hx-target="#preview-drawer-content"
+                                                                                                    hx-on::after-request="window.dispatchEvent(new CustomEvent('open-preview'))"
+                                                                                                    class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary tooltip tooltip-right"
+                                                                                                    data-tip="View Preview">
+                                                                                                <i class="fa-solid fa-eye text-[9px]"></i>
+                                                                                            </button>
+                                                                                            {% endif %}
+                                                                                        </div>
+                                                                                        <div class="text-[10px] text-base-content/60">
+                                                                                            {{ report.created_at|date:"M d, Y" }} · {{ report.created_by.first_name }}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <a href="{{ report.file.url }}" download class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary">
+                                                                                    <i class="fa-solid fa-download text-[9px]"></i>
+                                                                                </a>
+                                                                            </div>
+                                                                            {% if report.variants.exists %}
+                                                                            <div class="border-t border-base-300/50 px-2 py-1.5">
+                                                                                <h6 class="text-[9px] uppercase text-base-content/40 mb-0.5 font-bold flex items-center gap-1">
+                                                                                    <i class="fa-solid fa-dna text-[7px]"></i> Reported Variants
+                                                                                </h6>
+                                                                                <table class="table table-xs w-full">
+                                                                                    <tbody>
+                                                                                        {% for variant in report.variants.all %}
+                                                                                        <tr>
+                                                                                            <td class="font-mono text-[9px]">{{ variant }}</td>
+                                                                                            <td class="text-[9px]">{{ variant.get_zygosity_display }}</td>
+                                                                                            <td class="text-[9px]">{{ variant.type }}</td>
+                                                                                            <td class="italic text-[9px]">{{ variant.genes.all|join:", "|default:"--" }}</td>
+                                                                                        </tr>
+                                                                                        {% endfor %}
+                                                                                    </tbody>
+                                                                                </table>
+                                                                            </div>
+                                                                            {% endif %}
+                                                                        </div>
+                                                                        {% endfor %}
+                                                                    </div>
+                                                                    {% else %}
+                                                                    <div class="text-center py-2 text-base-content/40 italic text-[10px] border border-dashed border-base-200 rounded-lg">
+                                                                        No reports uploaded.
+                                                                    </div>
+                                                                    {% endif %}
+                                                                </div>
                                                                 {% endfor %}
                                                             </div>
                                                             {% endif %}
@@ -575,87 +657,7 @@
                                                             </div>
                                                             {% endif %}
 
-                                                            <!-- Reports (matching info tab style) -->
-                                                            <div class="mt-2 border-t-2 border-base-200 pt-2">
-                                                                <div class="flex items-center justify-between mb-2 px-1">
-                                                                    <h5 class="text-xs uppercase text-base-content/50 font-bold flex items-center gap-1">
-                                                                        <i class="fa-solid fa-file-invoice"></i> Reports
-                                                                    </h5>
-                                                                    <button hx-get="{% url 'lab:report_create_modal' pipeline.id %}"
-                                                                            hx-target="#generic-modal-content"
-                                                                            onclick="document.getElementById('generic-modal').showModal()"
-                                                                            class="btn btn-primary btn-xs gap-1 font-normal tooltip tooltip-left"
-                                                                            data-tip="Upload Report">
-                                                                        <i class="fa-solid fa-upload text-[10px]"></i>
-                                                                    </button>
-                                                                </div>
-                                                                {% if pipeline.reports.exists %}
-                                                                <div class="space-y-2">
-                                                                    {% for report in pipeline.reports.all|dictsortreversed:"created_at" %}
-                                                                    <div class="bg-base-200/50 rounded-lg group hover:bg-base-200 transition-colors overflow-hidden">
-                                                                        <div class="flex items-center justify-between p-3">
-                                                                            <div class="flex items-center gap-3">
-                                                                                <div class="h-10 w-10 rounded bg-white flex items-center justify-center border border-base-200 shrink-0">
-                                                                                    {% if report.file.name|lower|slice:"-4:" == ".pdf" %}
-                                                                                        <i class="fa-solid fa-file-pdf text-red-500 text-lg"></i>
-                                                                                    {% elif report.file.name|lower|slice:"-5:" == ".docx" %}
-                                                                                        <i class="fa-solid fa-file-word text-blue-500 text-lg"></i>
-                                                                                    {% else %}
-                                                                                        <i class="fa-solid fa-file text-base-content/40 text-lg"></i>
-                                                                                    {% endif %}
-                                                                                </div>
-                                                                                <div>
-                                                                                    <div class="font-medium text-sm flex items-center gap-2">
-                                                                                        <a href="{{ report.file.url }}" target="_blank" class="hover:underline hover:text-primary">
-                                                                                            {{ report.file.name|basename|truncatechars:30 }}
-                                                                                        </a>
-                                                                                        {% if report.preview_file %}
-                                                                                        <button hx-get="{% url 'lab:document_preview' 'AnalysisReport' report.pk %}"
-                                                                                                hx-target="#preview-drawer-content"
-                                                                                                hx-on::after-request="window.dispatchEvent(new CustomEvent('open-preview'))"
-                                                                                                class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary tooltip tooltip-right"
-                                                                                                data-tip="View Preview">
-                                                                                            <i class="fa-solid fa-eye"></i>
-                                                                                        </button>
-                                                                                        {% endif %}
-                                                                                    </div>
-                                                                                    <div class="text-xs text-base-content/60">
-                                                                                        {{ report.created_at|date:"M d, Y" }} · {{ report.created_by.first_name }}
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-                                                                            <a href="{{ report.file.url }}" download class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary">
-                                                                                <i class="fa-solid fa-download"></i>
-                                                                            </a>
-                                                                        </div>
-                                                                        {% if report.variants.exists %}
-                                                                        <div class="border-t border-base-300/50 px-3 py-2">
-                                                                            <h6 class="text-[10px] uppercase text-base-content/40 mb-1 font-bold flex items-center gap-1">
-                                                                                <i class="fa-solid fa-dna text-[8px]"></i> Reported Variants
-                                                                            </h6>
-                                                                            <table class="table table-xs w-full">
-                                                                                <tbody>
-                                                                                    {% for variant in report.variants.all %}
-                                                                                    <tr>
-                                                                                        <td class="font-mono text-[10px]">{{ variant }}</td>
-                                                                                        <td class="text-[10px]">{{ variant.get_zygosity_display }}</td>
-                                                                                        <td class="text-[10px]">{{ variant.type }}</td>
-                                                                                        <td class="italic text-[10px]">{{ variant.genes.all|join:", "|default:"--" }}</td>
-                                                                                    </tr>
-                                                                                    {% endfor %}
-                                                                                </tbody>
-                                                                            </table>
-                                                                        </div>
-                                                                        {% endif %}
-                                                                    </div>
-                                                                    {% endfor %}
-                                                                </div>
-                                                                {% else %}
-                                                                <div class="text-center py-4 text-base-content/40 italic text-xs border-2 border-dashed border-base-200 rounded-lg">
-                                                                    No reports uploaded.
-                                                                </div>
-                                                                {% endif %}
-                                                            </div>
+
 
                                                         </div>
                                                     </div>

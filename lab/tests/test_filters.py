@@ -1,7 +1,8 @@
 from django.test import TestCase
-from lab.models import Individual, Status, Sample, SampleType
+from lab.models import Individual, Status, Sample, SampleType, Test as LabTest, TestType, Pipeline, PipelineType, Analysis, AnalysisReport, AnalysisRequestForm, Project
 from lab.filters import IndividualFilter
 from django.contrib.auth.models import User
+import datetime
 
 class IndividualFilterTest(TestCase):
     def setUp(self):
@@ -29,18 +30,24 @@ class IndividualFilterTest(TestCase):
         self.ind1 = Individual.objects.create(
             full_name="John Doe", 
             sex="male", 
+            is_affected=True,
+            is_index=True,
             status=self.active_status,
             created_by=self.user
         )
         self.ind2 = Individual.objects.create(
             full_name="Jane Doe", 
             sex="female", 
+            is_affected=False,
+            is_index=False,
             status=self.active_status,
             created_by=self.user
         )
         self.ind3 = Individual.objects.create(
             full_name="Inactive User", 
             sex="male", 
+            is_affected=True,
+            is_index=False,
             status=self.inactive_status,
             created_by=self.user
         )
@@ -62,6 +69,22 @@ class IndividualFilterTest(TestCase):
             isolation_by=self.user,
             created_by=self.user
         )
+        
+        # Test, Pipeline, Analysis, Report for Ind1
+        self.test_type = TestType.objects.create(name="WES", created_by=self.user)
+        self.pipeline_type = PipelineType.objects.create(name="BWA", created_by=self.user)
+        self.sample1 = Sample.objects.get(individual=self.ind1)
+        self.test1 = LabTest.objects.create(sample=self.sample1, test_type=self.test_type, created_by=self.user)
+        self.pipeline1 = Pipeline.objects.create(test=self.test1, type=self.pipeline_type, performed_date=datetime.date.today(), performed_by=self.user, created_by=self.user)
+        self.analysis1 = Analysis.objects.create(pipeline=self.pipeline1, created_by=self.user)
+        self.report1 = AnalysisReport.objects.create(analysis=self.analysis1, created_by=self.user)
+        
+        # Request Form for Ind2
+        self.request_form1 = AnalysisRequestForm.objects.create(individual=self.ind2, created_by=self.user)
+        
+        # Project for Ind3
+        self.project1 = Project.objects.create(name="Rare Diseases", created_by=self.user)
+        self.project1.individuals.add(self.ind3)
         
     def test_filter_status_include(self):
         # filter status=Active
@@ -141,3 +164,53 @@ class IndividualFilterTest(TestCase):
         sample_status_qs = f.filters['samples__status'].queryset
         self.assertNotIn(s1, sample_status_qs)
         self.assertIn(s2, sample_status_qs)
+
+    def test_has_report_filter(self):
+        f = IndividualFilter(data={'has_report': 'true'}, queryset=Individual.objects.all())
+        self.assertEqual(f.qs.count(), 1)
+        self.assertIn(self.ind1, f.qs)
+        
+        f2 = IndividualFilter(data={'has_report': 'false'}, queryset=Individual.objects.all())
+        self.assertEqual(f2.qs.count(), 2)
+        self.assertIn(self.ind2, f2.qs)
+        self.assertIn(self.ind3, f2.qs)
+
+    def test_has_request_form_filter(self):
+        f = IndividualFilter(data={'has_request_form': 'true'}, queryset=Individual.objects.all())
+        self.assertEqual(f.qs.count(), 1)
+        self.assertIn(self.ind2, f.qs)
+        
+        f2 = IndividualFilter(data={'has_request_form': 'false'}, queryset=Individual.objects.all())
+        self.assertEqual(f2.qs.count(), 2)
+        self.assertIn(self.ind1, f2.qs)
+        self.assertIn(self.ind3, f2.qs)
+
+    def test_filter_projects(self):
+        f = IndividualFilter(data={'projects': ['Rare Diseases']}, queryset=Individual.objects.all())
+        self.assertEqual(f.qs.count(), 1)
+        self.assertIn(self.ind3, f.qs)
+        
+        f2 = IndividualFilter(data={'projects__exclude': ['Rare Diseases']}, queryset=Individual.objects.all())
+        self.assertEqual(f2.qs.count(), 2)
+        self.assertIn(self.ind1, f2.qs)
+        self.assertIn(self.ind2, f2.qs)
+
+    def test_filter_is_affected(self):
+        f = IndividualFilter(data={'is_affected': ['True']}, queryset=Individual.objects.all())
+        self.assertEqual(f.qs.count(), 2)
+        self.assertIn(self.ind1, f.qs)
+        self.assertIn(self.ind3, f.qs)
+
+        f2 = IndividualFilter(data={'is_affected': ['False']}, queryset=Individual.objects.all())
+        self.assertEqual(f2.qs.count(), 1)
+        self.assertIn(self.ind2, f2.qs)
+
+    def test_filter_is_index(self):
+        f = IndividualFilter(data={'is_index': ['True']}, queryset=Individual.objects.all())
+        self.assertEqual(f.qs.count(), 1)
+        self.assertIn(self.ind1, f.qs)
+
+        f2 = IndividualFilter(data={'is_index': ['False']}, queryset=Individual.objects.all())
+        self.assertEqual(f2.qs.count(), 2)
+        self.assertIn(self.ind2, f2.qs)
+        self.assertIn(self.ind3, f2.qs)

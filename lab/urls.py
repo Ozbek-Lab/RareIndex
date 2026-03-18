@@ -150,7 +150,7 @@ urlpatterns = [
     path("htmx/analysis/create/<int:pipeline_id>/", analysis_create_modal, name="analysis_create_modal"),
     path("htmx/task/create/<int:content_type_id>/<int:object_id>/", task_create_modal, name="task_create_modal"),
     path("htmx/request_form/create/<int:individual_id>/", request_form_create_modal, name="request_form_create_modal"),
-    path("htmx/report/create/<int:pipeline_id>/", report_create_modal, name="report_create_modal"),
+    path("htmx/report/create/<int:analysis_id>/", report_create_modal, name="report_create_modal"),
     path("htmx/variant/create/<int:pipeline_id>/", variant_create_modal, name="variant_create_modal"),
     path("htmx/variant/create/individual/<int:individual_id>/", variant_create_for_individual_modal, name="variant_create_for_individual_modal"),
     

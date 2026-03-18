@@ -92,7 +92,7 @@ class Command(BaseCommand):
                         pips = Pipeline.objects.filter(test=test)
                         for pip in pips:
                             SNV.objects.filter(pipeline=pip).delete()
-                            AnalysisReport.objects.filter(pipeline=pip).delete()
+                            AnalysisReport.objects.filter(analysis__pipeline=pip).delete()
                             Analysis.objects.filter(pipeline=pip).delete()
                         pips.delete()
                     tests.delete()
@@ -202,7 +202,7 @@ class Command(BaseCommand):
                 )
 
                 report = AnalysisReport.objects.create(
-                    pipeline=pipeline,
+                    analysis=analysis,
                     description="Example clinical report for Proband",
                     created_by=user
                 )

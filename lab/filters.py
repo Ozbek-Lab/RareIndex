@@ -112,6 +112,8 @@ class IndividualFilter(django_filters.FilterSet):
     )
     sex = TristateMultipleChoiceFilter(choices=Individual._meta.get_field('sex').choices)
     is_alive = TristateMultipleChoiceFilter(choices=[(True, 'Alive'), (False, 'Deceased')])
+    is_affected = TristateMultipleChoiceFilter(choices=[(True, 'Affected'), (False, 'Unaffected')])
+    is_index = TristateMultipleChoiceFilter(choices=[(True, 'Yes'), (False, 'No')], label="Is Index")
 
     # Sample Fields
     samples__status = TristateModelMultipleChoiceFilter(
@@ -192,6 +194,24 @@ class IndividualFilter(django_filters.FilterSet):
     variants__classifications__classification = TristateMultipleChoiceFilter(
         choices=Classification.CLASSIFICATION_CHOICES,
         label="ACMG Classification"
+    )
+
+    has_report = django_filters.ChoiceFilter(
+        choices=[('true', 'Yes'), ('false', 'No')],
+        method='filter_has_report',
+        label="Has Report",
+        empty_label=None,
+    )
+    has_request_form = django_filters.ChoiceFilter(
+        choices=[('true', 'Yes'), ('false', 'No')],
+        method='filter_has_request_form',
+        label="Has Request Form",
+        empty_label=None,
+    )
+    projects = django_filters.MultipleChoiceFilter(
+        field_name='projects__name',
+        choices=[],
+        label="Project",
     )
     
     # Institution filters (all go through the M2M Individual.institution)
@@ -304,9 +324,15 @@ class IndividualFilter(django_filters.FilterSet):
             Institution.objects.exclude(center_name__isnull=True).exclude(center_name='')
             .values_list('center_name', flat=True).distinct().order_by('center_name')
         ]
+        
+        project_choices = [
+            (name, name) for name in Project.objects.values_list('name', flat=True).order_by('name')
+        ]
+
         self.filters['institution__city'].field.choices = city_choices
         self.filters['institution__speciality'].field.choices = speciality_choices
         self.filters['institution__center_name'].field.choices = center_choices
+        self.filters['projects'].field.choices = project_choices
 
         # Restrict Status filter querysets by ContentType
         self._restrict_status_queryset('status', Individual)
@@ -447,6 +473,20 @@ class IndividualFilter(django_filters.FilterSet):
             queryset = queryset.exclude(exclude_q)
             
         return queryset.distinct()
+
+    def filter_has_report(self, queryset, name, value):
+        if value == 'true':
+            return queryset.filter(samples__tests__pipelines__analyses__reports__isnull=False).distinct()
+        elif value == 'false':
+            return queryset.filter(samples__tests__pipelines__analyses__reports__isnull=True).distinct()
+        return queryset
+
+    def filter_has_request_form(self, queryset, name, value):
+        if value == 'true':
+            return queryset.filter(analysis_request_forms__isnull=False).distinct()
+        elif value == 'false':
+            return queryset.filter(analysis_request_forms__isnull=True).distinct()
+        return queryset
 
 class VariantFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")

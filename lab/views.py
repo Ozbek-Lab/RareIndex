@@ -146,6 +146,41 @@ def _individual_filter_counts():
         for row in Individual.objects.values('is_alive').annotate(c=Count('id'))
     })
 
+    # Is affected
+    is_affected_counts = {True: 0, False: 0}
+    is_affected_counts.update({
+        row['is_affected']: row['c']
+        for row in Individual.objects.values('is_affected').annotate(c=Count('id'))
+    })
+
+    # Is index
+    is_index_counts = {True: 0, False: 0}
+    is_index_counts.update({
+        row['is_index']: row['c']
+        for row in Individual.objects.values('is_index').annotate(c=Count('id'))
+    })
+
+    # Has Report
+    has_report_counts = {
+        'true': Individual.objects.filter(samples__tests__pipelines__analyses__reports__isnull=False).distinct().count(),
+        'false': Individual.objects.filter(samples__tests__pipelines__analyses__reports__isnull=True).distinct().count()
+    }
+
+    # Has Request Form
+    has_request_form_counts = {
+        'true': Individual.objects.filter(analysis_request_forms__isnull=False).distinct().count(),
+        'false': Individual.objects.filter(analysis_request_forms__isnull=True).distinct().count()
+    }
+
+    # Projects
+    projects_counts = {p: 0 for p in Project.objects.values_list('name', flat=True)}
+    projects_counts.update({
+        row['projects__name']: row['c']
+        for row in Individual.objects.filter(projects__isnull=False)
+        .values('projects__name')
+        .annotate(c=Count('id', distinct=True))
+    })
+
     # Sample type (count = distinct individuals with at least one sample of this type)
     sample_type_counts = {name: 0 for name in SampleType.objects.values_list('name', flat=True)}
     sample_type_counts.update({
@@ -274,6 +309,11 @@ def _individual_filter_counts():
         "status":                   status_counts,
         "sex":                      sex_counts,
         "is_alive":                 is_alive_counts,
+        "is_affected":              is_affected_counts,
+        "is_index":                 is_index_counts,
+        "has_report":               has_report_counts,
+        "has_request_form":         has_request_form_counts,
+        "projects":                 projects_counts,
         "sample_type":              sample_type_counts,
         "sample_status":            sample_status_counts,
         "test_type":                test_type_counts,
@@ -491,7 +531,7 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
                 "samples__tests__pipelines__analyses__performed_date"
             ),
             variant_last_dt=Max("variants__created_at"),
-            report_last_dt=Max("samples__tests__pipelines__reports__created_at"),
+            report_last_dt=Max("samples__tests__pipelines__analyses__reports__created_at"),
         )
 
         # Last activity: pick the most downstream non-null timestamp in the
