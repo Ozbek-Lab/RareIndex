@@ -1466,17 +1466,18 @@ def report_create_modal(request, analysis_id):
     individual = analysis.pipeline.test.sample.individual
     
     if request.method == "POST":
-        form = AnalysisReportForm(request.POST, request.FILES)
+        form = AnalysisReportForm(request.POST, request.FILES, analysis=analysis)
         if form.is_valid():
             report = form.save(commit=False)
             report.analysis = analysis
             report.created_by = request.user
             report.save()
+            form.save_m2m()
             
             # Refresh the workflow tab
             return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
     else:
-        form = AnalysisReportForm()
+        form = AnalysisReportForm(analysis=analysis)
 
     title = f"Upload Analysis Report for {analysis.type.name}" if analysis.type else "Upload Analysis Report"
     context = {
@@ -1488,74 +1489,177 @@ def report_create_modal(request, analysis_id):
 
 
 @login_required
-def variant_create_modal(request, pipeline_id):
-    """Render a basic SNV variant creation modal or handle submission"""
-    from variant.forms import SNVForm
-    from lab.models import Pipeline
-    
-    pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
-    individual = pipeline.test.sample.individual
-    
-    if request.method == "POST":
-        form = SNVForm(request.POST)  # SNV formulation doesn't expect FILES currently but standard structure
-        if form.is_valid():
-            variant = form.save(commit=False)
-            variant.pipeline = pipeline
-            variant.individual = individual
-            variant.created_by = request.user
-            variant.save()
+@require_POST
+def generate_analysis_report_docx(request, analysis_id):
+    from django.core.files.base import ContentFile
+    from django.http import HttpResponseBadRequest
+    from django.shortcuts import get_object_or_404, render
+    from django.utils import timezone
 
-            # Refresh the workflow tab and close the modal.
-            html = render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
-            close_oob = (
-                '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
-                '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
-                "</div>"
-            )
-            response = HttpResponse(html + close_oob)
-            response["HX-Retarget"] = "#workflow-content"
-            response["HX-Reswap"] = "innerHTML"
-            return response
-    else:
-        form = SNVForm()
+    from variant.models import Variant
 
-    # We need to manually inject some styling because Variant forms don't inherit BaseForm
-    for field_name, field in form.fields.items():
-        current_classes = field.widget.attrs.get("class", "")
-        if isinstance(field.widget, forms.TextInput) or isinstance(field.widget, forms.NumberInput) or isinstance(field.widget, forms.Select):
-            if "select" not in current_classes and "input" not in current_classes:
-                # Basic daisyUI mapping
-                if isinstance(field.widget, forms.Select):
-                    field.widget.attrs["class"] = f"select select-bordered w-full {current_classes}"
-                else:
-                    field.widget.attrs["class"] = f"input input-bordered w-full {current_classes}"
+    from .models import Analysis, AnalysisReport
+    from .docx_reports import build_docx_report_bytes, choose_docx_template_for_test_type
 
-    context = {
-        "form": form,
-        "title": f"Add SNV for {pipeline.type.name}",
-        "action_url": request.path,
-        "hx_target": "#generic-modal-content",
-    }
-    return render(request, "lab/partials/generic_modal_form.html", context)
+    analysis = get_object_or_404(
+        Analysis.objects.select_related("pipeline__test__sample__individual", "pipeline__test__test_type"),
+        pk=analysis_id,
+    )
+    if not analysis.pipeline_id or not analysis.pipeline.test_id or not analysis.pipeline.test.sample_id:
+        return HttpResponseBadRequest("Analysis is missing pipeline/test/sample linkage.")
+
+    individual = analysis.pipeline.test.sample.individual
+
+    variant_ids = request.POST.getlist("variant_ids")
+    selected_qs = Variant.objects.filter(individual=individual)
+    if variant_ids:
+        selected_qs = selected_qs.filter(id__in=variant_ids)
+
+    # Ensure only unreported variants are picked (avoid duplicates across reports for same analysis)
+    selected_qs = selected_qs.exclude(reports__analysis=analysis).distinct()
+
+    negative = not selected_qs.exists()
+    test_type_name = getattr(analysis.pipeline.test.test_type, "name", None)
+    template_choice = choose_docx_template_for_test_type(test_type_name, negative=negative)
+
+    rows = [
+        {
+            "location": str(v),
+            "zygosity": v.get_zygosity_display(),
+            "type": v.type,
+            "genes": ", ".join([str(g) for g in v.genes.all()]),
+        }
+        for v in selected_qs
+    ]
+
+    title = f"{test_type_name or 'Test'} Report"
+    docx_bytes = build_docx_report_bytes(
+        template_path=template_choice.path,
+        title=title,
+        variants_rows=rows,
+        negative=negative,
+    )
+
+    ts = timezone.now().strftime("%Y%m%d_%H%M")
+    fn_safe_test = (test_type_name or "report").replace(" ", "_")
+    filename = f"{individual.primary_id}_{fn_safe_test}_{ts}.docx"
+
+    report = AnalysisReport.objects.create(
+        analysis=analysis,
+        description=(
+            f"Generated DOCX ({'negative' if negative else 'variants selected'}) — template: {template_choice.reason}"
+        ),
+        created_by=request.user,
+    )
+    report.file.save(filename, ContentFile(docx_bytes))
+    if not negative:
+        report.variants.set(list(selected_qs))
+
+    return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
 
 
 @login_required
-def variant_create_for_individual_modal(request, individual_id):
-    """Render a basic SNV variant creation modal or handle submission for an individual (no pipeline)."""
-    from variant.forms import SNVForm
-    from lab.models import Individual
+def report_replace_modal(request, report_id):
+    from django.shortcuts import get_object_or_404, render
+    from django.views.decorators.http import require_http_methods
 
-    individual = get_object_or_404(Individual, pk=individual_id)
+    from .forms import AnalysisReportReplaceForm
+    from .models import AnalysisReport
+
+    report = get_object_or_404(AnalysisReport.objects.select_related("analysis__pipeline__test__sample__individual"), pk=report_id)
+    individual = report.analysis.pipeline.test.sample.individual if report.analysis and report.analysis.pipeline_id else None
+
+    @require_http_methods(["GET", "POST"])
+    def _inner(request):
+        if request.method == "POST":
+            form = AnalysisReportReplaceForm(request.POST, request.FILES)
+            if form.is_valid():
+                report.file = form.cleaned_data["file"]
+                report.save(update_fields=["file"])
+                html = (
+                    render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
+                    if individual
+                    else ""
+                )
+                close_oob = (
+                    '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
+                    '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
+                    "</div>"
+                )
+                response = HttpResponse(html + close_oob)
+                response["HX-Retarget"] = "#workflow-content"
+                response["HX-Reswap"] = "innerHTML"
+                return response
+        else:
+            form = AnalysisReportReplaceForm()
+
+        context = {
+            "form": form,
+            "title": "Replace Analysis Report File",
+            "action_url": request.path,
+        }
+        return render(request, "lab/partials/modals/upload_modal_form.html", context)
+
+    return _inner(request)
+
+
+@login_required
+def variant_create_modal(request, individual_id=None, analysis_id=None):
+    """Create a variant scoped to an individual or an analysis (type-switching modal)."""
+    from variant.forms import CNVForm, RepeatForm, SNVForm, SVForm, VariantTypeForm
+    from lab.models import Individual, Analysis
+
+    analysis = None
+    individual = None
+    title = ""
+    post_url = ""
+
+    if analysis_id:
+        analysis = get_object_or_404(Analysis.objects.select_related("pipeline__test__sample__individual"), pk=analysis_id)
+        pipeline = analysis.pipeline
+        if not pipeline:
+            return HttpResponse("Analysis has no pipeline attached.", status=400)
+        individual = pipeline.test.sample.individual
+        title = f"Add Variant for {analysis.type.name if analysis.type else 'Analysis'}"
+        post_url = reverse("lab:variant_create_for_analysis_modal", kwargs={"analysis_id": analysis.id})
+    elif individual_id:
+        individual = get_object_or_404(Individual, pk=individual_id)
+        title = f"Add Variant for {individual.primary_id}"
+        post_url = reverse("lab:variant_create_for_individual_modal", kwargs={"individual_id": individual.id})
+    else:
+        return HttpResponse("Missing context for variant creation.", status=400)
+
+    variant_type = request.GET.get("variant_type") or request.POST.get("variant_type") or "snv"
+
+    form_class_map = {
+        "snv": SNVForm,
+        "cnv": CNVForm,
+        "sv": SVForm,
+        "repeat": RepeatForm,
+    }
+    form_class = form_class_map.get(variant_type, SNVForm)
+
+    # Build the type selector form (always shown in full modal)
+    type_form = VariantTypeForm(initial={"variant_type": variant_type})
+    type_form.fields["variant_type"].widget.attrs.update(
+        {
+            "hx-get": post_url,
+            "hx-target": "#variant-type-fields",
+            "hx-swap": "innerHTML",
+            "hx-trigger": "change",
+            "hx-include": 'select[name="variant_type"]',
+        }
+    )
 
     if request.method == "POST":
-        form = SNVForm(request.POST)
+        form = form_class(request.POST, individual=individual)
         if form.is_valid():
             variant = form.save(commit=False)
             variant.individual = individual
+            variant.analysis = analysis
             variant.created_by = request.user
             variant.save()
 
-            # Refresh the workflow tab and close the modal.
             html = render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
             close_oob = (
                 '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
@@ -1567,24 +1671,39 @@ def variant_create_for_individual_modal(request, individual_id):
             response["HX-Reswap"] = "innerHTML"
             return response
     else:
-        form = SNVForm()
+        form = form_class()
 
     for field_name, field in form.fields.items():
         current_classes = field.widget.attrs.get("class", "")
-        if isinstance(field.widget, forms.TextInput) or isinstance(field.widget, forms.NumberInput) or isinstance(field.widget, forms.Select):
+        if isinstance(field.widget, forms.TextInput) or isinstance(field.widget, forms.NumberInput) or isinstance(
+            field.widget, forms.Select
+        ):
             if "select" not in current_classes and "input" not in current_classes:
                 if isinstance(field.widget, forms.Select):
                     field.widget.attrs["class"] = f"select select-bordered w-full {current_classes}"
                 else:
                     field.widget.attrs["class"] = f"input input-bordered w-full {current_classes}"
 
-    context = {
-        "form": form,
-        "title": f"Add Variant for {individual.primary_id}",
-        "action_url": request.path,
-        "hx_target": "#generic-modal-content",
-    }
-    return render(request, "lab/partials/generic_modal_form.html", context)
+    # Only return fields if the request specifically targets "#variant-type-fields"
+    if request.method == "GET" and request.headers.get("HX-Target") == "variant-type-fields":
+        return render(
+            request,
+            "lab/partials/modals/variant_add_fields.html",
+            {"form": form, "variant_type": variant_type},
+        )
+
+    return render(
+        request,
+        "lab/partials/modals/variant_add_modal.html",
+        {
+            "title": title,
+            "analysis": analysis,
+            "type_form": type_form,
+            "form": form,
+            "variant_type": variant_type,
+            "variant_add_post_url": post_url,
+        },
+    )
 
 
 def _safe_deep_get(data, *keys, default=None):

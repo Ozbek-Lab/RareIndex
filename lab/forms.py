@@ -470,12 +470,35 @@ class AnalysisRequestFormForm(BaseForm):
 
 
 class AnalysisReportForm(BaseForm):
+    variants = forms.ModelMultipleChoiceField(
+        queryset=None,
+        required=False,
+        widget=forms.SelectMultiple(attrs={"class": "select select-bordered w-full h-32"}),
+    )
+
     class Meta:
         model = AnalysisReport
-        fields = ["file", "description"]
+        fields = ["file", "variants", "description"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
         }
+
+    def __init__(self, *args, analysis=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from variant.models import Variant
+        
+        self.fields["variants"].queryset = Variant.objects.none()
+        
+        if analysis and analysis.pipeline and analysis.pipeline.test and analysis.pipeline.test.sample:
+            individual = analysis.pipeline.test.sample.individual
+            if individual:
+                self.fields["variants"].queryset = Variant.objects.filter(individual=individual)
+
+
+class AnalysisReportReplaceForm(BaseForm):
+    class Meta:
+        model = AnalysisReport
+        fields = ["file"]
 
 
 class InstitutionForm(BaseForm):

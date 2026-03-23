@@ -1,6 +1,8 @@
 from django import forms
+import re
+
 from .models import Variant, SNV, CNV, SV, Repeat
-from lab.models import Individual, Test, Pipeline
+from lab.models import Individual, Test, Pipeline, Analysis
 
 class VariantContextForm(forms.Form):
     individual = forms.ModelChoiceField(
@@ -112,6 +114,10 @@ class BaseVariantForm(forms.ModelForm):
             'zygosity': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
         }
 
+    def __init__(self, *args, individual=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.individual = individual
+
     def clean(self):
         cleaned_data = super().clean()
         chromosome = cleaned_data.get("chromosome")
@@ -135,17 +141,97 @@ class BaseVariantForm(forms.ModelForm):
                 if start > max_size:
                      self.add_error('start', f"Start position exceeds the size of {chromosome} ({max_size} bp).")
         
+        if not self.errors and self.individual:
+            query = dict()
+            for field in ['chromosome', 'start', 'end']:
+                if field in cleaned_data and cleaned_data[field] is not None:
+                    query[field] = cleaned_data[field]
+            
+            for field in ['reference', 'alternate', 'cnv_type', 'copy_number', 'sv_type', 'repeat_unit', 'repeat_count']:
+                if field in self.fields and field in cleaned_data:
+                    query[field] = cleaned_data[field]
+            
+            existing = self._meta.model.objects.filter(individual=self.individual, **query)
+            if existing.exists():
+                raise forms.ValidationError("This variant has already been added to this individual.")
+        
         return cleaned_data
 
+
+class VariantTypeForm(forms.Form):
+    VARIANT_TYPE_CHOICES = [
+        ("snv", "SNV"),
+        ("cnv", "CNV"),
+        ("sv", "SV"),
+        ("repeat", "Repeat"),
+    ]
+
+    variant_type = forms.ChoiceField(
+        choices=VARIANT_TYPE_CHOICES,
+        widget=forms.Select(
+            attrs={
+                "class": "select select-bordered w-full",
+            }
+        ),
+        label="Variant type",
+    )
+
 class SNVForm(BaseVariantForm):
+    # Combined human-friendly representation: chr:posREF>ALT
+    snv_string = forms.CharField(
+        label="Variant (chr:posREF>ALT)",
+        help_text="e.g. chr3:33114394TGC>T",
+    )
+
     class Meta(BaseVariantForm.Meta):
         model = SNV
-        fields = ['assembly_version', 'chromosome', 'start', 'end', 'zygosity', 'reference', 'alternate']
+        fields = ["assembly_version", "snv_string", "zygosity"]
         widgets = {
             **BaseVariantForm.Meta.widgets,
-            'reference': forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
-            'alternate': forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Hide low-level fields; they are derived from snv_string.
+        for name in ("chromosome", "start", "end", "reference", "alternate"):
+            self.fields.pop(name, None)
+
+        self.fields["snv_string"].widget.attrs.update(
+            {
+                "class": "input input-bordered w-full font-mono text-xs",
+                "placeholder": "chr3:33114394TGC>T",
+                "pattern": r"^(chr[0-9]{1,2}|chrX|chrY|chrM):\d+[ACGT]+>[ACGT]+$",
+                "title": "Format: chrN:positionREF>ALT, e.g. chr3:33114394TGC>T",
+            }
+        )
+
+    def clean_snv_string(self):
+        value = self.cleaned_data["snv_string"].strip()
+        # Basic strict pattern: chrN:posREF>ALT
+        m = re.match(r"^(chr[0-9]{1,2}|chrX|chrY|chrM):(\d+)([ACGT]+)>([ACGT]+)$", value)
+        if not m:
+            raise forms.ValidationError("Use format chrN:positionREF>ALT, e.g. chr3:33114394TGC>T")
+        chrom, pos, ref, alt = m.groups()
+        pos_int = int(pos)
+
+        # Populate fields used by the model and BaseVariantForm.clean
+        self.cleaned_data["chromosome"] = chrom
+        self.cleaned_data["start"] = pos_int
+        self.cleaned_data["end"] = pos_int
+        self.cleaned_data["reference"] = ref
+        self.cleaned_data["alternate"] = alt
+        return value
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        obj.chromosome = self.cleaned_data["chromosome"]
+        obj.start = self.cleaned_data["start"]
+        obj.end = self.cleaned_data["end"]
+        obj.reference = self.cleaned_data["reference"]
+        obj.alternate = self.cleaned_data["alternate"]
+        if commit:
+            obj.save()
+        return obj
 
 class CNVForm(BaseVariantForm):
     class Meta(BaseVariantForm.Meta):
@@ -180,17 +266,20 @@ class RepeatForm(BaseVariantForm):
 class VariantUpdateForm(forms.ModelForm):
     class Meta:
         model = Variant
-        fields = ['pipeline'] # We only want to update pipeline for now
+        # Allow assigning an Analysis; Variants are no longer linked directly to Pipelines.
+        fields = ["analysis"]
         
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Filter pipeline based on individual if possible, or show all
+        # Limit available analyses to those belonging to the same individual (via pipeline)
         if self.instance and self.instance.individual:
-            # Show pipelines for the same individual
-            self.fields['pipeline'].queryset = Pipeline.objects.filter(
-                test__sample__individual=self.instance.individual
+            self.fields["analysis"].queryset = Analysis.objects.filter(
+                pipeline__test__sample__individual=self.instance.individual
             )
         
-        self.fields['pipeline'].widget.attrs.update({
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'
-        })
+        self.fields["analysis"].widget.attrs.update(
+            {
+                "class": "mt-1 block w-full rounded-md border-gray-300 shadow-sm "
+                "focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            }
+        )

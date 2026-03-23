@@ -125,6 +125,7 @@ class Command(BaseCommand):
                                         pipeline=target_pipeline,
                                         created_by=admin_user,
                                     )
+                                    target_analysis.performed_by.add(admin_user)
 
                                 if not AnalysisReport.objects.filter(file__endswith=file_path.name).exists():
                                     with open(file_path, "rb") as f:

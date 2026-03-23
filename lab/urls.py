@@ -70,8 +70,9 @@ from .htmx_views import (
     project_delete_modal,
     request_form_create_modal,
     report_create_modal,
+    generate_analysis_report_docx,
+    report_replace_modal,
     variant_create_modal,
-    variant_create_for_individual_modal,
     variant_detail_partial,
     config_form,
     config_delete_confirm,
@@ -151,8 +152,10 @@ urlpatterns = [
     path("htmx/task/create/<int:content_type_id>/<int:object_id>/", task_create_modal, name="task_create_modal"),
     path("htmx/request_form/create/<int:individual_id>/", request_form_create_modal, name="request_form_create_modal"),
     path("htmx/report/create/<int:analysis_id>/", report_create_modal, name="report_create_modal"),
-    path("htmx/variant/create/<int:pipeline_id>/", variant_create_modal, name="variant_create_modal"),
-    path("htmx/variant/create/individual/<int:individual_id>/", variant_create_for_individual_modal, name="variant_create_for_individual_modal"),
+    path("htmx/report/generate/<int:analysis_id>/", generate_analysis_report_docx, name="analysis_report_generate"),
+    path("htmx/report/<int:report_id>/replace/", report_replace_modal, name="report_replace_modal"),
+    path("htmx/variant/create/analysis/<int:analysis_id>/", variant_create_modal, name="variant_create_for_analysis_modal"),
+    path("htmx/variant/create/individual/<int:individual_id>/", variant_create_modal, name="variant_create_for_individual_modal"),
     
     # Project Management
     path("htmx/individual/<int:pk>/projects/edit/", individual_projects_edit, name="individual_projects_edit"),

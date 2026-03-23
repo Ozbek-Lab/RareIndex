@@ -1599,6 +1599,7 @@ class Command(BaseCommand):
                                 pipeline=target,
                                 created_by=self.admin_user,
                             )
+                            target_analysis.performed_by.add(self.admin_user)
                         rep = AnalysisReport(
                             analysis=target_analysis,
                             description=f"Imported from {fp.name}",

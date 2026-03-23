@@ -755,22 +755,6 @@ class Pipeline(HistoryMixin, models.Model):
 
         super().save(*args, **kwargs)
 
-    @property
-    def unreported_variants(self):
-        """Return variants for this pipeline that are not linked to any report.
-
-        Variants are now attached to ``Analysis`` (via ``Variant.analysis``)
-        rather than directly to ``Pipeline``. Reports are also on Analysis.
-        """
-        from variant.models import Variant
-
-        reported_ids = AnalysisReport.objects.filter(
-            analysis__pipeline=self
-        ).values_list("variants", flat=True)
-        return (
-            Variant.objects.filter(analysis__pipeline=self)
-            .exclude(pk__in=reported_ids)
-        )
 
 
 class AnalysisType(HistoryMixin, models.Model):
@@ -829,6 +813,23 @@ class Analysis(HistoryMixin, models.Model):
 
     def __str__(self):
         return f"{self.pipeline} - {self.type} - {self.performed_date}"
+
+    @property
+    def unreported_variants(self):
+        """Variants linked to this individual but not linked to any report for this analysis."""
+        from variant.models import Variant
+        
+        # We need the individual linked to this analysis
+        individual = self.pipeline.test.sample.individual if self.pipeline and self.pipeline.test and self.pipeline.test.sample else None
+        
+        if not individual:
+            return Variant.objects.none()
+            
+        return (
+            Variant.objects.filter(individual=individual)
+            .exclude(reports__analysis=self)
+            .distinct()
+        )
 
 
 class IdentifierType(HistoryMixin, models.Model):
