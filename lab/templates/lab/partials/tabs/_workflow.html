@@ -247,7 +247,10 @@
                         {% if sample.tests.exists %}
                             <div class="pl-4 border-l-2 border-primary/50 ml-4 space-y-3 relative">
                                 {% for test in sample.tests.all %}
-                                <div class="relative mb-2 last:mb-0" x-data="{ expanded: true }">
+                                <div
+                                    class="relative mb-2 last:mb-0"
+                                    x-data="{ expanded: {% if test|has_status:'Previous' %}false{% else %}true{% endif %} }"
+                                >
                                     <!-- Test Node -->
                                         <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
 

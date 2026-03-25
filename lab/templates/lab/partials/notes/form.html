@@ -14,13 +14,13 @@
     <div class="flex gap-2 items-stretch h-[auto]">
       <textarea
           name="content"
-          class="textarea textarea-bordered textarea-xs flex-1 leading-normal min-h-[60px] py-2"
+          class="textarea textarea-bordered textarea-xs flex-1 leading-normal min-h-0 h-[28px] py-1"
           placeholder="Add a note..."
           required
-          rows="3"
+          rows="1"
       ></textarea>
       
-      <div class="flex flex-col justify-between items-end gap-1 shrink-0 py-0.5">
+      <div class="flex flex-row justify-end items-center gap-1 shrink-0 py-0.5">
           <div class="tooltip tooltip-left flex items-center gap-1.5" data-tip="Private Note">
               <label class="cursor-pointer label p-0 gap-1.5 items-center">
                   <i class="fa-solid text-[10px] transition-colors duration-200" 
@@ -35,7 +35,7 @@
           <button
               type="submit"
               @click="$event.stopPropagation()"
-              class="btn btn-xs btn-primary h-[28px] min-h-0 px-3 w-full"
+              class="btn btn-xs btn-primary h-[28px] min-h-0 px-3 w-auto"
           >
               Add Note
           </button>
