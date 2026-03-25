@@ -1,0 +1,141 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initial fetch for notebooks
+    fetch('/authoring/notebooks/')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('id_notebook_filename');
+            if (select) {
+                // If it's a text input, we can add a datalist
+                const datalist = document.createElement('datalist');
+                datalist.id = 'notebook_files_list';
+                data.notebooks.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file;
+                    datalist.appendChild(option);
+                });
+                select.setAttribute('list', 'notebook_files_list');
+                select.parentNode.appendChild(datalist);
+            }
+        });
+});
+</script>
+<style>
+    .preview-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .preview-table th, .preview-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    .preview-table th { background-color: #f2f2f2; }
+    #query-preview-container { 
+        margin-top: 20px; 
+        padding: 15px; 
+        background: #fff; 
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+    .error-msg { color: #ba2121; font-weight: bold; }
+</style>
+{% endblock %}
+
+{% block content %}
+{{ block.super }}
+
+{% if change and original.notebook_filename %}
+<div class="module" style="margin-bottom: 16px;">
+    <a href="{% url 'lab:marimo_proxy' %}?file={{ original.notebook_filename|urlencode }}"
+       class="button"
+       target="_blank" rel="noopener noreferrer">Open “{{ original.notebook_filename }}” in Marimo editor</a>
+    <p class="help" style="margin-top:8px;">Runs against <code>MARIMO_EDITOR_URL</code> with a staff token in the redirect URL. Start the editor with <code>marimo edit lab/notebooks/ --port 8081 --host 127.0.0.1 --no-token</code> so Marimo does not show its own password gate.</p>
+</div>
+{% endif %}
+
+<div id="query-preview-tool" x-data="{ 
+    loading: false, 
+    results: null, 
+    error: null,
+    totalCount: 0,
+    testQuery() {
+        this.loading = true;
+        this.results = null;
+        this.error = null;
+        
+        const targetModel = document.getElementById('id_target_model').value;
+        const queryConfig = document.getElementById('id_query_config').value;
+        
+        fetch('/authoring/preview-plot/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                target_model: targetModel,
+                query_config: JSON.parse(queryConfig || '{}')
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            this.loading = false;
+            if (data.error) {
+                this.error = data.error;
+            } else {
+                this.results = data.data;
+                this.totalCount = data.record_count;
+            }
+        })
+        .catch(e => {
+            this.loading = false;
+            this.error = 'Invalid JSON or Network Error';
+        });
+    }
+}" class="module" style="margin-top: 40px;">
+    <h2>Query Preview Explorer</h2>
+    <div style="padding: 10px;">
+        <p>Test your <code>query_config</code> against the <code>target_model</code> before saving.</p>
+        <button type="button" @click="testQuery" class="button" :disabled="loading">
+            <span x-show="!loading">Run Test Query</span>
+            <span x-show="loading">Executing...</span>
+        </button>
+
+        <div id="query-preview-container" x-show="results || error" x-cloak>
+            <template x-if="error">
+                <div class="error-msg">Error: <span x-text="error"></span></div>
+            </template>
+            
+            <template x-if="results">
+                <div>
+                    <h3 style="margin-top: 0;">Preview (First 5 records of <span x-text="totalCount"></span> total)</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="preview-table">
+                            <thead>
+                                <tr>
+                                    <template x-for="key in Object.keys(results[0] || {})">
+                                        <th x-text="key"></th>
+                                    </template>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="row in results">
+                                    <tr>
+                                        <template x-for="val in Object.values(row)">
+                                            <td x-text="typeof val === 'object' ? JSON.stringify(val) : val"></td>
+                                        </template>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </template>
+            
+            <template x-if="results && results.length === 0">
+                <p>No records found matching these filters.</p>
+            </template>
+        </div>
+    </div>
+</div>
+{% endblock %}

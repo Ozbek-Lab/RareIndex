@@ -562,3 +562,74 @@ except NotRegistered:
 
 admin.site.register(User, CustomUserAdmin)
 
+
+@admin.register(models.PlotTemplate)
+class PlotTemplateAdmin(SimpleHistoryAdmin):
+    list_display = ["name", "target_model", "is_published", "created_by", "get_created_at", "get_updated_at"]
+    search_fields = ["name", "description", "target_model"]
+    list_filter = ["target_model", "is_published"]
+    prepopulated_fields = {"slug": ("name",)}
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_staff:
+            return qs
+        return qs.none()
+
+    def has_module_permission(self, request):
+        return request.user.is_staff
+
+    def has_add_permission(self, request):
+        return request.user.is_staff
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_staff
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_staff
+
+
+@admin.register(models.DashboardWidget)
+class DashboardWidgetAdmin(SimpleHistoryAdmin):
+    list_display = ["user", "template", "order", "col_span", "row_span", "get_created_at", "get_updated_at"]
+    list_filter = ["user", "template"]
+    search_fields = ["user__username", "template__name"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        if obj and obj.user == request.user:
+            return True
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        if obj and obj.user == request.user:
+            return True
+        return False
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)

@@ -391,6 +391,87 @@
 
             <!-- Main Dashboard Body Area -->
             <div id="dashboard-body-container" class="flex-1 pb-8 flex flex-col gap-6">
+                <!-- Widgets Section -->
+                {% if widgets %}
+                <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
+                     id="widget-grid"
+                     x-data="{ token: null }" 
+                     x-init="
+                        fetch('{% url 'lab:issue_plot_token' %}', { credentials: 'same-origin' })
+                            .then(r => r.json())
+                            .then(data => { token = data.token; })
+                            .catch(() => {});
+                        Sortable.create($el, {
+                            animation: 150,
+                            handle: '.drag-handle',
+                            ghostClass: 'opacity-50',
+                            onEnd: function (evt) {
+                                const newOrder = Array.from($el.children).map(child => child.dataset.widgetId);
+                                const match = document.cookie.match(/csrftoken=([^;]+)/);
+                                const csrfToken = match ? match[1] : '';
+                                fetch('{% url 'lab:reorder_widgets' %}', {
+                                    method: 'PATCH',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRFToken': csrfToken
+                                    },
+                                    body: JSON.stringify({order: newOrder})
+                                });
+                            }
+                        });
+                     ">
+                    {% for widget in widgets %}
+                    <div class="card bg-base-100 shadow-sm border border-base-200" data-widget-id="{{ widget.id }}" style="grid-column: span {{ widget.col_span }}; grid-row: span {{ widget.row_span }};">
+                        <div class="card-body p-2 sm:p-3 flex flex-col min-h-0 h-[calc(100dvh-4rem)] min-h-[44rem]">
+                            
+                            <div class="flex justify-between items-start mb-1 shrink-0 gap-2">
+                                <div>
+                                    <h2 class="card-title text-base drag-handle cursor-move flex items-center gap-2">
+                                        <i class="fa-solid fa-grip-vertical text-base-content/30 hover:text-base-content/70"></i>
+                                        {{ widget.template.name }}
+                                    </h2>
+                                    <p class="text-xs text-base-content/70">{{ widget.template.description }}</p>
+                                </div>
+                                <div class="flex items-center gap-1 shrink-0">
+                                    {% if user.is_staff %}
+                                    <a class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+                                       href="{% url 'lab:marimo_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}"
+                                       target="_blank" rel="noopener noreferrer"
+                                       title="Edit notebook in Marimo">
+                                        <i class="fa-solid fa-pen-to-square text-[11px]"></i>
+                                    </a>
+                                    {% endif %}
+                                    <button class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-error hover:bg-error/10"
+                                            hx-post="{% url 'lab:remove_widget' widget.id %}"
+                                            hx-target="closest .card"
+                                            hx-swap="outerHTML"
+                                            title="Remove from Dashboard">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="flex-1 w-full flex flex-col min-w-0 min-h-0 self-stretch">
+                                <template x-if="token">
+                                    <iframe
+                                        :key="'plot-widget-{{ widget.id }}-' + token"
+                                        :src="`{{ marimo_service_url }}/?file=${encodeURIComponent('{{ widget.template.notebook_filename }}')}&token=${encodeURIComponent(token)}`"
+                                        class="block w-full flex-1 min-h-0 h-full border-0 rounded-md bg-base-200/20"
+                                        title="{{ widget.template.name }}"
+                                        loading="eager"
+                                    ></iframe>
+                                </template>
+                                <div x-show="!token" class="flex flex-1 min-h-0 items-center justify-center bg-base-200/50 rounded animate-pulse">
+                                    <span class="loading loading-spinner text-primary"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
                 <!-- My Tasks Section -->
                 <div>
                     {% include "lab/partials/dashboard/my_tasks.html" %}

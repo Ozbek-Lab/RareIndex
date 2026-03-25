@@ -4,6 +4,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+from django.conf import settings
 from encrypted_model_fields.fields import (
     EncryptedCharField,
     EncryptedBigIntegerField,
@@ -11,6 +12,7 @@ from encrypted_model_fields.fields import (
 )
 from simple_history.models import HistoricalRecords
 from django.utils import timezone
+from pathlib import Path
 from taggit.managers import TaggableManager
 from taggit.models import GenericTaggedItemBase
 from .middleware import get_current_user
@@ -994,4 +996,65 @@ class AnalysisRequestForm(HistoryMixin, models.Model):
 
     def __str__(self):
         return f"Request Form for {self.individual} - {self.created_at.strftime('%Y-%m-%d')}"
+
+
+class PlotTemplate(HistoryMixin, models.Model):
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    target_model = models.CharField(max_length=100)
+    query_config = models.JSONField(default=dict)
+    notebook_filename = models.CharField(max_length=255)
+    slug = models.SlugField(unique=True)
+    is_published = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="created_plot_templates"
+    )
+    history = HistoricalRecords()
+
+    def clean(self):
+        super().clean()
+        if self.target_model not in settings.PLOT_ALLOWED_MODELS:
+            raise ValidationError({"target_model": f"Must be one of: {settings.PLOT_ALLOWED_MODELS}"})
+
+        raw = (self.notebook_filename or "").strip()
+        if not raw:
+            raise ValidationError({"notebook_filename": "This field is required."})
+        safe_name = Path(raw).name
+        if safe_name != raw:
+            raise ValidationError(
+                {"notebook_filename": "Must be a bare filename (e.g. sunburst.py), no folders or path segments."}
+            )
+        self.notebook_filename = safe_name
+
+        notebook_path = settings.MARIMO_NOTEBOOKS_DIR / safe_name
+        if not notebook_path.exists():
+            raise ValidationError({"notebook_filename": f"Notebook {safe_name} not found in {settings.MARIMO_NOTEBOOKS_DIR}."})
+
+    def save(self, *args, **kwargs):
+        if not getattr(self, "created_by_id", None):
+            try:
+                current_user = get_current_user()
+            except Exception:
+                current_user = None
+
+            if current_user is not None and getattr(current_user, "is_authenticated", False):
+                self.created_by = current_user
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+class DashboardWidget(HistoryMixin, models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="dashboard_widgets")
+    template = models.ForeignKey(PlotTemplate, on_delete=models.CASCADE)
+    order = models.IntegerField(default=0)
+    col_span = models.IntegerField(default=1)
+    row_span = models.IntegerField(default=1)
+    history = HistoricalRecords()
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.template.name}"
 

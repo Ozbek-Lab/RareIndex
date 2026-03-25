@@ -1,0 +1,74 @@
+<style>
+/* RareIndex dashboard: hide Marimo multi-notebook “Back to gallery” bar (shown when ?file= is used). */
+.flex.items-center.px-6.pt-4:has(a[aria-label="Back to gallery"]) {
+  display: none !important;
+}
+
+/* Fill the iframe vertically so Marimo layout doesn’t leave a dead band under the chart. */
+html {
+  height: 100%;
+}
+body {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+/* Marimo root: stretch to iframe height (structure is typically body > single app root). */
+body > div:first-of-type {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Plotly: outer div matches iframe; inner tree fills it (avoids “tall box, short graph”). */
+.plotly-graph-div {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100dvh !important;
+  min-height: 18rem !important;
+  max-height: 100dvh !important;
+}
+.plotly-graph-div .plotly,
+.plotly-graph-div .js-plotly-plot,
+.plotly-graph-div .plot-container {
+  height: 100% !important;
+  width: 100% !important;
+}
+.plotly-graph-div .svg-container {
+  height: 100% !important;
+}
+</style>
+<script>
+(function () {
+  function resizePlots() {
+    if (typeof Plotly === "undefined") return;
+    document.querySelectorAll(".plotly-graph-div").forEach(function (gd) {
+      try {
+        Plotly.Plots.resize(gd);
+      } catch (e) {}
+    });
+  }
+  function scheduleResize() {
+    resizePlots();
+    requestAnimationFrame(resizePlots);
+    [0, 50, 150, 400, 1000].forEach(function (ms) {
+      setTimeout(resizePlots, ms);
+    });
+  }
+  function onReady() {
+    scheduleResize();
+    if (typeof ResizeObserver !== "undefined") {
+      var ro = new ResizeObserver(function () {
+        resizePlots();
+      });
+      ro.observe(document.documentElement);
+    }
+  }
+  if (document.readyState === "complete") onReady();
+  else window.addEventListener("load", onReady);
+  window.addEventListener("resize", resizePlots);
+})();
+</script>

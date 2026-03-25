@@ -16,6 +16,16 @@ from .views import (
     IndividualExportView,
     configurations_view,
     MapVisualizationView,
+    issue_plot_token_view,
+    generic_plot_data,
+    PlotGalleryView,
+    add_widget,
+    remove_widget,
+    reorder_widgets,
+    list_notebook_files,
+    preview_plot_data,
+    marimo_proxy,
+    marimo_run_proxy,
 )
 from .profile_views import ProfileView, UpdateThemeView
 from .htmx_views import (
@@ -183,4 +193,21 @@ urlpatterns = [
     path("htmx/config/<str:model_name>/<int:pk>/form/", config_form, name="config_form_edit"),
     path("htmx/config/<str:model_name>/<int:pk>/delete-confirm/", config_delete_confirm, name="config_delete_confirm"),
     path("htmx/config/<str:model_name>/<int:pk>/delete/", config_delete, name="config_delete"),
+    
+    # API for Marimo
+    path("api/plot-token/", issue_plot_token_view, name="issue_plot_token"),
+    path("api/plot-data/", generic_plot_data, name="generic_plot_data"),
+    
+    # Dashboard Integrations
+    path("gallery/", PlotGalleryView.as_view(), name="plot_gallery"),
+    path("dashboard/add/<int:pk>/", add_widget, name="add_widget"),
+    path("dashboard/remove/<int:pk>/", remove_widget, name="remove_widget"),
+    path("dashboard/reorder/", reorder_widgets, name="reorder_widgets"),
+    
+    # Phase 5: Admin Authoring UX
+    path("authoring/notebooks/", list_notebook_files, name="list_notebooks"),
+    path("authoring/preview-plot/", preview_plot_data, name="preview_plot_data"),
+    path("authoring/marimo/", marimo_proxy, name="marimo_proxy"),
+    path("authoring/marimo/<path:path>", marimo_proxy, name="marimo_proxy_path"),
+    path("authoring/marimo-run/", marimo_run_proxy, name="marimo_run_proxy"),
 ]

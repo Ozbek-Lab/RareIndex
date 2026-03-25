@@ -1,5 +1,7 @@
+import logging
+from django.conf import settings
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -8,7 +10,7 @@ from django_tables2 import SingleTableMixin
 from django_filters.views import FilterView
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Count, Min, Max, DateTimeField
+from django.db.models import Count, Min, Max, Sum, Avg, DateTimeField
 from django.db.models.functions import Cast, Coalesce
 from django.contrib.contenttypes.models import ContentType
 from .models import (
@@ -27,10 +29,55 @@ from .models import (
     AnalysisType,
     IdentifierType,
     Institution,
+    PlotTemplate,
+    DashboardWidget,
 )
 from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
 from .filters import IndividualFilter, ProjectFilter, VariantFilter
 from variant.models import Variant, Annotation as VariantAnnotation, Classification as VariantClassification
+
+logger = logging.getLogger(__name__)
+
+
+def _plot_config_filters(config):
+    return config.get("filters") or config.get("filter") or {}
+
+
+def _plot_build_annotations(annotate_spec):
+    """Map query_config.annotate to Django ORM annotations (incl. count shorthand)."""
+    if not annotate_spec:
+        return {}
+    annotations = {}
+    for alias, agg_spec in annotate_spec.items():
+        if isinstance(agg_spec, str):
+            annotations[alias] = Count(agg_spec)
+        elif isinstance(agg_spec, dict):
+            for agg_type, field in agg_spec.items():
+                agg_type_l = str(agg_type).lower()
+                if agg_type_l == "count":
+                    annotations[alias] = Count(field)
+                elif agg_type_l == "sum":
+                    annotations[alias] = Sum(field)
+                elif agg_type_l == "avg":
+                    annotations[alias] = Avg(field)
+                elif agg_type_l == "min":
+                    annotations[alias] = Min(field)
+                elif agg_type_l == "max":
+                    annotations[alias] = Max(field)
+                else:
+                    raise ValueError(f"Unknown aggregation type: {agg_type!r}")
+        else:
+            raise ValueError(
+                f"annotate entry {alias!r} must be a field name (str) or an aggregation dict"
+            )
+    return annotations
+
+
+def _plot_ensure_dict_rows(qs):
+    """Force Values-style rows so JsonResponse always receives list[dict]."""
+    if qs.query.values_select:
+        return qs
+    return qs.values()
 
 
 def _variant_filter_counts():
@@ -279,6 +326,8 @@ def _individual_filter_counts():
         if row['classification']
     })
 
+
+    # --- Lab App Setup/Installation Checks ---
     # Institution sub-filters (distinct individuals per city / speciality / center_name)
     institution_city_counts = {
         row['institution__city']: row['c']
@@ -429,6 +478,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             .order_by('-c', 'city')[:10]
         )
         
+        # Dashboard Widgets
+        context["widgets"] = (
+            self.request.user.dashboard_widgets.select_related("template").order_by("order")
+        )
+        context["marimo_service_url"] = getattr(
+            settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8080"
+        ).rstrip("/")
+
         # 2. News Feed - Aggregated History
         from itertools import chain
         from operator import attrgetter
@@ -1413,3 +1470,247 @@ def configurations_view(request):
             sections.append(_build_section_context(request, key, config))
 
     return render(request, "lab/configurations.html", {"sections": sections})
+
+
+# --- API for Marimo ---
+from django.apps import apps
+from django.views import generic
+from django.views.decorators.http import require_http_methods, require_POST
+from .jwt_utils import issue_plot_token, verify_plot_token
+
+@login_required
+def issue_plot_token_view(request):
+    token = issue_plot_token(request.user)
+    expires = int(getattr(settings, "MARIMO_PLOT_TOKEN_MAX_AGE", 900))
+    return JsonResponse({"token": token, "expires_in": expires})
+
+def generic_plot_data(request):
+    user = request.user
+    if not user.is_authenticated:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+            try:
+                user = verify_plot_token(token)
+            except Exception as e:
+                logger.warning("plot-data: bearer token verification failed (%s)", e)
+                return JsonResponse({"error": str(e)}, status=401)
+        else:
+            logger.warning("plot-data: unauthenticated request with no bearer token")
+            return JsonResponse({"error": "Unauthorized"}, status=401)
+
+    allowed_models = getattr(settings, "PLOT_ALLOWED_MODELS", [])
+    model_name = request.GET.get("model")
+    if model_name not in allowed_models:
+        logger.warning("plot-data: disallowed model requested: %s", model_name)
+        return JsonResponse({"error": "Model not allowed"}, status=403)
+
+    try:
+        model = apps.get_model("lab", model_name)
+    except LookupError:
+        try:
+            model = apps.get_model("variant", model_name)
+        except LookupError:
+            return JsonResponse({"error": f"Model {model_name} not found"}, status=400)
+
+    query_str = request.GET.get("config") or request.GET.get("query") or "{}"
+    try:
+        config = json.loads(query_str)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid query config"}, status=400)
+
+    qs = model.objects.all()
+
+    filters = _plot_config_filters(config)
+    if filters:
+        qs = qs.filter(**filters)
+
+    values = config.get("values") or []
+    if values:
+        qs = qs.values(*values)
+
+    annotate = config.get("annotate") or {}
+    if annotate:
+        try:
+            annotations = _plot_build_annotations(annotate)
+        except ValueError as e:
+            return JsonResponse({"error": str(e)}, status=400)
+        qs = qs.annotate(**annotations)
+
+    qs = _plot_ensure_dict_rows(qs)
+    data = list(qs)
+    return JsonResponse({"data": data, "model": model_name, "record_count": len(data)})
+
+class PlotGalleryView(LoginRequiredMixin, generic.ListView):
+    model = PlotTemplate
+    template_name = 'lab/gallery.html'
+    context_object_name = 'templates'
+
+    def get_queryset(self):
+        return super().get_queryset().filter(is_published=True)
+
+@login_required
+@require_POST
+def add_widget(request, pk):
+    template = get_object_or_404(PlotTemplate, pk=pk)
+    # Check if user already has this template on dashboard
+    if not DashboardWidget.objects.filter(user=request.user, template=template).exists():
+        # Add to dashboard at the end
+        last_order = DashboardWidget.objects.filter(user=request.user).aggregate(max_order=Max("order"))["max_order"] or 0
+        DashboardWidget.objects.create(
+            user=request.user,
+            template=template,
+            order=last_order + 1
+        )
+    # HTMX response to show success checkmark or text swap
+    return HttpResponse('<span class="text-success"><i class="fa-solid fa-check"></i> Added</span>')
+
+@login_required
+@require_POST
+def remove_widget(request, pk):
+    # pk is the widget ID (or template ID if we want, but widget ID is safer)
+    widget = get_object_or_404(DashboardWidget, pk=pk, user=request.user)
+    widget.delete()
+    return HttpResponse("") # HTMX will swap out the element (outerHTML)
+
+@login_required
+@require_http_methods(["PATCH"])
+def reorder_widgets(request):
+    try:
+        data = json.loads(request.body)
+        order_list = data.get("order", [])
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    # Perform bulk update
+    widgets = []
+    for index, widget_id in enumerate(order_list):
+        try:
+            widget = DashboardWidget.objects.get(pk=widget_id, user=request.user)
+            widget.order = index
+            widgets.append(widget)
+        except DashboardWidget.DoesNotExist:
+            pass
+
+    if widgets:
+        DashboardWidget.objects.bulk_update(widgets, ['order'])
+
+    return JsonResponse({"status": "success"})
+
+
+# --- Admin Authoring UX Endpoints ---
+import os
+from django.contrib.admin.views.decorators import staff_member_required
+
+@staff_member_required
+def list_notebook_files(request):
+    """Returns a list of .py notebook files in the notebooks directory."""
+    notebooks_dir = getattr(settings, 'MARIMO_NOTEBOOKS_DIR', settings.BASE_DIR / 'lab' / 'notebooks')
+    files = []
+    if os.path.exists(notebooks_dir):
+        for f in os.listdir(notebooks_dir):
+            if f.endswith('.py') and not f.startswith('_'):
+                files.append(f)
+    return JsonResponse({"notebooks": sorted(files)})
+
+@staff_member_required
+@require_POST
+def preview_plot_data(request):
+    """Executes a JSON query payload exactly as the API would, for testing/validation."""
+    try:
+        payload = json.loads(request.body)
+        model_name = payload.get('target_model')
+        query_config = payload.get('query_config', {})
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    allowed_models = getattr(settings, 'PLOT_ALLOWED_MODELS', [])
+    if model_name not in allowed_models:
+        return JsonResponse({"error": f"Model {model_name} not allowed"}, status=400)
+        
+    try:
+        model = apps.get_model('lab', model_name)
+    except LookupError:
+        try:
+            model = apps.get_model('variant', model_name)
+        except LookupError:
+            return JsonResponse({"error": f"Model {model_name} not found"}, status=400)
+    
+    qs = model.objects.all()
+
+    filters = _plot_config_filters(query_config)
+    if filters:
+        try:
+            qs = qs.filter(**filters)
+        except Exception as e:
+            return JsonResponse({"error": f"Filter error: {str(e)}"}, status=400)
+
+    values = query_config.get("values") or []
+    if values:
+        try:
+            qs = qs.values(*values)
+        except Exception as e:
+            return JsonResponse({"error": f"Values error: {str(e)}"}, status=400)
+
+    annotate = query_config.get("annotate") or {}
+    if annotate:
+        try:
+            annotations = _plot_build_annotations(annotate)
+            qs = qs.annotate(**annotations)
+        except ValueError as e:
+            return JsonResponse({"error": str(e)}, status=400)
+        except Exception as e:
+            return JsonResponse({"error": f"Annotate error: {str(e)}"}, status=400)
+
+    try:
+        qs = _plot_ensure_dict_rows(qs)
+        data = list(qs[:5])
+    except Exception as e:
+        return JsonResponse({"error": f"Database execution error: {str(e)}"}, status=400)
+
+    return JsonResponse({"data": data, "record_count": qs.count()})
+
+
+@staff_member_required
+def marimo_proxy(request, path=""):
+    """
+    Send staff to the local Marimo *edit* server with a long-lived JWT on the query string.
+
+    Use GET params Marimo understands (e.g. file=status_bar.py). Cross-origin cookies do not
+    reach :8081, so the token is carried in the URL; notebooks read it via mo.query_params().
+    """
+    from .jwt_utils import issue_editor_plot_token
+
+    marimo_base = getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8081").rstrip("/")
+    params = request.GET.copy()
+    params["token"] = issue_editor_plot_token(request.user)
+    return redirect(f"{marimo_base}/?{params.urlencode()}")
+
+
+@login_required
+def marimo_run_proxy(request):
+    """
+    Send the user to the Marimo *run* server (dashboard / read-only app) with a plot JWT.
+
+    Opening http://localhost:8080/?file=… alone does not include a Django JWT, so plot cells
+    stop with auth. This view adds token= for mo.query_params() (Marimo does not strip it).
+    """
+    from pathlib import Path
+
+    from django.http import HttpResponseBadRequest
+
+    raw = (request.GET.get("file") or "").strip()
+    if not raw:
+        return HttpResponseBadRequest("Missing required query parameter: file")
+    safe_name = Path(raw).name
+    if safe_name != raw:
+        return HttpResponseBadRequest("file= must be a basename only (e.g. sunburst.py)")
+    nb_dir = getattr(settings, "MARIMO_NOTEBOOKS_DIR", None)
+    if nb_dir is not None and not (Path(nb_dir) / safe_name).is_file():
+        return HttpResponseBadRequest("Notebook file not found in MARIMO_NOTEBOOKS_DIR")
+
+    marimo_base = getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8080").rstrip("/")
+    token = issue_plot_token(request.user)
+    from urllib.parse import urlencode
+
+    return redirect(f"{marimo_base}/?{urlencode({'file': safe_name, 'token': token})}")
