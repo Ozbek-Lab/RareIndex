@@ -76,6 +76,7 @@ from .htmx_views import (
     task_detail_edit,
     task_detail_save,
     document_preview,
+    document_download,
     project_create_modal,
     project_delete_modal,
     request_form_create_modal,
@@ -184,6 +185,7 @@ urlpatterns = [
     path("htmx/task/<int:pk>/edit/", task_detail_edit, name="task_detail_edit"),
     path("htmx/task/<int:pk>/save/", task_detail_save, name="task_detail_save"),
     path("htmx/preview/<str:model_name>/<int:pk>/", document_preview, name="document_preview"),
+    path("documents/<str:model_name>/<int:pk>/download/", document_download, name="document_download"),
     path("htmx/variant/<int:pk>/detail/", variant_detail_partial, name="variant_detail_partial"),
 
     # Configurations

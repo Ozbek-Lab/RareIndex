@@ -1,5 +1,6 @@
 # forms.py
 from django import forms
+from django.contrib.auth.models import User
 from django.utils import timezone
 from .models import (
     Task,
@@ -501,6 +502,138 @@ class AnalysisReportReplaceForm(BaseForm):
         fields = ["file"]
 
 
+class AnalysisReportGenerateForm(forms.Form):
+    report_date = forms.DateField(
+        initial=timezone.localdate,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    template_location = forms.CharField(
+        required=False,
+        label="Report template",
+        widget=forms.HiddenInput(),
+    )
+    default_positive_comment_text = forms.CharField(
+        required=False,
+        label="Positive comment text",
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+    default_negative_result_text = forms.CharField(
+        required=False,
+        label="Negative result text",
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+    default_method_text = forms.CharField(
+        required=False,
+        label="Method text",
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+    default_total_reads_text = forms.CharField(
+        required=False,
+        label="Total reads",
+    )
+    default_coverage_20x_text = forms.CharField(
+        required=False,
+        label="Coverage (20x)",
+    )
+    default_mean_depth_text = forms.CharField(
+        required=False,
+        label="Mean depth",
+    )
+    default_filtering_text = forms.CharField(
+        required=False,
+        label="Filtering text",
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+    default_limitations_text = forms.CharField(
+        required=False,
+        label="Limitations text",
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+    signers = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label="Signers",
+        help_text="Only users with a saved signer block are listed.",
+        widget=forms.SelectMultiple(),
+    )
+    authorized_signer = forms.ModelChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        empty_label="No authorized signer",
+        label="Authorized signer",
+        help_text="Only users with a saved signer block are listed.",
+    )
+
+    def __init__(self, *args, test_type=None, report_mode="positive", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["signers"].queryset = (
+            User.objects.filter(profile__signer_block_text__isnull=False)
+            .exclude(profile__signer_block_text="")
+            .order_by("first_name", "last_name", "username")
+        )
+        self.fields["authorized_signer"].queryset = (
+            User.objects.filter(profile__signer_block_text__isnull=False)
+            .exclude(profile__signer_block_text="")
+            .order_by("first_name", "last_name", "username")
+        )
+        self.fields["signers"].label_from_instance = (
+            lambda user: user.get_full_name().strip() or user.username
+        )
+        self.fields["authorized_signer"].label_from_instance = (
+            lambda user: user.get_full_name().strip() or user.username
+        )
+
+        if test_type is not None:
+            self.fields["template_location"].initial = (
+                getattr(test_type, "negative_report_template", "")
+                if report_mode == "negative"
+                else getattr(test_type, "positive_report_template", "")
+            ) or ""
+            self.fields["default_positive_comment_text"].initial = getattr(test_type, "default_positive_comment_text", "") or ""
+            self.fields["default_negative_result_text"].initial = getattr(test_type, "default_negative_result_text", "") or ""
+            self.fields["default_method_text"].initial = getattr(test_type, "default_method_text", "") or ""
+            self.fields["default_total_reads_text"].initial = getattr(test_type, "default_total_reads_text", "") or ""
+            self.fields["default_coverage_20x_text"].initial = getattr(test_type, "default_coverage_20x_text", "") or ""
+            self.fields["default_mean_depth_text"].initial = getattr(test_type, "default_mean_depth_text", "") or ""
+            self.fields["default_filtering_text"].initial = getattr(test_type, "default_filtering_text", "") or ""
+            self.fields["default_limitations_text"].initial = getattr(test_type, "default_limitations_text", "") or ""
+
+        if report_mode == "negative":
+            self.fields.pop("default_positive_comment_text")
+        else:
+            self.fields.pop("default_negative_result_text")
+
+        field_order = [
+            "report_date",
+            "default_negative_result_text" if report_mode == "negative" else "default_positive_comment_text",
+            "default_method_text",
+            "default_total_reads_text",
+            "default_coverage_20x_text",
+            "default_mean_depth_text",
+            "default_filtering_text",
+            "default_limitations_text",
+            "signers",
+            "authorized_signer",
+            "template_location",
+        ]
+        self.order_fields([name for name in field_order if name in self.fields])
+
+        # Match BaseForm styling without turning this into a ModelForm.
+        self.fields["report_date"].widget.attrs["class"] = "input input-bordered w-full"
+        if "default_positive_comment_text" in self.fields:
+            self.fields["default_positive_comment_text"].widget.attrs["class"] = "textarea textarea-bordered w-full h-24"
+        if "default_negative_result_text" in self.fields:
+            self.fields["default_negative_result_text"].widget.attrs["class"] = "textarea textarea-bordered w-full h-24"
+        self.fields["default_method_text"].widget.attrs["class"] = "textarea textarea-bordered w-full h-24"
+        self.fields["default_total_reads_text"].widget.attrs["class"] = "input input-bordered w-full"
+        self.fields["default_coverage_20x_text"].widget.attrs["class"] = "input input-bordered w-full"
+        self.fields["default_mean_depth_text"].widget.attrs["class"] = "input input-bordered w-full"
+        self.fields["default_filtering_text"].widget.attrs["class"] = "textarea textarea-bordered w-full h-24"
+        self.fields["default_limitations_text"].widget.attrs["class"] = "textarea textarea-bordered w-full h-24"
+        self.fields["signers"].widget.attrs["class"] = "select select-bordered w-full h-32"
+        self.fields["authorized_signer"].widget.attrs["class"] = "select select-bordered w-full"
+
+
 class InstitutionForm(BaseForm):
     class Meta:
         model = Institution
@@ -966,9 +1099,43 @@ class SampleTypeForm(BaseForm):
 class TestTypeForm(BaseForm):
     class Meta:
         model = TestType
-        fields = ["name", "description"]
+        fields = [
+            "name",
+            "description",
+            "positive_report_template",
+            "negative_report_template",
+            "default_positive_comment_text",
+            "default_negative_result_text",
+            "default_method_text",
+            "default_total_reads_text",
+            "default_coverage_20x_text",
+            "default_mean_depth_text",
+            "default_filtering_text",
+            "default_limitations_text",
+        ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
+            "default_positive_comment_text": forms.Textarea(attrs={"rows": 6, "class": "textarea textarea-bordered w-full h-40"}),
+            "default_negative_result_text": forms.Textarea(attrs={"rows": 6, "class": "textarea textarea-bordered w-full h-40"}),
+            "default_method_text": forms.Textarea(attrs={"rows": 6, "class": "textarea textarea-bordered w-full h-40"}),
+            "default_filtering_text": forms.Textarea(attrs={"rows": 6, "class": "textarea textarea-bordered w-full h-40"}),
+            "default_limitations_text": forms.Textarea(attrs={"rows": 6, "class": "textarea textarea-bordered w-full h-40"}),
+        }
+        labels = {
+            "positive_report_template": "Positive report template",
+            "negative_report_template": "Negative report template",
+            "default_positive_comment_text": "Default positive comment text",
+            "default_negative_result_text": "Default negative result text",
+            "default_method_text": "Method text",
+            "default_total_reads_text": "Total reads",
+            "default_coverage_20x_text": "Coverage (20x)",
+            "default_mean_depth_text": "Mean depth",
+            "default_filtering_text": "Filtering text",
+            "default_limitations_text": "Limitations text",
+        }
+        help_texts = {
+            "default_positive_comment_text": "Supports report placeholders like {{GENE_TRANSCRIPT_BLOCK}}, {{VARIANT_DETAILS_BLOCK}}, {{ZYGOSITY}}, {{CLASSIFICATION_BLOCK}}, and {{HPO_TERMS}}.",
+            "default_negative_result_text": "Supports report placeholders like {{HPO_TERMS}} and other report tokens.",
         }
 
 
@@ -1127,4 +1294,3 @@ class QuickAddMemberForm(forms.ModelForm):
             "class": "input input-bordered input-sm w-full",
             "placeholder": self.fields["secondary_id"].label,
         })
-

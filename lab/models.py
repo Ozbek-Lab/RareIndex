@@ -244,6 +244,16 @@ class Note(HistoryMixin, models.Model):
 class TestType(HistoryMixin, models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+    positive_report_template = models.CharField(max_length=255, blank=True, default="")
+    negative_report_template = models.CharField(max_length=255, blank=True, default="")
+    default_positive_comment_text = models.TextField(blank=True, default="")
+    default_negative_result_text = models.TextField(blank=True, default="")
+    default_method_text = models.TextField(blank=True, default="")
+    default_total_reads_text = models.CharField(max_length=255, blank=True, default="")
+    default_coverage_20x_text = models.CharField(max_length=255, blank=True, default="")
+    default_mean_depth_text = models.CharField(max_length=255, blank=True, default="")
+    default_filtering_text = models.TextField(blank=True, default="")
+    default_limitations_text = models.TextField(blank=True, default="")
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     history = HistoricalRecords()
 
@@ -833,6 +843,11 @@ class Analysis(HistoryMixin, models.Model):
             .distinct()
         )
 
+    @property
+    def has_connected_variants(self):
+        """Whether this analysis has any variants to show in report-related sections."""
+        return self.unreported_variants.exists() or self.reports.filter(variants__isnull=False).exists()
+
 
 class IdentifierType(HistoryMixin, models.Model):
     name = models.CharField(max_length=100)
@@ -894,6 +909,11 @@ class Profile(models.Model):
     display_preferences = models.JSONField(
         default=dict, help_text="UI and display preference settings"
     )
+    signer_block_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="Multiline signer block inserted into generated reports.",
+    )
 
     def __str__(self):
         return f"{self.user.username}'s Profile"
@@ -907,13 +927,13 @@ from django.dispatch import receiver
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
-        Profile.objects.create(user=instance)
+        Profile.objects.get_or_create(user=instance)
 
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
-    if hasattr(instance, "profile"):
-        instance.profile.save()
+    Profile.objects.get_or_create(user=instance)
+    instance.profile.save()
 
 
 # Notification Signals
@@ -1057,4 +1077,3 @@ class DashboardWidget(HistoryMixin, models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.template.name}"
-

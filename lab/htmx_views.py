@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden, FileResponse, Http404
 from django.contrib.auth.decorators import login_required
 from django import forms
 from django.views.decorators.http import require_POST
@@ -8,6 +8,7 @@ from django.core.paginator import Paginator
 from django.views.generic import View
 from django.urls import reverse
 from django.apps import apps
+from pathlib import Path
 from .models import Individual, Family, Project
 
 
@@ -1339,6 +1340,23 @@ def project_individual_remove(request, project_pk, individual_pk):
     return render(request, "lab/partials/tabs/_project_individuals.html", context)
 
 
+def _user_can_access_document(request_user, obj):
+    model_name = obj._meta.model_name
+    return (
+        request_user.is_staff
+        or request_user.has_perm(f"lab.view_{model_name}")
+        or request_user.has_perm(f"lab.change_{model_name}")
+    )
+
+
+def _get_downloadable_document_file(request_user, obj):
+    if not request_user.has_perm("lab.view_sensitive_data"):
+        raise PermissionError("Document download requires sensitive-data permission.")
+    if not obj.file:
+        raise Http404("Original file not found.")
+    return obj.file
+
+
 @login_required
 def document_preview(request, model_name, pk):
     """Render a document preview in the side drawer."""
@@ -1349,9 +1367,7 @@ def document_preview(request, model_name, pk):
     except (LookupError, ValueError):
         return HttpResponse("Invalid model or object.")
 
-    # Check permission (generic)
-    if not request.user.has_perm("lab.view_analysisrequestform") and not request.user.is_staff:
-        # A more complex permission check could be done here if needed
+    if not _user_can_access_document(request.user, obj):
         return HttpResponseForbidden("You do not have permission to view this document.")
 
     context = {
@@ -1361,6 +1377,26 @@ def document_preview(request, model_name, pk):
     response = render(request, "lab/partials/preview_drawer.html", context)
     response["HX-Trigger"] = "open-preview"
     return response
+
+
+@login_required
+def document_download(request, model_name, pk):
+    try:
+        Model = apps.get_model("lab", model_name)
+        obj = get_object_or_404(Model, pk=pk)
+    except (LookupError, ValueError):
+        return HttpResponse("Invalid model or object.")
+
+    if not _user_can_access_document(request.user, obj):
+        return HttpResponseForbidden("You do not have permission to download this document.")
+
+    try:
+        selected_file = _get_downloadable_document_file(request.user, obj)
+    except PermissionError as exc:
+        return HttpResponseForbidden(str(exc))
+
+    filename = Path(selected_file.name).name or f"{obj._meta.model_name}-{obj.pk}"
+    return FileResponse(selected_file.open("rb"), as_attachment=True, filename=filename)
 
 
 @login_required
@@ -1489,7 +1525,6 @@ def report_create_modal(request, analysis_id):
 
 
 @login_required
-@require_POST
 def generate_analysis_report_docx(request, analysis_id):
     from django.core.files.base import ContentFile
     from django.http import HttpResponseBadRequest
@@ -1499,7 +1534,12 @@ def generate_analysis_report_docx(request, analysis_id):
     from variant.models import Variant
 
     from .models import Analysis, AnalysisReport
-    from .docx_reports import build_docx_report_bytes, choose_docx_template_for_test_type
+    from .docx_reports import (
+        build_docx_report_bytes,
+        choose_docx_template_for_test_type,
+        resolve_docx_template_path,
+    )
+    from .forms import AnalysisReportGenerateForm
 
     analysis = get_object_or_404(
         Analysis.objects.select_related("pipeline__test__sample__individual", "pipeline__test__test_type"),
@@ -1509,8 +1549,42 @@ def generate_analysis_report_docx(request, analysis_id):
         return HttpResponseBadRequest("Analysis is missing pipeline/test/sample linkage.")
 
     individual = analysis.pipeline.test.sample.individual
+    variant_ids = request.GET.getlist("variant_ids") if request.method == "GET" else request.POST.getlist("variant_ids")
+    report_mode = (
+        request.GET.get("report_mode", "positive")
+        if request.method == "GET"
+        else request.POST.get("report_mode", "positive")
+    )
+    if report_mode not in {"positive", "negative"}:
+        return HttpResponseBadRequest("Invalid report mode.")
 
-    variant_ids = request.POST.getlist("variant_ids")
+    test_type = analysis.pipeline.test.test_type
+    if request.method == "GET":
+        form = AnalysisReportGenerateForm(test_type=test_type, report_mode=report_mode)
+        context = {
+            "form": form,
+            "action_url": request.path,
+            "analysis": analysis,
+            "individual": individual,
+            "variant_ids": variant_ids,
+            "selected_count": len(variant_ids),
+            "report_mode": report_mode,
+        }
+        return render(request, "lab/partials/modals/report_generate_modal.html", context)
+
+    form = AnalysisReportGenerateForm(request.POST, test_type=test_type, report_mode=report_mode)
+    if not form.is_valid():
+        context = {
+            "form": form,
+            "action_url": request.path,
+            "analysis": analysis,
+            "individual": individual,
+            "variant_ids": variant_ids,
+            "selected_count": len(variant_ids),
+            "report_mode": report_mode,
+        }
+        return render(request, "lab/partials/modals/report_generate_modal.html", context)
+
     selected_qs = Variant.objects.filter(individual=individual)
     if variant_ids:
         selected_qs = selected_qs.filter(id__in=variant_ids)
@@ -1518,19 +1592,189 @@ def generate_analysis_report_docx(request, analysis_id):
     # Ensure only unreported variants are picked (avoid duplicates across reports for same analysis)
     selected_qs = selected_qs.exclude(reports__analysis=analysis).distinct()
 
-    negative = not selected_qs.exists()
-    test_type_name = getattr(analysis.pipeline.test.test_type, "name", None)
-    template_choice = choose_docx_template_for_test_type(test_type_name, negative=negative)
+    negative = report_mode == "negative"
+    test_type_name = getattr(test_type, "name", None)
+    configured_template = form.cleaned_data.get("template_location", "") or ""
+    configured_template_path = resolve_docx_template_path(configured_template)
+    if configured_template_path:
+        template_choice = type(
+            "TemplateChoice",
+            (),
+            {"path": configured_template_path, "reason": f"configured on TestType: {configured_template}"},
+        )()
+    else:
+        template_choice = choose_docx_template_for_test_type(test_type_name, negative=negative)
+    report_date = form.cleaned_data["report_date"]
+    default_method_text = form.cleaned_data.get("default_method_text", "") or ""
+    default_total_reads_text = form.cleaned_data.get("default_total_reads_text", "") or ""
+    default_coverage_20x_text = form.cleaned_data.get("default_coverage_20x_text", "") or ""
+    default_mean_depth_text = form.cleaned_data.get("default_mean_depth_text", "") or ""
+    default_filtering_text = form.cleaned_data.get("default_filtering_text", "") or ""
+    default_limitations_text = form.cleaned_data.get("default_limitations_text", "") or ""
+    default_positive_comment_text = form.cleaned_data.get("default_positive_comment_text", "") or ""
+    default_negative_result_text = form.cleaned_data.get("default_negative_result_text", "") or ""
+    signers = list(form.cleaned_data.get("signers") or [])
+    authorized_signer = form.cleaned_data.get("authorized_signer")
+
+    referring_physicians = ", ".join(
+        [
+            physician.get_full_name().strip() or physician.username
+            for physician in individual.physicians.all()
+        ]
+    )
+    referring_clinic = ", ".join(individual.institution.values_list("name", flat=True))
+    hpo_terms = ", ".join(
+        [getattr(term, "descriptive_term", str(term)) for term in individual.hpo_terms.all()]
+    )
+    signer_blocks = []
+    for signer in signers:
+        if hasattr(signer, "profile") and signer.profile.signer_block_text:
+            signer_blocks.append(
+                [
+                    line.strip()
+                    for line in signer.profile.signer_block_text.splitlines()
+                    if line.strip()
+                ]
+            )
+
+    signer_1_entries = [signer_blocks[0]] if len(signer_blocks) >= 1 else []
+    signer_2_entries = [signer_blocks[1]] if len(signer_blocks) >= 2 else []
+    signer_3_entries = [signer_blocks[2]] if len(signer_blocks) >= 3 else []
+
+    signer_1_block = "\n\n".join("\n".join(lines) for lines in signer_1_entries)
+    signer_2_block = "\n\n".join("\n".join(lines) for lines in signer_2_entries)
+    signer_3_block = "\n\n".join("\n".join(lines) for lines in signer_3_entries)
+
+    authorized_signer_lines = []
+    if authorized_signer and hasattr(authorized_signer, "profile"):
+        authorized_signer_lines = [
+            line.strip()
+            for line in (authorized_signer.profile.signer_block_text or "").splitlines()
+            if line.strip()
+        ]
+
+    while len(authorized_signer_lines) < 4:
+        authorized_signer_lines.append("")
+
+    report_zygosity_labels = {
+        "het": "Heterozigot",
+        "hom": "Homozigot",
+        "hemi": "Hemizigot",
+        "hetpl": "Heteroplazmi",
+    }
 
     rows = [
         {
             "location": str(v),
-            "zygosity": v.get_zygosity_display(),
+            "zygosity": report_zygosity_labels.get(v.zygosity, v.get_zygosity_display()),
             "type": v.type,
             "genes": ", ".join([str(g) for g in v.genes.all()]),
         }
         for v in selected_qs
     ]
+
+    first_variant = rows[0] if rows else None
+    first_variant_model = selected_qs.first()
+    latest_classification = (
+        first_variant_model.classifications.order_by("-created_at").first()
+        if first_variant_model and hasattr(first_variant_model, "classifications")
+        else None
+    )
+
+    report_sex = {
+        "male": "Erkek",
+        "female": "Kadın",
+    }.get(individual.sex, individual.get_sex_display() if individual.sex else "")
+
+    placeholders = {
+        "REPORT_DATE": report_date.strftime("%d.%m.%Y"),
+        "PATIENT_NAME": individual.full_name or "",
+        "PATIENT_DOB": individual.birth_date.strftime("%d.%m.%Y") if individual.birth_date else "",
+        "PATIENT_SEX": report_sex,
+        "REFERRING_CLINIC": referring_clinic,
+        "REFERRING_PHYSICIAN": referring_physicians,
+        "TEST_INDICATION": individual.diagnosis or "",
+        "IBG_BIOBANK_NO": individual.secondary_id or "",
+        "RB_BIOBANK_NO": individual.primary_id or "",
+        "HPO_TERMS": hpo_terms,
+        "RESULT_ROW_NUMBER": "1" if first_variant else "",
+        "GENE_TRANSCRIPT_BLOCK": ", ".join(first_variant_model.genes.values_list("symbol", flat=True)) if first_variant_model else "",
+        "VARIANT_DETAILS_BLOCK": first_variant["location"] if first_variant else "",
+        "ZYGOSITY": first_variant["zygosity"] if first_variant else "",
+        "CLASSIFICATION_BLOCK": latest_classification.get_classification_display() if latest_classification else "",
+        "OMIM_BLOCK": "",
+        "INTERPRETATION_TEXT": "",
+        "VARIANT_INTERPRETATION": "",
+        "PHENOTYPE_CORRELATION": "",
+        "SIGNER_1_BLOCK": signer_1_block,
+        "SIGNER_2_BLOCK": signer_2_block,
+        "SIGNER_3_BLOCK": signer_3_block,
+        "SIGNER_3_NAME": authorized_signer_lines[0],
+        "SIGNER_3_AFFILIATION": authorized_signer_lines[1],
+        "SIGNER_3_TITLE": authorized_signer_lines[2],
+        "SIGNER_3_ROLE": authorized_signer_lines[3],
+        "AUTHORIZED_SIGNER_BLOCK": "\n".join([line for line in authorized_signer_lines if line]),
+        "METHOD_SUMMARY": default_method_text,
+        "TOTAL_READS": default_total_reads_text,
+        "COVERAGE_20X": default_coverage_20x_text,
+        "MEAN_DEPTH": default_mean_depth_text,
+        "FILTERING_SUMMARY": default_filtering_text,
+        "LIMITATIONS": default_limitations_text,
+        "DEFAULT_METHOD_TEXT": default_method_text,
+        "DEFAULT_TOTAL_READS_TEXT": default_total_reads_text,
+        "DEFAULT_COVERAGE_20X_TEXT": default_coverage_20x_text,
+        "DEFAULT_MEAN_DEPTH_TEXT": default_mean_depth_text,
+        "DEFAULT_FILTERING_TEXT": default_filtering_text,
+        "DEFAULT_LIMITATIONS_TEXT": default_limitations_text,
+        "DEFAULT_POSITIVE_COMMENT_TEXT": "",
+        "DEFAULT_NEGATIVE_RESULT_TEXT": "",
+        "POSITIVE_COMMENT_TEXT": "",
+        "NEGATIVE_RESULT_TEXT": "",
+    }
+
+    def expand_report_text(template_text: str) -> str:
+        expanded = template_text or ""
+        for key, value in placeholders.items():
+            expanded = expanded.replace(f"{{{{{key}}}}}", value or "")
+        return expanded
+
+    default_method_text = expand_report_text(default_method_text)
+    default_total_reads_text = expand_report_text(default_total_reads_text)
+    default_coverage_20x_text = expand_report_text(default_coverage_20x_text)
+    default_mean_depth_text = expand_report_text(default_mean_depth_text)
+    default_filtering_text = expand_report_text(default_filtering_text)
+    default_limitations_text = expand_report_text(default_limitations_text)
+    placeholders["METHOD_SUMMARY"] = default_method_text
+    placeholders["TOTAL_READS"] = default_total_reads_text
+    placeholders["COVERAGE_20X"] = default_coverage_20x_text
+    placeholders["MEAN_DEPTH"] = default_mean_depth_text
+    placeholders["FILTERING_SUMMARY"] = default_filtering_text
+    placeholders["LIMITATIONS"] = default_limitations_text
+    placeholders["DEFAULT_METHOD_TEXT"] = default_method_text
+    placeholders["DEFAULT_TOTAL_READS_TEXT"] = default_total_reads_text
+    placeholders["DEFAULT_COVERAGE_20X_TEXT"] = default_coverage_20x_text
+    placeholders["DEFAULT_MEAN_DEPTH_TEXT"] = default_mean_depth_text
+    placeholders["DEFAULT_FILTERING_TEXT"] = default_filtering_text
+    placeholders["DEFAULT_LIMITATIONS_TEXT"] = default_limitations_text
+    default_positive_comment_text = expand_report_text(default_positive_comment_text)
+    default_negative_result_text = expand_report_text(default_negative_result_text)
+    placeholders["DEFAULT_POSITIVE_COMMENT_TEXT"] = default_positive_comment_text
+    placeholders["DEFAULT_NEGATIVE_RESULT_TEXT"] = default_negative_result_text
+
+    if negative:
+        negative_result_text = default_negative_result_text
+
+        placeholders["INTERPRETATION_TEXT"] = negative_result_text
+        placeholders["VARIANT_INTERPRETATION"] = negative_result_text
+        placeholders["DEFAULT_NEGATIVE_RESULT_TEXT"] = negative_result_text
+        placeholders["NEGATIVE_RESULT_TEXT"] = negative_result_text
+    elif first_variant_model:
+        positive_comment_text = default_positive_comment_text
+        placeholders["INTERPRETATION_TEXT"] = ""
+        placeholders["VARIANT_INTERPRETATION"] = positive_comment_text
+        placeholders["PHENOTYPE_CORRELATION"] = hpo_terms
+        placeholders["DEFAULT_POSITIVE_COMMENT_TEXT"] = positive_comment_text
+        placeholders["POSITIVE_COMMENT_TEXT"] = positive_comment_text
 
     title = f"{test_type_name or 'Test'} Report"
     docx_bytes = build_docx_report_bytes(
@@ -1538,6 +1782,13 @@ def generate_analysis_report_docx(request, analysis_id):
         title=title,
         variants_rows=rows,
         negative=negative,
+        placeholders=placeholders,
+        rich_text_blocks={
+            "SIGNER_1_BLOCK": signer_1_entries,
+            "SIGNER_2_BLOCK": signer_2_entries,
+            "SIGNER_3_BLOCK": signer_3_entries,
+            "AUTHORIZED_SIGNER_BLOCK": [authorized_signer_lines] if any(authorized_signer_lines) else [],
+        },
     )
 
     ts = timezone.now().strftime("%Y%m%d_%H%M")
@@ -1555,7 +1806,16 @@ def generate_analysis_report_docx(request, analysis_id):
     if not negative:
         report.variants.set(list(selected_qs))
 
-    return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+    html = render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
+    close_oob = (
+        '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
+        '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
+        "</div>"
+    )
+    response = HttpResponse(html + close_oob)
+    response["HX-Retarget"] = "#workflow-content"
+    response["HX-Reswap"] = "innerHTML"
+    return response
 
 
 @login_required
@@ -1571,7 +1831,44 @@ def report_replace_modal(request, report_id):
 
     @require_http_methods(["GET", "POST"])
     def _inner(request):
+        can_change_report = request.user.has_perm("lab.change_analysisreport")
+        can_delete_report = request.user.has_perm("lab.delete_analysisreport")
+
+        if not (can_change_report or can_delete_report):
+            return HttpResponseForbidden("You do not have permission to modify or delete analysis reports.")
+
         if request.method == "POST":
+            action = request.POST.get("action", "replace")
+
+            if action == "delete":
+                if not can_delete_report:
+                    return HttpResponseForbidden("You do not have permission to delete analysis reports.")
+
+                # Delete stored files before removing the report record.
+                if report.file:
+                    report.file.delete(save=False)
+                if report.preview_file:
+                    report.preview_file.delete(save=False)
+                report.delete()
+
+                html = (
+                    render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
+                    if individual
+                    else ""
+                )
+                close_oob = (
+                    '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
+                    '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
+                    "</div>"
+                )
+                response = HttpResponse(html + close_oob)
+                response["HX-Retarget"] = "#workflow-content"
+                response["HX-Reswap"] = "innerHTML"
+                return response
+
+            if not can_change_report:
+                return HttpResponseForbidden("You do not have permission to replace analysis report files.")
+
             form = AnalysisReportReplaceForm(request.POST, request.FILES)
             if form.is_valid():
                 report.file = form.cleaned_data["file"]
@@ -1597,8 +1894,11 @@ def report_replace_modal(request, report_id):
             "form": form,
             "title": "Replace Analysis Report File",
             "action_url": request.path,
+            "report": report,
+            "can_change_report": can_change_report,
+            "can_delete_report": can_delete_report,
         }
-        return render(request, "lab/partials/modals/upload_modal_form.html", context)
+        return render(request, "lab/partials/modals/report_replace_modal.html", context)
 
     return _inner(request)
 

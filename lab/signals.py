@@ -2,6 +2,7 @@ from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from django.core.cache import cache
 from .models import Individual
+import re
 
 @receiver(m2m_changed, sender=Individual.hpo_terms.through)
 def invalidate_hpo_tree_cache(sender, instance, action, **kwargs):
@@ -13,11 +14,73 @@ def invalidate_hpo_tree_cache(sender, instance, action, **kwargs):
 
 # Preview Generation Signals
 import os
+import tempfile
 import pypandoc
 from django.db.models.signals import post_save
 from django.core.files.base import ContentFile
 from weasyprint import HTML, CSS
 from .models import AnalysisRequestForm, AnalysisReport
+from zipfile import ZipFile, ZIP_DEFLATED
+from io import BytesIO
+
+
+def _get_preview_individual(instance):
+    if isinstance(instance, AnalysisRequestForm):
+        return instance.individual
+    if isinstance(instance, AnalysisReport):
+        analysis = getattr(instance, "analysis", None)
+        pipeline = getattr(analysis, "pipeline", None)
+        test = getattr(pipeline, "test", None)
+        sample = getattr(test, "sample", None)
+        return getattr(sample, "individual", None)
+    return None
+
+
+def _redact_individual_name_for_preview(html_content, instance):
+    individual = _get_preview_individual(instance)
+    full_name = (getattr(individual, "full_name", "") or "").strip()
+    if not full_name:
+        return html_content
+
+    name_parts = [part for part in re.split(r"\s+", full_name) if part]
+    if not name_parts:
+        return html_content
+
+    pattern = r"\b" + r"\s+".join(re.escape(part) for part in name_parts) + r"\b"
+    return re.sub(pattern, "[REDACTED NAME]", html_content)
+
+
+def _build_redacted_docx_for_preview(input_path, instance):
+    individual = _get_preview_individual(instance)
+    full_name = (getattr(individual, "full_name", "") or "").strip()
+    if not full_name:
+        return input_path, None
+
+    xml_members = {
+        "word/document.xml",
+        "word/header1.xml",
+        "word/header2.xml",
+        "word/header3.xml",
+        "word/footer1.xml",
+        "word/footer2.xml",
+        "word/footer3.xml",
+    }
+
+    rendered = BytesIO()
+    with ZipFile(input_path, "r") as zin, ZipFile(rendered, "w", compression=ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename in xml_members:
+                text = data.decode("utf-8")
+                text = text.replace(full_name, "[REDACTED NAME]")
+                data = text.encode("utf-8")
+            zout.writestr(item, data)
+
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+    temp.write(rendered.getvalue())
+    temp.flush()
+    temp.close()
+    return temp.name, temp.name
 
 def convert_docx_to_pdf_preview(instance, file_field_name, preview_field_name):
     """
@@ -35,10 +98,12 @@ def convert_docx_to_pdf_preview(instance, file_field_name, preview_field_name):
     if not filename.lower().endswith('.docx'):
         return
 
+    temp_input_path = None
     try:
         # 1. Convert DOCX to HTML using Pandoc
         # We need the absolute path to the file.
         input_path = file_field.path
+        input_path, temp_input_path = _build_redacted_docx_for_preview(input_path, instance)
 
         # Convert to HTML string
         html_content = pypandoc.convert_file(
@@ -47,6 +112,7 @@ def convert_docx_to_pdf_preview(instance, file_field_name, preview_field_name):
             format='docx',
             extra_args=['--mathml'] # mathml for better formula support if needed
         )
+        html_content = _redact_individual_name_for_preview(html_content, instance)
 
         # 2. Convert HTML to PDF using WeasyPrint
         # We wrap HTML in a basic template to ensure styling
@@ -87,6 +153,9 @@ def convert_docx_to_pdf_preview(instance, file_field_name, preview_field_name):
 
     except Exception as e:
         print(f"Error generating preview for {filename}: {e}")
+    finally:
+        if temp_input_path and os.path.exists(temp_input_path):
+            os.unlink(temp_input_path)
 
 
 @receiver(post_save, sender=AnalysisRequestForm)
@@ -96,4 +165,3 @@ def generate_request_form_preview(sender, instance, created, **kwargs):
 @receiver(post_save, sender=AnalysisReport)
 def generate_analysis_report_preview(sender, instance, created, **kwargs):
     convert_docx_to_pdf_preview(instance, 'file', 'preview_file')
-

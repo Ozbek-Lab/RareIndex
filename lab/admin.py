@@ -1,10 +1,33 @@
 from django.contrib import admin
+from django import forms
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.forms import AdminUserCreationForm
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from simple_history.admin import SimpleHistoryAdmin
 from . import models
+
+
+class ProfileInlineForm(forms.ModelForm):
+    class Meta:
+        model = models.Profile
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ("email_notifications", "display_preferences"):
+            self.fields[field_name].required = False
+            self.fields[field_name].initial = self.initial.get(field_name) or {}
+
+
+class CustomUserCreationForm(AdminUserCreationForm):
+    signer_block_text = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 6}),
+        help_text="Optional multiline signer block to store on the user's profile.",
+        label="Signer block text",
+    )
 
 class ProjectIndividualsInline(admin.TabularInline):
     model = models.Project.individuals.through
@@ -44,6 +67,49 @@ class TestTypeAdmin(SimpleHistoryAdmin):
     list_display = ["name", "created_by", "get_created_at", "get_updated_at"]
     search_fields = ["name", "description"]
     list_filter = ["created_by"]
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "description",
+                    "created_by",
+                    "positive_report_template",
+                    "negative_report_template",
+                )
+            },
+        ),
+        (
+            "Positive Report Text",
+            {
+                "fields": (
+                    "default_positive_comment_text",
+                )
+            },
+        ),
+        (
+            "Negative Report Text",
+            {
+                "fields": (
+                    "default_negative_result_text",
+                )
+            },
+        ),
+        (
+            "Default Report Table Text",
+            {
+                "fields": (
+                    "default_method_text",
+                    "default_total_reads_text",
+                    "default_coverage_20x_text",
+                    "default_mean_depth_text",
+                    "default_filtering_text",
+                    "default_limitations_text",
+                )
+            },
+        ),
+    )
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -493,14 +559,28 @@ class AnalysisRequestFormAdmin(SimpleHistoryAdmin):
 
 class ProfileInline(admin.StackedInline):
     model = models.Profile
+    form = ProfileInlineForm
     can_delete = False
     fk_name = "user"
     verbose_name_plural = "Profile"
-    fields = ("email_notifications", "display_preferences")
+    fields = (
+        "signer_block_text",
+        "email_notifications",
+        "display_preferences",
+    )
 
 
 class CustomUserAdmin(BaseUserAdmin):
+    add_form = CustomUserCreationForm
     inlines = (ProfileInline,)
+    add_fieldsets = BaseUserAdmin.add_fieldsets + (
+        (
+            "Report Signer",
+            {
+                "fields": ("signer_block_text",),
+            },
+        ),
+    )
     list_display = BaseUserAdmin.list_display + (
         "get_filter_popup_on_hover",
         "get_default_list_view",
@@ -508,6 +588,21 @@ class CustomUserAdmin(BaseUserAdmin):
         "get_status_change_notifications",
         "get_group_message_notifications",
     )
+
+    def get_inline_instances(self, request, obj=None):
+        # The profile is created by signal on initial user creation, so showing
+        # the inline on the add form causes the admin to try creating it twice.
+        if obj is None:
+            return []
+        return super().get_inline_instances(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        signer_block_text = form.cleaned_data.get("signer_block_text")
+        if signer_block_text is not None:
+            profile, _ = models.Profile.objects.get_or_create(user=obj)
+            profile.signer_block_text = signer_block_text
+            profile.save(update_fields=["signer_block_text"])
 
     def _get_profile(self, obj):
         return getattr(obj, "profile", None)

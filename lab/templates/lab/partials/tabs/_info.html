@@ -602,10 +602,16 @@
                     </div>
                     <div>
                         <div class="font-medium text-sm flex items-center gap-2">
-                            <a href="{{ form.file.url }}" target="_blank" class="hover:underline hover:text-primary">
+                            {% if perms.lab.view_sensitive_data %}
+                            <a href="{% url 'lab:document_download' 'AnalysisRequestForm' form.pk %}" download hx-boost="false" class="hover:underline hover:text-primary">
                                 {{ form.file.name|basename|truncatechars:30 }}
                             </a>
-                             {% if form.preview_file %}
+                            {% else %}
+                            <span>
+                                {{ form.file.name|basename|truncatechars:30 }}
+                            </span>
+                            {% endif %}
+                             {% if form.preview_file and perms.lab.view_analysisrequestform %}
                                 <button hx-get="{% url 'lab:document_preview' 'AnalysisRequestForm' form.pk %}"
                                         hx-target="#preview-drawer-content"
                                         hx-on::after-request="window.dispatchEvent(new CustomEvent('open-preview'))"
@@ -620,9 +626,11 @@
                         </div>
                     </div>
                 </div>
-                <a href="{{ form.file.url }}" download class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary">
+                {% if perms.lab.view_sensitive_data %}
+                <a href="{% url 'lab:document_download' 'AnalysisRequestForm' form.pk %}" download hx-boost="false" class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary">
                     <i class="fa-solid fa-download"></i>
                 </a>
+                {% endif %}
             </div>
             {% endfor %}
         </div>

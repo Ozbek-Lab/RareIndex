@@ -30,6 +30,7 @@ langchain-community
 langchain-core
 sqlalchemy
 requests
+PyJWT
 django-environ
 gunicorn
 psycopg2-binary
@@ -41,3 +42,5 @@ pypandoc
 weasyprint
 django-widget-tweaks
 django-taggit
+marimo
+python-docx

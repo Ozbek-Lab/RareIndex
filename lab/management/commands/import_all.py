@@ -118,6 +118,96 @@ ZYGOSITY_MAP = {
 }
 
 
+def _parse_report_text_field_reference_markdown(md_text: str) -> dict[str, dict[str, str]]:
+    """
+    Parse `report_text_field_reference.md` into:
+      { "WES": { "positive_report_template": "...", ... }, ... }
+    """
+    lines = md_text.splitlines()
+    parsed: dict[str, dict[str, str]] = {}
+    current_test: str | None = None
+
+    key_re = re.compile(r'^`(?P<key>[a-zA-Z0-9_]+)`\s*$')
+    section_re = re.compile(r'^##\s+(?P<name>.+)\s*$')
+    inline_value_re = re.compile(r'^`(?P<val>[^`]*)`\s*$')
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip("\n")
+
+        sec_m = section_re.match(line)
+        if sec_m:
+            current_test = sec_m.group("name").strip()
+            parsed.setdefault(current_test, {})
+            i += 1
+            continue
+
+        if current_test is None:
+            i += 1
+            continue
+
+        key_m = key_re.match(line.strip())
+        if not key_m:
+            i += 1
+            continue
+
+        field_name = key_m.group("key")
+
+        j = i + 1
+        while j < len(lines) and lines[j].strip() == "":
+            j += 1
+        if j >= len(lines):
+            raise RuntimeError(f"Unexpected EOF while reading value for {current_test}.{field_name}")
+
+        val_line = lines[j].strip()
+        if val_line.startswith("```"):
+            j += 1
+            content: list[str] = []
+            while j < len(lines):
+                if lines[j].strip().startswith("```"):
+                    break
+                content.append(lines[j])
+                j += 1
+            else:
+                raise RuntimeError(f"Missing closing fence for {current_test}.{field_name}")
+
+            value = "\n".join(content).strip("\n")
+            parsed[current_test][field_name] = value
+            i = j + 1
+            continue
+
+        in_m = inline_value_re.match(val_line)
+        if in_m:
+            parsed[current_test][field_name] = in_m.group("val")
+            i = j + 1
+            continue
+
+        parsed[current_test][field_name] = val_line
+        i = j + 1
+
+    return parsed
+
+
+def _normalize_testtype_report_payload(payload: dict[str, str]) -> dict[str, str]:
+    normalized = dict(payload)
+
+    fallback_pairs = (
+        ("default_method_text", ("positive_method_text", "negative_method_text")),
+        ("default_filtering_text", ("positive_filtering_text", "negative_filtering_text")),
+        ("default_limitations_text", ("positive_limitations_text", "negative_limitations_text")),
+    )
+    for target, candidates in fallback_pairs:
+        if normalized.get(target):
+            continue
+        for candidate in candidates:
+            candidate_value = normalized.get(candidate)
+            if candidate_value:
+                normalized[target] = candidate_value
+                break
+
+    return normalized
+
+
 def _map_zygosity_strict(value, warn_fn=None):
     """Return model key for *value*, or None and call warn_fn if unrecognised."""
     if not value:
@@ -174,6 +264,9 @@ class Command(BaseCommand):
 
         # Instance-level state shared between steps
         self.analysis_map: dict = {}       # (lab_id, tt_name) → Analysis
+
+        # Lazily loaded on-demand by _backfill_testtype_report_fields().
+        self._report_text_reference_cache = None
 
         # Step 0a — ontologies
         self._step0a_ensure_ontologies()
@@ -236,6 +329,56 @@ class Command(BaseCommand):
             self._step_yayin_ici(options["yayin_ici"])
 
         self.stdout.write(self.style.SUCCESS("Import completed successfully."))
+
+    def _load_report_text_reference(self) -> dict[str, dict[str, str]]:
+        if self._report_text_reference_cache is not None:
+            return self._report_text_reference_cache
+
+        repo_root = Path(__file__).resolve().parents[3]
+        md_path = repo_root / "report_text_field_reference.md"
+        if not md_path.exists():
+            self._report_text_reference_cache = {}
+            return self._report_text_reference_cache
+
+        self._report_text_reference_cache = _parse_report_text_field_reference_markdown(
+            md_path.read_text(encoding="utf-8")
+        )
+        return self._report_text_reference_cache
+
+    def _backfill_testtype_report_fields(self, test_type) -> None:
+        """
+        Populate empty TestType report fields from the markdown reference.
+        Uses bulk UPDATE to avoid unnecessary model save side-effects.
+        """
+        if self.dry_run:
+            return
+        if not test_type or not getattr(test_type, "pk", None):
+            return
+        if not getattr(test_type, "name", None):
+            return
+
+        parsed = self._load_report_text_reference()
+        if not parsed:
+            return
+
+        lower_to_canonical = {k.strip().lower(): k for k in parsed.keys()}
+        canonical_name = lower_to_canonical.get(test_type.name.strip().lower())
+        if not canonical_name:
+            return
+
+        payload = _normalize_testtype_report_payload(parsed.get(canonical_name) or {})
+        model_fields = {f.name for f in type(test_type)._meta.fields}
+
+        updates = {}
+        for field_name, value in payload.items():
+            if field_name not in model_fields:
+                continue
+            current = getattr(test_type, field_name, "")
+            if current is None or (isinstance(current, str) and current.strip() == ""):
+                updates[field_name] = value
+
+        if updates:
+            type(test_type).objects.filter(pk=test_type.pk).update(**updates)
 
     # ==================================================================
     # Step 0a — Ontologies
@@ -808,6 +951,7 @@ class Command(BaseCommand):
                     defaults={"created_by": self.admin_user})
 
             test_type = get_or_create_test_type(tt_name, self.admin_user)
+            self._backfill_testtype_report_fields(test_type)
             test, test_created = Test.objects.get_or_create(
                 sample=sample, test_type=test_type,
                 defaults={
@@ -1001,6 +1145,7 @@ class Command(BaseCommand):
     def _step_sanger(self, wb) -> None:
         self.stdout.write("Step 8: Sanger Konfirmasyonları…")
         sanger_type = get_or_create_test_type("Sanger", self.admin_user)
+        self._backfill_testtype_report_fields(sanger_type)
         created = skipped = 0
         for d in self._ws_rows(wb, "Sanger Konfirmasyonları"):
             lab_id = str(d.get("Özbek Lab. ID") or "").strip()
@@ -1039,6 +1184,7 @@ class Command(BaseCommand):
             name="WGS - TÜSEB",
             defaults={"created_by": self.admin_user, "priority": "medium"})
         wgs_type = get_or_create_test_type("WGS", self.admin_user)
+        self._backfill_testtype_report_fields(wgs_type)
         completed  = self.statuses["test"].get("completed")
         awaiting   = self.statuses["test"].get("awaiting")
         id_map = build_id_map()
@@ -1228,6 +1374,7 @@ class Command(BaseCommand):
             test_name = str(d.get("Çalışılan Test Adı") or "").strip()
             if test_name and sample:
                 tt = get_or_create_test_type(test_name, self.admin_user)
+                self._backfill_testtype_report_fields(tt)
                 test, t_created = Test.objects.get_or_create(
                     sample=sample, test_type=tt,
                     defaults={
@@ -1270,6 +1417,7 @@ class Command(BaseCommand):
             name=project_name,
             defaults={"created_by": self.admin_user, "priority": "medium"})
         lr_type = get_or_create_test_type("Long Read WGS", self.admin_user)
+        self._backfill_testtype_report_fields(lr_type)
         sent_status = self.statuses["test"].get("sent")
         note_cols = [
             "Hastalık Grubu",
@@ -1337,6 +1485,7 @@ class Command(BaseCommand):
     def _step_rna_seq(self, wb) -> None:
         self.stdout.write("Step 13: RNA SEQ…")
         rna_type = get_or_create_test_type("RNA Seq", self.admin_user)
+        self._backfill_testtype_report_fields(rna_type)
         created = skipped = 0
         for d in self._ws_rows(wb, "RNA SEQ"):
             lab_id = str(d.get("Özbek Lab. ID") or "").strip()
@@ -1724,6 +1873,7 @@ class Command(BaseCommand):
                     name="Previous", content_type=ct_test).first()
                 for tt_name in self._normalize_test_tokens(str(prev_raw)):
                     tt = get_or_create_test_type(tt_name, self.admin_user)
+                    self._backfill_testtype_report_fields(tt)
                     if not individual.get_all_tests().filter(test_type=tt).exists():
                         sample = (individual.samples.first()
                                   or self._get_placeholder_sample(individual))
@@ -1803,6 +1953,7 @@ class Command(BaseCommand):
                     break
             if not target_test:
                 wes_tt = get_or_create_test_type("WES", self.admin_user)
+                self._backfill_testtype_report_fields(wes_tt)
                 sample = (individual.samples.first()
                           or self._get_placeholder_sample(individual))
                 target_test = Test.objects.create(
@@ -1834,6 +1985,7 @@ class Command(BaseCommand):
                     else "Targeted Panel" if p.lower() == "targeted panel"
                     else p)
             tt = get_or_create_test_type(name, self.admin_user)
+            self._backfill_testtype_report_fields(tt)
             if not individual.get_all_tests().filter(test_type=tt).exists():
                 sample = (individual.samples.first()
                           or self._get_placeholder_sample(individual))

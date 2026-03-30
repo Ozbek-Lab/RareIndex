@@ -1,0 +1,72 @@
+{% load lab_tags %}
+<div class="modal-header border-b border-base-200 pb-4 mb-4">
+    <h3 class="font-bold text-lg text-primary flex items-center gap-2">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        {{ title }}
+    </h3>
+</div>
+
+{% if can_change_report %}
+<form hx-post="{{ action_url }}"
+      hx-target="#workflow-content"
+      hx-swap="innerHTML"
+      hx-encoding="multipart/form-data"
+      class="space-y-4">
+    {% csrf_token %}
+
+    <div class="grid grid-cols-1 gap-4">
+        {% for field in form %}
+            <div class="form-control w-full {% if field.is_hidden %}hidden{% endif %}">
+                <label class="label py-1">
+                    <span class="label-text font-semibold text-xs opacity-70">{{ field.label }}</span>
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                    <label class="label py-0">
+                        <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                    </label>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="modal-action mt-8 pt-4 border-t border-base-200 flex justify-between">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('generic-modal').close()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm px-8">Upload</button>
+    </div>
+</form>
+{% endif %}
+
+{% if can_change_report or can_delete_report %}
+<div class="{% if can_change_report %}mt-6 pt-4 border-t border-base-200{% endif %}">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <h4 class="font-semibold text-sm text-error">Delete Report</h4>
+            <p class="text-xs text-base-content/60 mt-1">
+                Remove <span class="font-medium">{{ report.file.name|basename }}</span> from this analysis.
+            </p>
+            {% if not can_delete_report %}
+            <p class="text-xs text-base-content/50 mt-2">
+                You do not have permission to delete analysis reports.
+            </p>
+            {% endif %}
+        </div>
+        <form hx-post="{{ action_url }}"
+              hx-target="#workflow-content"
+              hx-swap="innerHTML"
+              class="shrink-0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="delete">
+            <button type="submit" class="btn btn-error btn-sm" {% if not can_delete_report %}disabled aria-disabled="true"{% endif %}>
+                <i class="fa-solid fa-trash-can mr-1"></i>
+                Delete
+            </button>
+        </form>
+    </div>
+    {% if not can_change_report %}
+    <div class="modal-action mt-6 pt-4 border-t border-base-200">
+        <button type="button" class="btn btn-ghost btn-sm ml-auto" onclick="document.getElementById('generic-modal').close()">Cancel</button>
+    </div>
+    {% endif %}
+</div>
+{% endif %}

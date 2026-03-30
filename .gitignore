@@ -56,3 +56,5 @@ lab/management/commands/add_individuals_to_project.py
 node_modules/
 vcfpaths
 tailwindcss-linux-x64
+reports/
+.codex

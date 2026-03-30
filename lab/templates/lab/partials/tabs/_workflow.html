@@ -24,6 +24,7 @@
                              <i class="fa-solid fa-list-check"></i> {{ individual.tasks.count }}
                          </div>
                      </div>
+                    {% if perms.lab.add_sample %}
                     <button class="btn btn-primary btn-xs gap-1 font-normal"
                             hx-get="{% url 'lab:sample_create_modal' individual.id %}"
                             hx-target="#generic-modal-content"
@@ -31,6 +32,7 @@
                         <i class="fa-solid fa-plus text-[10px]"></i>
                         Add Sample
                     </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -57,6 +59,7 @@
                         Pending Tasks
                     </div>
                     {% get_content_type_id individual as indiv_ct %}
+                    {% if perms.lab.add_task %}
                     <button hx-get="{% url 'lab:task_create_modal' indiv_ct individual.id %}"
                             hx-target="#generic-modal-content"
                             onclick="document.getElementById('generic-modal').showModal()"
@@ -64,6 +67,7 @@
                         <i class="fa-solid fa-plus"></i>
                         Add Task
                     </button>
+                    {% endif %}
                 </h4>
                 <div id="individual-tasks-{{ individual.id }}">
                     {% partialdef individual_tasks %}
@@ -105,6 +109,7 @@
                 <span class="flex items-center gap-1">
                     <i class="fa-solid fa-dna"></i> Previously Identified Variants
                 </span>
+                {% if perms.variant.add_variant %}
                 <button
                     class="btn btn-primary btn-xs gap-1 font-normal"
                     hx-get="{% url 'lab:variant_create_for_individual_modal' individual.id %}"
@@ -114,6 +119,7 @@
                     <i class="fa-solid fa-plus text-[10px]"></i>
                     Add Variant
                 </button>
+                {% endif %}
             </h4>
             <table class="table table-xs w-full">
                 <thead>
@@ -177,6 +183,7 @@
                                  <i class="fa-solid fa-list-check"></i> {{ sample.tasks.count }}
                              </div>
                          </div>
+                        {% if perms.lab.add_test %}
                         <button hx-get="{% url 'lab:test_create_modal' sample.id %}"
                                 hx-target="#generic-modal-content"
                                 onclick="document.getElementById('generic-modal').showModal()"
@@ -184,6 +191,7 @@
                             <i class="fa-solid fa-plus"></i>
                             Add Test
                         </button>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -205,6 +213,7 @@
                                     Sample Tasks
                                 </div>
                                 {% get_content_type_id sample as sample_ct %}
+                                {% if perms.lab.add_task %}
                                 <button hx-get="{% url 'lab:task_create_modal' sample_ct sample.id %}"
                                         hx-target="#generic-modal-content"
                                         onclick="document.getElementById('generic-modal').showModal()"
@@ -212,6 +221,7 @@
                                     <i class="fa-solid fa-plus"></i>
                                     Add Task
                                 </button>
+                                {% endif %}
                             </h4>
                             <div id="sample-tasks-{{ sample.id }}">
                                 {% partialdef sample_tasks %}
@@ -278,6 +288,7 @@
                                                              <i class="fa-solid fa-list-check"></i> {{ test.tasks.count }}
                                                          </div>
                                                      </div>
+                                                     {% if perms.lab.add_pipeline %}
                                                      <button hx-get="{% url 'lab:pipeline_create_modal' test.id %}"
                                                             hx-target="#generic-modal-content"
                                                             onclick="document.getElementById('generic-modal').showModal()"
@@ -285,6 +296,7 @@
                                                         <i class="fa-solid fa-plus text-[10px]"></i>
                                                         Add Pipeline
                                                     </button>
+                                                    {% endif %}
                                                 </div>
                                                 </div>
                                                 
@@ -307,6 +319,7 @@
                                                                 Test Tasks
                                                             </div>
                                                             {% get_content_type_id test as test_ct %}
+                                                            {% if perms.lab.add_task %}
                                                             <button hx-get="{% url 'lab:task_create_modal' test_ct test.id %}"
                                                                     hx-target="#generic-modal-content"
                                                                     onclick="document.getElementById('generic-modal').showModal()"
@@ -314,6 +327,7 @@
                                                                 <i class="fa-solid fa-plus"></i>
                                                                 Add Task
                                                             </button>
+                                                            {% endif %}
                                                         </h5>
                                                         <div id="test-tasks-{{ test.id }}">
                                                             {% partialdef test_tasks %}
@@ -376,6 +390,7 @@
                                                                          <i class="fa-solid fa-list-check"></i> {{ pipeline.tasks.count }}
                                                                      </div>
                                                                  </div>
+                                                                 {% if perms.lab.add_analysis %}
                                                                  <button hx-get="{% url 'lab:analysis_create_modal' pipeline.id %}"
                                                                         hx-target="#generic-modal-content"
                                                                         onclick="document.getElementById('generic-modal').showModal()"
@@ -383,6 +398,7 @@
                                                                     <i class="fa-solid fa-plus text-[10px]"></i>
                                                                     Add Analysis
                                                                 </button>
+                                                                 {% endif %}
                                                             </div>
                                                         </div>
                                                         
@@ -404,6 +420,7 @@
                                                                             Pipeline Tasks
                                                                         </div>
                                                                         {% get_content_type_id pipeline as pipeline_ct %}
+                                                                        {% if perms.lab.add_task %}
                                                                         <button hx-get="{% url 'lab:task_create_modal' pipeline_ct pipeline.id %}"
                                                                                 hx-target="#generic-modal-content"
                                                                                 onclick="document.getElementById('generic-modal').showModal()"
@@ -411,6 +428,7 @@
                                                                             <i class="fa-solid fa-plus"></i>
                                                                             Add Task
                                                                         </button>
+                                                                        {% endif %}
                                                                     </h5>
                                                                     <div id="pipeline-tasks-{{ pipeline.id }}">
                                                                         {% partialdef pipeline_tasks %}
@@ -482,6 +500,35 @@
                                                                                         <i class="fa-solid fa-list-check"></i> {{ analysis.tasks.count }}
                                                                                     </div>
                                                                                 </div>
+                                                                                {% if perms.lab.add_analysisreport %}
+                                                                                <button
+                                                                                    class="btn btn-error btn-xs h-5 min-h-0 px-2 text-[9px] font-normal"
+                                                                                    type="button"
+                                                                                    hx-get="{% url 'lab:analysis_report_generate' analysis.id %}"
+                                                                                    hx-include="#unreported-variants-form-{{ analysis.id }}"
+                                                                                    hx-vals='{"report_mode":"negative"}'
+                                                                                    hx-target="#generic-modal-content"
+                                                                                    hx-swap="innerHTML"
+                                                                                    onclick="document.getElementById('generic-modal').showModal()">
+                                                                                    <i class="fa-solid fa-file-word text-[8px]"></i>
+                                                                                    Negative Report
+                                                                                </button>
+                                                                                {% if analysis.unreported_variants.exists %}
+                                                                                <button
+                                                                                    class="btn btn-success btn-xs h-5 min-h-0 px-2 text-[9px] font-normal"
+                                                                                    type="button"
+                                                                                    hx-get="{% url 'lab:analysis_report_generate' analysis.id %}"
+                                                                                    hx-include="#unreported-variants-form-{{ analysis.id }}"
+                                                                                    hx-vals='{"report_mode":"positive"}'
+                                                                                    hx-target="#generic-modal-content"
+                                                                                    hx-swap="innerHTML"
+                                                                                    onclick="document.getElementById('generic-modal').showModal()">
+                                                                                    <i class="fa-solid fa-file-word text-[8px]"></i>
+                                                                                    Positive Report
+                                                                                </button>
+                                                                                {% endif %}
+                                                                                {% endif %}
+                                                                                {% if perms.variant.add_variant %}
                                                                                 <button
                                                                                     class="btn btn-primary btn-xs h-5 min-h-0 px-2 text-[9px] font-normal"
                                                                                     hx-get="{% url 'lab:variant_create_for_analysis_modal' analysis.id %}"
@@ -491,6 +538,7 @@
                                                                                     <i class="fa-solid fa-plus text-[8px]"></i>
                                                                                     Add Variant
                                                                                 </button>
+                                                                                {% endif %}
                                                                             </div>
                                                                         </div>
                                 
@@ -509,12 +557,14 @@
                                                                                     <h5 class="text-[9px] uppercase text-base-content/50 mb-1 font-bold flex items-center justify-between gap-1">
                                                                                         <div class="flex items-center gap-1"><i class="fa-solid fa-list-check"></i> Analysis Tasks</div>
                                                                                         {% get_content_type_id analysis as analysis_ct %}
+                                                                                        {% if perms.lab.add_task %}
                                                                                         <button hx-get="{% url 'lab:task_create_modal' analysis_ct analysis.id %}"
                                                                                                 hx-target="#generic-modal-content"
                                                                                                 onclick="document.getElementById('generic-modal').showModal()"
                                                                                                 class="btn btn-primary btn-xs h-4 min-h-0 px-1 text-[8px] font-normal">
                                                                                             <i class="fa-solid fa-plus text-[8px]"></i> Add Task
                                                                                         </button>
+                                                                                        {% endif %}
                                                                                     </h5>
                                                                                     <div id="analysis-tasks-{{ analysis.id }}">
                                                                                         {% partialdef analysis_tasks %}
@@ -543,19 +593,24 @@
                                                                     </div>
                                                                 </div>
 
+                                                                {% if analysis.has_connected_variants %}
                                                                 <!-- Reports for this Analysis -->
                                                                 <div class="mt-2 border-t-2 border-base-200 pt-2">
                                                                     <div class="flex items-center justify-between mb-2 px-1">
                                                                         <h6 class="text-[10px] uppercase text-base-content/40 font-bold flex items-center gap-1">
                                                                             <i class="fa-solid fa-file-invoice text-[9px]"></i> Reports
                                                                         </h6>
-                                                                        <button hx-get="{% url 'lab:report_create_modal' analysis.id %}"
-                                                                                hx-target="#generic-modal-content"
-                                                                                onclick="document.getElementById('generic-modal').showModal()"
-                                                                                class="btn btn-primary btn-xs h-4 min-h-0 px-2 gap-1 text-[9px] font-normal tooltip tooltip-left"
-                                                                                data-tip="Upload Report">
-                                                                            <i class="fa-solid fa-upload text-[8px]"></i>
-                                                                        </button>
+                                                                        <div class="flex items-center gap-1">
+                                                                            {% if perms.lab.add_analysisreport %}
+                                                                            <button hx-get="{% url 'lab:report_create_modal' analysis.id %}"
+                                                                                    hx-target="#generic-modal-content"
+                                                                                    onclick="document.getElementById('generic-modal').showModal()"
+                                                                                    class="btn btn-primary btn-xs h-4 min-h-0 px-2 gap-1 text-[9px] font-normal tooltip tooltip-left"
+                                                                                    data-tip="Upload Report">
+                                                                                <i class="fa-solid fa-upload text-[8px]"></i>
+                                                                            </button>
+                                                                            {% endif %}
+                                                                        </div>
                                                                     </div>
                                                                     {% if analysis.reports.exists %}
                                                                     <div class="space-y-1.5">
@@ -574,10 +629,16 @@
                                                                                     </div>
                                                                                     <div>
                                                                                         <div class="font-medium text-xs flex items-center gap-1.5">
-                                                                                            <a href="{{ report.file.url }}" target="_blank" class="hover:underline hover:text-primary">
+                                                                                            {% if perms.lab.view_sensitive_data %}
+                                                                                            <a href="{% url 'lab:document_download' 'AnalysisReport' report.pk %}" download hx-boost="false" class="hover:underline hover:text-primary">
                                                                                                 {{ report.file.name|basename|truncatechars:25 }}
                                                                                             </a>
-                                                                                            {% if report.preview_file %}
+                                                                                            {% else %}
+                                                                                            <span>
+                                                                                                {{ report.file.name|basename|truncatechars:25 }}
+                                                                                            </span>
+                                                                                            {% endif %}
+                                                                                            {% if report.preview_file and perms.lab.view_analysisreport %}
                                                                                             <button hx-get="{% url 'lab:document_preview' 'AnalysisReport' report.pk %}"
                                                                                                     hx-target="#preview-drawer-content"
                                                                                                     hx-on::after-request="window.dispatchEvent(new CustomEvent('open-preview'))"
@@ -593,6 +654,7 @@
                                                                                     </div>
                                                                                 </div>
                                                                                 <div class="flex items-center gap-1">
+                                                                                    {% if perms.lab.change_analysisreport %}
                                                                                     <button
                                                                                         hx-get="{% url 'lab:report_replace_modal' report.id %}"
                                                                                         hx-target="#generic-modal-content"
@@ -603,9 +665,12 @@
                                                                                     >
                                                                                         <i class="fa-solid fa-rotate text-[9px]"></i>
                                                                                     </button>
-                                                                                    <a href="{{ report.file.url }}" download class="btn btn-ghost btn-xs btn-square text-base-content/40 hover:text-primary tooltip tooltip-left" data-tip="Download">
+                                                                                    {% endif %}
+                                                                                    {% if perms.lab.view_sensitive_data %}
+                                                                                    <a href="{% url 'lab:document_download' 'AnalysisReport' report.pk %}" download hx-boost="false" class="btn btn-ghost btn-xs btn-square text-base-content/40 hover:text-primary tooltip tooltip-left" data-tip="Download">
                                                                                         <i class="fa-solid fa-download text-[9px]"></i>
                                                                                     </a>
+                                                                                    {% endif %}
                                                                                 </div>
                                                                             </div>
                                                                             {% if report.variants.exists %}
@@ -637,21 +702,11 @@
                                                                     {% endif %}
                                                                 </div>
 
-                                                                <!-- Unreported Variants (linked to analysis, not in any report for this analysis) -->
-                                                                {% if analysis.unreported_variants.exists %}
                                                                 <div class="mt-2 border-t-2 border-base-200 pt-2" x-data="{ allChecked: false }">
                                                                     <div class="flex items-center justify-between mb-2 px-1 gap-2">
                                                                         <h5 class="text-xs uppercase text-base-content/50 font-bold flex items-center gap-1">
                                                                             <i class="fa-solid fa-dna"></i> Unreported Variants
                                                                         </h5>
-                                                                        <button
-                                                                            class="btn btn-primary btn-xs h-5 min-h-0 px-2 text-[9px] font-normal"
-                                                                            type="submit"
-                                                                            form="unreported-variants-form-{{ analysis.id }}"
-                                                                        >
-                                                                            <i class="fa-solid fa-file-word text-[9px]"></i>
-                                                                            Create Report
-                                                                        </button>
                                                                     </div>
 
                                                                     <form
@@ -661,6 +716,7 @@
                                                                         hx-swap="innerHTML"
                                                                     >
                                                                         {% csrf_token %}
+                                                                        {% if analysis.unreported_variants.exists %}
                                                                         <table class="table table-xs w-full">
                                                                             <thead>
                                                                                 <tr>
@@ -696,6 +752,11 @@
                                                                                 {% endfor %}
                                                                             </tbody>
                                                                         </table>
+                                                                        {% else %}
+                                                                        <div class="text-center py-2 text-base-content/40 italic text-[10px] border border-dashed border-base-200 rounded-lg">
+                                                                            No unreported variants connected to this analysis.
+                                                                        </div>
+                                                                        {% endif %}
                                                                     </form>
 
                                                                     {% if analysis.unreported_variants.count > 10 %}
@@ -755,7 +816,6 @@
             <i class="fa-solid fa-chevron-down text-[10px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-56 mt-2">
-            <li class="menu-title text-[10px] uppercase opacity-40 px-3 py-2">Toggle Sample Status</li>
             {% get_statuses sample as available_statuses %}
             {% get_content_type_id sample as ct_id %}
             {% regroup available_statuses by group.name as grouped_statuses %}
@@ -812,7 +872,6 @@
             <i class="fa-solid fa-chevron-down text-[8px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu menu-sm p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-48 mt-2">
-            <li class="menu-title text-[9px] uppercase opacity-40 px-3 py-2">Toggle Test Status</li>
             {% get_statuses test as available_statuses %}
             {% get_content_type_id test as ct_id %}
             {% regroup available_statuses by group.name as grouped_statuses %}
@@ -869,7 +928,6 @@
             <i class="fa-solid fa-chevron-down text-[8px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu menu-sm p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-48 mt-2">
-            <li class="menu-title text-[9px] uppercase opacity-40 px-3 py-2">Toggle Pipeline Status</li>
             {% get_statuses pipeline as available_statuses %}
             {% get_content_type_id pipeline as ct_id %}
             {% regroup available_statuses by group.name as grouped_statuses %}
@@ -926,7 +984,6 @@
             <i class="fa-solid fa-chevron-down text-[6px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu menu-xs p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-40 mt-1">
-            <li class="menu-title text-[8px] uppercase opacity-40 px-3 py-1.5">Toggle Analysis Status</li>
             {% get_statuses analysis as available_statuses %}
             {% get_content_type_id analysis as ct_id %}
             {% regroup available_statuses by group.name as grouped_statuses %}
@@ -983,7 +1040,6 @@
             <i class="fa-solid fa-chevron-down text-[10px] opacity-40"></i>
         </div>
         <ul tabindex="0" class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-64 mt-2">
-            <li class="menu-title text-[10px] uppercase opacity-40 px-3 py-2">Toggle Individual Status</li>
             {% get_statuses individual as available_statuses %}
             {% get_content_type_id individual as ct_id %}
             {% regroup available_statuses by group.name as grouped_statuses %}

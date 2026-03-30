@@ -41,7 +41,10 @@ class HtmxRedirectUnauthorizedMiddleware(MiddlewareMixin):
 
     - If a view protected by @login_required returns a 302 to LOGIN_URL, convert it to
       an HX-Redirect so HTMX performs a full navigation rather than swapping HTML.
-    - Also handle 401/403 by issuing HX-Redirect to the login URL.
+    - Also handle 401 by issuing HX-Redirect to the login URL.
+    - Do not convert 403 responses for authenticated users; those should remain
+      inline so HTMX UIs can show a proper forbidden message instead of
+      navigating away.
     """
 
     def _is_htmx(self, request):
@@ -88,9 +91,9 @@ class HtmxRedirectUnauthorizedMiddleware(MiddlewareMixin):
         except Exception:
             pass
 
-        # Case 2: Unauthorized/Forbidden responses
+        # Case 2: Unauthorized responses
         try:
-            if response.status_code in (401, 403):
+            if response.status_code == 401:
                 response["HX-Redirect"] = login_url
                 return response
         except Exception:

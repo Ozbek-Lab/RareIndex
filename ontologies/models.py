@@ -74,6 +74,12 @@ class Term(models.Model):
             return f'NCIT:{self.identifier}'
 
     @property
+    def descriptive_term(self):
+        if self.label:
+            return f'{self.term} {self.label}'
+        return self.term
+
+    @property
     def url(self):
         if self.source == 'MONDO':
             return f'https://monarchinitiative.org/disease/{self.term}'

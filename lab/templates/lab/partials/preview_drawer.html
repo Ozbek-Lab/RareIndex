@@ -36,10 +36,12 @@
                     <p class="text-sm text-base-content/60 max-w-xs mb-6">
                         We could not generate a visual preview for this file type ({{ object.file.name|lower|slice:"-4:" }}). Please download the file to view it.
                     </p>
-                    <a href="{{ object.file.url }}" download class="btn btn-primary gap-2">
+                    {% if perms.lab.view_sensitive_data %}
+                    <a href="{% url 'lab:document_download' model_name object.pk %}" download hx-boost="false" class="btn btn-primary gap-2">
                         <i class="fa-solid fa-download"></i>
                         Download File
                     </a>
+                    {% endif %}
                 </div>
             {% endif %}
         </div>
@@ -51,10 +53,12 @@
             Internal Document · Protected Health Information
         </div>
         <div class="flex gap-2">
-            <a href="{{ object.file.url }}" download class="btn btn-outline btn-sm gap-2">
+            {% if perms.lab.view_sensitive_data %}
+            <a href="{% url 'lab:document_download' model_name object.pk %}" download hx-boost="false" class="btn btn-outline btn-sm gap-2">
                 <i class="fa-solid fa-download"></i>
                 Download Original
             </a>
+            {% endif %}
             {% if object.preview_file %}
             <a href="{{ object.preview_file.url }}" target="_blank" class="btn btn-primary btn-sm gap-2">
                 <i class="fa-solid fa-up-right-from-square"></i>
