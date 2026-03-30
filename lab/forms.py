@@ -1,4 +1,6 @@
 # forms.py
+from collections import OrderedDict
+
 from django import forms
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -29,19 +31,65 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
 
+def _content_type_label(content_type):
+    if not content_type:
+        return "Global"
+    return content_type.model.replace("_", " ").title()
+
+
+def _grouped_status_choices(statuses):
+    if not any(status.group_id for status in statuses):
+        return [(str(status.pk), status.name) for status in statuses]
+
+    grouped = OrderedDict()
+
+    for status in statuses:
+        if status.group_id:
+            label = status.group.name
+        elif status.content_type_id is None:
+            label = "Global Statuses"
+        else:
+            label = "Other Statuses"
+        grouped.setdefault(label, []).append((str(status.pk), status.name))
+
+    return list(grouped.items())
+
+
+def _grouped_status_group_choices(groups):
+    grouped = OrderedDict()
+
+    for group in groups:
+        label = _content_type_label(group.content_type)
+        grouped.setdefault(label, []).append((str(group.pk), group.name))
+
+    return list(grouped.items())
+
+
 class BaseForm(forms.ModelForm):
     """Base form class with consistent styling for all form fields"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Limit statuses choices strictly to model-specific statuses
+        # Limit statuses choices to model-specific plus global statuses and
+        # present them grouped by status group in multi-select dropdowns.
         if "statuses" in self.fields and hasattr(self, '_meta') and hasattr(self._meta, 'model'):
-            from django.contrib.contenttypes.models import ContentType
-            from .models import Status
             try:
                 model_ct = ContentType.objects.get_for_model(self._meta.model)
-                self.fields["statuses"].queryset = Status.objects.filter(content_type=model_ct).order_by("name")
+                statuses = (
+                    Status.objects.select_related("group", "content_type")
+                    .filter(Q(content_type=model_ct) | Q(content_type__isnull=True))
+                    .order_by("group__name", "name")
+                )
+                self.fields["statuses"].queryset = statuses
+                self.fields["statuses"].choices = _grouped_status_choices(statuses)
+                has_groups = statuses.exclude(group__isnull=True).exists()
+                if has_groups:
+                    self.fields["statuses"].help_text = "Statuses are grouped by status group."
+                else:
+                    self.fields["statuses"].help_text = (
+                        "No status groups yet. Statuses are shown as a flat list until groups are created."
+                    )
             except Exception:
                 pass
                 
@@ -230,6 +278,23 @@ class TaskEditForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        try:
+            model_ct = ContentType.objects.get_for_model(Task)
+            statuses = (
+                Status.objects.select_related("group", "content_type")
+                .filter(Q(content_type=model_ct) | Q(content_type__isnull=True))
+                .order_by("group__name", "name")
+            )
+            self.fields["statuses"].queryset = statuses
+            self.fields["statuses"].choices = _grouped_status_choices(statuses)
+            if statuses.exclude(group__isnull=True).exists():
+                self.fields["statuses"].help_text = "Statuses are grouped by status group."
+            else:
+                self.fields["statuses"].help_text = (
+                    "No status groups yet. Statuses are shown as a flat list until groups are created."
+                )
+        except Exception:
+            pass
         if self.instance and self.instance.pk:
             self.initial["statuses"] = self.instance.statuses.all()
             if self.instance.due_date:
@@ -1221,16 +1286,39 @@ class StatusConfigForm(BaseForm):
         )
         self.fields["content_type"].required = False
         self.fields["content_type"].empty_label = "— Global (applies to all) —"
-        # Filter group dropdown to match the current content_type
+
+        selected_content_type_id = (
+            self.data.get(self.add_prefix("content_type"))
+            or self.initial.get("content_type")
+        )
         instance = self.instance
-        if instance and instance.pk and instance.content_type_id:
-            self.fields["group"].queryset = StatusGroup.objects.filter(
-                content_type_id=instance.content_type_id
+        if not selected_content_type_id and instance and instance.pk:
+            selected_content_type_id = instance.content_type_id
+
+        group_queryset = StatusGroup.objects.select_related("content_type")
+        if selected_content_type_id:
+            group_queryset = group_queryset.filter(
+                Q(content_type_id=selected_content_type_id) | Q(content_type__isnull=True)
             )
         else:
-            self.fields["group"].queryset = StatusGroup.objects.all()
+            group_queryset = group_queryset.all()
+        group_queryset = group_queryset.order_by("content_type__app_label", "content_type__model", "name")
+
+        self.fields["group"].queryset = group_queryset
         self.fields["group"].required = False
         self.fields["group"].empty_label = "— No group (freely toggleable) —"
+        self.fields["group"].choices = [
+            ("", self.fields["group"].empty_label),
+            *_grouped_status_group_choices(group_queryset),
+        ]
+        if group_queryset.exists():
+            self.fields["group"].help_text = (
+                "Groups are organised by scope. Pick one to make statuses in that group mutually exclusive."
+            )
+        else:
+            self.fields["group"].help_text = (
+                "No status groups yet. Create one first, or leave this empty for a freely toggleable status."
+            )
         # If the stored value is a hex string, the color input handles it natively
         if instance and instance.pk:
             raw = instance.color or ""
@@ -1277,10 +1365,21 @@ class QuickAddMemberForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from django.contrib.contenttypes.models import ContentType
         ct = ContentType.objects.get_for_model(Individual)
-        self.fields["statuses"].queryset = Status.objects.filter(content_type=ct).order_by("name")
+        statuses = (
+            Status.objects.select_related("group", "content_type")
+            .filter(Q(content_type=ct) | Q(content_type__isnull=True))
+            .order_by("group__name", "name")
+        )
+        self.fields["statuses"].queryset = statuses
+        self.fields["statuses"].choices = _grouped_status_choices(statuses)
         self.fields["full_name"].required = True
+        if statuses.exclude(group__isnull=True).exists():
+            self.fields["statuses"].help_text = "Statuses are grouped by status group."
+        else:
+            self.fields["statuses"].help_text = (
+                "No status groups yet. Statuses are shown as a flat list until groups are created."
+            )
         # Set dynamic labels from IdentifierType
         primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
         secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()

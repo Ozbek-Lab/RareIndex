@@ -269,10 +269,36 @@ class TestAdmin(SimpleHistoryAdmin):
 
 @admin.register(models.Status)
 class StatusAdmin(SimpleHistoryAdmin):
-    list_display = ["name", "short_name", "content_type", "color", "created_by", "get_created_at", "get_updated_at"]
+    list_display = ["name", "short_name", "group", "content_type", "color", "created_by", "get_created_at", "get_updated_at"]
     list_editable = ["short_name"]
     search_fields = ["name", "short_name", "description"]
+    list_filter = ["content_type", "group"]
+    autocomplete_fields = ["group"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
+
+@admin.register(models.StatusGroup)
+class StatusGroupAdmin(SimpleHistoryAdmin):
+    list_display = ["name", "content_type", "status_count", "get_created_at", "get_updated_at"]
+    search_fields = ["name", "content_type__app_label", "content_type__model"]
     list_filter = ["content_type"]
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.prefetch_related("statuses")
+
+    def status_count(self, obj):
+        return obj.statuses.count()
+    status_count.short_description = "Statuses"
 
     def get_created_at(self, obj):
         return obj.get_created_at()

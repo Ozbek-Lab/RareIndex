@@ -33,6 +33,21 @@
                     <span class="label-text-alt opacity-50 text-xs">{{ field.help_text }}</span>
                     {% endif %}
                 </label>
+                {% if model_name == "status" and field.name == "group" %}
+                <div class="mb-2 flex items-center justify-between gap-2 rounded-lg border border-base-200 bg-base-200/30 px-3 py-2">
+                    <p class="text-xs text-base-content/60">
+                        Need a new group first? Create it here, then come back and attach this status to it.
+                    </p>
+                    <button type="button"
+                            class="btn btn-ghost btn-xs shrink-0"
+                            hx-get="{% url 'lab:config_form_add' 'statusgroup' %}"
+                            hx-target="#generic-modal-content"
+                            hx-swap="innerHTML">
+                        <i class="fa-solid fa-layer-group text-[10px]"></i>
+                        Create Group
+                    </button>
+                </div>
+                {% endif %}
                 {% if field.name == "color" %}
                 <div class="flex items-center gap-3">
                     {{ field }}
