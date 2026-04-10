@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.urls import reverse
-from lab.models import Task, Status, Individual, Sample, Project, Note, SampleType
+from lab.models import Task, Status, Individual, Sample, Project, Note, SampleType, Contact
 from django.utils import timezone
 from datetime import timedelta
 
@@ -9,6 +9,7 @@ class DashboardViewTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', password='password')
         self.other_user = User.objects.create_user(username='otheruser', password='password')
+        self.contact = Contact.objects.create(full_name="testuser", user=self.user, created_by=self.user)
         self.client.login(username='testuser', password='password')
         
         # Create Statuses
@@ -52,7 +53,7 @@ class DashboardViewTest(TestCase):
             individual=self.individual,
             sample_type=self.sample_type,
             status=self.status_pending,
-            isolation_by=self.user,
+            isolation_by=self.contact,
             created_by=self.user
         )
         # 4. Create Note

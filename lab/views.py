@@ -823,16 +823,26 @@ class MapVisualizationView(LoginRequiredMixin, TemplateView):
         city_counts_families = {city: len(keys) for city, keys in city_families.items()}
         city_counts_probands = {city: len(ids) for city, ids in city_probands.items()}
 
-        # Use individuals as the default sorted table display.
-        city_counts_sorted = sorted(
-            city_counts_individuals.items(), key=lambda item: item[1], reverse=True
+        all_cities = sorted(
+            set(city_counts_individuals)
+            | set(city_counts_families)
+            | set(city_counts_probands),
+            key=lambda city: (-city_counts_individuals.get(city, 0), city),
         )
+        city_rows = [
+            {
+                "city": city,
+                "individuals": city_counts_individuals.get(city, 0),
+                "families": city_counts_families.get(city, 0),
+                "probands": city_counts_probands.get(city, 0),
+            }
+            for city in all_cities
+        ]
 
         context["city_counts_individuals"] = city_counts_individuals
         context["city_counts_families"] = city_counts_families
         context["city_counts_probands"] = city_counts_probands
-        # Also provide a list sorted by count descending for display.
-        context["city_counts_sorted"] = city_counts_sorted
+        context["city_rows"] = city_rows
         return context
 
 from django.views.generic import ListView, DetailView
@@ -1376,7 +1386,12 @@ class IndividualExportView(LoginRequiredMixin, View):
             general_notes = " | ".join([n.content for n in individual.notes.all()])
             
             institution_names = "; ".join([i.name for i in individual.institution.all()])
-            physicians = "; ".join([u.get_full_name() or u.username for u in individual.physicians.all()])
+            physicians = "; ".join(
+                [
+                    contact.full_name or str(contact)
+                    for contact in individual.physicians.all()
+                ]
+            )
             projects = "; ".join([p.name for p in individual.projects.all()])
 
             # Aggregate Sample data
@@ -1403,7 +1418,7 @@ class IndividualExportView(LoginRequiredMixin, View):
                 if s_notes:
                     sample_notes_list.append(s_notes)
                 if sample.isolation_by:
-                    iso_name = sample.isolation_by.get_full_name() or sample.isolation_by.username
+                    iso_name = sample.isolation_by.full_name or str(sample.isolation_by)
                     isolation_by_list.append(iso_name)
                 if sample.sample_measurements:
                     measurements_list.append(sample.sample_measurements)
@@ -1484,40 +1499,35 @@ def issue_plot_token_view(request):
     expires = int(getattr(settings, "MARIMO_PLOT_TOKEN_MAX_AGE", 900))
     return JsonResponse({"token": token, "expires_in": expires})
 
-def generic_plot_data(request):
-    user = request.user
-    if not user.is_authenticated:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ", 1)[1].strip()
-            try:
-                user = verify_plot_token(token)
-            except Exception as e:
-                logger.warning("plot-data: bearer token verification failed (%s)", e)
-                return JsonResponse({"error": str(e)}, status=401)
-        else:
-            logger.warning("plot-data: unauthenticated request with no bearer token")
-            return JsonResponse({"error": "Unauthorized"}, status=401)
+def _user_for_plot_request(request):
+    if request.user.is_authenticated:
+        return request.user
 
-    allowed_models = getattr(settings, "PLOT_ALLOWED_MODELS", [])
-    model_name = request.GET.get("model")
-    if model_name not in allowed_models:
-        logger.warning("plot-data: disallowed model requested: %s", model_name)
-        return JsonResponse({"error": "Model not allowed"}, status=403)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+        try:
+            return verify_plot_token(token)
+        except Exception as e:
+            logger.warning("plot-auth: bearer token verification failed (%s)", e)
 
+    token = request.GET.get("token")
+    if token:
+        try:
+            return verify_plot_token(token)
+        except Exception as e:
+            logger.warning("plot-auth: query token verification failed (%s)", e)
+
+    return None
+
+def _plot_data_for_model(model_name, config):
     try:
         model = apps.get_model("lab", model_name)
     except LookupError:
         try:
             model = apps.get_model("variant", model_name)
         except LookupError:
-            return JsonResponse({"error": f"Model {model_name} not found"}, status=400)
-
-    query_str = request.GET.get("config") or request.GET.get("query") or "{}"
-    try:
-        config = json.loads(query_str)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid query config"}, status=400)
+            raise LookupError(f"Model {model_name} not found")
 
     qs = model.objects.all()
 
@@ -1531,14 +1541,36 @@ def generic_plot_data(request):
 
     annotate = config.get("annotate") or {}
     if annotate:
-        try:
-            annotations = _plot_build_annotations(annotate)
-        except ValueError as e:
-            return JsonResponse({"error": str(e)}, status=400)
+        annotations = _plot_build_annotations(annotate)
         qs = qs.annotate(**annotations)
 
     qs = _plot_ensure_dict_rows(qs)
-    data = list(qs)
+    return list(qs)
+
+def generic_plot_data(request):
+    user = _user_for_plot_request(request)
+    if not user:
+        logger.warning("plot-data: unauthenticated request with no valid token")
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+
+    allowed_models = getattr(settings, "PLOT_ALLOWED_MODELS", [])
+    model_name = request.GET.get("model")
+    if model_name not in allowed_models:
+        logger.warning("plot-data: disallowed model requested: %s", model_name)
+        return JsonResponse({"error": "Model not allowed"}, status=403)
+
+    query_str = request.GET.get("config") or request.GET.get("query") or "{}"
+    try:
+        config = json.loads(query_str)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid query config"}, status=400)
+
+    try:
+        data = _plot_data_for_model(model_name, config)
+    except LookupError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
     return JsonResponse({"data": data, "model": model_name, "record_count": len(data)})
 
 class PlotGalleryView(LoginRequiredMixin, generic.ListView):

@@ -199,7 +199,6 @@ urlpatterns = [
     # API for Marimo
     path("api/plot-token/", issue_plot_token_view, name="issue_plot_token"),
     path("api/plot-data/", generic_plot_data, name="generic_plot_data"),
-    
     # Dashboard Integrations
     path("gallery/", PlotGalleryView.as_view(), name="plot_gallery"),
     path("dashboard/add/<int:pk>/", add_widget, name="add_widget"),

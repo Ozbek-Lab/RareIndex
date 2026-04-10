@@ -66,11 +66,11 @@ def _(data, mo):
             )
         )
         fig.update_layout(
-            title=f"Individual status distribution (n={total_ct})",
             autosize=True,
+            height=360,
             xaxis_title=None,
             yaxis_title="Count",
-            margin=dict(t=48, l=48, r=24, b=100),
+            margin=dict(t=8, l=48, r=24, b=100),
             xaxis_tickangle=-35,
         )
         return fig

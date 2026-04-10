@@ -12,7 +12,7 @@ from . import models
 class ProfileInlineForm(forms.ModelForm):
     class Meta:
         model = models.Profile
-        fields = "__all__"
+        exclude = ("contact_info",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -142,8 +142,9 @@ class SampleTypeAdmin(SimpleHistoryAdmin):
 @admin.register(models.Institution)
 class InstitutionAdmin(SimpleHistoryAdmin):
     list_display = ["name", "latitude", "longitude", "created_by", "get_created_at", "get_updated_at"]
-    search_fields = ["name"]
+    search_fields = ["name", "staff__full_name"]
     list_filter = ["created_by"]
+    autocomplete_fields = ["staff", "created_by"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -178,6 +179,7 @@ class IndividualAdmin(SimpleHistoryAdmin):
         "tc_identity",
         "cross_ids__id_value",
         "institution__name",
+        "physicians__full_name",
     ]
 
     def get_created_at(self, obj):
@@ -190,7 +192,7 @@ class IndividualAdmin(SimpleHistoryAdmin):
     get_updated_at.short_description = "Updated At"
     get_updated_at.admin_order_field = "id"
 
-    autocomplete_fields = ["hpo_terms", "mother", "father", "family", "institution"]
+    autocomplete_fields = ["hpo_terms", "mother", "father", "family", "institution", "physicians"]
     inlines = [IndividualProjectsInline]
 
     def get_hpo_terms(self, obj):
@@ -212,9 +214,10 @@ class SampleAdmin(SimpleHistoryAdmin):
     list_filter = ["sample_type", "receipt_date"]
     search_fields = [
         "individual__full_name",  # Only direct or forward fields!
+        "isolation_by__full_name",
     ]
     date_hierarchy = "receipt_date"
-    autocomplete_fields = ["individual", "sample_type"]
+    autocomplete_fields = ["individual", "sample_type", "isolation_by"]
 
     def get_created_at(self, obj):
         return obj.get_created_at()
@@ -415,7 +418,12 @@ class AnalysisAdmin(SimpleHistoryAdmin):
     autocomplete_fields = ["pipeline", "type"]
 
     def get_performed_by(self, obj):
-        return ", ".join(u.get_full_name() or u.username for u in obj.performed_by.all())
+        return ", ".join(
+            getattr(getattr(user, "contact", None), "full_name", None)
+            or user.get_full_name()
+            or user.username
+            for user in obj.performed_by.all()
+        )
     get_performed_by.short_description = "Performed By"
 
     def get_created_at(self, obj):
@@ -563,6 +571,32 @@ class CrossIdentifierAdmin(SimpleHistoryAdmin):
         return ", ".join(obj.institution.values_list("name", flat=True))
 
     get_institutions.short_description = "Institutions"
+
+
+@admin.register(models.Contact)
+class ContactAdmin(SimpleHistoryAdmin):
+    list_display = ["full_name", "user", "get_emails", "get_phones", "created_by", "get_created_at", "get_updated_at"]
+    list_filter = ["created_by", "user"]
+    search_fields = ["full_name", "notes", "user__username", "user__first_name", "user__last_name"]
+    autocomplete_fields = ["user", "created_by"]
+
+    def get_created_at(self, obj):
+        return obj.get_created_at()
+    get_created_at.short_description = "Created At"
+    get_created_at.admin_order_field = "id"
+
+    def get_updated_at(self, obj):
+        return obj.get_updated_at()
+    get_updated_at.short_description = "Updated At"
+    get_updated_at.admin_order_field = "id"
+
+    def get_emails(self, obj):
+        return ", ".join(obj.emails or [])
+    get_emails.short_description = "Emails"
+
+    def get_phones(self, obj):
+        return ", ".join(obj.phones or [])
+    get_phones.short_description = "Phones"
 
 
 @admin.register(models.AnalysisReport)

@@ -9,13 +9,13 @@ Deletion order respects FK constraints:
   6  Status (preserving defaults) · StatusGroup
   7  Lookup tables: AnalysisType, PipelineType, TestType, SampleType, IdentifierType
   8  Institution
-  9  Ontologies (optional, --keep-ontologies)
+  9  Ontologies (optional, deleted only with --delete-ontologies)
  10  Non-superuser Users
 
 Flags:
   --include-history   Also wipe simple_history records for our apps
-  --keep-genes        Keep HGNC Gene data
-  --keep-ontologies   Keep Ontology / Term data
+  --delete-genes      Also delete HGNC Gene data
+  --delete-ontologies Also delete Ontology / Term data
   --yes               Skip the confirmation prompt
 """
 
@@ -42,14 +42,14 @@ class Command(BaseCommand):
             help="Also delete simple_history historical records for lab / variant models.",
         )
         parser.add_argument(
-            "--keep-genes",
+            "--delete-genes",
             action="store_true",
-            help="Keep imported HGNC Gene data.",
+            help="Also delete imported HGNC Gene data.",
         )
         parser.add_argument(
-            "--keep-ontologies",
+            "--delete-ontologies",
             action="store_true",
-            help="Keep loaded Ontology / Term / Synonym / Relationship data.",
+            help="Also delete loaded Ontology / Term / Synonym / Relationship data.",
         )
         parser.add_argument(
             "--yes", "-y",
@@ -94,6 +94,7 @@ class Command(BaseCommand):
             AnalysisRequestForm,
             AnalysisType,
             CrossIdentifier,
+            DashboardWidget,
             Family,
             IdentifierType,
             Individual,
@@ -101,6 +102,8 @@ class Command(BaseCommand):
             Note,
             Pipeline,
             PipelineType,
+            PlotTemplate,
+            Profile,
             Project,
             Sample,
             SampleType,
@@ -122,6 +125,7 @@ class Command(BaseCommand):
             SV,
             Variant,
         )
+        superuser = User.objects.filter(is_superuser=True).order_by("id").first()
 
         # ── 1. Variant data ───────────────────────────────────────────
         self.stdout.write("Phase 1: Variant data")
@@ -134,8 +138,10 @@ class Command(BaseCommand):
         self._delete(Repeat.objects.all(), "Repeat")
         self._delete(delins.objects.all(), "delins")
         self._delete(Variant.objects.all(), "Variant (base)")
-        if not options["keep_genes"]:
+        if options["delete_genes"]:
             self._delete(Gene.objects.all(), "Gene")
+        else:
+            self.stdout.write("  Kept           Gene (--delete-genes not set)")
 
         # ── 2. Reports and request forms ──────────────────────────────
         self.stdout.write("Phase 2: Reports / request forms")
@@ -158,15 +164,26 @@ class Command(BaseCommand):
         self._delete(Individual.objects.all(), "Individual")
         self._delete(Family.objects.all(), "Family")
 
-        # ── 5. Notes / Tasks / TaggedStatuses / Projects ──────────────
-        self.stdout.write("Phase 5: Notes · Tasks · TaggedStatuses · Projects")
+        # ── 5. Notes / Tasks / TaggedStatuses / Projects / Dashboards ─
+        self.stdout.write("Phase 5: Notes · Tasks · TaggedStatuses · Projects · Dashboards")
         self._delete(Note.objects.all(), "Note")
         self._delete(Task.objects.all(), "Task")
         self._delete(TaggedStatus.objects.all(), "TaggedStatus")
         self._delete(Project.objects.all(), "Project")
+        self._delete(DashboardWidget.objects.all(), "DashboardWidget")
+        self._delete(PlotTemplate.objects.all(), "PlotTemplate")
 
         # ── 6. Statuses ───────────────────────────────────────────────
         self.stdout.write("Phase 6: Status · StatusGroup")
+        if superuser:
+            Status.objects.exclude(name__in=DEFAULT_STATUSES).update(created_by=superuser)
+            Status.objects.filter(name__in=DEFAULT_STATUSES).update(created_by=superuser)
+        elif Status.objects.exists():
+            self.stdout.write(
+                self.style.WARNING(
+                    "  No superuser found; preserved default statuses may block user deletion."
+                )
+            )
         removed, _ = Status.objects.exclude(name__in=DEFAULT_STATUSES).delete()
         self.stdout.write(f"  Deleted {removed:>6}  Status (non-default)")
         self.stdout.write(f"  Kept           Status (defaults: {DEFAULT_STATUSES})")
@@ -185,7 +202,7 @@ class Command(BaseCommand):
         self._delete(Institution.objects.all(), "Institution")
 
         # ── 9. Ontologies (optional) ──────────────────────────────────
-        if not options["keep_ontologies"]:
+        if options["delete_ontologies"]:
             self.stdout.write("Phase 9: Ontologies")
             try:
                 from ontologies.models import (
@@ -203,7 +220,7 @@ class Command(BaseCommand):
             except ImportError:
                 self.stdout.write("  ontologies app not found, skipping.")
         else:
-            self.stdout.write("Phase 9: Ontologies — kept (--keep-ontologies).")
+            self.stdout.write("Phase 9: Ontologies — kept (--delete-ontologies not set).")
 
         # ── 10. simple_history records (optional) ─────────────────────
         if options["include_history"]:
@@ -212,6 +229,7 @@ class Command(BaseCommand):
 
         # ── 11. Users ─────────────────────────────────────────────────
         self.stdout.write("Phase 11: Users")
+        self._delete(Profile.objects.filter(user__is_superuser=False), "Profile (non-superuser)")
         self._delete(User.objects.filter(is_superuser=False), "User (non-superuser)")
 
     def _clear_history(self):
@@ -229,6 +247,7 @@ class Command(BaseCommand):
             HistoricalNote,
             HistoricalPipeline,
             HistoricalPipelineType,
+            HistoricalPlotTemplate,
             HistoricalProject,
             HistoricalSample,
             HistoricalSampleType,
@@ -237,15 +256,16 @@ class Command(BaseCommand):
             HistoricalTask,
             HistoricalTest,
             HistoricalTestType,
+            HistoricalDashboardWidget,
         )
         lab_historical = [
             HistoricalAnalysis, HistoricalAnalysisReport, HistoricalAnalysisRequestForm,
             HistoricalAnalysisType, HistoricalCrossIdentifier, HistoricalFamily,
             HistoricalIdentifierType, HistoricalIndividual, HistoricalInstitution,
             HistoricalNote, HistoricalPipeline, HistoricalPipelineType,
-            HistoricalProject, HistoricalSample, HistoricalSampleType,
+            HistoricalPlotTemplate, HistoricalProject, HistoricalSample, HistoricalSampleType,
             HistoricalStatus, HistoricalStatusGroup, HistoricalTask,
-            HistoricalTest, HistoricalTestType,
+            HistoricalTest, HistoricalTestType, HistoricalDashboardWidget,
         ]
         for model in lab_historical:
             self._delete(model.objects.all(), model.__name__)

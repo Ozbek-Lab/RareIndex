@@ -62,6 +62,11 @@ def _(token):
 
 
 @app.cell
+def _():
+    return
+
+
+@app.cell
 def _(mo, plot_rows):
     # Loop/comprehension names must not collide across cells; keep plot logic inside a function.
     import plotly.graph_objects as go
@@ -115,10 +120,9 @@ def _(mo, plot_rows):
             )
         )
         fig.update_layout(
-            title="Clinical workflow: Individual → Sample → Test",
             autosize=True,
-            margin=dict(t=48, l=8, r=8, b=8),
-            title_x=0.5,
+            height=360,
+            margin=dict(t=0, l=0, r=0, b=0),
         )
         return fig
 

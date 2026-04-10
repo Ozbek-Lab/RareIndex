@@ -396,12 +396,7 @@
                 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
                      id="widget-grid"
-                     x-data="{ token: null }" 
                      x-init="
-                        fetch('{% url 'lab:issue_plot_token' %}', { credentials: 'same-origin' })
-                            .then(r => r.json())
-                            .then(data => { token = data.token; })
-                            .catch(() => {});
                         Sortable.create($el, {
                             animation: 150,
                             handle: '.drag-handle',
@@ -423,7 +418,7 @@
                      ">
                     {% for widget in widgets %}
                     <div class="card bg-base-100 shadow-sm border border-base-200" data-widget-id="{{ widget.id }}" style="grid-column: span {{ widget.col_span }}; grid-row: span {{ widget.row_span }};">
-                        <div class="card-body p-2 sm:p-3 flex flex-col min-h-0 h-[calc(100dvh-4rem)] min-h-[44rem]">
+                        <div class="card-body p-2 sm:p-3 flex flex-col min-h-0">
                             
                             <div class="flex justify-between items-start mb-1 shrink-0 gap-2">
                                 <div>
@@ -452,25 +447,22 @@
                                 </div>
                             </div>
 
-                            <div class="flex-1 w-full flex flex-col min-w-0 min-h-0 self-stretch">
-                                <template x-if="token">
-                                    <iframe
-                                        :key="'plot-widget-{{ widget.id }}-' + token"
-                                        :src="`{{ marimo_service_url }}/?file=${encodeURIComponent('{{ widget.template.notebook_filename }}')}&token=${encodeURIComponent(token)}`"
-                                        class="block w-full flex-1 min-h-0 h-full border-0 rounded-md bg-base-200/20"
-                                        title="{{ widget.template.name }}"
-                                        loading="eager"
-                                    ></iframe>
-                                </template>
-                                <div x-show="!token" class="flex flex-1 min-h-0 items-center justify-center bg-base-200/50 rounded animate-pulse">
-                                    <span class="loading loading-spinner text-primary"></span>
-                                </div>
+                            <div class="w-full min-w-0 min-h-0 self-stretch">
+                                <iframe
+                                    :key="'plot-widget-{{ widget.id }}'"
+                                    src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}"
+                                    class="block w-full border-0 bg-transparent"
+                                    style="height: 1px; min-height: 28rem; overflow: hidden;"
+                                    data-widget-id="{{ widget.id }}"
+                                    title="{{ widget.template.name }}"
+                                    loading="eager"
+                                ></iframe>
                             </div>
                         </div>
                     </div>
                     {% endfor %}
-                </div>
-                {% endif %}
+</div>
+{% endif %}
 
                 <!-- My Tasks Section -->
                 <div>
@@ -488,7 +480,26 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 </div>
+</div>
+</div>
+<script>
+(function () {
+  function findFrame(sourceWindow) {
+    return Array.from(document.querySelectorAll('iframe[data-widget-id]')).find(function (frame) {
+      return frame.contentWindow === sourceWindow;
+    });
+  }
+
+  window.addEventListener('message', function (event) {
+    var data = event.data;
+    if (!data || data.type !== 'marimo-embed-height') return;
+    if (typeof data.height !== 'number' || data.height <= 0) return;
+    var frame = findFrame(event.source);
+    if (!frame) return;
+    frame.style.height = Math.ceil(data.height) + 'px';
+    frame.style.minHeight = Math.ceil(Math.max(data.height, 288)) + 'px';
+  });
+})();
+</script>
 {% endblock %}

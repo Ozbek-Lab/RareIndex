@@ -1,7 +1,46 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% include "lab/partials/visualizations/map.html" %}
+<div x-data="{ currentTab: 'turkey-choropleth' }" class="min-h-[calc(100vh-64px)] bg-white">
+  <div class="border-b border-base-200 bg-white px-6 pt-4">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-bold text-base-content">Visualizations</h1>
+        <p class="text-xs text-base-content/60">
+          Example choropleth map of Turkey rendered with D3 / Observable.
+        </p>
+      </div>
+      <div role="tablist" class="tabs tabs-boxed bg-base-200/50 p-1 gap-1">
+        <button
+          type="button"
+          role="tab"
+          class="tab transition-all duration-200"
+          :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'turkey-choropleth' }"
+          @click="currentTab = 'turkey-choropleth'"
+        >
+          Turkey Choropleth
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="tab transition-all duration-200 opacity-70"
+          disabled
+          title="Coming soon"
+        >
+          More visualizations
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="p-6 space-y-4">
+    <div x-show="currentTab === 'turkey-choropleth'" x-cloak>
+      {% include "lab/partials/visualizations/map.html" %}
+    </div>
+
+    <div x-show="currentTab !== 'turkey-choropleth'" x-cloak class="rounded-box border border-base-200 bg-base-100 p-6 text-sm text-base-content/60">
+      Additional visualizations will appear here.
+    </div>
+  </div>
+</div>
 {% endblock %}
-
-

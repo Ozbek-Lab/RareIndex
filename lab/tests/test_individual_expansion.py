@@ -1,11 +1,12 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth.models import User
-from lab.models import Individual, Status, Project, Sample, Test, Pipeline, PipelineType, SampleType, TestType
+from lab.models import Individual, Status, Project, Sample, Test, Pipeline, PipelineType, SampleType, TestType, Contact
 
 class IndividualExpansionTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="testuser", password="password")
+        self.contact = Contact.objects.create(full_name="testuser", user=self.user, created_by=self.user)
         self.client = Client()
         self.client.force_login(self.user)
         
@@ -24,7 +25,7 @@ class IndividualExpansionTest(TestCase):
             sample_type=self.sample_type, 
             status=self.status,
             created_by=self.user,
-            isolation_by=self.user
+            isolation_by=self.contact
         )
         
         self.test_type = TestType.objects.create(name="WGS", created_by=self.user)

@@ -36,6 +36,7 @@ from lab.models import (
     Test,
     TestType,
 )
+from lab.management.commands._import_helpers import get_or_create_contact_for_user
 from ontologies.models import Ontology, Term
 from variant.models import Classification, Gene, SNV
 
@@ -181,6 +182,7 @@ class Command(BaseCommand):
         if not user:
             self.stdout.write("Creating default superuser…")
             user = User.objects.create_superuser("admin", "admin@example.com", "admin")
+        contact = get_or_create_contact_for_user(user, user)
         if not User.objects.filter(username="pleb").exists():
             self.stdout.write("Creating pleb user…")
             User.objects.create_user("pleb", "pleb@example.com", "pleb")
@@ -270,7 +272,7 @@ class Command(BaseCommand):
 
             for ind in [mother, father] + children:
                 self._create_samples(
-                    ind, institution, sample_types, test_types, pipeline_types,
+                    ind, contact, institution, sample_types, test_types, pipeline_types,
                     options["samples_per_individual"],
                     options["tests_per_sample"],
                     options["pipelines_per_test"],
@@ -577,7 +579,7 @@ class Command(BaseCommand):
     # ==================================================================
 
     def _create_samples(
-        self, individual, institution, sample_types, test_types, pipeline_types,
+        self, individual, contact, institution, sample_types, test_types, pipeline_types,
         num_samples, tests_per_sample, pipelines_per_test, analyses_per_pipeline,
         variants_per_analysis, tasks_per_object, user, all_statuses, project,
         analysis_types,
@@ -594,7 +596,7 @@ class Command(BaseCommand):
                 individual=individual,
                 sample_type=sample_type,
                 receipt_date=receipt_date,
-                isolation_by=user,
+                isolation_by=contact,
                 created_by=user,
             )
             if active_sample:

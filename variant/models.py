@@ -49,6 +49,7 @@ class Variant(HistoryMixin, models.Model):
         ("hemi", "Hemizygous"),
         ("hetpl", "Heteroplasmy"), #Check if chromosome is "MT"
         ("homoplasmy", "Homoplasmy"), #Check if chromosome is "MT"
+        ("unknown", "Unknown"),
     ]
     zygosity = models.CharField(max_length=20, choices=ZYGOSITY_CHOICES)
 
@@ -221,4 +222,3 @@ class Gene(models.Model):
     
     def __str__(self):
         return self.symbol
-

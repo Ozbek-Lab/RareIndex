@@ -271,8 +271,48 @@ class SampleType(HistoryMixin, models.Model):
         return self.name
 
 
+class Contact(HistoryMixin, models.Model):
+    full_name = models.CharField(max_length=255, db_index=True)
+    emails = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered email addresses associated with this contact.",
+    )
+    phones = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered phone numbers associated with this contact.",
+    )
+    notes = models.TextField(blank=True, default="")
+    user = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contact",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="created_contacts",
+    )
+    history = HistoricalRecords()
+
+    class Meta:
+        ordering = ["full_name"]
+
+    def __str__(self):
+        return self.full_name
+
+
 class Institution(HistoryMixin, models.Model):
-    staff = models.ManyToManyField(User, blank=True, related_name="institutions_as_staff")
+    staff = models.ManyToManyField(
+        "Contact",
+        blank=True,
+        related_name="institutions_as_staff",
+    )
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
     city = models.CharField(max_length=255, null=True, blank=True)
@@ -370,7 +410,12 @@ class Status(HistoryMixin, models.Model):
     )
     description = models.TextField(blank=True)
     color = models.CharField(max_length=50, default="gray")
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     content_type = models.ForeignKey(
         ContentType, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -462,7 +507,7 @@ class Individual(HistoryMixin, models.Model):
     diagnosis = models.TextField(blank=True)
     diagnosis_date = models.DateField(null=True, blank=True)
     institution = models.ManyToManyField(Institution, related_name="individuals")
-    physicians = models.ManyToManyField(User, blank=True, related_name="patients")
+    physicians = models.ManyToManyField("Contact", blank=True, related_name="patients")
     tasks = GenericRelation("Task")
     registration_date = models.DateField(null=True, blank=True)
 
@@ -586,7 +631,11 @@ class Sample(HistoryMixin, models.Model):
 
     # Sample details
     isolation_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="isolated_samples"
+        "Contact",
+        on_delete=models.PROTECT,
+        related_name="isolated_samples",
+        null=True,
+        blank=True,
     )
     sample_measurements = models.CharField(max_length=255, blank=True)
 
@@ -903,6 +952,11 @@ class CrossIdentifier(HistoryMixin, models.Model):
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    contact_info = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered clinician contact values imported from spreadsheets.",
+    )
     email_notifications = models.JSONField(
         default=dict, help_text="Email notification settings"
     )

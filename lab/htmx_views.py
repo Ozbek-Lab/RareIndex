@@ -1618,7 +1618,8 @@ def generate_analysis_report_docx(request, analysis_id):
 
     referring_physicians = ", ".join(
         [
-            physician.get_full_name().strip() or physician.username
+            getattr(physician, "full_name", None)
+            or str(physician)
             for physician in individual.physicians.all()
         ]
     )

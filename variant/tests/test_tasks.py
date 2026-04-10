@@ -2,13 +2,14 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from variant.models import Variant
-from lab.models import Task, Status, Project, Individual
+from lab.models import Task, Status, Project, Individual, Contact
 
 User = get_user_model()
 
 class VariantTaskTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="testuser", password="password")
+        self.contact = Contact.objects.create(full_name="testuser", user=self.user, created_by=self.user)
         self.status = Status.objects.create(name="Open", color="blue", created_by=self.user)
         self.individual = Individual.objects.create(
             full_name="Test Individual",
@@ -70,7 +71,7 @@ class VariantTaskTests(TestCase):
             sample_type=sample_type,
             status=self.status,
             created_by=self.user,
-            isolation_by=self.user
+            isolation_by=self.contact
         )
         test = Test.objects.create(
             sample=sample,
@@ -104,7 +105,7 @@ class VariantTaskTests(TestCase):
             sample_type=sample_type,
             status=self.status,
             created_by=self.user,
-            isolation_by=self.user
+            isolation_by=self.contact
         )
         test = Test.objects.create(
             sample=sample,

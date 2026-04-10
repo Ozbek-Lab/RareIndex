@@ -14,7 +14,7 @@ Sheets processed from the master XLSX
   CP_COHORT           – CP cohort project assignment
   RNA SEQ             – RNA Seq tests
   Gennext Analiz Listesi – Gennext pipelines (links Analiz Takip analyses)
-  RarePipe Analiz Listesi – RarePipe pipelines (⚠ date column missing — remind user)
+  RarePipe Analiz Listesi – RarePipe pipelines
 
 Optional external inputs
 ------------------------
@@ -40,7 +40,7 @@ Processing order
  12  CP_COHORT
  13  RNA SEQ
  14  Gennext Analiz Listesi (creates Pipelines and links to analyses from step 5)
- 15  RarePipe Analiz Listesi (⚠ skipped — no date column yet)
+ 15  RarePipe Analiz Listesi
  16  Variant List
  17  link_imported_genes
  18  File attachments
@@ -48,11 +48,12 @@ Processing order
 
 REMINDERS (ask after implementation):
   • CNV / SV / Repeat variant format in Variant List (Q5)
-  • RarePipe Analiz Listesi: add a date column (Q10)
+  • RarePipe Analiz Listesi: confirm whether Matching Sample ID / ID should also be preserved as notes
   • Yayın_İçi Variant column format (Q12)
 """
 
 import csv
+import json
 import os
 import re
 from pathlib import Path
@@ -69,6 +70,7 @@ from lab.models import (
     AnalysisReport,
     AnalysisRequestForm,
     CrossIdentifier,
+    Contact,
     Family,
     IdentifierType,
     Individual,
@@ -76,15 +78,18 @@ from lab.models import (
     Pipeline,
     Project,
     Sample,
+    PlotTemplate,
     Status,
     Task,
     Test,
 )
 from ontologies.models import Ontology
-from variant.models import Classification, Gene, SNV, Variant
+from variant.models import Classification, CNV, Gene, SNV, SV, Variant, delins
 
 from lab.management.commands._import_helpers import (
     build_id_map,
+    find_individual_by_import_identifier,
+    find_individual_by_rareboost_id,
     get_family_id,
     get_hpo_terms,
     get_initials,
@@ -93,6 +98,8 @@ from lab.management.commands._import_helpers import (
     get_or_create_sample_type,
     get_or_create_status,
     get_or_create_test_type,
+    get_or_create_contact,
+    get_or_create_contact_for_user,
     get_or_create_user,
     map_classification,
     map_inheritance,
@@ -112,9 +119,50 @@ User = get_user_model()
 # ---------------------------------------------------------------------------
 ZYGOSITY_MAP = {
     "het.": "het",
+    "heterozigot": "het",
     "hom.": "hom",
+    "homozigot": "hom",
     "hemizigot": "hemi",
     "heteroplazmi": "hetpl",
+    "homoplazmi": "homoplasmy",
+    "na": "unknown",
+    "n/a": "unknown",
+}
+
+YAYIN_ZYGOSITY_MAP = {
+    "het": "het",
+    "het.": "het",
+    "heterozygous": "het",
+    "heterozigot": "het",
+    "hom": "hom",
+    "hom.": "hom",
+    "homozygous": "hom",
+    "homozigot": "hom",
+    "hem": "hemi",
+    "hemi": "hemi",
+    "hemizigot": "hemi",
+    "heteroplazmi": "hetpl",
+    "hetpl": "hetpl",
+    "homoplazmi": "homoplasmy",
+    "comphat": "het",
+    "comphet": "het",
+    "mono - de novo": "unknown",
+    "mono-de novo": "unknown",
+    "mono - maternal": "unknown",
+    "mono-maternal": "unknown",
+    "mono - paternal": "unknown",
+    "mono-paternal": "unknown",
+    "mono - unknown": "unknown",
+    "mono-unknown": "unknown",
+    "negative": "unknown",
+    "unknown": "unknown",
+    "na": "unknown",
+    "n/a": "unknown",
+}
+
+REQUIRED_PLOT_TEMPLATE_SLUGS = {
+    "sample-distribution-sunburst",
+    "analysis-status-bar",
 }
 
 
@@ -214,10 +262,202 @@ def _map_zygosity_strict(value, warn_fn=None):
         if warn_fn:
             warn_fn(f"  Zygosity is empty — skipping variant")
         return None
-    mapped = ZYGOSITY_MAP.get(str(value).strip().lower())
+    normalized = re.sub(r"\s+", " ", str(value).strip().lower())
+    mapped = ZYGOSITY_MAP.get(normalized)
     if mapped is None and warn_fn:
         warn_fn(f"  Unrecognised zygosity {value!r} — skipping variant")
     return mapped
+
+
+def _compact_variant_coord(value) -> str:
+    """Strip punctuation commonly used as thousands separators from coordinate strings."""
+    if value is None:
+        return ""
+    return re.sub(r"[,\s.]", "", str(value).strip())
+
+
+def _normalize_variant_chromosome(value) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.lower().startswith("chr"):
+        return text if text.startswith("chr") else f"chr{text[3:]}"
+    m = re.match(r"^(?P<num>\d+|x|y|m)", text, re.I)
+    if m:
+        suffix = m.group("num")
+        return f"chr{suffix.upper() if len(suffix) == 1 else suffix}"
+    return text
+
+
+def _normalize_yayin_zygosity(value) -> str:
+    if value is None:
+        return "unknown"
+    text = re.sub(r"\s+", " ", str(value).strip().lower())
+    text = re.sub(r"\s+", " ", text)
+    return YAYIN_ZYGOSITY_MAP.get(text, YAYIN_ZYGOSITY_MAP.get(text.replace(" ", "-"), "unknown"))
+
+
+def _split_yayin_variant_text(value) -> list[str]:
+    if value is None:
+        return []
+    text = str(value).strip()
+    if not text or text == "-":
+        return []
+    return [line.strip() for line in text.splitlines() if line.strip() and line.strip() != "-"]
+
+
+def _split_csv_values(value) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
+def _normalize_contact_value(value) -> str:
+    return re.sub(r"\s+", "", str(value or "")).strip()
+
+
+def _build_clinician_assignments(
+    clinician_field,
+    first_contact_field,
+    second_contact_field,
+) -> list[tuple[str, list[str]]]:
+    names = [name.strip() for name in _split_csv_values(clinician_field)]
+    names = [name for name in names if name]
+    if not names:
+        return []
+
+    contacts = []
+    for raw_field in (first_contact_field, second_contact_field):
+        for token in _split_csv_values(raw_field):
+            normalized = _normalize_contact_value(token)
+            if normalized:
+                contacts.append(normalized)
+
+    assignments = [[] for _ in names]
+    for idx, contact in enumerate(contacts):
+        assignments[min(idx, len(names) - 1)].append(contact)
+
+    return list(zip(names, assignments))
+
+
+def _extract_variant_records(token: str) -> list[dict]:
+    """
+    Best-effort parser for Yayın_İçi variant text.
+
+    Returns a list of dicts describing importable variants. Unparseable tokens
+    are returned as an empty list so callers can preserve them as notes.
+    """
+    text = str(token or "").strip()
+    if not text or text == "-":
+        return []
+
+    variant_text, sep, extra_text = text.partition(";")
+    variant_text = variant_text.strip()
+    extra_text = extra_text.strip() if sep else ""
+
+    # Gene-level HGVS-like strings without genomic coordinates are preserved as notes.
+    if "chr" not in variant_text.lower() and not re.search(r"\(\s*[\d,._]+\s*[_-]\s*[\d,._]+\s*\)\s*x\d+", variant_text, re.I):
+        return []
+
+    # Explicit "chr5-12345 A>G" or "chr5:12345 A>G"
+    snv_match = re.search(
+        r"(?P<chrom>chr[\w]+)[\s:,-]+(?P<start>[\d.,]+)\s*(?P<ref>[ACGT]+)>(?P<alt>[ACGT]+)",
+        variant_text,
+        re.I,
+    )
+    if snv_match:
+        ref = snv_match.group("ref").upper()
+        alt = snv_match.group("alt").upper()
+        record = {
+            "chromosome": _normalize_variant_chromosome(snv_match.group("chrom")),
+            "start": int(_compact_variant_coord(snv_match.group("start"))),
+            "reference": ref,
+            "alternate": alt,
+            "kind": "snv" if len(ref) == len(alt) == 1 else "delins",
+            "end": int(_compact_variant_coord(snv_match.group("start"))),
+        }
+        if extra_text:
+            record["note"] = extra_text
+        record["source_text"] = text
+        return [record]
+
+    # Structural/CNV style variants with a coordinate range.
+    coord_range_match = re.search(
+        r"(?P<chrom>chr[\w]+|[0-9XYM]+[pq][^(\s]*)[:\-](?P<start>[\d.,]+)[\-_](?P<end>[\d.,]+)",
+        variant_text,
+        re.I,
+    )
+    if coord_range_match:
+        copy_match = re.search(r"x(?P<copy>\d+)", variant_text, re.I)
+        has_dup = re.search(r"\bdup(lication)?\b|\bgain\b|\bamplification\b", variant_text, re.I)
+        has_del = re.search(r"\bdel(etion)?\b|\bdelesyon\b", variant_text, re.I)
+        if not (copy_match or has_dup or has_del):
+            return []
+
+        chrom = _normalize_variant_chromosome(coord_range_match.group("chrom"))
+        start = int(_compact_variant_coord(coord_range_match.group("start")))
+        end = int(_compact_variant_coord(coord_range_match.group("end")))
+        if copy_match:
+            copy = int(copy_match.group("copy"))
+            return [{
+                "chromosome": chrom,
+                "start": min(start, end),
+                "end": max(start, end),
+                "kind": "cnv",
+                "cnv_type": "loss" if copy == 0 else "gain",
+                "copy_number": copy,
+                "source_text": text,
+                **({"note": extra_text} if extra_text else {}),
+            }]
+        variant_type = "sv"
+        if has_dup:
+            variant_type = "cnv"
+
+        record = {
+            "chromosome": chrom,
+            "start": min(start, end),
+            "end": max(start, end),
+            "kind": variant_type,
+            "source_text": text,
+        }
+        if extra_text:
+            record["note"] = extra_text
+        if variant_type == "cnv":
+            record["cnv_type"] = "gain"
+            record["copy_number"] = None
+        elif variant_type == "sv":
+            record["sv_type"] = "deletion" if has_del else "structural_variant"
+        return [record]
+
+    # Cytoband / deletion notation with coordinates in parentheses:
+    #   LAMA2 seq[GRCh38] 6q22.33(129,047,209_129,083,546)x4 Duplikasyon
+    band_match = re.search(
+        r"(?P<chrom>[0-9XYM]+[pq][^(\s]*)\((?P<start>[\d,._]+)\s*[_-]\s*(?P<end>[\d,._]+)\)\s*x(?P<copy>\d+)",
+        variant_text,
+        re.I,
+    )
+    if band_match:
+        chrom = _normalize_variant_chromosome(band_match.group("chrom"))
+        start = int(_compact_variant_coord(band_match.group("start")))
+        end = int(_compact_variant_coord(band_match.group("end")))
+        copy = int(band_match.group("copy"))
+        return [{
+            "chromosome": chrom,
+            "start": min(start, end),
+            "end": max(start, end),
+            "kind": "cnv",
+            "cnv_type": "loss" if copy == 0 else "gain",
+            "copy_number": copy,
+            "source_text": text,
+            **({"note": extra_text} if extra_text else {}),
+        }]
+
+    return []
+
+
+def _variant_text_summary(token: str) -> str:
+    token = " ".join(str(token or "").split())
+    return token.strip()
 
 
 class Command(BaseCommand):
@@ -244,6 +484,138 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", dest="dry_run", action="store_true",
                             help="Validate without writing to the database")
 
+    def _resolve_admin_user(self, admin_username: str):
+        """Get the admin user, creating or promoting it when needed."""
+        admin_user = User.objects.filter(username=admin_username).first()
+        if admin_user:
+            needs_staff = not admin_user.is_staff
+            needs_superuser = not admin_user.is_superuser
+            if needs_staff or needs_superuser:
+                if self.dry_run:
+                    self.stdout.write(self.style.WARNING(
+                        f"Admin user {admin_username!r} exists but is not staff/superuser; "
+                        "a real run would promote it."
+                    ))
+                else:
+                    admin_user.is_staff = True
+                    admin_user.is_superuser = True
+                    admin_user.save(update_fields=["is_staff", "is_superuser"])
+                    self.stdout.write(self.style.WARNING(
+                        f"Admin user {admin_username!r} was promoted to staff/superuser."
+                    ))
+            return admin_user
+
+        if self.dry_run:
+            raise CommandError(
+                f"Admin user {admin_username!r} not found and cannot be created in dry-run mode"
+            )
+
+        admin_user = User.objects.create_superuser(
+            username=admin_username,
+            password=admin_username,
+        )
+        self.stdout.write(self.style.WARNING(
+            f"Admin user {admin_username!r} did not exist and was created as a superuser."
+        ))
+        return admin_user
+
+    def _apply_contact_details(self, contact, contact_values) -> None:
+        if not contact_values:
+            return
+
+        existing_emails = list(contact.emails or [])
+        existing_phones = list(contact.phones or [])
+        updated_emails = list(existing_emails)
+        updated_phones = list(existing_phones)
+
+        for value in contact_values:
+            normalized_value = _normalize_contact_value(value)
+            if not normalized_value:
+                continue
+            if "@" in normalized_value:
+                if normalized_value not in updated_emails:
+                    updated_emails.append(normalized_value)
+            elif normalized_value not in updated_phones:
+                updated_phones.append(normalized_value)
+
+        changed_fields = []
+        if updated_emails != existing_emails:
+            contact.emails = updated_emails
+            changed_fields.append("emails")
+        if updated_phones != existing_phones:
+            contact.phones = updated_phones
+            changed_fields.append("phones")
+        if changed_fields:
+            contact.save(update_fields=changed_fields)
+
+        linked_user = getattr(contact, "user", None)
+        if linked_user and not linked_user.email:
+            email_to_set = next((email for email in updated_emails if "@" in email), None)
+            if email_to_set:
+                linked_user.email = email_to_set
+                linked_user.save(update_fields=["email"])
+
+    def _build_clinician_assignments(self, clinician_field, first_contact_field, second_contact_field):
+        assignments = _build_clinician_assignments(
+            clinician_field,
+            first_contact_field,
+            second_contact_field,
+        )
+        self._report_clinician_edge_cases(
+            clinician_field,
+            first_contact_field,
+            second_contact_field,
+            assignments,
+        )
+        return assignments
+
+    def _report_clinician_edge_cases(
+        self,
+        clinician_field,
+        first_contact_field,
+        second_contact_field,
+        assignments,
+    ) -> None:
+        clinician_names = [name.strip() for name in _split_csv_values(clinician_field) if name.strip()]
+        contact_values = []
+        for raw_field in (first_contact_field, second_contact_field):
+            for token in _split_csv_values(raw_field):
+                normalized = _normalize_contact_value(token)
+                if normalized:
+                    contact_values.append(normalized)
+
+        if not clinician_names or not contact_values:
+            return
+
+        if len(contact_values) < len(clinician_names):
+            message = (
+                "Clinician contact edge case: "
+                f"{len(clinician_names)} clinician(s) but {len(contact_values)} contact value(s); "
+                "later clinicians will have no contact info."
+            )
+        elif len(contact_values) > len(clinician_names):
+            message = (
+                "Clinician contact edge case: "
+                f"{len(clinician_names)} clinician(s) but {len(contact_values)} contact value(s); "
+                "extra values were attached to the last clinician."
+            )
+        else:
+            return
+
+        self.stdout.write(f"INFO: {message}")
+        self._record_issue(
+            step="clinician",
+            sheet="Klinisyen",
+            severity="info",
+            reason=message,
+            row={
+                "Klinisyen": clinician_field,
+                "İletişim Bilgileri - Mail/telefon?": first_contact_field,
+                "İletişim Bilgileri - Telefon/mail?": second_contact_field,
+            },
+            context={"assignments": assignments},
+        )
+
     # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
@@ -253,14 +625,14 @@ class Command(BaseCommand):
         if self.dry_run:
             self.stdout.write(self.style.WARNING("-- DRY RUN: nothing will be saved --"))
 
-        try:
-            self.admin_user = User.objects.get(username=options["admin_username"])
-        except User.DoesNotExist:
-            raise CommandError(f"Admin user {options['admin_username']!r} not found")
+        admin_username = options["admin_username"]
+        self.admin_user = self._resolve_admin_user(admin_username)
 
         file_path = options["xlsx_file"]
         if not os.path.exists(file_path):
             raise CommandError(f"File not found: {file_path}")
+
+        self._init_issue_log(file_path)
 
         # Instance-level state shared between steps
         self.analysis_map: dict = {}       # (lab_id, tt_name) → Analysis
@@ -320,15 +692,142 @@ class Command(BaseCommand):
             self.stdout.write("Step 17: Linking genes via annotations…")
             call_command("link_imported_genes")
 
-        # Step 18 — file attachments
+        # Step 18 — plot templates
+        self._step18_ensure_plot_templates()
+
+        # Step 19 — file attachments
         if options.get("forms_dir") or options.get("reports_dir"):
             self._step_file_attachments(options.get("forms_dir"), options.get("reports_dir"))
 
-        # Step 19 — Yayın_İçi
+        # Step 20 — Yayın_İçi
         if options.get("yayin_ici"):
             self._step_yayin_ici(options["yayin_ici"])
 
+        self._write_issue_log()
         self.stdout.write(self.style.SUCCESS("Import completed successfully."))
+
+    def _init_issue_log(self, xlsx_file: str) -> None:
+        base_dir = Path(xlsx_file).resolve().parent
+        self.issue_log_path = base_dir / "import_all_issues.tsv"
+        self.info_log_path = base_dir / "import_all_info.tsv"
+        self.error_log_path = base_dir / "import_all_errors.tsv"
+        self.issue_records: list[dict[str, str]] = []
+
+    def _record_issue(
+        self,
+        *,
+        step: str,
+        reason: str,
+        sheet: str = "",
+        severity: str = "warning",
+        lab_id=None,
+        row: dict | None = None,
+        context: dict | None = None,
+    ) -> None:
+        def _json_safe(value):
+            if isinstance(value, dict):
+                return {
+                    "" if key is None else str(key): _json_safe(val)
+                    for key, val in value.items()
+                }
+            if isinstance(value, (list, tuple, set)):
+                return [_json_safe(item) for item in value]
+            return value
+
+        payload = {
+            "step": step,
+            "sheet": sheet,
+            "severity": severity,
+            "reason": reason,
+            "lab_id": "" if lab_id is None else str(lab_id),
+            "context": json.dumps(_json_safe(context or {}), ensure_ascii=False, sort_keys=True, default=str),
+            "row_data": json.dumps(_json_safe(row or {}), ensure_ascii=False, sort_keys=True, default=str),
+        }
+        self.issue_records.append(payload)
+
+    def _write_issue_log(self) -> None:
+        records = list(getattr(self, "issue_records", []) or [])
+
+        def _sanitize_shareable_record(record: dict[str, str]) -> dict[str, str]:
+            return {
+                "step": record.get("step", ""),
+                "sheet": record.get("sheet", ""),
+                "severity": record.get("severity", ""),
+                "reason": record.get("reason", ""),
+                "lab_id": record.get("lab_id", ""),
+            }
+
+        non_info_records = [record for record in records if record.get("severity") != "info"]
+        info_records = [record for record in records if record.get("severity") == "info"]
+        error_records = [record for record in records if record.get("severity") == "error"]
+
+        def _write_tsv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> None:
+            with path.open("w", encoding="utf-8", newline="") as fh:
+                writer = csv.DictWriter(fh, fieldnames=fieldnames, delimiter="\t")
+                writer.writeheader()
+                writer.writerows(rows)
+
+        _write_tsv(
+            self.issue_log_path,
+            non_info_records,
+            ["step", "sheet", "severity", "reason", "lab_id", "context", "row_data"],
+        )
+        _write_tsv(
+            self.info_log_path,
+            [_sanitize_shareable_record(record) for record in info_records],
+            ["step", "sheet", "severity", "reason", "lab_id"],
+        )
+        _write_tsv(
+            self.error_log_path,
+            [_sanitize_shareable_record(record) for record in error_records],
+            ["step", "sheet", "severity", "reason", "lab_id"],
+        )
+
+        if records:
+            self.stdout.write(self.style.WARNING(
+                f"Issue log: wrote {len(non_info_records)} non-info entries to {self.issue_log_path}"))
+            self.stdout.write(self.style.WARNING(
+                f"Issue log: wrote {len(info_records)} info entries to {self.info_log_path}"))
+            self.stdout.write(self.style.WARNING(
+                f"Issue log: wrote {len(error_records)} error entries to {self.error_log_path}"))
+        else:
+            self.stdout.write("Issue log: no skipped or failed rows recorded.")
+
+    def _fit_uploaded_filename(self, field_file, source_name: str) -> str:
+        """
+        Shorten the basename if needed so the generated storage path fits the
+        field's max_length. Keeps the extension intact.
+        """
+        field = field_file.field
+        max_length = field.max_length
+        candidate_name = Path(source_name).name
+        generated_name = field.generate_filename(field_file.instance, candidate_name)
+
+        if not max_length or len(generated_name) <= max_length:
+            return candidate_name
+
+        suffix = Path(candidate_name).suffix
+        stem = Path(candidate_name).stem
+        min_stem_len = 1
+        allowed_stem_len = len(stem)
+
+        while allowed_stem_len >= min_stem_len:
+            trimmed_name = f"{stem[:allowed_stem_len]}{suffix}"
+            generated_name = field.generate_filename(field_file.instance, trimmed_name)
+            if len(generated_name) <= max_length:
+                return trimmed_name
+            allowed_stem_len -= 1
+
+        if suffix:
+            trimmed_name = suffix[-max_length:]
+            generated_name = field.generate_filename(field_file.instance, trimmed_name)
+            if len(generated_name) <= max_length:
+                return trimmed_name
+
+        raise ValueError(
+            f"Could not fit filename {source_name!r} into max_length={max_length} "
+            f"for upload path {field.upload_to!r}"
+        )
 
     def _load_report_text_reference(self) -> dict[str, dict[str, str]]:
         if self._report_text_reference_cache is not None:
@@ -379,6 +878,32 @@ class Command(BaseCommand):
 
         if updates:
             type(test_type).objects.filter(pk=test_type.pk).update(**updates)
+
+    def _step18_ensure_plot_templates(self) -> None:
+        """
+        Ensure the published Marimo-backed plot templates exist so /gallery/
+        can show cards and link to the run/editor servers.
+        """
+        existing_slugs = set(
+            PlotTemplate.objects.filter(
+                slug__in=REQUIRED_PLOT_TEMPLATE_SLUGS,
+                is_published=True,
+            ).values_list("slug", flat=True)
+        )
+        missing_slugs = sorted(REQUIRED_PLOT_TEMPLATE_SLUGS - existing_slugs)
+        if not missing_slugs:
+            self.stdout.write("Step 18: Plot templates already seeded.")
+            return
+
+        self.stdout.write(
+            self.style.WARNING(
+                f"Step 18: Missing published plot templates {missing_slugs} — seeding defaults…"
+            )
+        )
+        if self.dry_run:
+            return
+
+        call_command("seed_plot_templates")
 
     # ==================================================================
     # Step 0a — Ontologies
@@ -444,6 +969,7 @@ class Command(BaseCommand):
             },
             "sample": {
                 "not_available":     s("Not Available",          "Placeholder",    "gray",   "sample", "fa-ban"),
+                "unsure_import":    s("Unsure Import",         "Import fallback","orange", "sample", "fa-circle-question"),
                 "pending_blood":     s("Pending Blood Recovery", "Awaiting draw",  "red",    "sample", "fa-droplet"),
                 "pending_isolation": s("Pending Isolation",      "Awaiting iso",   "yellow", "sample", "fa-vials"),
                 "available":         s("Available",              "Ready",          "green",  "sample", "fa-circle-check"),
@@ -453,17 +979,20 @@ class Command(BaseCommand):
                 "in_progress": s("In Progress",          "Ongoing",                "yellow", "test", "fa-spinner"),
                 "pending":     s("Pending",              "Waiting",                "red",    "test", "fa-clock"),
                 "previous":    s("Previous",             "Historical",             "orange", "test", "fa-clock-rotate-left"),
+                "unsure_import": s("Unsure Import",      "Import fallback",        "orange", "test", "fa-circle-question"),
                 "sent":        s("Sent",                 "Sent for sequencing",    "blue",   "test", "fa-paper-plane"),
                 "awaiting":    s("Awaiting Data Arrival","Waiting for data",       "red",    "test", "fa-hourglass-half"),
             },
             "pipeline": {
                 "completed":   s("Completed",   "Done",     "green",  "pipeline", "fa-circle-check"),
                 "in_progress": s("In Progress", "Ongoing",  "yellow", "pipeline", "fa-spinner"),
+                "unsure_import": s("Unsure Import", "Import fallback", "orange", "pipeline", "fa-circle-question"),
             },
             "analysis": {
                 "completed":    s("Completed",    "Done",          "green",  "analysis", "fa-circle-check"),
                 "in_progress":  s("In Progress",  "Ongoing",       "yellow", "analysis", "fa-spinner"),
                 "pending_data": s("Pending Data", "Waiting",       "red",    "analysis", "fa-hourglass-half"),
+                "unsure_import": s("Unsure Import", "Import fallback", "orange", "analysis", "fa-circle-question"),
             },
             "project": {
                 "in_progress": s("In Progress", "Active",  "green",  "project", "fa-diagram-project"),
@@ -522,6 +1051,12 @@ class Command(BaseCommand):
         except KeyError:
             self.stdout.write(self.style.WARNING(
                 "Sheet 'Kurumlar' not found — proceeding without institution metadata."))
+            self._record_issue(
+                step="step2",
+                sheet="Kurumlar",
+                severity="warning",
+                reason="Sheet not found; institution metadata skipped.",
+            )
             return kurumlar_map
         headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1)) if c.value]
         for row in ws.iter_rows(min_row=2, values_only=True):
@@ -588,18 +1123,18 @@ class Command(BaseCommand):
             if fid:
                 unique_fids.add(fid)
 
-            # Parse clinician name / contact from combined column
-            klinisyen_raw = str(row.get("Klinisyen & İletişim Bilgileri") or "")
-            contact_part = ""
-            if "/" in klinisyen_raw:
-                _, contact_part = klinisyen_raw.split("/", 1)
-                contact_part = contact_part.strip()
+            clinician_assignments = _build_clinician_assignments(
+                row.get("Klinisyen"),
+                row.get("İletişim Bilgileri - Mail/telefon?"),
+                row.get("İletişim Bilgileri - Telefon/mail?"),
+            )
 
             inst_raw = str(row.get("Gönderen Kurum/Birim") or "")
             for name in [n.strip() for n in inst_raw.split(",") if n.strip()]:
                 inst_contacts.setdefault(name, set())
-                if contact_part:
-                    inst_contacts[name].add(contact_part)
+                for _, contact_values in clinician_assignments:
+                    for contact_value in contact_values:
+                        inst_contacts[name].add(contact_value)
 
         families: dict = {}
         institutions: dict = {}
@@ -667,11 +1202,29 @@ class Command(BaseCommand):
             lab_id = row.get("Özbek Lab. ID")
             full_name = row.get("Ad-Soyad")
             if not lab_id or not full_name:
+                self._record_issue(
+                    step="step3",
+                    sheet="OZBEK LAB",
+                    severity="warning",
+                    reason="Missing required individual fields.",
+                    lab_id=lab_id,
+                    row=row,
+                    context={"missing_lab_id": not bool(lab_id), "missing_full_name": not bool(full_name)},
+                )
                 continue
             fid = get_family_id(lab_id)
             family = families.get(fid)
             if not family and not self.dry_run:
                 self.stdout.write(self.style.WARNING(f"  Family missing for {lab_id} — skip"))
+                self._record_issue(
+                    step="step3",
+                    sheet="OZBEK LAB",
+                    severity="warning",
+                    reason="Family missing for lab ID.",
+                    lab_id=lab_id,
+                    row=row,
+                    context={"family_id": fid},
+                )
                 continue
 
             if self.dry_run:
@@ -708,8 +1261,7 @@ class Command(BaseCommand):
             consanguinity   = to_bool(row.get("Akrabalık"))
             registration_date = parse_date(row.get("Geliş Tarihi"))
 
-            individual = Individual.objects.filter(
-                cross_ids__id_value=str(lab_id)).first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual and family:
                 individual = Individual.objects.filter(
                     full_name=full_name, family=family).first()
@@ -760,13 +1312,15 @@ class Command(BaseCommand):
                 family.is_consanguineous = consanguinity
                 family.save()
 
-            # Physician from "Klinisyen & İletişim Bilgileri" (before the "/")
-            klinisyen_raw = str(row.get("Klinisyen & İletişim Bilgileri") or "")
-            if klinisyen_raw:
-                clinician_name = klinisyen_raw.split("/", 1)[0].strip()
-                if clinician_name:
-                    physician = get_or_create_user(clinician_name, self.admin_user)
-                    individual.physicians.add(physician)
+            clinician_assignments = _build_clinician_assignments(
+                row.get("Klinisyen"),
+                row.get("İletişim Bilgileri - Mail/telefon?"),
+                row.get("İletişim Bilgileri - Telefon/mail?"),
+            )
+            for clinician_name, contact_values in clinician_assignments:
+                physician = get_or_create_contact(clinician_name, self.admin_user)
+                individual.physicians.add(physician)
+                self._apply_contact_details(physician, contact_values)
 
             hpo_terms = get_hpo_terms(row.get("HPO kodları"), self.stdout)
             if hpo_terms:
@@ -844,10 +1398,24 @@ class Command(BaseCommand):
         for row in rows:
             lab_id = row.get("Özbek Lab. ID")
             if not lab_id:
+                self._record_issue(
+                    step="step4",
+                    sheet="OZBEK LAB",
+                    severity="warning",
+                    reason="Missing lab ID; samples skipped.",
+                    row=row,
+                )
                 continue
-            individual = Individual.objects.filter(
-                cross_ids__id_value=str(lab_id)).first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual:
+                self._record_issue(
+                    step="step4",
+                    sheet="OZBEK LAB",
+                    severity="warning",
+                    reason="Individual not found; samples skipped.",
+                    lab_id=lab_id,
+                    row=row,
+                )
                 continue
 
             sample_types_raw = str(row.get("Örnek Tipi") or "")
@@ -858,7 +1426,7 @@ class Command(BaseCommand):
 
                 sample_type = get_or_create_sample_type(sample_type_name, self.admin_user)
                 # renamed column: "Saklandığı/İzole edildiği yer"
-                isolation_by = get_or_create_user(
+                isolation_by = get_or_create_contact(
                     row.get("Saklandığı/İzole edildiği yer"), self.admin_user)
                 receipt_date = parse_date(row.get("Geliş Tarihi"))  # same col as registration_date
 
@@ -920,19 +1488,44 @@ class Command(BaseCommand):
             d = dict(zip(headers, row[:len(headers)]))
             lab_id = d.get("Özbek Lab. ID")
             if not lab_id:
-                leftover_rows.append(d); continue
+                leftover_rows.append(d)
+                self._record_issue(
+                    step="step5",
+                    sheet="Analiz Takip",
+                    severity="warning",
+                    reason="Missing lab ID.",
+                    row=d,
+                )
+                continue
 
-            individual = Individual.objects.filter(
-                cross_ids__id_value=str(lab_id)).first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual:
                 self.stdout.write(self.style.WARNING(
                     f"  Analiz Takip: no individual for {lab_id}"))
-                leftover_rows.append(d); continue
+                leftover_rows.append(d)
+                self._record_issue(
+                    step="step5",
+                    sheet="Analiz Takip",
+                    severity="warning",
+                    reason="Individual not found for analysis row.",
+                    lab_id=lab_id,
+                    row=d,
+                )
+                continue
 
             # VERİ KAYNAĞI is a single value (strip only)
             tt_name = str(d.get("VERİ KAYNAĞI") or "").strip()
             if not tt_name:
-                leftover_rows.append(d); continue
+                leftover_rows.append(d)
+                self._record_issue(
+                    step="step5",
+                    sheet="Analiz Takip",
+                    severity="warning",
+                    reason="Missing VERİ KAYNAĞI.",
+                    lab_id=lab_id,
+                    row=d,
+                )
+                continue
 
             if self.dry_run:
                 self.stdout.write(f"  [DRY] Test+Analysis for {lab_id} / {tt_name}")
@@ -974,9 +1567,8 @@ class Command(BaseCommand):
             parse_and_add_notes(d.get("Veri İçeriği"), test, self.admin_user)
             parse_and_add_notes(d.get("Veri Notları"), test, self.admin_user)
 
-            # Performed_by for Analysis (union of two columns)
-            performers = self._parse_analysis_performers(
-                d.get("ANALİZİ KİMLER YAPTI?"), d.get("Analizi Yapan"))
+            # Performed_by for Analysis (comma-separated names in one column)
+            performers = self._parse_analysis_performers(d.get("Analizi Yapan"))
 
             analiz_tarihi  = parse_date(d.get("Reanaliz bitiş tarihi/ayça bitirdiğinde"))
             analiz_turu    = str(d.get("Analiz Türü") or "").strip()
@@ -1018,19 +1610,19 @@ class Command(BaseCommand):
                 f"  {len(leftover_rows)} Analiz Takip rows could not be matched."))
         self.stdout.write(f"  Analyses created: {len(self.analysis_map)}")
 
-    def _parse_analysis_performers(self, field1, field2) -> list:
-        """Union of two performer columns → list of User objects."""
+    def _parse_analysis_performers(self, field) -> list:
+        """Split the performer column into a list of User objects."""
         names: set = set()
-        for raw in (field1, field2):
-            if not raw:
-                continue
-            for name in re.split(r"[,\n]", str(raw)):
+        if field:
+            for name in re.split(r"[,\n]", str(field)):
                 name = name.strip()
                 if name:
                     names.add(name)
         users = []
         for name in sorted(names):
-            users.append(get_or_create_user(name, self.admin_user))
+            user = get_or_create_user(name, self.admin_user)
+            get_or_create_contact(name, self.admin_user, linked_user=user)
+            users.append(user)
         return users
 
     # ==================================================================
@@ -1041,7 +1633,15 @@ class Command(BaseCommand):
         self.stdout.write(f"Step 6: RarePipe TSV {tsv_path_str}…")
         tsv_path = Path(tsv_path_str)
         if not tsv_path.exists():
-            self.stdout.write(self.style.ERROR(f"  Not found: {tsv_path}")); return
+            self.stdout.write(self.style.ERROR(f"  Not found: {tsv_path}"))
+            self._record_issue(
+                step="step6",
+                sheet="RarePipe TSV",
+                severity="error",
+                reason="RarePipe TSV file not found.",
+                context={"path": str(tsv_path)},
+            )
+            return
 
         rows = []
         with tsv_path.open(newline="", encoding="utf-8") as fh:
@@ -1058,17 +1658,51 @@ class Command(BaseCommand):
 
         for i, row in enumerate(rows, start=1):
             if len(row) < 5:
+                self._record_issue(
+                    step="step6",
+                    sheet="RarePipe TSV",
+                    severity="error",
+                    reason="Row has fewer than 5 columns.",
+                    row={"raw_row": row},
+                    context={"row_number": i},
+                )
                 errors += 1; continue
             filename, output_loc, raw_id, input_loc, version = row[:5]
             if not version:
+                self._record_issue(
+                    step="step6",
+                    sheet="RarePipe TSV",
+                    severity="error",
+                    reason="Missing pipeline version.",
+                    row={"raw_row": row},
+                    context={"row_number": i},
+                )
                 errors += 1; continue
             try:
                 performed_date = parse_date_from_filename(filename)
             except ValueError as exc:
-                self.stdout.write(self.style.ERROR(f"  Row {i}: {exc}")); errors += 1; continue
+                self.stdout.write(self.style.ERROR(f"  Row {i}: {exc}"))
+                self._record_issue(
+                    step="step6",
+                    sheet="RarePipe TSV",
+                    severity="error",
+                    reason="Could not parse performed date from filename.",
+                    row={"raw_row": row},
+                    context={"row_number": i, "error": str(exc)},
+                )
+                errors += 1; continue
 
             individual = id_map.get(normalize_id(raw_id))
             if not individual:
+                self._record_issue(
+                    step="step6",
+                    sheet="RarePipe TSV",
+                    severity="warning",
+                    reason="Individual not found for normalized ID.",
+                    lab_id=raw_id,
+                    row={"raw_row": row},
+                    context={"row_number": i, "normalized_id": normalize_id(raw_id)},
+                )
                 skipped += 1; continue
 
             test = (
@@ -1078,12 +1712,30 @@ class Command(BaseCommand):
                                        test_type__name__icontains="WES").order_by("id").first()
             )
             if not test:
+                self._record_issue(
+                    step="step6",
+                    sheet="RarePipe TSV",
+                    severity="warning",
+                    reason="No WGS or WES test found for individual.",
+                    lab_id=getattr(individual, "primary_id", raw_id),
+                    row={"raw_row": row},
+                    context={"row_number": i},
+                )
                 skipped += 1; continue
 
             pipeline_type = type_map[version]
             if Pipeline.objects.filter(test=test, type=pipeline_type,
                                         performed_date=performed_date,
                                         output_location=output_loc).exists():
+                self._record_issue(
+                    step="step6",
+                    sheet="RarePipe TSV",
+                    severity="info",
+                    reason="Duplicate pipeline row skipped.",
+                    lab_id=getattr(individual, "primary_id", raw_id),
+                    row={"raw_row": row},
+                    context={"row_number": i},
+                )
                 skipped += 1; continue
 
             if self.dry_run:
@@ -1150,10 +1802,24 @@ class Command(BaseCommand):
         for d in self._ws_rows(wb, "Sanger Konfirmasyonları"):
             lab_id = str(d.get("Özbek Lab. ID") or "").strip()
             if not lab_id:
+                self._record_issue(
+                    step="step8",
+                    sheet="Sanger Konfirmasyonları",
+                    severity="warning",
+                    reason="Missing lab ID.",
+                    row=d,
+                )
                 skipped += 1; continue
-            individual = Individual.objects.filter(
-                cross_ids__id_value=lab_id).first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual:
+                self._record_issue(
+                    step="step8",
+                    sheet="Sanger Konfirmasyonları",
+                    severity="warning",
+                    reason="Individual not found.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 skipped += 1; continue
             if self.dry_run:
                 created += 1; continue
@@ -1197,6 +1863,23 @@ class Command(BaseCommand):
         created = skipped = 0
 
         for d in self._ws_rows(wb, "WGS_TÜSEB"):
+            non_empty_keys = {
+                str(key).strip()
+                for key, value in d.items()
+                if value is not None and str(value).strip()
+            }
+            if non_empty_keys and all(key.startswith("Örnek No") for key in non_empty_keys):
+                self._record_issue(
+                    step="step9",
+                    sheet="WGS_TÜSEB",
+                    severity="info",
+                    reason="Separator row in WGS_TÜSEB skipped.",
+                    row=d,
+                    context={"non_empty_columns": sorted(non_empty_keys)},
+                )
+                skipped += 1
+                continue
+
             lab_id = str(d.get("Özbek Lab. ID") or "").strip()
             individual = None
             if lab_id:
@@ -1209,6 +1892,14 @@ class Command(BaseCommand):
                         cross_ids__id_type=bb_type,
                         cross_ids__id_value=bb_val).first()
             if not individual:
+                self._record_issue(
+                    step="step9",
+                    sheet="WGS_TÜSEB",
+                    severity="warning",
+                    reason="Individual not found by RareBoost or Biobank ID.",
+                    lab_id=lab_id or d.get("Biyobanka ID"),
+                    row=d,
+                )
                 skipped += 1; continue
             if self.dry_run:
                 created += 1; continue
@@ -1264,6 +1955,19 @@ class Command(BaseCommand):
             id_value     = str(d.get("ID Value") or "").strip()
             full_name    = str(d.get("Ad-Soyad") or "").strip()
             if not id_type_name or not id_value or not full_name:
+                self._record_issue(
+                    step="step10",
+                    sheet="External",
+                    severity="warning",
+                    reason="Missing required external individual fields.",
+                    lab_id=id_value,
+                    row=d,
+                    context={
+                        "missing_id_type": not bool(id_type_name),
+                        "missing_id_value": not bool(id_value),
+                        "missing_full_name": not bool(full_name),
+                    },
+                )
                 skipped += 1; continue
             if self.dry_run:
                 self.stdout.write(f"  [DRY] External: {full_name}")
@@ -1335,13 +2039,15 @@ class Command(BaseCommand):
 
             self._parse_other_ids(d.get("Other IDs"), individual)
 
-            # Physician
-            klinisyen_raw = str(d.get("Klinisyen & İletişim Bilgileri") or "")
-            if klinisyen_raw:
-                clinician_name = klinisyen_raw.split("/", 1)[0].strip()
-                if clinician_name:
-                    individual.physicians.add(
-                        get_or_create_user(clinician_name, self.admin_user))
+            clinician_assignments = _build_clinician_assignments(
+                d.get("Klinisyen"),
+                d.get("İletişim Bilgileri - Mail/telefon?"),
+                d.get("İletişim Bilgileri - Telefon/mail?"),
+            )
+            for clinician_name, contact_values in clinician_assignments:
+                physician = get_or_create_contact(clinician_name, self.admin_user)
+                individual.physicians.add(physician)
+                self._apply_contact_details(physician, contact_values)
 
             hpo_terms = get_hpo_terms(d.get("HPO kodları"), self.stdout)
             if hpo_terms:
@@ -1353,7 +2059,7 @@ class Command(BaseCommand):
             sample = None
             if sample_type_name:
                 sample_type = get_or_create_sample_type(sample_type_name, self.admin_user)
-                isolation_by = get_or_create_user(
+                isolation_by = get_or_create_contact(
                     d.get("İzolasyonu yapan"), self.admin_user)
                 measurements = str(d.get("Örnek gön.& OD değ.") or "").strip()
                 sample, s_created = Sample.objects.get_or_create(
@@ -1429,10 +2135,26 @@ class Command(BaseCommand):
         for d in self._ws_rows(wb, sheet_name):
             lab_id = str(d.get("RareBoost ID") or "").strip()
             if not lab_id:
+                self._record_issue(
+                    step="step11",
+                    sheet=sheet_name,
+                    severity="warning",
+                    reason="Missing RareBoost ID.",
+                    row=d,
+                    context={"note_tag": note_tag},
+                )
                 skipped += 1; continue
-            individual = Individual.objects.filter(
-                cross_ids__id_value=lab_id).first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual:
+                self._record_issue(
+                    step="step11",
+                    sheet=sheet_name,
+                    severity="warning",
+                    reason="Individual not found.",
+                    lab_id=lab_id,
+                    row=d,
+                    context={"note_tag": note_tag},
+                )
                 skipped += 1; continue
             if self.dry_run:
                 created += 1; continue
@@ -1467,10 +2189,24 @@ class Command(BaseCommand):
         for d in self._ws_rows(wb, "CP_COHORT"):
             lab_id = str(d.get("Özbek Lab. ID") or "").strip()
             if not lab_id:
+                self._record_issue(
+                    step="step12",
+                    sheet="CP_COHORT",
+                    severity="warning",
+                    reason="Missing lab ID.",
+                    row=d,
+                )
                 continue
-            individual = Individual.objects.filter(
-                cross_ids__id_value=lab_id).first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual:
+                self._record_issue(
+                    step="step12",
+                    sheet="CP_COHORT",
+                    severity="warning",
+                    reason="Individual not found.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 continue
             if not self.dry_run:
                 project.individuals.add(individual)
@@ -1490,10 +2226,24 @@ class Command(BaseCommand):
         for d in self._ws_rows(wb, "RNA SEQ"):
             lab_id = str(d.get("Özbek Lab. ID") or "").strip()
             if not lab_id:
+                self._record_issue(
+                    step="step13",
+                    sheet="RNA SEQ",
+                    severity="warning",
+                    reason="Missing lab ID.",
+                    row=d,
+                )
                 skipped += 1; continue
-            individual = Individual.objects.filter(
-                cross_ids__id_value=lab_id).first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual:
+                self._record_issue(
+                    step="step13",
+                    sheet="RNA SEQ",
+                    severity="warning",
+                    reason="Individual not found.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 skipped += 1; continue
             if self.dry_run:
                 created += 1; continue
@@ -1523,21 +2273,44 @@ class Command(BaseCommand):
         self.stdout.write("Step 14: Gennext Analiz Listesi…")
         gennext_type = get_or_create_pipeline_type("Gennext", self.admin_user)
         p_completed  = self.statuses["pipeline"].get("completed")
+        id_map = build_id_map()
         created = skipped = errors = 0
 
         for d in self._ws_rows(wb, "Gennext Analiz Listesi"):
-            lab_id = str(d.get("Gennext RBID") or "").strip()
+            lab_id = str(d.get("Gennext ID") or "").strip()
             if not lab_id:
+                self._record_issue(
+                    step="step14",
+                    sheet="Gennext Analiz Listesi",
+                    severity="warning",
+                    reason="Missing Gennext ID.",
+                    row=d,
+                )
                 skipped += 1; continue
             performed_date = parse_date(d.get("Gennext Date"))
             if not performed_date:
                 self.stdout.write(self.style.WARNING(
                     f"  Gennext: no date for {lab_id} — skipping"))
+                self._record_issue(
+                    step="step14",
+                    sheet="Gennext Analiz Listesi",
+                    severity="warning",
+                    reason="Missing or invalid Gennext Date.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 skipped += 1; continue
 
-            individual = Individual.objects.filter(
-                cross_ids__id_value=lab_id).first()
+            individual = id_map.get(normalize_id(lab_id))
             if not individual:
+                self._record_issue(
+                    step="step14",
+                    sheet="Gennext Analiz Listesi",
+                    severity="warning",
+                    reason="Individual not found by any cross identifier.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 skipped += 1; continue
 
             test = (
@@ -1548,12 +2321,40 @@ class Command(BaseCommand):
             )
             if not test:
                 self.stdout.write(self.style.WARNING(
-                    f"  Gennext: no WES/WGS test for {lab_id}"))
-                skipped += 1; continue
+                    f"  Gennext: no WES/WGS test for {lab_id} — creating fallback WES test"))
+                wes_tt = get_or_create_test_type("WES", self.admin_user)
+                self._backfill_testtype_report_fields(wes_tt)
+                sample = individual.samples.first() or self._get_placeholder_sample(individual)
+                test = Test.objects.create(
+                    sample=sample,
+                    test_type=wes_tt,
+                    created_by=self.admin_user,
+                )
+                synthetic_statuses = [
+                    self.statuses["test"].get("previous"),
+                    self.statuses["test"].get("unsure_import"),
+                ]
+                test.statuses.set([s for s in synthetic_statuses if s])
+                self._record_issue(
+                    step="step14",
+                    sheet="Gennext Analiz Listesi",
+                    severity="info",
+                    reason="No WES or WGS test found; created fallback WES test with Previous + Unsure Import.",
+                    lab_id=lab_id,
+                    row=d,
+                )
 
-            output_loc = str(d.get("Gennext Hash") or "").strip()
+            output_loc = ""
             if Pipeline.objects.filter(test=test, type=gennext_type,
                                         performed_date=performed_date).exists():
+                self._record_issue(
+                    step="step14",
+                    sheet="Gennext Analiz Listesi",
+                    severity="info",
+                    reason="Duplicate pipeline already exists.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 skipped += 1; continue
 
             if self.dry_run:
@@ -1568,7 +2369,15 @@ class Command(BaseCommand):
                 if p_completed:
                     pipeline.statuses.set([p_completed])
 
-                parse_and_add_notes(d.get("Gennext"), pipeline, self.admin_user)
+                note_lines = []
+                gennext_note = str(d.get("Gennext") or "").strip()
+                if gennext_note:
+                    note_lines.append(f"Gennext: {gennext_note}")
+                gennext_hash = str(d.get("Gennext Hash") or "").strip()
+                if gennext_hash:
+                    note_lines.append(f"Gennext Hash: {gennext_hash}")
+                if note_lines:
+                    parse_and_add_notes("\n".join(note_lines), pipeline, self.admin_user)
 
                 # Link an unlinked Analysis from analysis_map for this individual
                 tt_name = test.test_type.name
@@ -1580,20 +2389,181 @@ class Command(BaseCommand):
                 created += 1
             except Exception as exc:
                 self.stdout.write(self.style.ERROR(f"  Gennext error {lab_id}: {exc}"))
+                self._record_issue(
+                    step="step14",
+                    sheet="Gennext Analiz Listesi",
+                    severity="error",
+                    reason="Unhandled error while creating Gennext pipeline.",
+                    lab_id=lab_id,
+                    row=d,
+                    context={"error": str(exc)},
+                )
                 errors += 1
 
         self.stdout.write(self.style.SUCCESS(
             f"  Gennext: created={created} skipped={skipped} errors={errors}"))
 
     # ==================================================================
-    # Step 15 — RarePipe Analiz Listesi (⚠ INCOMPLETE — no date column)
+    # Step 15 — RarePipe Analiz Listesi
     # ==================================================================
 
     def _step_rarepipe_analiz(self, wb) -> None:
-        self.stdout.write(self.style.WARNING(
-            "Step 15: RarePipe Analiz Listesi — ⚠ SKIPPED.\n"
-            "  Reminder: add a Pipeline date column (and output location) to this sheet, "
-            "then re-implement this step. (Q10)"))
+        self.stdout.write("Step 15: RarePipe Analiz Listesi…")
+        rarepipe_type = get_or_create_pipeline_type("RarePipe", self.admin_user)
+        p_completed = self.statuses["pipeline"].get("completed")
+        id_map = build_id_map()
+        created = skipped = errors = 0
+
+        for d in self._ws_rows(wb, "RarePipe Analiz Listesi"):
+            sheet_name = str(d.get("Samplesheet Name") or "").strip()
+            performed_date = parse_date(d.get("Date"))
+            sample_id = str(
+                d.get("Sample ID (Note)")
+                or d.get("Sample ID")
+                or ""
+            ).strip()
+            matched_id = str(
+                d.get("Matched ID")
+                or d.get("Matching Sample ID")
+                or d.get("ID")
+                or ""
+            ).strip()
+
+            if not performed_date:
+                self._record_issue(
+                    step="step15",
+                    sheet="RarePipe Analiz Listesi",
+                    severity="warning",
+                    reason="Missing or invalid Date.",
+                    row=d,
+                )
+                skipped += 1
+                continue
+
+            if not matched_id:
+                self._record_issue(
+                    step="step15",
+                    sheet="RarePipe Analiz Listesi",
+                    severity="warning",
+                    reason="Missing Matched ID.",
+                    row=d,
+                )
+                skipped += 1
+                continue
+
+            individual = id_map.get(normalize_id(matched_id))
+            if not individual:
+                self._record_issue(
+                    step="step15",
+                    sheet="RarePipe Analiz Listesi",
+                    severity="warning",
+                    reason="Individual not found by any cross identifier.",
+                    lab_id=matched_id,
+                    row=d,
+                )
+                skipped += 1
+                continue
+
+            test = (
+                Test.objects.filter(sample__individual=individual,
+                                    test_type__name__icontains="WGS").order_by("id").first()
+                or Test.objects.filter(sample__individual=individual,
+                                       test_type__name__icontains="WES").order_by("id").first()
+            )
+            if not test:
+                if self.dry_run:
+                    self._record_issue(
+                        step="step15",
+                        sheet="RarePipe Analiz Listesi",
+                        severity="info",
+                        reason="No WGS or WES test found; dry-run would create fallback WES test with Previous + Unsure Import.",
+                        lab_id=matched_id,
+                        row=d,
+                    )
+                    skipped += 1
+                    continue
+
+                wes_tt = get_or_create_test_type("WES", self.admin_user)
+                self._backfill_testtype_report_fields(wes_tt)
+                sample = individual.samples.first() or self._get_placeholder_sample(individual)
+                test = Test.objects.create(
+                    sample=sample,
+                    test_type=wes_tt,
+                    created_by=self.admin_user,
+                )
+                synthetic_statuses = [
+                    self.statuses["test"].get("previous"),
+                    self.statuses["test"].get("unsure_import"),
+                ]
+                test.statuses.set([s for s in synthetic_statuses if s])
+                self._record_issue(
+                    step="step15",
+                    sheet="RarePipe Analiz Listesi",
+                    severity="info",
+                    reason="No WGS or WES test found; created fallback WES test with Previous + Unsure Import.",
+                    lab_id=matched_id,
+                    row=d,
+                    context={"test_type": "WES"},
+                )
+
+            note_lines = [line for line in (
+                f"Samplesheet Name: {sheet_name}" if sheet_name else "",
+                f"Sample ID: {sample_id}" if sample_id else "",
+            ) if line]
+
+            if Pipeline.objects.filter(
+                test=test,
+                type=rarepipe_type,
+                performed_date=performed_date,
+            ).exists():
+                self._record_issue(
+                    step="step15",
+                    sheet="RarePipe Analiz Listesi",
+                    severity="info",
+                    reason="Duplicate RarePipe pipeline already exists.",
+                    lab_id=matched_id,
+                    row=d,
+                )
+                skipped += 1
+                continue
+
+            if self.dry_run:
+                created += 1
+                continue
+
+            try:
+                pipeline = Pipeline.objects.create(
+                    test=test,
+                    performed_date=performed_date,
+                    performed_by=self.admin_user,
+                    type=rarepipe_type,
+                    created_by=self.admin_user,
+                )
+                if p_completed:
+                    pipeline.statuses.set([p_completed])
+
+                if note_lines:
+                    parse_and_add_notes("\n".join(note_lines), pipeline, self.admin_user)
+
+                Analysis.objects.get_or_create(
+                    pipeline=pipeline,
+                    defaults={"created_by": self.admin_user},
+                )
+                created += 1
+            except Exception as exc:
+                self._record_issue(
+                    step="step15",
+                    sheet="RarePipe Analiz Listesi",
+                    severity="error",
+                    reason="Unhandled error while importing RarePipe pipeline.",
+                    lab_id=matched_id,
+                    row=d,
+                    context={"error": str(exc)},
+                )
+                errors += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  RarePipe Analiz Listesi: created={created} skipped={skipped} errors={errors}"))
 
     # ==================================================================
     # Step 16 — Variant List
@@ -1608,6 +2578,12 @@ class Command(BaseCommand):
                 break
         if not variant_ws:
             self.stdout.write(self.style.WARNING("  Sheet 'Variant List' not found."))
+            self._record_issue(
+                step="step16",
+                sheet="Variant List",
+                severity="warning",
+                reason="Sheet not found.",
+            )
             return
 
         variant_ct = ContentType.objects.get_for_model(Variant)
@@ -1620,11 +2596,25 @@ class Command(BaseCommand):
             d = dict(zip(headers, row))
             lab_id = str(d.get("Özbek Lab. ID") or "").strip()
             if not lab_id:
+                self._record_issue(
+                    step="step16",
+                    sheet="Variant List",
+                    severity="warning",
+                    reason="Missing lab ID.",
+                    row=d,
+                )
                 continue
 
-            individual = Individual.objects.filter(
-                cross_ids__id_value=lab_id).first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual:
+                self._record_issue(
+                    step="step16",
+                    sheet="Variant List",
+                    severity="warning",
+                    reason="Individual not found.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 skipped += 1; continue
 
             # Zygosity — strict mapping, skip if unrecognised
@@ -1632,6 +2622,14 @@ class Command(BaseCommand):
                 d.get("Zygosity"),
                 warn_fn=lambda msg: self.stdout.write(self.style.WARNING(msg)))
             if zyg is None:
+                self._record_issue(
+                    step="step16",
+                    sheet="Variant List",
+                    severity="warning",
+                    reason="Invalid or empty zygosity; variant skipped.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 errors += 1; continue
 
             parsed = parse_variant_string(d.get("Chromosomal Position"))
@@ -1640,6 +2638,14 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(
                     f"  Cannot parse '{d.get('Chromosomal Position')}' for {lab_id} "
                     f"— CNV/SV/Repeat formats not yet implemented."))
+                self._record_issue(
+                    step="step16",
+                    sheet="Variant List",
+                    severity="warning",
+                    reason="Chromosomal Position could not be parsed; CNV/SV/Repeat formats not implemented.",
+                    lab_id=lab_id,
+                    row=d,
+                )
                 errors += 1; continue
 
             chrom, start_str, ref, alt = parsed
@@ -1683,6 +2689,15 @@ class Command(BaseCommand):
                 imported += 1
             except Exception as exc:
                 self.stdout.write(self.style.ERROR(f"  Variant error {lab_id}: {exc}"))
+                self._record_issue(
+                    step="step16",
+                    sheet="Variant List",
+                    severity="error",
+                    reason="Unhandled error while importing variant.",
+                    lab_id=lab_id,
+                    row=d,
+                    context={"error": str(exc)},
+                )
                 errors += 1
 
         self.stdout.write(self.style.SUCCESS(
@@ -1694,7 +2709,7 @@ class Command(BaseCommand):
 
     def _step_file_attachments(self, forms_dir_str, reports_dir_str) -> None:
         self.stdout.write("Step 18: File attachments…")
-        id_regex = re.compile(r"^(RB_\d{4}_[\d\.]+)")
+        id_regex = re.compile(r"^(?P<lab_id>(?:RB_\d{4}_[\d\.]+|RD3\.F\d+(?:\.\d+)+))")
 
         if forms_dir_str:
             forms_dir = Path(forms_dir_str)
@@ -1702,12 +2717,36 @@ class Command(BaseCommand):
                 for fp in sorted(forms_dir.glob("*")):
                     if not fp.is_file() or fp.name.startswith("."): continue
                     m = id_regex.match(fp.name)
-                    if not m: continue
-                    ind = Individual.objects.filter(
-                        cross_ids__id_type__name="RareBoost",
-                        cross_ids__id_value=m.group(1)).first()
-                    if not ind: continue
-                    if AnalysisRequestForm.objects.filter(file__endswith=fp.name).exists(): continue
+                    if not m:
+                        self._record_issue(
+                            step="step18",
+                            sheet="forms_dir",
+                            severity="warning",
+                            reason="Form filename did not match RareBoost ID pattern.",
+                            context={"file": fp.name},
+                        )
+                        continue
+                    ind = find_individual_by_import_identifier(m.group("lab_id"))
+                    if not ind:
+                        self._record_issue(
+                            step="step18",
+                            sheet="forms_dir",
+                            severity="warning",
+                            reason="No individual found for form filename.",
+                            lab_id=m.group("lab_id"),
+                            context={"file": fp.name},
+                        )
+                        continue
+                    if AnalysisRequestForm.objects.filter(file__endswith=fp.name).exists():
+                        self._record_issue(
+                            step="step18",
+                            sheet="forms_dir",
+                            severity="info",
+                            reason="Form already imported; duplicate skipped.",
+                            lab_id=m.group("lab_id"),
+                            context={"file": fp.name},
+                        )
+                        continue
                     if self.dry_run:
                         self.stdout.write(f"  [DRY] form: {fp.name}"); continue
                     with open(fp, "rb") as fh:
@@ -1715,7 +2754,17 @@ class Command(BaseCommand):
                             individual=ind,
                             description=f"Imported from {fp.name}",
                             created_by=self.admin_user)
-                        form_obj.file.save(fp.name, File(fh))
+                        stored_name = self._fit_uploaded_filename(form_obj.file, fp.name)
+                        if stored_name != fp.name:
+                            self._record_issue(
+                                step="step18",
+                                sheet="forms_dir",
+                                severity="info",
+                                reason="Form filename shortened to fit storage max_length.",
+                                lab_id=m.group("lab_id"),
+                                context={"original_file": fp.name, "stored_file": stored_name},
+                            )
+                        form_obj.file.save(stored_name, File(fh))
                         form_obj.save()
 
         if reports_dir_str:
@@ -1724,12 +2773,36 @@ class Command(BaseCommand):
                 for fp in sorted(reports_dir.glob("*")):
                     if not fp.is_file() or fp.name.startswith("."): continue
                     m = id_regex.match(fp.name)
-                    if not m: continue
-                    ind = Individual.objects.filter(
-                        cross_ids__id_type__name="RareBoost",
-                        cross_ids__id_value=m.group(1)).first()
-                    if not ind: continue
-                    if AnalysisReport.objects.filter(file__endswith=fp.name).exists(): continue
+                    if not m:
+                        self._record_issue(
+                            step="step18",
+                            sheet="reports_dir",
+                            severity="warning",
+                            reason="Report filename did not match an importable ID pattern.",
+                            context={"file": fp.name},
+                        )
+                        continue
+                    ind = find_individual_by_import_identifier(m.group("lab_id"))
+                    if not ind:
+                        self._record_issue(
+                            step="step18",
+                            sheet="reports_dir",
+                            severity="warning",
+                            reason="No individual found for report filename.",
+                            lab_id=m.group("lab_id"),
+                            context={"file": fp.name},
+                        )
+                        continue
+                    if AnalysisReport.objects.filter(file__endswith=fp.name).exists():
+                        self._record_issue(
+                            step="step18",
+                            sheet="reports_dir",
+                            severity="info",
+                            reason="Report already imported; duplicate skipped.",
+                            lab_id=m.group("lab_id"),
+                            context={"file": fp.name},
+                        )
+                        continue
                     fn_lower = fp.name.lower()
                     pqs = Pipeline.objects.filter(test__sample__individual=ind)
                     target = (
@@ -1737,7 +2810,54 @@ class Command(BaseCommand):
                         else pqs.filter(type__name__icontains="wes").last() if "wes" in fn_lower
                         else pqs.filter(type__name__icontains="sanger").last() if "sanger" in fn_lower
                         else pqs.last())
-                    if not target: continue
+                    if not target:
+                        report_test = ind.get_all_tests().order_by("id").first()
+                        if self.dry_run:
+                            self._record_issue(
+                                step="step18",
+                                sheet="reports_dir",
+                                severity="info",
+                                reason="No matching pipeline found; dry-run would create Franklin fallback pipeline on the individual's first test with Unsure Import.",
+                                lab_id=m.group("lab_id"),
+                                context={"file": fp.name, "pipeline_type": "Franklin", "test": str(report_test) if report_test else ""},
+                            )
+                            continue
+                        if not report_test:
+                            wes_tt = get_or_create_test_type("WES", self.admin_user)
+                            self._backfill_testtype_report_fields(wes_tt)
+                            sample = ind.samples.first() or self._get_placeholder_sample(ind)
+                            report_test = Test.objects.create(
+                                sample=sample,
+                                test_type=wes_tt,
+                                created_by=self.admin_user,
+                            )
+                            synthetic_statuses = [
+                                self.statuses["test"].get("previous"),
+                                self.statuses["test"].get("unsure_import"),
+                            ]
+                            report_test.statuses.set([s for s in synthetic_statuses if s])
+                        franklin_type = get_or_create_pipeline_type(
+                            "Franklin", self.admin_user, description="Import fallback"
+                        )
+                        from datetime import date as date_cls
+                        target = Pipeline.objects.create(
+                            test=report_test,
+                            performed_date=date_cls.today(),
+                            performed_by=self.admin_user,
+                            type=franklin_type,
+                            created_by=self.admin_user,
+                        )
+                        pipeline_unsure_import = self.statuses["pipeline"].get("unsure_import")
+                        if pipeline_unsure_import:
+                            target.statuses.set([pipeline_unsure_import])
+                        self._record_issue(
+                            step="step18",
+                            sheet="reports_dir",
+                            severity="info",
+                            reason="No matching pipeline found; created Franklin fallback pipeline on the individual's first test with Unsure Import.",
+                            lab_id=m.group("lab_id"),
+                            context={"file": fp.name, "pipeline_type": "Franklin", "test": str(report_test)},
+                        )
                     if self.dry_run:
                         self.stdout.write(f"  [DRY] report: {fp.name}"); continue
                     with open(fp, "rb") as fh:
@@ -1749,11 +2869,24 @@ class Command(BaseCommand):
                                 created_by=self.admin_user,
                             )
                             target_analysis.performed_by.add(self.admin_user)
+                            unsure_import = self.statuses["analysis"].get("unsure_import")
+                            if unsure_import:
+                                target_analysis.statuses.set([unsure_import])
                         rep = AnalysisReport(
                             analysis=target_analysis,
                             description=f"Imported from {fp.name}",
                             created_by=self.admin_user)
-                        rep.file.save(fp.name, File(fh))
+                        stored_name = self._fit_uploaded_filename(rep.file, fp.name)
+                        if stored_name != fp.name:
+                            self._record_issue(
+                                step="step18",
+                                sheet="reports_dir",
+                                severity="info",
+                                reason="Report filename shortened to fit storage max_length.",
+                                lab_id=m.group("lab_id"),
+                                context={"original_file": fp.name, "stored_file": stored_name},
+                            )
+                        rep.file.save(stored_name, File(fh))
                         rep.save()
 
     # ==================================================================
@@ -1763,12 +2896,28 @@ class Command(BaseCommand):
     def _step_yayin_ici(self, yayin_ici_path: str) -> None:
         self.stdout.write(f"Step 20: Yayın_İçi ({yayin_ici_path})…")
         if not os.path.exists(yayin_ici_path):
-            self.stdout.write(self.style.ERROR(f"  File not found: {yayin_ici_path}")); return
+            self.stdout.write(self.style.ERROR(f"  File not found: {yayin_ici_path}"))
+            self._record_issue(
+                step="step20",
+                sheet="GÜNCELyayıniciyedek",
+                severity="error",
+                reason="Yayın_İçi workbook file not found.",
+                context={"path": yayin_ici_path},
+            )
+            return
 
         wb = openpyxl.load_workbook(yayin_ici_path, data_only=True)
         sheet_name = "GÜNCELyayıniciyedek"
         if sheet_name not in wb.sheetnames:
-            self.stdout.write(self.style.ERROR(f"  Sheet '{sheet_name}' not found.")); return
+            self.stdout.write(self.style.ERROR(f"  Sheet '{sheet_name}' not found."))
+            self._record_issue(
+                step="step20",
+                sheet=sheet_name,
+                severity="error",
+                reason="Yayın_İçi sheet not found.",
+                context={"path": yayin_ici_path},
+            )
+            return
 
         ws = wb[sheet_name]
         headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))
@@ -1778,25 +2927,35 @@ class Command(BaseCommand):
         ct_ind   = ContentType.objects.get_for_model(Individual)
         ct_test  = ContentType.objects.get_for_model(Test)
         updated = skipped = 0
+        variant_imported = variant_skipped = 0
 
         for vals in ws.iter_rows(min_row=2, values_only=True):
             if all(v is None for v in vals): continue
             d = dict(zip(headers, vals[:len(headers)]))
+            if not any(
+                v is not None and str(v).strip()
+                for k, v in d.items()
+                if k != "Column 24"
+            ):
+                continue
 
             # Lookup
             lab_id = str(d.get("RareBoost ID") or "").strip()
-            individual = None
-            if lab_id:
-                qs = Individual.objects.filter(cross_ids__id_value=lab_id)
-                if rb_type:
-                    qs = qs.filter(cross_ids__id_type=rb_type)
-                individual = qs.first()
+            individual = find_individual_by_rareboost_id(lab_id)
             if not individual:
                 bb_val = str(d.get("Biyobanka ID") or "").strip()
                 if bb_val and bb_type:
                     individual = Individual.objects.filter(
                         cross_ids__id_type=bb_type, cross_ids__id_value=bb_val).first()
             if not individual:
+                self._record_issue(
+                    step="step20",
+                    sheet=sheet_name,
+                    severity="warning",
+                    reason="Individual not found by RareBoost ID or Biobank ID.",
+                    lab_id=lab_id or d.get("Biyobanka ID"),
+                    row=d,
+                )
                 skipped += 1; continue
             if self.dry_run:
                 updated += 1; continue
@@ -1851,10 +3010,15 @@ class Command(BaseCommand):
                     name=geldi_merkez, defaults={"created_by": self.admin_user})
                 individual.institution.add(inst)
                 # Physicians for this institution
-                klin_raw = str(d.get("Klinisyen & İletişim Bilgileri") or "")
-                for klin in [k.strip() for k in klin_raw.split(",") if k.strip()]:
-                    physician = get_or_create_user(klin, self.admin_user)
+                clinician_assignments = _build_clinician_assignments(
+                    d.get("Klinisyen"),
+                    d.get("İletişim Bilgileri - Mail/telefon?"),
+                    d.get("İletişim Bilgileri - Telefon/mail?"),
+                )
+                for klin, contact_values in clinician_assignments:
+                    physician = get_or_create_contact(klin, self.admin_user)
                     inst.staff.add(physician)
+                    self._apply_contact_details(physician, contact_values)
 
             # HPO
             hpo_terms = get_hpo_terms(d.get("HPO"), self.stdout)
@@ -1879,8 +3043,11 @@ class Command(BaseCommand):
                                   or self._get_placeholder_sample(individual))
                         test = Test.objects.create(
                             sample=sample, test_type=tt, created_by=self.admin_user)
-                        if prev_status:
-                            test.statuses.set([prev_status])
+                        synthetic_statuses = [
+                            prev_status,
+                            self.statuses["test"].get("unsure_import"),
+                        ]
+                        test.statuses.set([s for s in synthetic_statuses if s])
 
             # RareBoost Reanaliz/WGS/WES/RNA seq
             rb_raw = d.get("RareBoost Reanaliz/WGS/WES/RNA seq")
@@ -1902,16 +3069,130 @@ class Command(BaseCommand):
                     note_val = trio_values[idx] if idx < len(trio_values) else last_val
                     parse_and_add_notes(note_val, test_obj, self.admin_user)
 
-            # Variant column — format unknown, skip and remind
-            if d.get("Variant"):
-                self.stdout.write(self.style.WARNING(
-                    f"  Yayın_İçi: Variant column for {lab_id} skipped "
-                    f"(format unknown — Q12, ask after implementation)"))
+            # Variant import — prefer the importable Chromosomal Position column.
+            variant_text = str(
+                d.get("Chromosomal Position")
+                or d.get("Variant")
+                or ""
+            ).strip()
+            if variant_text:
+                for line in _split_yayin_variant_text(variant_text):
+                    records = _extract_variant_records(line)
+                    if not records:
+                        variant_skipped += 1
+                        self._record_issue(
+                            step="step20",
+                            sheet=sheet_name,
+                            severity="warning",
+                            reason="Variant line could not be imported safely; no genomic coordinates recognized.",
+                            lab_id=lab_id,
+                            row=d,
+                            context={"variant_line": line},
+                        )
+                        self.stdout.write(self.style.WARNING(
+                            f"  Yayın_İçi: skipped variant for {lab_id} -> {line}"))
+                        continue
+
+                    for record in records:
+                        zyg = _normalize_yayin_zygosity(d.get("Zygosity"))
+                        model_kind = record["kind"]
+                        model_cls = {
+                            "snv": SNV,
+                            "delins": delins,
+                            "cnv": CNV,
+                            "sv": SV,
+                        }.get(model_kind)
+                        if not model_cls:
+                            variant_skipped += 1
+                            self._record_issue(
+                                step="step20",
+                                sheet=sheet_name,
+                                severity="warning",
+                                reason="Variant record had an unsupported model kind.",
+                                lab_id=lab_id,
+                                row=d,
+                                context={"variant_line": line, "record": record},
+                            )
+                            continue
+
+                        try:
+                            if model_cls in (SNV, delins):
+                                lookup = {
+                                    "individual": individual,
+                                    "chromosome": record["chromosome"],
+                                    "start": record["start"],
+                                    "reference": record["reference"],
+                                    "alternate": record["alternate"],
+                                }
+                                defaults = {
+                                    "end": record["end"],
+                                    "zygosity": zyg,
+                                    "created_by": self.admin_user,
+                                }
+                            elif model_cls is CNV:
+                                lookup = {
+                                    "individual": individual,
+                                    "chromosome": record["chromosome"],
+                                    "start": record["start"],
+                                    "end": record["end"],
+                                    "cnv_type": record.get("cnv_type", "gain"),
+                                    "copy_number": record.get("copy_number"),
+                                }
+                                defaults = {
+                                    "zygosity": zyg,
+                                    "created_by": self.admin_user,
+                                }
+                            else:  # SV
+                                lookup = {
+                                    "individual": individual,
+                                    "chromosome": record["chromosome"],
+                                    "start": record["start"],
+                                    "end": record["end"],
+                                    "sv_type": record.get("sv_type", "deletion"),
+                                }
+                                defaults = {
+                                    "zygosity": zyg,
+                                    "created_by": self.admin_user,
+                            }
+
+                            variant_obj, created_variant = model_cls.objects.get_or_create(
+                                **lookup, defaults=defaults)
+
+                            if not created_variant:
+                                variant_skipped += 1
+                                self._record_issue(
+                                    step="step20",
+                                    sheet=sheet_name,
+                                    severity="info",
+                                    reason="Variant already exists; duplicate skipped.",
+                                    lab_id=lab_id,
+                                    row=d,
+                                    context={"variant_line": line, "record": record, "source_column": "Chromosomal Position"},
+                                )
+                                continue
+
+                            if record.get("note"):
+                                parse_and_add_notes(record["note"], variant_obj, self.admin_user)
+
+                            variant_imported += 1
+                        except Exception as exc:
+                            variant_skipped += 1
+                            self._record_issue(
+                                step="step20",
+                                sheet=sheet_name,
+                                severity="error",
+                                reason="Failed to import parsed variant record.",
+                                lab_id=lab_id,
+                                row=d,
+                                context={"variant_line": line, "record": record, "error": str(exc)},
+                            )
+                            self.stdout.write(self.style.ERROR(
+                                f"  Yayın_İçi: variant import failed for {lab_id} -> {line}: {exc}"))
 
             updated += 1
 
         self.stdout.write(self.style.SUCCESS(
-            f"  Yayın_İçi: updated={updated} skipped={skipped}"))
+            f"  Yayın_İçi: updated={updated} skipped={skipped} variants_imported={variant_imported} variants_skipped={variant_skipped}"))
 
     def _normalize_test_tokens(self, text: str) -> list:
         """Split and normalise test type strings from the Previous test column."""
@@ -1938,7 +3219,6 @@ class Command(BaseCommand):
 
     def _process_rb_reanaliz(self, individual, text: str) -> None:
         """Handle the 'RareBoost Reanaliz/WGS/WES/RNA seq' column."""
-        ct_test = ContentType.objects.get_for_model(Test)
         parts = [p.strip() for p in text.replace("\n", ",").split(",") if p.strip()]
         has_reanalysis = any(p.lower() in {"reanalysis", "wgs reanalysis"} for p in parts)
         if has_reanalysis:
@@ -1958,10 +3238,11 @@ class Command(BaseCommand):
                           or self._get_placeholder_sample(individual))
                 target_test = Test.objects.create(
                     sample=sample, test_type=wes_tt, created_by=self.admin_user)
-                completed = Status.objects.filter(
-                    name="Completed", content_type=ct_test).first()
-                if completed:
-                    target_test.statuses.set([completed])
+                synthetic_statuses = [
+                    self.statuses["test"].get("previous"),
+                    self.statuses["test"].get("unsure_import"),
+                ]
+                target_test.statuses.set([s for s in synthetic_statuses if s])
 
             pipeline_type = get_or_create_pipeline_type("Reanalysis", self.admin_user)
             ct_pipeline = ContentType.objects.get_for_model(Pipeline)
@@ -1991,10 +3272,11 @@ class Command(BaseCommand):
                           or self._get_placeholder_sample(individual))
                 test = Test.objects.create(
                     sample=sample, test_type=tt, created_by=self.admin_user)
-                completed = Status.objects.filter(
-                    name="Completed", content_type=ct_test).first()
-                if completed:
-                    test.statuses.set([completed])
+                synthetic_statuses = [
+                    self.statuses["test"].get("previous"),
+                    self.statuses["test"].get("unsure_import"),
+                ]
+                test.statuses.set([s for s in synthetic_statuses if s])
 
     # ==================================================================
     # Internal helpers
@@ -2005,12 +3287,15 @@ class Command(BaseCommand):
         if existing:
             return existing
         placeholder_type = get_or_create_sample_type("Placeholder", self.admin_user)
+        placeholder_contact = get_or_create_contact_for_user(self.admin_user, self.admin_user)
         sample = Sample.objects.create(
             individual=individual,
             sample_type=placeholder_type,
-            isolation_by=self.admin_user,
+            isolation_by=placeholder_contact,
             created_by=self.admin_user)
-        not_available = self.statuses["sample"].get("not_available")
-        if not_available:
-            sample.statuses.set([not_available])
+        sample_statuses = [
+            self.statuses["sample"].get("not_available"),
+            self.statuses["sample"].get("unsure_import"),
+        ]
+        sample.statuses.set([s for s in sample_statuses if s])
         return sample

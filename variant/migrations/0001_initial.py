@@ -9,6 +9,16 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+ZYGOSITY_CHOICES = [
+    ("het", "Heterozygous"),
+    ("hom", "Homozygous"),
+    ("hemi", "Hemizygous"),
+    ("hetpl", "Heteroplasmy"),
+    ("homoplasmy", "Homoplasmy"),
+    ("unknown", "Unknown"),
+]
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -28,7 +38,7 @@ class Migration(migrations.Migration):
                 ('start', models.IntegerField()),
                 ('end', models.IntegerField()),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('zygosity', models.CharField(choices=[('het', 'Heterozygous'), ('hom', 'Homozygous'), ('hemi', 'Hemizygous'), ('hetpl', 'Heteroplasmy')], max_length=20)),
+                ('zygosity', models.CharField(choices=ZYGOSITY_CHOICES, max_length=20)),
                 ('analysis', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='found_variants', to='lab.analysis')),
                 ('created_by', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to=settings.AUTH_USER_MODEL)),
                 ('individual', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='variants', to='lab.individual')),
@@ -186,7 +196,7 @@ class Migration(migrations.Migration):
                 ('start', models.IntegerField()),
                 ('end', models.IntegerField()),
                 ('created_at', models.DateTimeField(blank=True, editable=False)),
-                ('zygosity', models.CharField(choices=[('het', 'Heterozygous'), ('hom', 'Homozygous'), ('hemi', 'Hemizygous'), ('hetpl', 'Heteroplasmy')], max_length=20)),
+                ('zygosity', models.CharField(choices=ZYGOSITY_CHOICES, max_length=20)),
                 ('cnv_type', models.CharField(choices=[('loss', 'Loss'), ('gain', 'Gain')], max_length=50)),
                 ('copy_number', models.IntegerField(blank=True, null=True)),
                 ('history_id', models.AutoField(primary_key=True, serialize=False)),
@@ -216,7 +226,7 @@ class Migration(migrations.Migration):
                 ('start', models.IntegerField()),
                 ('end', models.IntegerField()),
                 ('created_at', models.DateTimeField(blank=True, editable=False)),
-                ('zygosity', models.CharField(choices=[('het', 'Heterozygous'), ('hom', 'Homozygous'), ('hemi', 'Hemizygous'), ('hetpl', 'Heteroplasmy')], max_length=20)),
+                ('zygosity', models.CharField(choices=ZYGOSITY_CHOICES, max_length=20)),
                 ('reference', models.CharField(max_length=255, validators=[django.core.validators.RegexValidator(code='invalid_allele', message='Alleles must consist only of the uppercase characters A, T, G, or C.', regex='^[ATGC]+$')])),
                 ('alternate', models.CharField(max_length=255, validators=[django.core.validators.RegexValidator(code='invalid_allele', message='Alleles must consist only of the uppercase characters A, T, G, or C.', regex='^[ATGC]+$')])),
                 ('history_id', models.AutoField(primary_key=True, serialize=False)),
@@ -246,7 +256,7 @@ class Migration(migrations.Migration):
                 ('start', models.IntegerField()),
                 ('end', models.IntegerField()),
                 ('created_at', models.DateTimeField(blank=True, editable=False)),
-                ('zygosity', models.CharField(choices=[('het', 'Heterozygous'), ('hom', 'Homozygous'), ('hemi', 'Hemizygous'), ('hetpl', 'Heteroplasmy')], max_length=20)),
+                ('zygosity', models.CharField(choices=ZYGOSITY_CHOICES, max_length=20)),
                 ('repeat_unit', models.CharField(max_length=50)),
                 ('repeat_count', models.IntegerField()),
                 ('history_id', models.AutoField(primary_key=True, serialize=False)),
@@ -276,7 +286,7 @@ class Migration(migrations.Migration):
                 ('start', models.IntegerField()),
                 ('end', models.IntegerField()),
                 ('created_at', models.DateTimeField(blank=True, editable=False)),
-                ('zygosity', models.CharField(choices=[('het', 'Heterozygous'), ('hom', 'Homozygous'), ('hemi', 'Hemizygous'), ('hetpl', 'Heteroplasmy')], max_length=20)),
+                ('zygosity', models.CharField(choices=ZYGOSITY_CHOICES, max_length=20)),
                 ('reference', models.CharField(max_length=255, validators=[django.core.validators.RegexValidator(code='invalid_allele', message='Alleles must consist only of the uppercase characters A, T, G, or C.', regex='^[ATGC]+$')])),
                 ('alternate', models.CharField(max_length=255, validators=[django.core.validators.RegexValidator(code='invalid_allele', message='Alleles must consist only of the uppercase characters A, T, G, or C.', regex='^[ATGC]+$')])),
                 ('history_id', models.AutoField(primary_key=True, serialize=False)),
@@ -306,7 +316,7 @@ class Migration(migrations.Migration):
                 ('start', models.IntegerField()),
                 ('end', models.IntegerField()),
                 ('created_at', models.DateTimeField(blank=True, editable=False)),
-                ('zygosity', models.CharField(choices=[('het', 'Heterozygous'), ('hom', 'Homozygous'), ('hemi', 'Hemizygous'), ('hetpl', 'Heteroplasmy')], max_length=20)),
+                ('zygosity', models.CharField(choices=ZYGOSITY_CHOICES, max_length=20)),
                 ('sv_type', models.CharField(choices=[('inversion', 'Inversion'), ('translocation', 'Translocation'), ('insertion', 'Insertion'), ('deletion', 'Deletion'), ('duplication', 'Duplication')], max_length=50)),
                 ('breakpoints', models.JSONField(blank=True, help_text='Detailed breakpoint coordinates', null=True)),
                 ('history_id', models.AutoField(primary_key=True, serialize=False)),
@@ -335,7 +345,7 @@ class Migration(migrations.Migration):
                 ('start', models.IntegerField()),
                 ('end', models.IntegerField()),
                 ('created_at', models.DateTimeField(blank=True, editable=False)),
-                ('zygosity', models.CharField(choices=[('het', 'Heterozygous'), ('hom', 'Homozygous'), ('hemi', 'Hemizygous'), ('hetpl', 'Heteroplasmy')], max_length=20)),
+                ('zygosity', models.CharField(choices=ZYGOSITY_CHOICES, max_length=20)),
                 ('history_id', models.AutoField(primary_key=True, serialize=False)),
                 ('history_date', models.DateTimeField(db_index=True)),
                 ('history_change_reason', models.CharField(max_length=100, null=True)),

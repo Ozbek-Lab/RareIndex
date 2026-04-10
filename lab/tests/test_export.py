@@ -2,7 +2,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth.models import User, Permission
-from lab.models import Individual, Sample, Test, SampleType, TestType, Status, IdentifierType, CrossIdentifier, Project, Institution
+from lab.models import Individual, Sample, Test, SampleType, TestType, Status, IdentifierType, CrossIdentifier, Project, Institution, Contact
 import csv
 import io
 
@@ -10,6 +10,7 @@ class IndividualExportTest(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username='testuser', password='password')
+        self.contact = Contact.objects.create(full_name="testuser", user=self.user, created_by=self.user)
         self.user.user_permissions.add(Permission.objects.get(codename='view_sensitive_data'))
         self.client.login(username='testuser', password='password')
         
@@ -33,7 +34,7 @@ class IndividualExportTest(TestCase):
             sample_type=self.sample_type,
             status=self.status,
             receipt_date="2023-01-01",
-            isolation_by=self.user,
+            isolation_by=self.contact,
             created_by=self.user
         )
         

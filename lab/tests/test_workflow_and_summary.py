@@ -1,12 +1,13 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth.models import User
-from lab.models import Individual, Sample, Test, Pipeline, Status, SampleType, TestType, PipelineType
+from lab.models import Individual, Sample, Test, Pipeline, Status, SampleType, TestType, PipelineType, Contact
 from datetime import date
 
 class WorkflowAndSummaryTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="testuser", password="password")
+        self.contact = Contact.objects.create(full_name="testuser", user=self.user, created_by=self.user)
         self.client = Client()
         self.client.login(username="testuser", password="password")
 
@@ -43,7 +44,7 @@ class WorkflowAndSummaryTest(TestCase):
             sample_type=self.sample_type,
             status=self.status,
             created_by=self.user,
-            isolation_by=self.user,
+            isolation_by=self.contact,
             receipt_date=date.today()
         )
         self.test = Test.objects.create(
@@ -153,7 +154,7 @@ class WorkflowAndSummaryTest(TestCase):
             "sample_type": self.sample_type.id,
             "status": self.status.id,
             "receipt_date": "2023-01-01",
-            "isolation_by": self.user.id,
+            "isolation_by": self.contact.id,
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.individual.samples.count(), 2)

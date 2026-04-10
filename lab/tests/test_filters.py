@@ -1,5 +1,5 @@
 from django.test import TestCase
-from lab.models import Individual, Status, Sample, SampleType, Test as LabTest, TestType, Pipeline, PipelineType, Analysis, AnalysisReport, AnalysisRequestForm, Project
+from lab.models import Individual, Status, Sample, SampleType, Test as LabTest, TestType, Pipeline, PipelineType, Analysis, AnalysisReport, AnalysisRequestForm, Project, Contact
 from lab.filters import IndividualFilter
 from django.contrib.auth.models import User
 import datetime
@@ -8,6 +8,7 @@ class IndividualFilterTest(TestCase):
     def setUp(self):
         # Create Users
         self.user = User.objects.create_user(username="testuser", password="password")
+        self.contact = Contact.objects.create(full_name="testuser", user=self.user, created_by=self.user)
         
         from django.contrib.contenttypes.models import ContentType
         ind_ct = ContentType.objects.get_for_model(Individual)
@@ -58,7 +59,7 @@ class IndividualFilterTest(TestCase):
             individual=self.ind1, 
             sample_type=self.blood_type, 
             status=self.sample_active_status, # Use sample specific status
-            isolation_by=self.user,
+            isolation_by=self.contact,
             created_by=self.user
         )
         # Ind2 has Saliva (Failed)
@@ -66,7 +67,7 @@ class IndividualFilterTest(TestCase):
             individual=self.ind2, 
             sample_type=self.saliva_type, 
             status=self.failed_status, # Use sample specific status
-            isolation_by=self.user,
+            isolation_by=self.contact,
             created_by=self.user
         )
         

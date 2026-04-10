@@ -18,12 +18,36 @@ def parse_date(value):
     """Parse a date from an Excel datetime object or various string formats."""
     if not value:
         return None
-    if hasattr(value, 'date'):
+    if isinstance(value, datetime):
         return value.date()
+    if isinstance(value, date):
+        return value
     if isinstance(value, str):
-        for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%d.%m.%Y'):
+        text = value.strip()
+        if not text or text.lower() in {"na", "n/a", "none", "null", "-"}:
+            return None
+
+        # Try the raw string and common date-only prefixes before giving up.
+        candidates = [text]
+        for separator in ("T", " "):
+            if separator in text:
+                candidates.append(text.split(separator, 1)[0].strip())
+
+        formats = (
+            "%d/%m/%Y",
+            "%d-%m-%Y",
+            "%d.%m.%Y",
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+        )
+        for candidate in candidates:
+            for fmt in formats:
+                try:
+                    return datetime.strptime(candidate, fmt).date()
+                except ValueError:
+                    continue
             try:
-                return datetime.strptime(value.strip(), fmt).date()
+                return date.fromisoformat(candidate)
             except ValueError:
                 continue
     return None
@@ -49,6 +73,74 @@ def get_family_id(lab_id):
     return str(lab_id).split('.')[0]
 
 
+def normalize_import_id(value):
+    """Normalize an import-time ID for tolerant matching."""
+    if value is None:
+        return ""
+    return str(value).strip().rstrip(".")
+
+
+def rareboost_lookup_variants(value):
+    """Return tolerated RareBoost ID variants for import-time lookups.
+
+    Import data can lag behind cohort renumbering, so we treat `... .1` and
+    `... .1.1` as interchangeable when resolving an existing individual.
+    """
+    base = normalize_import_id(value)
+    if not base:
+        return []
+
+    variants = [base]
+    if base.endswith(".1.1"):
+        variants.append(re.sub(r"(\.1)\.1$", r"\1", base))
+    elif base.endswith(".1"):
+        variants.append(f"{base}.1")
+
+    seen = set()
+    ordered = []
+    for variant in variants:
+        if variant and variant not in seen:
+            ordered.append(variant)
+            seen.add(variant)
+    return ordered
+
+
+def find_individual_by_rareboost_id(lab_id):
+    """Find an individual by RareBoost ID, allowing import-time renumbering."""
+    from lab.models import Individual
+
+    candidates = rareboost_lookup_variants(lab_id)
+    if not candidates:
+        return None
+    return Individual.objects.filter(
+        cross_ids__id_type__name="RareBoost",
+        cross_ids__id_value__in=candidates,
+    ).first()
+
+
+def find_individual_by_import_identifier(lab_id):
+    """Find an individual by an import filename/row identifier.
+
+    This resolves RareBoost IDs with import-time renumbering and then falls
+    back to exact cross-identifier value matching across any identifier type.
+    """
+    from lab.models import Individual
+
+    candidates = []
+    for candidate in rareboost_lookup_variants(lab_id):
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    normalized = normalize_import_id(lab_id)
+    if normalized and normalized not in candidates:
+        candidates.append(normalized)
+
+    if not candidates:
+        return None
+
+    return Individual.objects.filter(cross_ids__id_value__in=candidates).first()
+
+
 def normalize_id(value):
     """Replace '.', '_', '-' with '.' for separator-agnostic ID comparison."""
     return re.sub(r'[._\-]', '.', str(value))
@@ -71,15 +163,19 @@ def build_id_map():
                 Value('..'), Value('.'),
             )
         )
-        .select_related('individual')
-        .values_list('norm', 'individual_id')
+        .select_related('individual', 'id_type')
+        .values_list('norm', 'individual_id', 'id_type__name')
     )
-    individual_ids = {ind_id for _, ind_id in rows}
+    individual_ids = {ind_id for _, ind_id, _ in rows}
     individuals = {i.id: i for i in Individual.objects.filter(id__in=individual_ids)}
     mapping: dict = {}
-    for norm, ind_id in rows:
+    for norm, ind_id, id_type_name in rows:
         if ind_id in individuals:
-            mapping[norm] = individuals[ind_id]
+            individual = individuals[ind_id]
+            mapping[norm] = individual
+            if id_type_name == "RareBoost":
+                for alias in rareboost_lookup_variants(norm):
+                    mapping.setdefault(alias, individual)
     return mapping
 
 
@@ -107,6 +203,55 @@ def get_or_create_user(name, admin_user):
     except Exception:
         user = User.objects.filter(username=username).first() or admin_user
     return user
+
+
+def get_or_create_contact(full_name, admin_user, linked_user=None):
+    """Get or create a Contact by normalized full name, optionally linking a User."""
+    from lab.models import Contact
+
+    if not full_name:
+        return None
+
+    normalized_name = " ".join(str(full_name).split())
+    if not normalized_name:
+        return None
+
+    contact = Contact.objects.filter(full_name=normalized_name).first()
+    if not contact:
+        contact = Contact.objects.create(
+            full_name=normalized_name,
+            user=linked_user,
+            created_by=admin_user,
+        )
+        return contact
+
+    changed = False
+    if linked_user and contact.user_id is None:
+        contact.user = linked_user
+        changed = True
+    if contact.created_by_id is None and admin_user is not None:
+        contact.created_by = admin_user
+        changed = True
+    if changed:
+        contact.save(update_fields=[field for field, value in (
+            ("user", linked_user and contact.user_id is not None),
+            ("created_by", contact.created_by_id is not None),
+        )])
+        # The helper above only touches fields if they were missing.
+        # Re-read to keep the return value in sync with what was saved.
+        contact.refresh_from_db()
+    return contact
+
+
+def get_or_create_contact_for_user(user, admin_user=None):
+    """Get or create a Contact using the user's display name and optional linkage."""
+    if user is None:
+        return None
+
+    contact_name = (user.get_full_name() or user.username or "").strip()
+    if not contact_name:
+        return None
+    return get_or_create_contact(contact_name, admin_user or user, linked_user=user)
 
 
 def get_or_create_sample_type(name, admin_user):
@@ -262,11 +407,19 @@ def map_zygosity(zygosity_str):
     """Map free-text zygosity to a valid ZYGOSITY_CHOICES key. Defaults to 'het'."""
     if not zygosity_str:
         return 'het'
-    z = str(zygosity_str).lower().strip()
+    z = re.sub(r"\s+", " ", str(zygosity_str).lower().strip())
+    if z in {'na', 'n/a', 'unknown'}:
+        return 'unknown'
+    if 'homoplaz' in z:
+        return 'homoplasmy'
+    if 'heteroplaz' in z:
+        return 'hetpl'
     if 'hom' in z:
         return 'hom'
     if 'hemi' in z:
         return 'hemi'
+    if 'het' in z:
+        return 'het'
     return 'het'
 
 

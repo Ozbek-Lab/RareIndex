@@ -1,6 +1,6 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
-from lab.models import Individual, Pipeline, Status, Test, TestType, Sample, SampleType, PipelineType
+from lab.models import Contact, Individual, Pipeline, Status, Test, TestType, Sample, SampleType, PipelineType
 from variant.models import SNV, Variant, Annotation, Classification
 from variant.services import DiagnosticService, AnnotationService
 
@@ -8,6 +8,7 @@ class VariantModelTest(TestCase):
     def setUp(self):
         self.user = User.objects.create(username="testuser")
         self.status = Status.objects.create(name="Active", created_by=self.user)
+        self.contact = Contact.objects.create(full_name="testuser", user=self.user, created_by=self.user)
         self.individual = Individual.objects.create(
             full_name="Test Indiv", created_by=self.user, status=self.status
         )
@@ -44,7 +45,7 @@ class ServiceTest(TestCase):
         self.sample = Sample.objects.create(
             individual=self.individual, sample_type=self.sample_type, 
             status=self.status_neg, created_by=self.user,
-            isolation_by=self.user
+            isolation_by=self.contact
         )
         self.test_type = TestType.objects.create(name="WGS", created_by=self.user)
         self.test = Test.objects.create(
@@ -80,6 +81,7 @@ class VariantViewTest(TestCase):
         self.user = User.objects.create_user(username="testuser", password="password")
         self.client.login(username="testuser", password="password")
         self.status = Status.objects.create(name="Active", created_by=self.user)
+        self.contact = Contact.objects.create(full_name="testuser", user=self.user, created_by=self.user)
         self.individual = Individual.objects.create(
             full_name="Test Indiv", created_by=self.user, status=self.status
         )
@@ -87,7 +89,7 @@ class VariantViewTest(TestCase):
         self.sample = Sample.objects.create(
             individual=self.individual, sample_type=self.sample_type, 
             status=self.status, created_by=self.user,
-            isolation_by=self.user
+            isolation_by=self.contact
         )
         self.test_type = TestType.objects.create(name="WGS", created_by=self.user)
         self.test = Test.objects.create(

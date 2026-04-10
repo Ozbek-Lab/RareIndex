@@ -1,75 +1,74 @@
-<div class="h-[calc(100vh-64px)] bg-base-100 flex flex-col">
-  <header class="h-16 flex items-center justify-between px-6 border-b border-base-200 bg-base-100 flex-shrink-0 z-10">
-    <div class="flex items-center gap-4 flex-1">
-      <h1 class="text-2xl font-bold text-base-content whitespace-nowrap">Visualizations</h1>
-      <p class="text-xs text-base-content/60">
-        Example choropleth map of Turkey rendered with D3 / Observable.
-      </p>
+<div id="turkey-plot-panel" class="bg-white rounded-box shadow-sm border border-base-200 p-4 flex flex-col">
+  <div class="flex items-start justify-between gap-3 mb-2">
+    <h2 class="text-sm font-semibold text-base-content/70 flex items-center gap-2">
+      <i class="fa-solid fa-map text-primary"></i>
+      Turkey Choropleth
+    </h2>
+    <div class="flex items-center gap-2 flex-none">
+      <button id="fullscreen-toggle" type="button" class="btn btn-xs btn-outline gap-1.5">
+        <i id="fullscreen-toggle-icon" class="fa-solid fa-expand"></i>
+        <span id="fullscreen-toggle-label" class="hidden sm:inline">Fullscreen</span>
+      </button>
+      <button id="download-map" type="button" class="btn btn-xs btn-outline gap-1.5">
+        <i class="fa-solid fa-download"></i>
+        <span class="hidden sm:inline">Download</span>
+      </button>
     </div>
-  </header>
-
-  <main class="flex-1 overflow-y-auto p-6 bg-base-200/50">
-    <div class="bg-base-100 rounded-box shadow-sm border border-base-200 p-4">
-      <h2 class="text-sm font-semibold text-base-content/70 mb-2 flex items-center gap-2">
-        <i class="fa-solid fa-map text-primary"></i>
-        Turkey Choropleth
-      </h2>
-      <div class="mb-3 flex items-center gap-3 text-[11px] text-base-content/70">
-        <span class="font-semibold">View:</span>
-        <label class="inline-flex items-center gap-1 cursor-pointer">
-          <input type="radio" name="map-mode" value="individuals" class="radio radio-xs" checked>
-          <span>Individuals</span>
-        </label>
-        <label class="inline-flex items-center gap-1 cursor-pointer">
-          <input type="radio" name="map-mode" value="families" class="radio radio-xs">
-          <span>Families</span>
-        </label>
-        <label class="inline-flex items-center gap-1 cursor-pointer">
-          <input type="radio" name="map-mode" value="probands" class="radio radio-xs">
-          <span>Probands</span>
-        </label>
-      </div>
-      <div id="turkey-map-container" class="w-full overflow-auto mb-4">
-        <!-- Map will be injected here by the script below -->
-      </div>
-      <p class="mb-3 text-[11px] text-base-content/50">
-        Values represent the number of individuals per city (based on their institutions).
-      </p>
-
-      {% if city_counts_sorted %}
-      <div class="mt-2 border-t border-base-200 pt-3">
-        <h3 class="text-xs uppercase text-base-content/50 mb-2 font-bold">
-          City Counts
-        </h3>
-        <div class="overflow-x-auto max-h-64 max-w-md">
-          <table class="table table-xs w-auto">
-            <thead>
-              <tr class="text-[11px]">
-                <th>City</th>
-                <th class="text-right">Individuals</th>
-              </tr>
-            </thead>
-            <tbody class="text-[11px]">
-              {% for city, count in city_counts_sorted %}
-                {% if count %}
-                <tr>
-                  <td class="pr-2">{{ city }}</td>
-                  <td class="text-right font-mono">{{ count }}</td>
-                </tr>
-                {% endif %}
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      {% endif %}
-    </div>
-  </main>
+  </div>
+  <div class="mb-3 flex items-center gap-3 text-[11px] text-base-content/70">
+    <span class="font-semibold">View:</span>
+    <label class="inline-flex items-center gap-1 cursor-pointer">
+      <input type="radio" name="map-mode" value="individuals" class="radio radio-xs" checked>
+      <span>Individuals</span>
+    </label>
+    <label class="inline-flex items-center gap-1 cursor-pointer">
+      <input type="radio" name="map-mode" value="families" class="radio radio-xs">
+      <span>Families</span>
+    </label>
+    <label class="inline-flex items-center gap-1 cursor-pointer">
+      <input type="radio" name="map-mode" value="probands" class="radio radio-xs">
+      <span>Probands</span>
+    </label>
+  </div>
+  <div id="turkey-map-container" class="w-full flex-1 min-h-[420px] overflow-hidden mb-4">
+    <!-- Map will be injected here by the script below -->
+  </div>
 </div>
+
+{% if city_rows %}
+<div class="mt-4 bg-white rounded-box shadow-sm border border-base-200 p-4">
+  <h3 class="text-xs uppercase text-base-content/50 mb-2 font-bold">
+    City Counts
+  </h3>
+  <div class="overflow-x-auto max-h-72 max-w-full">
+    <table class="table table-xs w-full min-w-[640px]">
+      <thead>
+        <tr class="text-[11px]">
+          <th>City</th>
+          <th class="text-right">Individuals</th>
+          <th class="text-right">Families</th>
+          <th class="text-right">Probands</th>
+        </tr>
+      </thead>
+      <tbody id="city-counts-body" class="text-[11px]">
+        {% for row in city_rows %}
+          <tr>
+            <td class="pr-2">{{ row.city }}</td>
+            <td class="text-right font-mono">{{ row.individuals }}</td>
+            <td class="text-right font-mono">{{ row.families }}</td>
+            <td class="text-right font-mono">{{ row.probands }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 {{ city_counts_individuals|json_script:"city-counts-individuals" }}
 {{ city_counts_families|json_script:"city-counts-families" }}
 {{ city_counts_probands|json_script:"city-counts-probands" }}
+{{ city_rows|json_script:"city-rows" }}
 
 <script type="module">
   import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
@@ -84,6 +83,18 @@
   const CITY_COUNTS_PROBANDS = JSON.parse(
     document.getElementById("city-counts-probands").textContent
   );
+  const CITY_ROWS = JSON.parse(document.getElementById("city-rows").textContent);
+  const plotPanel = document.getElementById("turkey-plot-panel");
+  const fullscreenButton = document.getElementById("fullscreen-toggle");
+  const fullscreenIcon = document.getElementById("fullscreen-toggle-icon");
+  const fullscreenLabel = document.getElementById("fullscreen-toggle-label");
+  const downloadButton = document.getElementById("download-map");
+
+  const MODE_LABELS = {
+    individuals: "Individuals",
+    families: "Families",
+    probands: "Probands",
+  };
 
   function buildData(mode) {
     let source;
@@ -95,18 +106,57 @@
       source = CITY_COUNTS_INDIVIDUALS;
     }
     const m = new Map(Object.entries(source));
-    if (mode === "families") {
-      m.title = "Families per city (by institution)";
-    } else if (mode === "probands") {
-      m.title = "Probands per city (by institution)";
-    } else {
-      m.title = "Individuals per city (by institution)";
-    }
+    m.title = `${MODE_LABELS[mode]} per city (by institution)`;
     return m;
+  }
+
+  function getRowValue(row, mode) {
+    return Number(row[mode] || 0);
+  }
+
+  function renderCityTable(mode) {
+    const body = document.getElementById("city-counts-body");
+    if (!body) return;
+
+    const sortedRows = [...CITY_ROWS].sort((a, b) => {
+      const delta = getRowValue(b, mode) - getRowValue(a, mode);
+      if (delta !== 0) return delta;
+      return String(a.city).localeCompare(String(b.city), "tr");
+    });
+
+    body.replaceChildren(
+      ...sortedRows.map((row) => {
+        const tr = document.createElement("tr");
+        const cells = [
+          { value: row.city, className: "pr-2" },
+          { value: row.individuals },
+          { value: row.families },
+          { value: row.probands },
+        ];
+
+        cells.forEach(({ value, className }) => {
+          const td = document.createElement("td");
+          td.textContent = value;
+          td.className = `text-right font-mono${className ? ` ${className}` : ""}`;
+          if (className === "pr-2") {
+            td.className = "pr-2";
+            td.textContent = value;
+          }
+          tr.appendChild(td);
+        });
+
+        tr.firstChild.className = "pr-2";
+        tr.firstChild.textContent = row.city;
+        return tr;
+      })
+    );
   }
 
   let currentMode = "individuals";
   let data = buildData(currentMode);
+  let mapSvgNode = null;
+  let mapGroupNode = null;
+  let currentZoomTransform = d3.zoomIdentity;
 
   const TURKEY_TOPOJSON_URL =
     "https://static.observableusercontent.com/files/6109f5f630487b36dae403853b1adb5c534371e095f5d80e0176a4b99966d7b5aaa5ee28dc42bb5a076771aa1a28c0d90baa12e1a4776c84c54dcf41322ab573";
@@ -143,7 +193,12 @@
     const turkey = await d3.json(TURKEY_TOPOJSON_URL);
 
     const svg = d3.create("svg")
-      .attr("viewBox", [0, 0, width, height]);
+      .attr("viewBox", [0, 0, width, height])
+      .attr("preserveAspectRatio", "xMidYMid meet")
+      .style("width", "100%")
+      .style("height", "100%")
+      .style("display", "block");
+    mapSvgNode = svg.node();
 
     // Sea background
     svg.append("rect")
@@ -151,10 +206,11 @@
       .attr("y", 0)
       .attr("width", width)
       .attr("height", height)
-      .attr("fill", "#e5e7eb");  // light grey sea
+      .attr("fill", "#ffffff");
 
     // Wrap all map content in a <g> so zoom can transform it.
     const g = svg.append("g");
+    mapGroupNode = g.node();
 
     const features = topojson.feature(turkey, turkey.objects.collection).features;
 
@@ -232,11 +288,13 @@
 
     // Initial draw
     applyDataToMap();
+    renderCityTable(currentMode);
 
     // Zoom behavior (similar to Observable's zoom-to-bounding-box example).
     const zoom = d3.zoom()
       .scaleExtent([1, 8])
       .on("zoom", (event) => {
+        currentZoomTransform = event.transform;
         g.attr("transform", event.transform);
       });
 
@@ -253,20 +311,22 @@
       const y = (y0 + y1) / 2;
       const scale = Math.min(8, 0.9 / Math.max(dx / width, dy / height));
       const translate = [width / 2 - scale * x, height / 2 - scale * y];
+      currentZoomTransform = d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale);
 
       svg.transition()
         .duration(750)
         .call(
           zoom.transform,
-          d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+          currentZoomTransform
         );
     }
 
     // Click on empty background to reset zoom.
     svg.on("click", () => {
+      currentZoomTransform = d3.zoomIdentity;
       svg.transition()
         .duration(750)
-        .call(zoom.transform, d3.zoomIdentity);
+        .call(zoom.transform, currentZoomTransform);
     });
 
     container.innerHTML = "";
@@ -280,10 +340,130 @@
         currentMode = event.target.value;
         data = buildData(currentMode);
         applyDataToMap();
+        renderCityTable(currentMode);
       });
+    });
+  }
+
+  function syncFullscreenButton() {
+    const isFullscreen = document.fullscreenElement === plotPanel;
+    if (plotPanel) {
+      plotPanel.style.position = isFullscreen ? "fixed" : "";
+      plotPanel.style.inset = isFullscreen ? "0" : "";
+      plotPanel.style.zIndex = isFullscreen ? "9999" : "";
+      plotPanel.style.width = isFullscreen ? "100vw" : "";
+      plotPanel.style.height = isFullscreen ? "100vh" : "";
+      plotPanel.style.margin = isFullscreen ? "0" : "";
+      plotPanel.style.borderRadius = isFullscreen ? "0" : "";
+      plotPanel.style.padding = isFullscreen ? "1rem" : "";
+      plotPanel.style.overflow = isFullscreen ? "hidden" : "";
+    }
+    if (fullscreenIcon) {
+      fullscreenIcon.className = `fa-solid ${isFullscreen ? "fa-compress" : "fa-expand"}`;
+    }
+    if (fullscreenLabel) {
+      fullscreenLabel.textContent = isFullscreen ? "Exit Fullscreen" : "Fullscreen";
+    }
+  }
+
+  async function toggleFullscreen() {
+    if (!plotPanel) return;
+    if (document.fullscreenElement === plotPanel) {
+      await document.exitFullscreen();
+      return;
+    }
+    await plotPanel.requestFullscreen();
+  }
+
+  async function downloadMapPng() {
+    if (!mapSvgNode || !mapGroupNode) return;
+
+    const contentBox = mapGroupNode.getBBox();
+    const padding = 12;
+    const corners = [
+      [contentBox.x - padding, contentBox.y - padding],
+      [contentBox.x + contentBox.width + padding, contentBox.y - padding],
+      [contentBox.x - padding, contentBox.y + contentBox.height + padding],
+      [contentBox.x + contentBox.width + padding, contentBox.y + contentBox.height + padding],
+    ];
+    const transformedCorners = corners.map(([x, y]) => ({
+      x: x * currentZoomTransform.k + currentZoomTransform.x,
+      y: y * currentZoomTransform.k + currentZoomTransform.y,
+    }));
+    const exportMinX = Math.min(...transformedCorners.map((point) => point.x));
+    const exportMaxX = Math.max(...transformedCorners.map((point) => point.x));
+    const exportMinY = Math.min(...transformedCorners.map((point) => point.y));
+    const exportMaxY = Math.max(...transformedCorners.map((point) => point.y));
+    const exportWidth = Math.max(1, exportMaxX - exportMinX);
+    const exportHeight = Math.max(1, exportMaxY - exportMinY);
+
+    const serializer = new XMLSerializer();
+    const svgClone = mapSvgNode.cloneNode(true);
+    svgClone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    svgClone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    svgClone.setAttribute("viewBox", `${exportMinX} ${exportMinY} ${exportWidth} ${exportHeight}`);
+    svgClone.setAttribute("width", `${Math.round(exportWidth)}`);
+    svgClone.setAttribute("height", `${Math.round(exportHeight)}`);
+    svgClone.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+    const svgSource = serializer.serializeToString(svgClone);
+    const svgBlob = new Blob([svgSource], {
+      type: "image/svg+xml;charset=utf-8",
+    });
+    const url = URL.createObjectURL(svgBlob);
+    const image = new Image();
+    image.decoding = "async";
+
+    image.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(exportWidth * scale));
+      canvas.height = Math.max(1, Math.round(exportHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      context.scale(scale, scale);
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, exportWidth, exportHeight);
+      context.drawImage(image, 0, 0, exportWidth, exportHeight);
+
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(url);
+        if (!blob) return;
+
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `turkey-choropleth-${currentMode}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      }, "image/png");
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+    };
+
+    image.src = url;
+  }
+
+  document.addEventListener("fullscreenchange", syncFullscreenButton);
+  syncFullscreenButton();
+
+  if (fullscreenButton) {
+    fullscreenButton.addEventListener("click", () => {
+      toggleFullscreen().catch(() => {});
+    });
+  }
+
+  if (downloadButton) {
+    downloadButton.addEventListener("click", () => {
+      downloadMapPng().catch(() => {});
     });
   }
 
   drawMap();
 </script>
-
