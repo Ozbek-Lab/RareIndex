@@ -18,6 +18,7 @@ class GalleryDashboardTests(TestCase):
             description="A chart",
             target_model="Individual",
             query_config={"values": ["status"]},
+            default_col_span=2,
             notebook_filename="sunburst.py",
             is_published=True,
             created_by=self.staff_user,
@@ -35,7 +36,7 @@ class GalleryDashboardTests(TestCase):
 
     def test_gallery_shows_only_published(self):
         self.client.login(username="testuser", password="password")
-        response = self.client.get(reverse("lab:plot_gallery"))
+        response = self.client.get(reverse("lab:plot_gallery"), secure=True)
         self.assertEqual(response.status_code, 200)
         templates = response.context["templates"]
         self.assertIn(self.published_tpl, templates)
@@ -45,16 +46,43 @@ class GalleryDashboardTests(TestCase):
         self.client.login(username="testuser", password="password")
         
         # Add widget
-        response = self.client.post(reverse("lab:add_widget", args=[self.published_tpl.pk]))
+        response = self.client.post(
+            reverse("lab:add_widget", args=[self.published_tpl.pk]),
+            secure=True,
+        )
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(DashboardWidget.objects.filter(user=self.user, template=self.published_tpl).exists())
-        
         widget = DashboardWidget.objects.get(user=self.user, template=self.published_tpl)
+        self.assertEqual(widget.col_span, 2)
+        self.assertEqual(widget.row_span, 1)
         
         # Remove widget
-        response = self.client.post(reverse("lab:remove_widget", args=[widget.pk]))
+        response = self.client.post(
+            reverse("lab:remove_widget", args=[widget.pk]),
+            secure=True,
+        )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(DashboardWidget.objects.filter(user=self.user, template=self.published_tpl).exists())
+
+    def test_add_widget_refreshes_existing_span(self):
+        self.client.login(username="testuser", password="password")
+
+        widget = DashboardWidget.objects.create(
+            user=self.user,
+            template=self.published_tpl,
+            order=0,
+            col_span=1,
+            row_span=1,
+        )
+
+        response = self.client.post(
+            reverse("lab:add_widget", args=[self.published_tpl.pk]),
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        widget.refresh_from_db()
+        self.assertEqual(widget.col_span, 2)
+        self.assertEqual(widget.row_span, 1)
 
     def test_reorder_dashboard_widgets(self):
         self.client.login(username="testuser", password="password")
@@ -66,6 +94,7 @@ class GalleryDashboardTests(TestCase):
             name="T2",
             slug="t2-template",
             target_model="Individual",
+            default_col_span=1,
             notebook_filename="status_bar.py",
             created_by=self.staff_user,
         )
@@ -76,7 +105,8 @@ class GalleryDashboardTests(TestCase):
         response = self.client.patch(
             reverse("lab:reorder_widgets"),
             data=json.dumps({"order": new_order}),
-            content_type="application/json"
+            content_type="application/json",
+            secure=True,
         )
         self.assertEqual(response.status_code, 200)
         
@@ -88,6 +118,7 @@ class GalleryDashboardTests(TestCase):
     def test_non_staff_cannot_create_templates(self):
         # Even though admin is handled by Django, we can check basic access to the model's admin page
         self.client.login(username="testuser", password="password")
-        response = self.client.get("/admin/lab/plottemplate/add/")
+        response = self.client.get("/admin/lab/plottemplate/add/", secure=True)
         # Should redirect to admin login because it's non-staff
-        self.assertRedirects(response, "/admin/login/?next=/admin/lab/plottemplate/add/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/?next=/admin/lab/plottemplate/add/", response["Location"])

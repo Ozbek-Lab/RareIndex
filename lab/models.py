@@ -1078,6 +1078,11 @@ class PlotTemplate(HistoryMixin, models.Model):
     target_model = models.CharField(max_length=100)
     query_config = models.JSONField(default=dict)
     notebook_filename = models.CharField(max_length=255)
+    default_col_span = models.PositiveSmallIntegerField(default=1)
+    show_download_menu = models.BooleanField(
+        default=True,
+        help_text="Show Marimo's notebook actions/download menu on notebook pages.",
+    )
     slug = models.SlugField(unique=True)
     is_published = models.BooleanField(default=False)
     created_by = models.ForeignKey(

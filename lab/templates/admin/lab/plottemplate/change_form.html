@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {% if change and original.notebook_filename %}
 <div class="module" style="margin-bottom: 16px;">
-    <a href="{% url 'lab:marimo_proxy' %}?file={{ original.notebook_filename|urlencode }}"
+    <a href="{% url 'lab:marimo_proxy' %}?file={{ original.notebook_filename|urlencode }}&show_download_menu={{ original.show_download_menu|yesno:'1,0' }}"
        class="button"
        target="_blank" rel="noopener noreferrer">Open “{{ original.notebook_filename }}” in Marimo editor</a>
     <p class="help" style="margin-top:8px;">Runs against <code>MARIMO_EDITOR_URL</code> with a staff token in the redirect URL. Start the editor with <code>marimo edit lab/notebooks/ --port 8081 --host 127.0.0.1 --no-token</code> so Marimo does not show its own password gate.</p>

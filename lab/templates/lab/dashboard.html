@@ -417,10 +417,84 @@
                         });
                      ">
                     {% for widget in widgets %}
-                    <div class="card bg-base-100 shadow-sm border border-base-200" data-widget-id="{{ widget.id }}" style="grid-column: span {{ widget.col_span }}; grid-row: span {{ widget.row_span }};">
-                        <div class="card-body p-2 sm:p-3 flex flex-col min-h-0">
+                    <div class="card bg-base-100 shadow-sm border border-base-200" data-widget-id="{{ widget.id }}" style="grid-column: span {{ widget.template.default_col_span|default:widget.col_span }}; grid-row: span {{ widget.row_span }};">
+                        <div class="card-body p-2 sm:p-3 flex flex-col min-h-0 relative">
                             
-                            <div class="flex justify-between items-start mb-1 shrink-0 gap-2">
+                            {% if widget.template.slug == "hpo-term-network" %}
+                            <div class="relative z-30 mb-1 flex flex-col gap-2">
+                                <div data-hpo-title>
+                                    <h2 class="card-title text-base drag-handle cursor-move flex items-center gap-2">
+                                        <i class="fa-solid fa-grip-vertical text-base-content/30 hover:text-base-content/70"></i>
+                                        {{ widget.template.name }}
+                                    </h2>
+                                    <p class="text-xs text-base-content/70">{{ widget.template.description }}</p>
+                                </div>
+                                <div class="flex flex-wrap items-center justify-between gap-2"
+                                     data-hpo-toolbar
+                                     data-hpo-controls
+                                     data-widget-id="{{ widget.id }}"
+                                     data-base-src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}">
+                                    <div class="flex flex-wrap items-center gap-2 rounded-lg border border-base-200 bg-base-100/90 p-2 text-xs shadow-sm backdrop-blur">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium text-base-content/70">Layout</span>
+                                            <div class="join join-horizontal">
+                                                <button type="button"
+                                                        class="btn btn-xs join-item btn-outline"
+                                                        data-hpo-layout="Circular">Circular</button>
+                                                <button type="button"
+                                                        class="btn btn-xs join-item btn-outline"
+                                                        data-hpo-layout="Layered">Layered</button>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium text-base-content/70">Theme</span>
+                                            <div class="join join-horizontal">
+                                                <button type="button"
+                                                        class="btn btn-xs join-item btn-outline"
+                                                        data-hpo-theme="Icefire">Icefire</button>
+                                                <button type="button"
+                                                        class="btn btn-xs join-item btn-outline"
+                                                        data-hpo-theme="Rainbow">Rainbow</button>
+                                            </div>
+                                        </div>
+                                        <label class="flex items-center gap-2 font-medium text-base-content/70">
+                                            <span>Consolidation threshold</span>
+                                            <input type="number"
+                                                   min="1"
+                                                   max="24"
+                                                   step="1"
+                                                   value="12"
+                                                   class="input input-bordered input-xs w-20"
+                                                   data-hpo-threshold>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <button class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+                                                type="button"
+                                                data-fullscreen-toggle
+                                                title="Fullscreen">
+                                            <i class="fa-solid fa-expand text-[11px]" data-fullscreen-icon></i>
+                                        </button>
+                                        {% if user.is_staff %}
+                                        <a class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+                                           href="{% url 'lab:marimo_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                           target="_blank" rel="noopener noreferrer"
+                                           title="Edit notebook in Marimo">
+                                            <i class="fa-solid fa-pen-to-square text-[11px]"></i>
+                                        </a>
+                                        {% endif %}
+                                        <button class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-error hover:bg-error/10"
+                                                hx-post="{% url 'lab:remove_widget' widget.id %}"
+                                                hx-target="closest .card"
+                                                hx-swap="outerHTML"
+                                                title="Remove from Dashboard">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="relative z-30 flex justify-between items-start mb-1 shrink-0 gap-2">
                                 <div>
                                     <h2 class="card-title text-base drag-handle cursor-move flex items-center gap-2">
                                         <i class="fa-solid fa-grip-vertical text-base-content/30 hover:text-base-content/70"></i>
@@ -428,10 +502,16 @@
                                     </h2>
                                     <p class="text-xs text-base-content/70">{{ widget.template.description }}</p>
                                 </div>
-                                <div class="flex items-center gap-1 shrink-0">
+                                <div class="relative z-30 flex items-center gap-1 shrink-0">
+                                    <button class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+                                            type="button"
+                                            data-fullscreen-toggle
+                                            title="Fullscreen">
+                                        <i class="fa-solid fa-expand text-[11px]" data-fullscreen-icon></i>
+                                    </button>
                                     {% if user.is_staff %}
                                     <a class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
-                                       href="{% url 'lab:marimo_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}"
+                                       href="{% url 'lab:marimo_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
                                        target="_blank" rel="noopener noreferrer"
                                        title="Edit notebook in Marimo">
                                         <i class="fa-solid fa-pen-to-square text-[11px]"></i>
@@ -446,11 +526,19 @@
                                     </button>
                                 </div>
                             </div>
+                            {% endif %}
 
-                            <div class="w-full min-w-0 min-h-0 self-stretch">
+                            <div class="w-full min-w-0 min-h-0 self-stretch flex-1">
                                 <iframe
                                     :key="'plot-widget-{{ widget.id }}'"
-                                    src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}"
+                                    {% if widget.template.slug == "hpo-term-network" %}
+                                    src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&layout=Circular&theme=Icefire&threshold=12&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                    data-base-src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                    {% else %}
+                                    src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                    {% endif %}
+                                    allow="fullscreen"
+                                    allowfullscreen
                                     class="block w-full border-0 bg-transparent"
                                     style="height: 1px; min-height: 28rem; overflow: hidden;"
                                     data-widget-id="{{ widget.id }}"
@@ -497,9 +585,160 @@
     if (typeof data.height !== 'number' || data.height <= 0) return;
     var frame = findFrame(event.source);
     if (!frame) return;
+    var card = frame.closest('.card');
+    if (card && card.getAttribute('data-dashboard-fullscreen') === '1') {
+      frame.style.height = '100%';
+      frame.style.minHeight = '0';
+      return;
+    }
     frame.style.height = Math.ceil(data.height) + 'px';
     frame.style.minHeight = Math.ceil(Math.max(data.height, 288)) + 'px';
   });
+
+  function initHpoControls() {
+    document.querySelectorAll('[data-hpo-controls]').forEach(function (controls) {
+      var widgetId = controls.getAttribute('data-widget-id');
+      var card = controls.closest('.card');
+      if (!card) return;
+      var frame = card.querySelector('iframe[data-widget-id="' + widgetId + '"]');
+      if (!frame) return;
+
+      var baseSrc = controls.getAttribute('data-base-src');
+      if (!baseSrc) return;
+
+      var layoutButtons = Array.from(controls.querySelectorAll('[data-hpo-layout]'));
+      var themeButtons = Array.from(controls.querySelectorAll('[data-hpo-theme]'));
+      var thresholdInput = controls.querySelector('[data-hpo-threshold]');
+
+      var state = {
+        layout: 'Circular',
+        theme: 'Icefire',
+        threshold: thresholdInput && thresholdInput.value ? thresholdInput.value : '12'
+      };
+      var thresholdTimer = null;
+
+      function setButtonState(buttons, attrName, value) {
+        buttons.forEach(function (btn) {
+          var active = btn.getAttribute(attrName) === value;
+          btn.classList.toggle('btn-primary', active);
+          btn.classList.toggle('btn-outline', !active);
+        });
+      }
+
+      function refreshFrame() {
+        var url = new URL(baseSrc, window.location.origin);
+        url.searchParams.set('layout', state.layout);
+        url.searchParams.set('theme', state.theme);
+        url.searchParams.set('threshold', state.threshold);
+        if (card.getAttribute('data-dashboard-fullscreen') === '1') {
+          url.searchParams.set('fullscreen', '1');
+        } else {
+          url.searchParams.delete('fullscreen');
+        }
+        frame.src = url.toString();
+        setButtonState(layoutButtons, 'data-hpo-layout', state.layout);
+        setButtonState(themeButtons, 'data-hpo-theme', state.theme);
+      }
+
+      layoutButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          state.layout = btn.getAttribute('data-hpo-layout') || 'Circular';
+          refreshFrame();
+        });
+      });
+
+      themeButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          state.theme = btn.getAttribute('data-hpo-theme') || 'Icefire';
+          refreshFrame();
+        });
+      });
+
+      if (thresholdInput) {
+        thresholdInput.addEventListener('input', function () {
+          var value = thresholdInput.value;
+          window.clearTimeout(thresholdTimer);
+          thresholdTimer = window.setTimeout(function () {
+            state.threshold = value || '12';
+            refreshFrame();
+          }, 250);
+        });
+      }
+
+      refreshFrame();
+    });
+  }
+
+  function initFullscreenControls() {
+    document.querySelectorAll('[data-fullscreen-toggle]').forEach(function (button) {
+      var card = button.closest('.card');
+      if (!card) return;
+      var dashboard = document.querySelector('.dashboard-content-refresh');
+      var body = card.querySelector('.card-body');
+      var frame = card.querySelector('iframe[data-widget-id]');
+      var icon = button.querySelector('[data-fullscreen-icon]');
+      function applyFullscreenState(isFullscreen) {
+        card.setAttribute('data-dashboard-fullscreen', isFullscreen ? '1' : '0');
+        if (dashboard) {
+          dashboard.style.overflow = isFullscreen ? 'hidden' : '';
+        }
+        if (card) {
+          card.style.position = isFullscreen ? 'fixed' : '';
+          card.style.inset = isFullscreen ? '0' : '';
+          card.style.zIndex = isFullscreen ? '9999' : '';
+          card.style.width = isFullscreen ? '100vw' : '';
+          card.style.height = isFullscreen ? '100vh' : '';
+          card.style.margin = isFullscreen ? '0' : '';
+          card.style.borderRadius = isFullscreen ? '0' : '';
+        }
+        if (body) {
+          body.style.height = isFullscreen ? '100%' : '';
+          body.style.flex = isFullscreen ? '1 1 auto' : '';
+        }
+        if (frame) {
+          frame.style.height = isFullscreen ? '100%' : '';
+          frame.style.minHeight = isFullscreen ? '0' : '';
+        }
+      }
+
+      function syncButton() {
+        var isFullscreen = card.getAttribute('data-dashboard-fullscreen') === '1';
+        if (icon) {
+          icon.className = 'fa-solid ' + (isFullscreen ? 'fa-compress' : 'fa-expand') + ' text-[11px]';
+        }
+        button.setAttribute('title', isFullscreen ? 'Exit fullscreen' : 'Fullscreen');
+      }
+
+      button.addEventListener('click', function () {
+        var isFullscreen = card.getAttribute('data-dashboard-fullscreen') === '1';
+        applyFullscreenState(!isFullscreen);
+        syncButton();
+
+        if (frame) {
+          var url = new URL(frame.src, window.location.origin);
+          if (!isFullscreen) {
+            url.searchParams.set('fullscreen', '1');
+          } else {
+            url.searchParams.delete('fullscreen');
+          }
+          frame.src = url.toString();
+        }
+      });
+
+      applyFullscreenState(false);
+      syncButton();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      initHpoControls();
+      initFullscreenControls();
+    });
+  } else {
+    initHpoControls();
+    initFullscreenControls();
+  }
 })();
 </script>
 {% endblock %}

@@ -38,7 +38,21 @@ def _(token):
 
 
 @app.cell
-def _(data, mo):
+def _(mo):
+    import _utils
+
+    qp = mo.query_params()
+    fullscreen = str(_utils._qp_get(qp, "fullscreen", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    return (fullscreen,)
+
+
+@app.cell
+def _(data, fullscreen, mo):
     import plotly.graph_objects as go
 
     mo.stop(not data, mo.md("_No rows returned._"))
@@ -67,7 +81,7 @@ def _(data, mo):
         )
         fig.update_layout(
             autosize=True,
-            height=360,
+            height=1000 if fullscreen else 360,
             xaxis_title=None,
             yaxis_title="Count",
             margin=dict(t=8, l=48, r=24, b=100),

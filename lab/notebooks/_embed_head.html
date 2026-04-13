@@ -48,6 +48,17 @@ body > div:first-of-type > div {
 </style>
 <script>
 (function () {
+  var qp = new URLSearchParams(window.location.search);
+  var showDownloadMenu = qp.get("show_download_menu");
+  if (showDownloadMenu !== null) {
+    var normalized = String(showDownloadMenu).trim().toLowerCase();
+    if (["0", "false", "no", "off"].indexOf(normalized) !== -1) {
+      var style = document.createElement("style");
+      style.textContent = '[data-testid="notebook-actions-dropdown"] { display: none !important; }';
+      document.head.appendChild(style);
+    }
+  }
+
   function reportHeight() {
     var height = Math.max(
       document.body ? document.body.scrollHeight : 0,

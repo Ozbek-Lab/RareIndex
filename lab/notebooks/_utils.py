@@ -4,8 +4,27 @@ import urllib.parse
 
 import requests
 
-DJANGO_API_URL = os.environ.get("DJANGO_API_URL", "http://localhost:8000")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+
+
+def _normalize_api_url(raw_url: str | None) -> str:
+    url = (raw_url or "http://127.0.0.1:8000").strip()
+    parts = urllib.parse.urlsplit(url)
+    if parts.hostname == "localhost":
+        netloc = "127.0.0.1"
+        if parts.port:
+            netloc += f":{parts.port}"
+        if parts.username:
+            auth = parts.username
+            if parts.password:
+                auth += f":{parts.password}"
+            netloc = f"{auth}@{netloc}"
+        parts = parts._replace(netloc=netloc)
+        url = urllib.parse.urlunsplit(parts)
+    return url
+
+
+DJANGO_API_URL = _normalize_api_url(os.environ.get("DJANGO_API_URL"))
 
 
 def _jwt_shape_ok(t: str | None) -> bool:

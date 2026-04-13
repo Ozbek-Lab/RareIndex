@@ -160,10 +160,22 @@ YAYIN_ZYGOSITY_MAP = {
     "n/a": "unknown",
 }
 
-REQUIRED_PLOT_TEMPLATE_SLUGS = {
-    "sample-distribution-sunburst",
-    "analysis-status-bar",
+REQUIRED_PLOT_TEMPLATE_SPECS = {
+    "sample-distribution-sunburst": {
+        "default_col_span": 1,
+        "show_download_menu": False,
+    },
+    "analysis-status-bar": {
+        "default_col_span": 1,
+        "show_download_menu": False,
+    },
+    "hpo-term-network": {
+        "default_col_span": 2,
+        "show_download_menu": False,
+    },
 }
+
+REQUIRED_PLOT_TEMPLATE_SLUGS = set(REQUIRED_PLOT_TEMPLATE_SPECS)
 
 
 def _parse_report_text_field_reference_markdown(md_text: str) -> dict[str, dict[str, str]]:
@@ -884,20 +896,29 @@ class Command(BaseCommand):
         Ensure the published Marimo-backed plot templates exist so /gallery/
         can show cards and link to the run/editor servers.
         """
-        existing_slugs = set(
-            PlotTemplate.objects.filter(
+        existing_templates = {
+            slug: {
+                "default_col_span": default_col_span,
+                "show_download_menu": show_download_menu,
+            }
+            for slug, default_col_span, show_download_menu in PlotTemplate.objects.filter(
                 slug__in=REQUIRED_PLOT_TEMPLATE_SLUGS,
                 is_published=True,
-            ).values_list("slug", flat=True)
+            ).values_list("slug", "default_col_span", "show_download_menu")
+        }
+        missing_slugs = sorted(REQUIRED_PLOT_TEMPLATE_SLUGS - set(existing_templates))
+        mismatched_specs = sorted(
+            slug
+            for slug, spec in REQUIRED_PLOT_TEMPLATE_SPECS.items()
+            if any(existing_templates.get(slug, {}).get(field) != value for field, value in spec.items())
         )
-        missing_slugs = sorted(REQUIRED_PLOT_TEMPLATE_SLUGS - existing_slugs)
-        if not missing_slugs:
+        if not missing_slugs and not mismatched_specs:
             self.stdout.write("Step 18: Plot templates already seeded.")
             return
 
         self.stdout.write(
             self.style.WARNING(
-                f"Step 18: Missing published plot templates {missing_slugs} — seeding defaults…"
+                f"Step 18: Plot templates need seeding (missing={missing_slugs}, spec_mismatch={mismatched_specs}) — seeding defaults…"
             )
         )
         if self.dry_run:

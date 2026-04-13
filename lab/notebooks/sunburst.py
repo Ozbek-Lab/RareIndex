@@ -67,7 +67,21 @@ def _():
 
 
 @app.cell
-def _(mo, plot_rows):
+def _(mo):
+    import _utils
+
+    qp = mo.query_params()
+    fullscreen = str(_utils._qp_get(qp, "fullscreen", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    return (fullscreen,)
+
+
+@app.cell
+def _(mo, plot_rows, fullscreen):
     # Loop/comprehension names must not collide across cells; keep plot logic inside a function.
     import plotly.graph_objects as go
 
@@ -121,7 +135,7 @@ def _(mo, plot_rows):
         )
         fig.update_layout(
             autosize=True,
-            height=360,
+            height=1000 if fullscreen else 360,
             margin=dict(t=0, l=0, r=0, b=0),
         )
         return fig

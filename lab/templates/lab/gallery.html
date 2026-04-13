@@ -28,13 +28,13 @@
                     </button>
                     {% if user.is_authenticated %}
                     <a class="btn btn-ghost btn-sm"
-                       href="{% url 'lab:marimo_run_proxy' %}?file={{ tp.notebook_filename|urlencode }}"
+                       href="{% url 'lab:marimo_run_proxy' %}?file={{ tp.notebook_filename|urlencode }}&show_download_menu={{ tp.show_download_menu|yesno:'1,0' }}"
                        target="_blank" rel="noopener noreferrer"
                        title="Marimo run server with Django plot JWT in the URL">Open run app</a>
                     {% endif %}
                     {% if user.is_staff %}
                     <a class="btn btn-ghost btn-sm"
-                       href="{% url 'lab:marimo_proxy' %}?file={{ tp.notebook_filename|urlencode }}"
+                       href="{% url 'lab:marimo_proxy' %}?file={{ tp.notebook_filename|urlencode }}&show_download_menu={{ tp.show_download_menu|yesno:'1,0' }}"
                        target="_blank" rel="noopener noreferrer">Edit in Marimo</a>
                     {% endif %}
                 </div>

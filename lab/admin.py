@@ -720,7 +720,16 @@ admin.site.register(User, CustomUserAdmin)
 
 @admin.register(models.PlotTemplate)
 class PlotTemplateAdmin(SimpleHistoryAdmin):
-    list_display = ["name", "target_model", "is_published", "created_by", "get_created_at", "get_updated_at"]
+    list_display = [
+        "name",
+        "target_model",
+        "default_col_span",
+        "show_download_menu",
+        "is_published",
+        "created_by",
+        "get_created_at",
+        "get_updated_at",
+    ]
     search_fields = ["name", "description", "target_model"]
     list_filter = ["target_model", "is_published"]
     prepopulated_fields = {"slug": ("name",)}

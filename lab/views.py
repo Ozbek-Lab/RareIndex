@@ -1586,14 +1586,27 @@ class PlotGalleryView(LoginRequiredMixin, generic.ListView):
 def add_widget(request, pk):
     template = get_object_or_404(PlotTemplate, pk=pk)
     # Check if user already has this template on dashboard
-    if not DashboardWidget.objects.filter(user=request.user, template=template).exists():
+    widget = DashboardWidget.objects.filter(user=request.user, template=template).first()
+    if widget is None:
         # Add to dashboard at the end
         last_order = DashboardWidget.objects.filter(user=request.user).aggregate(max_order=Max("order"))["max_order"] or 0
         DashboardWidget.objects.create(
             user=request.user,
             template=template,
-            order=last_order + 1
+            order=last_order + 1,
+            col_span=template.default_col_span,
+            row_span=1,
         )
+    else:
+        updated_fields = []
+        if widget.col_span != template.default_col_span:
+            widget.col_span = template.default_col_span
+            updated_fields.append("col_span")
+        if widget.row_span != 1:
+            widget.row_span = 1
+            updated_fields.append("row_span")
+        if updated_fields:
+            widget.save(update_fields=updated_fields)
     # HTMX response to show success checkmark or text swap
     return HttpResponse('<span class="text-success"><i class="fa-solid fa-check"></i> Added</span>')
 
@@ -1743,6 +1756,7 @@ def marimo_run_proxy(request):
 
     marimo_base = getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8080").rstrip("/")
     token = issue_plot_token(request.user)
-    from urllib.parse import urlencode
-
-    return redirect(f"{marimo_base}/?{urlencode({'file': safe_name, 'token': token})}")
+    params = request.GET.copy()
+    params["file"] = safe_name
+    params["token"] = token
+    return redirect(f"{marimo_base}/?{params.urlencode()}")
