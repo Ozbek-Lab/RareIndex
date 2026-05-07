@@ -27,7 +27,7 @@ from .views import (
     marimo_proxy,
     marimo_run_proxy,
 )
-from .profile_views import ProfileView, UpdateThemeView, UpdateFontSizeView
+from .profile_views import ProfileView, UpdateThemeView, UpdateFontSizeView, UpdateInstitutionDisplayView
 from .htmx_views import (
     RevealSensitiveFieldView,
     add_individual_row,
@@ -152,6 +152,7 @@ urlpatterns = [
     path("profile/", ProfileView.as_view(), name="profile"),
     path("profile/update-theme/", UpdateThemeView.as_view(), name="update_theme"),
     path("profile/update-font-size/", UpdateFontSizeView.as_view(), name="update_font_size"),
+    path("profile/update-institution-display/", UpdateInstitutionDisplayView.as_view(), name="update_institution_display"),
     
     # Status Updates
     path(

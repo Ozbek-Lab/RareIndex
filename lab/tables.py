@@ -3,6 +3,7 @@ from django.utils.html import format_html, mark_safe
 from django.urls import reverse
 
 from .models import Individual, Sample, Project
+from .display_preferences import DEFAULT_INSTITUTION_DISPLAY, institution_display_name, normalize_institution_display
 from .status_utils import collect_individual_row_statuses
 from variant.models import Variant
 
@@ -65,7 +66,13 @@ class IndividualTable(tables.Table):
             self.columns["secondary_id"].column.verbose_name = f"{secondary_type.name} ID"
 
     def render_institution(self, value, record):
-        names = [i.name for i in record.institution.all()]
+        user = getattr(self.request, "user", None) if hasattr(self, "request") else None
+        mode = DEFAULT_INSTITUTION_DISPLAY
+        if user and user.is_authenticated and hasattr(user, "profile"):
+            mode = normalize_institution_display(
+                (user.profile.display_preferences or {}).get("institution_display", DEFAULT_INSTITUTION_DISPLAY)
+            )
+        names = [institution_display_name(i, mode) for i in record.institution.all()]
         return ", ".join(names) if names else "—"
 
     class Meta:

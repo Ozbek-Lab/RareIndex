@@ -160,6 +160,7 @@
     sidebarOpen: window.innerWidth < 1024 ? false : localStorage.getItem('sidebarOpen') === 'true',
     theme: '{{ user_theme|default:"light"|escapejs }}',
     fontSize: '{{ user_font_size|default:"small"|escapejs }}',
+    institutionDisplay: '{{ user_institution_display|default:"name"|escapejs }}',
     fontSizeMap: { small: '100%', medium: '112.5%', large: '125%' },
     init() {
         document.documentElement.setAttribute('data-theme', this.theme);

@@ -13,6 +13,7 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Min, Max, Sum, Avg, DateTimeField
 from django.db.models.functions import Cast, Coalesce
 from django.contrib.contenttypes.models import ContentType
+from .display_preferences import DEFAULT_INSTITUTION_DISPLAY, institution_display_name, normalize_institution_display
 from .models import (
     Individual,
     Sample,
@@ -1423,7 +1424,20 @@ class IndividualExportView(LoginRequiredMixin, View):
             # Notes
             general_notes = " | ".join([n.content for n in individual.notes.all()])
             
-            institution_names = "; ".join([i.name for i in individual.institution.all()])
+            institution_display = DEFAULT_INSTITUTION_DISPLAY
+            if self.request.user.is_authenticated and hasattr(self.request.user, "profile"):
+                institution_display = normalize_institution_display(
+                    (self.request.user.profile.display_preferences or {}).get(
+                        "institution_display",
+                        DEFAULT_INSTITUTION_DISPLAY,
+                    )
+                )
+            institution_names = "; ".join(
+                [
+                    institution_display_name(institution, institution_display)
+                    for institution in individual.institution.all()
+                ]
+            )
             physicians = "; ".join(
                 [
                     contact.full_name or str(contact)

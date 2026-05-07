@@ -14,6 +14,27 @@ def get_list(dictionary, key):
 def get_item(dictionary, key):
     return dictionary.get(key)
 
+
+@register.filter
+def institution_display(institution, mode="name"):
+    from lab.display_preferences import institution_display_name
+
+    return institution_display_name(institution, mode)
+
+
+@register.filter
+def institutions_display(institutions, mode="name"):
+    from lab.display_preferences import institution_display_name
+
+    if hasattr(institutions, "all"):
+        institutions = institutions.all()
+    names = [
+        institution_display_name(institution, mode)
+        for institution in institutions
+    ]
+    names = [name for name in names if name]
+    return ", ".join(names) if names else "—"
+
 @register.filter
 def visible_to(notes, user):
     """Filter notes visible to the user"""

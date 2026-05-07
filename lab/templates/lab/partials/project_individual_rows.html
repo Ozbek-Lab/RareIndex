@@ -38,7 +38,7 @@
                 {% with insts=individual.institution.all %}
                     {% if insts %}
                         <span class="block max-w-xs truncate">
-                            {{ insts|join:", " }}
+                            {{ insts|institutions_display:user_institution_display }}
                         </span>
                     {% else %}
                         —
@@ -67,4 +67,3 @@
     </tr>
     {% endif %}
 {% endif %}
-

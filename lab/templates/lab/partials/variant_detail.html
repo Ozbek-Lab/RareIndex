@@ -743,7 +743,7 @@
                     {% endif %}
                   </td>
                   <td class="text-base-content/70">
-                    {% for inst in entry.individual.institution.all %}{{ inst.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+                    {{ entry.individual.institution.all|institutions_display:user_institution_display }}
                   </td>
                   <td class="max-w-[240px] py-2">
                     <div class="flex flex-wrap gap-1.5">

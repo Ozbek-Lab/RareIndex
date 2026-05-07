@@ -9,7 +9,7 @@ from django.views.generic import View
 from django.urls import reverse
 from django.apps import apps
 from pathlib import Path
-from .models import Individual, Family, Project
+from .models import Family, Individual, Project, Task
 
 
 def _get_status_for_model(model, *names):

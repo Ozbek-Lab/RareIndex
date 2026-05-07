@@ -81,6 +81,39 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card bg-base-200 shadow-xl">
+                <div class="card-body">
+                    <h3 class="font-bold flex items-center gap-2">
+                        <i class="fas fa-building-columns"></i> Institutions
+                    </h3>
+                    <p class="text-sm text-base-content/60">
+                        Choose which institution label appears in tables and detail views.
+                    </p>
+                    <div class="grid grid-cols-1 gap-3 mt-2">
+                        {% for option in institution_display_options %}
+                        <div
+                            x-bind:class="institutionDisplay === '{{ option.value }}'
+                                ? 'border-primary bg-primary/10 shadow-md ring-2 ring-primary/30'
+                                : 'border-base-300 bg-base-100 hover:border-base-content/30 hover:bg-base-200/50'"
+                            class="group rounded-lg border transition-all duration-200"
+                            @click="institutionDisplay = '{{ option.value }}'; htmx.ajax('POST', '{% url 'lab:update_institution_display' %}', {values: {institution_display: '{{ option.value }}'}, swap: 'none'})"
+                        >
+                            <div class="flex items-center justify-between gap-3 cursor-pointer rounded-lg px-4 py-3">
+                                <div>
+                                    <div class="font-semibold text-base-content">{{ option.label }}</div>
+                                    <div class="text-xs text-base-content/60">{{ option.description }}</div>
+                                </div>
+                                <div class="flex items-center justify-end gap-2" x-show="institutionDisplay === '{{ option.value }}'">
+                                    <span class="badge badge-primary badge-sm">Selected</span>
+                                    <i class="fa-solid fa-check text-primary"></i>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Theme Selection -->
