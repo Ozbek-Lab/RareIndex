@@ -27,8 +27,19 @@ from simple_history.signals import post_create_historical_record
 
 
 DEFAULT_STATUSES = [
-    "Registered", "Active", "Completed", "Cancelled",
-    "Pending", "In Progress", "Awaiting Data Arrival",
+    "Active", "Inactive", "Affected", "Healthy", "Unsolved", "Solved",
+    "Unsure Import",
+    "Planned", "Recieved - In lab process", "Isolated", "Available", "Not Available",
+    "Waiting Data/Bioinformatic process", "Data Delivered / Completed", "Previous",
+    "Bioinformatic process completed", "Waiting Confirmation", "Reported",
+    "Initial Analysis", "Reanalysis",
+    "Negative", "Positive", "Delivered to Clinician",
+    "Assigned", "Cancelled",
+    "In Planning", "In Progress", "On Hold", "Completed",
+    "Not reported", "Causative", "Suspected Causative", "Secondary Finding",
+    "Previously reported", "Ruled Out", "Ongoing Sanger Confirmation",
+    "Ongoing Functional Study", "Novel Gene Disease Association",
+    "Candidate Gene-Variant Association",
 ]
 
 

@@ -64,7 +64,7 @@
             </h3>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.status.field.choices %}
-                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.status|get_item:choice.0 %}
+                {% with metadata=status_metadata.project|get_item:choice.0 count=filter_counts.status|get_item:choice.0 %}
                   {% include "lab/components/tristate_status_pill.html" with name="status" value=choice.0 label=choice.1 short_label=metadata.short_name color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'status' excluded_values=request.GET|get_list:'status__exclude' %}
                 {% endwith %}
               {% endfor %}

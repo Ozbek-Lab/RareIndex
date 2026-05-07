@@ -1,4 +1,4 @@
-
+{% load variant_filters %}
 
 {% partialdef vep %}
 <div class="space-y-4">
@@ -149,28 +149,198 @@
 {% partialdef genebe %}
 <div class="space-y-4">
   {% if data %}
-    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+    {% with result=data.variants.0|default:data %}
+    <div class="rounded-box border border-base-200 bg-base-100 p-4 space-y-4 text-base-content">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 text-sm">
         <div>
-          <span class="block text-gray-500 text-xs">Gene</span>
-          <span class="font-medium text-gray-900 dark:text-gray-100">{{ data.gene_symbol|default:"-" }}</span>
+          <span class="block text-base-content/50 text-xs">Gene</span>
+          <span class="font-medium text-base-content">{{ result.gene_symbol|default:"-" }}</span>
         </div>
         <div>
-          <span class="block text-gray-500 text-xs">ACMG Classification</span>
-          <span class="font-medium px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700">
-            {{ data.acmg_classification|default:"-" }}
+          <span class="block text-base-content/50 text-xs">Transcript</span>
+          <span class="font-mono text-base-content">{{ result.transcript|default:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">Effect</span>
+          <span class="font-medium text-base-content">{{ result.effect|default:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">ACMG Classification</span>
+          <span class="badge badge-sm badge-ghost">
+            {{ result.acmg_classification|default:"-" }}
           </span>
         </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">ACMG Score</span>
+          <span class="font-medium text-base-content">{{ result.acmg_score|default_if_none:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">ClinVar Classification</span>
+          <span class="font-medium text-base-content">{{ result.clinvar_classification|default:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">ClinVar Review Status</span>
+          <span class="font-medium text-base-content">{{ result.clinvar_review_status|default:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">Combined Pathogenicity</span>
+          <span class="font-medium text-base-content">{{ result.pathogenicity_classification_combined|default:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">Population AF</span>
+          <span class="font-mono text-base-content">{{ result.frequency_reference_population|default_if_none:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">gnomAD Exomes AF</span>
+          <span class="font-mono text-base-content">{{ result.gnomad_exomes_af|default_if_none:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">gnomAD Genomes AF</span>
+          <span class="font-mono text-base-content">{{ result.gnomad_genomes_af|default_if_none:"-" }}</span>
+        </div>
+        <div>
+          <span class="block text-base-content/50 text-xs">Splice Prediction</span>
+          <span class="font-medium text-base-content">{{ result.splice_prediction_selected|default:"-" }}</span>
+        </div>
       </div>
+
+      {% if result.acmg_by_gene %}
+      <div>
+        <h5 class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-2">Gene-specific ACMG</h5>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-base-200 text-sm">
+            <thead class="bg-base-200/50">
+              <tr>
+                <th class="px-3 py-2 text-left font-semibold text-base-content/70">Gene</th>
+                <th class="px-3 py-2 text-left font-semibold text-base-content/70">Classification</th>
+                <th class="px-3 py-2 text-left font-semibold text-base-content/70">
+                  <span class="tooltip tooltip-bottom inline-block cursor-help" data-tip="B <=-7 | LB -1--6 | VUS 0-5 | LP 6-9 | P >=10">Score</span>
+                </th>
+                <th class="px-3 py-2 text-left font-semibold text-base-content/70">Inheritance</th>
+                <th class="px-3 py-2 text-left font-semibold text-base-content/70">Transcript</th>
+                <th class="px-3 py-2 text-left font-semibold text-base-content/70">Criteria</th>
+                {% if perms.variant.change_variant %}
+                <th class="px-3 py-2 text-right font-semibold text-base-content/70">Action</th>
+                {% endif %}
+              </tr>
+            </thead>
+            {% for gene_item in result.acmg_by_gene %}
+            <tbody class="divide-y divide-base-200" x-data="{ open: false }">
+              {% with acmg_result=gene_item|acmg_classification_for_gene:variant %}
+              <tr>
+                <td class="px-3 py-2 font-medium text-base-content">{{ gene_item.gene_symbol|default:"-" }}</td>
+                <td class="px-3 py-2 text-base-content/80">{{ acmg_result.label }}</td>
+                <td class="px-3 py-2 font-mono text-base-content/80">
+                  <span class="tooltip tooltip-top cursor-help" data-tip="B <=-7 | LB -1--6 | VUS 0-5 | LP 6-9 | P >=10">{{ acmg_result.score }}</span>
+                </td>
+                <td class="px-3 py-2 text-base-content/80">{{ gene_item.inheritance_mode|default:"-" }}</td>
+                <td class="px-3 py-2 font-mono text-base-content/80">{{ gene_item.transcript|default:"-" }}</td>
+                <td class="px-3 py-2 text-base-content/80">
+                  {% with criteria_items=gene_item|acmg_criteria_with_gene:variant %}
+                    {% if criteria_items %}
+                    <div class="flex flex-wrap gap-1.5">
+                      {% for crit in criteria_items %}
+                      <div
+                        class="tooltip tooltip-top criteria-tooltip"
+                        data-tip="{{ crit.tooltip|default:crit.description }}"
+                      >
+                        <span class="badge badge-sm whitespace-nowrap {{ crit.badge_class }} {% if crit.is_manual_override %}font-semibold{% endif %}">
+                          {% if crit.is_manual_override %}<i class="fa-solid fa-star text-warning mr-1"></i>{% endif %}
+                          {{ crit.display }}
+                        </span>
+                      </div>
+                      {% endfor %}
+                    </div>
+                    {% else %}
+                      -
+                    {% endif %}
+                  {% endwith %}
+                </td>
+                {% if perms.variant.change_variant %}
+                <td class="px-3 py-2 text-right">
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-outline gap-1 whitespace-nowrap"
+                    @click="open = !open"
+                  >
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span x-text="open ? 'Close' : 'Edit Evidence'"></span>
+                    <i class="fa-solid fa-chevron-down text-[10px] transition-transform" :class="{ 'rotate-180': open }"></i>
+                  </button>
+                </td>
+                {% endif %}
+              </tr>
+              {% if perms.variant.change_variant %}
+              <tr x-show="open">
+                <td colspan="7" class="bg-base-100 px-3 py-3">
+                  <form
+                    hx-post="{% url 'lab:variant_acmg_evidence_save' variant.pk %}"
+                    hx-target="#genebe-classification-{{ variant.pk }}"
+                    hx-swap="outerHTML"
+                    class="space-y-3"
+                  >
+                    <input type="hidden" name="gene_symbol" value="{{ gene_item.gene_symbol|default:'' }}">
+                    <input type="hidden" name="transcript" value="{{ gene_item.transcript|default:'' }}">
+                    <div class="flex items-center justify-between gap-3 border-b border-base-200 pb-2">
+                      <div>
+                        <h6 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Evidence table</h6>
+                        <p class="text-xs text-base-content/40">{{ gene_item.gene_symbol|default:"-" }} · {{ gene_item.transcript|default:"-" }}</p>
+                      </div>
+                    </div>
+                    {% include "variant/partials/_acmg_evidence_matrix.html" with gene_item=gene_item variant=variant %}
+                    <div class="flex items-center justify-end gap-2">
+                      <button type="button" class="btn btn-sm btn-ghost" @click="open = false">Cancel</button>
+                      <button type="submit" class="btn btn-sm btn-primary gap-2">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        Save evidence
+                      </button>
+                    </div>
+                  </form>
+                </td>
+              </tr>
+              {% endif %}
+              {% endwith %}
+            </tbody>
+            {% endfor %}
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if result.acmg_criteria %}
+      <div>
+        <span class="block text-base-content/50 text-xs mb-1">ACMG Criteria</span>
+        {% with criteria_items=result.acmg_criteria|parse_acmg_criteria_with_variant:variant %}
+          {% if criteria_items %}
+          <div class="flex flex-wrap gap-1.5">
+            {% for crit in criteria_items %}
+            <div
+              class="tooltip tooltip-top criteria-tooltip"
+              data-tip="{{ crit.tooltip|default:crit.description }}"
+            >
+              <span class="badge badge-sm whitespace-nowrap {{ crit.badge_class }} {% if crit.is_manual_override %}font-semibold{% endif %}">
+                {% if crit.is_manual_override %}<i class="fa-solid fa-star text-warning mr-1"></i>{% endif %}
+                {{ crit.display }}
+              </span>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+            <span class="text-sm text-base-content">{{ result.acmg_criteria }}</span>
+          {% endif %}
+        {% endwith %}
+      </div>
+      {% endif %}
     </div>
+    {% endwith %}
     <div class="mt-4">
       <details>
-        <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700">View Raw Data</summary>
-        <pre class="text-xs bg-gray-100 dark:bg-gray-900 p-2 rounded mt-2 overflow-x-auto">{{ data|pprint }}</pre>
+        <summary class="text-xs text-base-content/50 cursor-pointer hover:text-base-content/70">View Raw Data</summary>
+        <pre class="text-xs bg-base-200/40 text-base-content p-2 rounded-box mt-2 overflow-x-auto">{{ data|pprint }}</pre>
       </details>
     </div>
   {% else %}
-    <div class="text-gray-500 italic">No Genebe data available.</div>
+    <div class="text-base-content/50 italic">No GeneBe data available.</div>
   {% endif %}
 </div>
 {% endpartialdef %}

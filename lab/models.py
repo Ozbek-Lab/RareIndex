@@ -1,4 +1,6 @@
 from django.db import models
+from django.db.models import Q
+from django.db.models.functions import Lower
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -114,7 +116,11 @@ class Task(HistoryMixin, models.Model):
         return self.title
 
     def complete(self, user, notes=""):
-        completed_status = Status.objects.filter(name__iexact="completed").first()
+        task_ct = ContentType.objects.get_for_model(Task)
+        completed_status = Status.objects.filter(
+            content_type=task_ct,
+            name__iexact="completed",
+        ).first()
         if not completed_status:
             raise ValueError("No 'completed' status found in Status model.")
         if self.statuses.filter(pk=completed_status.pk).exists():
@@ -175,11 +181,13 @@ class Project(HistoryMixin, models.Model):
         return self.tasks.count()
 
     def get_completed_task_count(self):
-        completed_status = Status.objects.filter(name__iexact="completed").first()
+        task_ct = ContentType.objects.get_for_model(Task)
+        completed_status = Status.objects.filter(
+            content_type=task_ct,
+            name__iexact="completed",
+        ).first()
         if not completed_status:
             return 0
-        from django.contrib.contenttypes.models import ContentType
-        task_ct = ContentType.objects.get_for_model(Task)
         completed_task_ids = TaggedStatus.objects.filter(
             content_type=task_ct,
             tag=completed_status,
@@ -364,7 +372,7 @@ class Family(HistoryMixin, models.Model):
 
     @property
     def is_solved(self):
-        """True if every index individual has at least one 'solved' status tag."""
+        """True if every index individual has at least one solved status tag."""
         index_ids = list(self.individuals.filter(is_index=True).values_list("id", flat=True))
         total_index = len(index_ids)
         if total_index == 0:
@@ -374,7 +382,7 @@ class Family(HistoryMixin, models.Model):
             TaggedStatus.objects.filter(
                 content_type=individual_ct,
                 object_id__in=index_ids,
-                tag__name__in=["Solved - P/LP", "Solved - VUS"],
+                tag__name__iexact="Solved",
             ).values_list("object_id", flat=True)
         )
         return len(solved_individual_ids) == total_index
@@ -418,6 +426,12 @@ class Status(HistoryMixin, models.Model):
     )
     content_type = models.ForeignKey(
         ContentType, on_delete=models.CASCADE, null=True, blank=True
+    )
+    connected_classes = models.ManyToManyField(
+        ContentType,
+        blank=True,
+        related_name="connected_statuses",
+        help_text="Connected object types whose statuses should also be surfaced on the individual row.",
     )
     icon = models.CharField(max_length=255, null=True)
     group = models.ForeignKey(
@@ -901,6 +915,12 @@ class Analysis(HistoryMixin, models.Model):
 class IdentifierType(HistoryMixin, models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    example = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Example of a valid identifier value for this type.",
+    )
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_id_types"
     )
@@ -909,8 +929,37 @@ class IdentifierType(HistoryMixin, models.Model):
     is_shown_in_table = models.BooleanField(default=True)
     history = HistoricalRecords()
 
+    def clean(self):
+        super().clean()
+        self.name = (self.name or "").strip()
+        self.example = (self.example or "").strip()
+        if not self.name:
+            raise ValidationError({"name": "This field is required."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def validation_error_message(self):
+        if self.example:
+            return f"ID with type {self.name} is invalid. Correct example: {self.example}"
+        return f"ID with type {self.name} is invalid."
+
     def __str__(self):
         return self.name
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                name="unique_identifiertype_name_ci",
+            ),
+            models.UniqueConstraint(
+                fields=["use_priority"],
+                condition=Q(use_priority__gt=0),
+                name="unique_identifiertype_use_priority_nonzero",
+            ),
+        ]
 
 
 class CrossIdentifier(HistoryMixin, models.Model):
@@ -944,8 +993,8 @@ class CrossIdentifier(HistoryMixin, models.Model):
         if validator is not None:
             try:
                 validator(self.id_value)
-            except ValidationError as e:
-                raise ValidationError({"id_value": e.messages})
+            except ValidationError:
+                raise ValidationError({"id_value": self.id_type.validation_error_message()})
 
     class Meta:
         unique_together = ["individual", "id_type"]
@@ -1040,6 +1089,7 @@ class AnalysisReport(HistoryMixin, models.Model):
     analysis = models.ForeignKey(
         Analysis, on_delete=models.PROTECT, related_name="reports", null=True, blank=True
     )
+    statuses = TaggableManager(through="TaggedStatus", blank=True, verbose_name="Statuses")
     # Lazy reference to avoid circular import if Variant is in another app
     variants = models.ManyToManyField("variant.Variant", related_name="reports", blank=True)
     file = models.FileField(upload_to="analysis_reports/%Y/%m/%d/")

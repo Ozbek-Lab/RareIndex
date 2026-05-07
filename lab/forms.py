@@ -1,7 +1,10 @@
 # forms.py
 from collections import OrderedDict
 
+import json
+
 from django import forms
+from django.forms import BaseFormSet
 from django.contrib.auth.models import User
 from django.utils import timezone
 from .models import (
@@ -29,6 +32,25 @@ from .models import (
 )
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
+
+
+def _validate_cross_identifier_value(form, field_name, id_type, value):
+    """Attach type-specific cross-identifier validation errors to a form."""
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    if not id_type:
+        return
+
+    if id_type.name == "RareBoost":
+        try:
+            validate_rareboost_id_value(value)
+        except DjangoValidationError:
+            form.add_error(field_name, id_type.validation_error_message())
+    elif id_type.name == "Biobank":
+        try:
+            validate_biobank_id_value(value)
+        except DjangoValidationError:
+            form.add_error(field_name, id_type.validation_error_message())
 
 
 def _content_type_label(content_type):
@@ -234,11 +256,15 @@ class TaskForm(BaseForm):
         if instance and getattr(instance, "pk", None):
             self.initial["statuses"] = instance.statuses.all()
 
-        # Default Task statuses to "Active" on creation (when not editing).
+        # Default Task statuses to "Assigned" on creation (when not editing).
         if not getattr(instance, "pk", None) and not self.initial.get("statuses"):
-            active_status = Status.objects.filter(name__iexact="Active").first()
-            if active_status:
-                self.initial["statuses"] = [active_status]
+            task_ct = ContentType.objects.get_for_model(Task)
+            assigned_status = Status.objects.filter(
+                content_type=task_ct,
+                name__iexact="Assigned",
+            ).first()
+            if assigned_status:
+                self.initial["statuses"] = [assigned_status]
         
         # Set up content_type choices - models that can have tasks
         from variant.models import Variant
@@ -875,6 +901,118 @@ class FamilyMemberForm(BaseForm):
             ),
         }
 
+
+class FamilyMemberFormSet(BaseFormSet):
+    default_error_messages = {
+        **BaseFormSet.default_error_messages,
+        "too_few_forms": "Add at least one family member before saving the family.",
+    }
+
+    def clean(self):
+        super().clean()
+
+        if any(self.errors):
+            return
+
+        total_forms = len(self.forms)
+
+        for index, form in enumerate(self.forms):
+            if not hasattr(form, "cleaned_data"):
+                continue
+
+            father_ref = form.cleaned_data.get("father_ref")
+            mother_ref = form.cleaned_data.get("mother_ref")
+            cross_identifiers_json = form.cleaned_data.get("cross_identifiers_json")
+
+            for field_name, ref_value, label in (
+                ("father_ref", father_ref, "Father"),
+                ("mother_ref", mother_ref, "Mother"),
+            ):
+                if ref_value in (None, ""):
+                    continue
+                try:
+                    ref_index = int(ref_value)
+                except (TypeError, ValueError):
+                    form.add_error(field_name, f"{label} selection is invalid.")
+                    continue
+
+                if ref_index < 0 or ref_index >= total_forms:
+                    form.add_error(
+                        field_name,
+                        f"{label} must reference one of the family members on this form.",
+                    )
+                elif ref_index == index:
+                    form.add_error(
+                        field_name,
+                        f"{label} cannot be the same person as this member.",
+                    )
+
+            if cross_identifiers_json in (None, ""):
+                form.add_error(
+                    "cross_identifiers_json",
+                    "Each family member needs at least one cross identifier.",
+                )
+                continue
+
+            try:
+                parsed_ids = json.loads(cross_identifiers_json)
+            except json.JSONDecodeError:
+                form.add_error(
+                    "cross_identifiers_json",
+                    "Cross identifiers could not be read. Please remove and re-add them.",
+                )
+                continue
+
+            if not isinstance(parsed_ids, list):
+                form.add_error(
+                    "cross_identifiers_json",
+                    "Cross identifiers must be a list of identifier objects.",
+                )
+                continue
+
+            if len(parsed_ids) == 0:
+                form.add_error(
+                    "cross_identifiers_json",
+                    "Each family member needs at least one cross identifier.",
+                )
+                continue
+
+            type_ids = [
+                item.get("type_id")
+                for item in parsed_ids
+                if isinstance(item, dict) and item.get("type_id") and item.get("value")
+            ]
+            id_types_by_id = IdentifierType.objects.in_bulk(type_ids) if type_ids else {}
+
+            for item in parsed_ids:
+                if not isinstance(item, dict):
+                    form.add_error(
+                        "cross_identifiers_json",
+                        "Each cross identifier must include a type and value.",
+                    )
+                    break
+                if not item.get("type_id") or not item.get("value"):
+                    form.add_error(
+                        "cross_identifiers_json",
+                        "Each cross identifier needs both a type and a value.",
+                    )
+                    break
+
+                type_id = item.get("type_id")
+                value = item.get("value")
+                id_type = (
+                    id_types_by_id.get(int(type_id))
+                    if str(type_id).isdigit()
+                    else id_types_by_id.get(type_id)
+                )
+                if id_type:
+                    _validate_cross_identifier_value(
+                        form,
+                        "cross_identifiers_json",
+                        id_type,
+                        value,
+                    )
+
 # Forms mapping for generic views
 FORMS_MAPPING = {
     "Individual": IndividualForm,
@@ -917,20 +1055,7 @@ class IndividualIdentificationForm(BaseForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        from django.core.exceptions import ValidationError as DjangoValidationError
         import json
-
-        def _validate_by_type_name(id_type_name: str, value: str, field_name: str):
-            if id_type_name == "RareBoost":
-                try:
-                    validate_rareboost_id_value(value)
-                except DjangoValidationError as e:
-                    self.add_error(field_name, " ".join(e.messages))
-            elif id_type_name == "Biobank":
-                try:
-                    validate_biobank_id_value(value)
-                except DjangoValidationError as e:
-                    self.add_error(field_name, " ".join(e.messages))
 
         primary_id_val = cleaned_data.get("primary_id") or ""
         secondary_id_val = cleaned_data.get("secondary_id") or ""
@@ -939,12 +1064,12 @@ class IndividualIdentificationForm(BaseForm):
         if primary_id_val:
             primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
             if primary_type:
-                _validate_by_type_name(primary_type.name, primary_id_val, "primary_id")
+                _validate_cross_identifier_value(self, "primary_id", primary_type, primary_id_val)
 
         if secondary_id_val:
             secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
             if secondary_type:
-                _validate_by_type_name(secondary_type.name, secondary_id_val, "secondary_id")
+                _validate_cross_identifier_value(self, "secondary_id", secondary_type, secondary_id_val)
 
         # Validate any dynamic cross IDs that are RareBoost
         cross_ids_json = cleaned_data.get("cross_identifiers_json")
@@ -970,7 +1095,7 @@ class IndividualIdentificationForm(BaseForm):
                     id_type = id_types_by_id.get(int(type_id)) if str(type_id).isdigit() else id_types_by_id.get(type_id)
                     if id_type:
                         # attach the error to the hidden field; the UI can show a generic message
-                        _validate_by_type_name(id_type.name, value, "cross_identifiers_json")
+                        _validate_cross_identifier_value(self, "cross_identifiers_json", id_type, value)
 
         return cleaned_data
 
@@ -1238,7 +1363,7 @@ class AnalysisTypeForm(BaseForm):
 class IdentifierTypeForm(BaseForm):
     class Meta:
         model = IdentifierType
-        fields = ["name", "description", "use_priority", "is_shown_in_table"]
+        fields = ["name", "description", "example", "use_priority", "is_shown_in_table"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
         }
@@ -1267,10 +1392,17 @@ class StatusConfigForm(BaseForm):
         help_text="Pick a colour for this status badge.",
         initial="#6b7280",
     )
+    connected_classes = forms.ModelMultipleChoiceField(
+        queryset=ContentType.objects.none(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={"class": "select select-bordered w-full h-28"}),
+        help_text="Connected object types whose statuses should also appear on the individual row.",
+        label="Connected Classes",
+    )
 
     class Meta:
         model = Status
-        fields = ["name", "short_name", "description", "color", "content_type", "icon", "group"]
+        fields = ["name", "short_name", "description", "color", "content_type", "icon", "group", "connected_classes"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "icon": forms.TextInput(attrs={"placeholder": "e.g. fa-solid fa-check"}),
@@ -1286,6 +1418,11 @@ class StatusConfigForm(BaseForm):
         )
         self.fields["content_type"].required = False
         self.fields["content_type"].empty_label = "— Global (applies to all) —"
+        self.fields["connected_classes"].queryset = (
+            ContentType.objects.filter(app_label__in=["lab", "variant"])
+            .exclude(model__startswith="historical")
+            .order_by("app_label", "model")
+        )
 
         selected_content_type_id = (
             self.data.get(self.add_prefix("content_type"))

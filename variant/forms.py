@@ -176,6 +176,33 @@ class VariantTypeForm(forms.Form):
         label="Variant type",
     )
 
+
+class VariantACMGEvidenceOverrideForm(forms.Form):
+    override_state = forms.TypedChoiceField(
+        choices=[
+            ("inherit", "Use imported value"),
+            ("include", "Include manually"),
+            ("exclude", "Exclude manually"),
+        ],
+        coerce=str,
+        initial="inherit",
+        label="Override",
+    )
+    note = forms.CharField(
+        required=False,
+        label="Note",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            current_classes = field.widget.attrs.get("class", "")
+            if isinstance(field.widget, forms.Select):
+                field.widget.attrs["class"] = f"select select-bordered w-full {current_classes}".strip()
+            elif isinstance(field.widget, forms.Textarea):
+                field.widget.attrs["class"] = f"textarea textarea-bordered w-full {current_classes}".strip()
+
 class SNVForm(BaseVariantForm):
     # Combined human-friendly representation: chr:posREF>ALT
     snv_string = forms.CharField(

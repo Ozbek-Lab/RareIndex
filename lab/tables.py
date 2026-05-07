@@ -3,6 +3,7 @@ from django.utils.html import format_html, mark_safe
 from django.urls import reverse
 
 from .models import Individual, Sample, Project
+from .status_utils import collect_individual_row_statuses
 from variant.models import Variant
 
 def _render_status_badges(statuses):
@@ -96,7 +97,7 @@ class IndividualTable(tables.Table):
 
     def render_statuses(self, value, record):
         """Render multiple status badges wrapped in a span for OOB swaps."""
-        all_statuses = list(record.statuses.all())
+        all_statuses = collect_individual_row_statuses(record)
         badges_html = _render_status_badges(all_statuses)
         return format_html(
             '<span id="individual-row-status-{}">{}</span>',

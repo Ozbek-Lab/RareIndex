@@ -1,9 +1,9 @@
 {% load lab_tags %}
-<div class="space-y-1" style="--padding-card: 0.1rem;">
+<div class="workflow-tab space-y-1" style="--padding-card: 0.1rem;">
     <!-- Individual Status Header - Row Style -->
     <div class="card bg-base-100 border border-base-200 shadow-sm mb-2">
         <div class="card-body p-0">
-             <div class="flex items-center justify-between bg-base-200/50 px-2 py-2 border-b border-base-200 rounded-t-lg">
+             <div class="flex items-center justify-between bg-base-200/70 px-2 py-2 border-b border-base-200 rounded-t-lg">
                 <div class="flex items-center gap-1">
                     <button class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0 invisible">
                          <i class="fa-solid fa-chevron-right text-[10px]"></i>
@@ -131,19 +131,44 @@
                         <th>Added</th>
                     </tr>
                 </thead>
-                <tbody>
-                    {% for variant in external_variants %}
-                    {% if not variant.pipeline_id and not variant.analysis_id %}
-                    <tr>
-                        <td class="font-mono text-xs">{{ variant }}</td>
+                {% for variant in external_variants %}
+                {% if not variant.pipeline_id and not variant.analysis_id %}
+                <tbody x-data="{ open: false }">
+                    <tr class="align-top">
+                        <td class="font-mono text-xs">
+                            <button
+                                type="button"
+                                class="flex items-center gap-1 text-left hover:text-primary transition-colors"
+                                hx-get="{% url 'lab:variant_detail_partial' variant.id %}"
+                                hx-target="#variant-detail-previous-{{ variant.id }}"
+                                hx-swap="innerHTML"
+                                hx-trigger="click once"
+                                @click="open = !open"
+                                :aria-expanded="open.toString()"
+                            >
+                                <i class="fa-solid fa-chevron-right text-[9px] transition-transform duration-150" :class="{ 'rotate-90': open }"></i>
+                                <span>{{ variant }}</span>
+                            </button>
+                        </td>
                         <td class="text-xs">{{ variant.get_zygosity_display }}</td>
                         <td class="text-xs">{{ variant.type }}</td>
                         <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
                         <td class="text-xs text-base-content/50">{{ variant.created_at|date:"M d, Y" }}</td>
                     </tr>
-                    {% endif %}
-                    {% endfor %}
+                    <tr x-cloak x-show="open" class="bg-base-50/40">
+                        <td colspan="5" class="px-1 pt-0 pb-1">
+                            <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
+                                <div id="variant-detail-previous-{{ variant.id }}" class="p-2">
+                                    <div class="text-[10px] text-base-content/40 italic px-1 py-2">
+                                        Loading variant details...
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
                 </tbody>
+                {% endif %}
+                {% endfor %}
             </table>
         </div>
     </div>
@@ -158,7 +183,7 @@
             <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
             <div class="card-body p-0 overflow-visible relative z-10">
                 <!-- Sample Header -->
-                <div class="p-1 border-b border-base-200 flex items-center justify-between bg-secondary/10 relative z-30 px-2 py-2 rounded-t-lg">
+                <div class="p-1 border-b border-base-200 flex items-center justify-between bg-secondary/20 relative z-30 px-2 py-2 rounded-t-lg">
                     <div class="flex items-center gap-1">
                         <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square">
                             <i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -267,7 +292,7 @@
                                         <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50">
                                             <div class="absolute pointer-events-none" style="top:0;bottom:0;left:0;width:4px;background-color:oklch(var(--p)/0.35);border-radius:var(--rounded-box,1rem) 0 0 var(--rounded-box,1rem);z-index:20;"></div>
                                             <div class="card-body p-0">
-                                                <div class="flex justify-between items-center bg-primary/10 px-2 py-2 border-b border-base-200 rounded-t-lg relative z-30">
+                                                <div class="flex justify-between items-center bg-primary/20 px-2 py-2 border-b border-base-200 rounded-t-lg relative z-30">
                                                                             <div class="flex items-center gap-1">
                                                         <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
                                                             <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -369,7 +394,7 @@
                                                 <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50">
                                                     <div class="absolute pointer-events-none" style="top:0;bottom:0;left:0;width:4px;background-color:oklch(var(--a)/0.35);border-radius:var(--rounded-box,1rem) 0 0 var(--rounded-box,1rem);z-index:20;"></div>
                                                     <div class="card-body p-0">
-                                                        <div class="flex justify-between items-center bg-accent/10 px-2 py-2 border-b border-base-200 rounded-t-lg">
+                                                        <div class="flex justify-between items-center bg-accent/20 px-2 py-2 border-b border-base-200 rounded-t-lg">
                                                             <div class="flex items-center gap-1">
                                                                 <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
                                                                     <i class="fa-solid fa-chevron-right text-[10px] transition-transform duration-200" :class="{'rotate-90': expanded}"></i>
@@ -464,7 +489,7 @@
                                                     <div class="absolute -left-4 top-0 h-5 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
                                                     <div class="p-0 text-left">
                                                         <!-- Header -->
-                                                        <div class="flex items-center justify-between py-2 px-2 bg-base-200/60 border-b border-base-200 relative z-10 rounded-t-lg">
+                                                        <div class="flex items-center justify-between py-2 px-2 bg-base-200/75 border-b border-base-200 relative z-10 rounded-t-lg">
                                                                             <!-- Left Side -->
                                                                             <div class="flex items-center gap-2">
                                                                                 <button @click="expanded = !expanded" class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0">
@@ -673,25 +698,50 @@
                                                                                     {% endif %}
                                                                                 </div>
                                                                             </div>
-                                                                            {% if report.variants.exists %}
-                                                                            <div class="border-t border-base-300/50 px-2 py-1.5">
-                                                                                <h6 class="text-[9px] uppercase text-base-content/40 mb-0.5 font-bold flex items-center gap-1">
-                                                                                    <i class="fa-solid fa-dna text-[7px]"></i> Reported Variants
-                                                                                </h6>
-                                                                                <table class="table table-xs w-full">
-                                                                                    <tbody>
-                                                                                        {% for variant in report.variants.all %}
-                                                                                        <tr>
-                                                                                            <td class="font-mono text-[9px]">{{ variant }}</td>
-                                                                                            <td class="text-[9px]">{{ variant.get_zygosity_display }}</td>
-                                                                                            <td class="text-[9px]">{{ variant.type }}</td>
-                                                                                            <td class="italic text-[9px]">{{ variant.genes.all|join:", "|default:"--" }}</td>
-                                                                                        </tr>
-                                                                                        {% endfor %}
-                                                                                    </tbody>
-                                                                                </table>
-                                                                            </div>
-                                                                            {% endif %}
+                                                                        {% if report.variants.exists %}
+                                                                        <div class="border-t border-base-300/50 px-2 py-1.5">
+                                                                            <h6 class="text-[9px] uppercase text-base-content/40 mb-0.5 font-bold flex items-center gap-1">
+                                                                                <i class="fa-solid fa-dna text-[7px]"></i> Reported Variants
+                                                                            </h6>
+                                                                            <table class="table table-xs w-full">
+                                                                                {% for variant in report.variants.all %}
+                                                                                <tbody x-data="{ open: false }">
+                                                                                    <tr class="align-top">
+                                                                                        <td class="font-mono text-[9px]">
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                class="flex items-center gap-1 text-left hover:text-primary transition-colors"
+                                                                                                hx-get="{% url 'lab:variant_detail_partial' variant.id %}"
+                                                                                                hx-target="#variant-detail-report-{{ report.id }}-{{ variant.id }}"
+                                                                                                hx-swap="innerHTML"
+                                                                                                hx-trigger="click once"
+                                                                                                @click="open = !open"
+                                                                                                :aria-expanded="open.toString()"
+                                                                                            >
+                                                                                                <i class="fa-solid fa-chevron-right text-[8px] transition-transform duration-150" :class="{ 'rotate-90': open }"></i>
+                                                                                                <span>{{ variant }}</span>
+                                                                                            </button>
+                                                                                        </td>
+                                                                                        <td class="text-[9px]">{{ variant.get_zygosity_display }}</td>
+                                                                                        <td class="text-[9px]">{{ variant.type }}</td>
+                                                                                        <td class="italic text-[9px]">{{ variant.genes.all|join:", "|default:"--" }}</td>
+                                                                                    </tr>
+                                                                                    <tr x-cloak x-show="open" class="bg-base-50/40">
+                                                                                        <td colspan="4" class="px-1 pt-0 pb-1">
+                                                                                            <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
+                                                                                                <div id="variant-detail-report-{{ report.id }}-{{ variant.id }}" class="p-2">
+                                                                                                    <div class="text-[10px] text-base-content/40 italic px-1 py-2">
+                                                                                                        Loading variant details...
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                </tbody>
+                                                                                {% endfor %}
+                                                                            </table>
+                                                                        </div>
+                                                                        {% endif %}
                                                                         </div>
                                                                         {% endfor %}
                                                                     </div>
@@ -715,8 +765,8 @@
                                                                         hx-target="#workflow-content"
                                                                         hx-swap="innerHTML"
                                                                     >
-                                                                        {% csrf_token %}
-                                                                        {% if analysis.unreported_variants.exists %}
+                                                                    {% csrf_token %}
+                                                                    {% if analysis.unreported_variants.exists %}
                                                                         <table class="table table-xs w-full">
                                                                             <thead>
                                                                                 <tr>
@@ -738,19 +788,44 @@
                                                                                     <th>Genes</th>
                                                                                 </tr>
                                                                             </thead>
-                                                                            <tbody>
-                                                                                {% for variant in analysis.unreported_variants|slice:":10" %}
-                                                                                <tr>
-                                                                                    <td>
-                                                                                        <input type="checkbox" class="checkbox checkbox-xs" name="variant_ids" value="{{ variant.id }}" />
-                                                                                    </td>
-                                                                                    <td class="font-mono text-xs">{{ variant }}</td>
-                                                                                    <td class="text-xs">{{ variant.get_zygosity_display }}</td>
-                                                                                    <td class="text-xs">{{ variant.type }}</td>
-                                                                                    <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
-                                                                                </tr>
-                                                                                {% endfor %}
-                                                                            </tbody>
+                                                                            {% for variant in analysis.unreported_variants|slice:":10" %}
+                                                                                <tbody x-data="{ open: false }">
+                                                                                    <tr class="align-top">
+                                                                                        <td>
+                                                                                            <input type="checkbox" class="checkbox checkbox-xs" name="variant_ids" value="{{ variant.id }}" />
+                                                                                        </td>
+                                                                                        <td class="font-mono text-xs">
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                class="flex items-center gap-1 text-left hover:text-primary transition-colors"
+                                                                                                hx-get="{% url 'lab:variant_detail_partial' variant.id %}"
+                                                                                                hx-target="#variant-detail-analysis-{{ analysis.id }}-{{ variant.id }}"
+                                                                                                hx-swap="innerHTML"
+                                                                                                hx-trigger="click once"
+                                                                                                @click="open = !open"
+                                                                                                :aria-expanded="open.toString()"
+                                                                                            >
+                                                                                                <i class="fa-solid fa-chevron-right text-[9px] transition-transform duration-150" :class="{ 'rotate-90': open }"></i>
+                                                                                                <span>{{ variant }}</span>
+                                                                                            </button>
+                                                                                        </td>
+                                                                                        <td class="text-xs">{{ variant.get_zygosity_display }}</td>
+                                                                                        <td class="text-xs">{{ variant.type }}</td>
+                                                                                        <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
+                                                                                    </tr>
+                                                                                    <tr x-cloak x-show="open" class="bg-base-50/40">
+                                                                                        <td colspan="5" class="px-1 pt-0 pb-1">
+                                                                                            <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
+                                                                                                <div id="variant-detail-analysis-{{ analysis.id }}-{{ variant.id }}" class="p-2">
+                                                                                                    <div class="text-[10px] text-base-content/40 italic px-1 py-2">
+                                                                                                        Loading variant details...
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                </tbody>
+                                                                            {% endfor %}
                                                                         </table>
                                                                         {% else %}
                                                                         <div class="text-center py-2 text-base-content/40 italic text-[10px] border border-dashed border-base-200 rounded-lg">

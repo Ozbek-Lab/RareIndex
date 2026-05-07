@@ -114,6 +114,10 @@
                                     {% else %}
                                         <span class="text-base-content/40 text-xs">—</span>
                                     {% endif %}
+                                {% elif field == "example" %}
+                                    <span class="text-sm text-base-content/70 truncate max-w-xs inline-block">
+                                        {{ obj.example|default:"—"|truncatechars:60 }}
+                                    </span>
                                 {% elif field == "description" %}
                                     <span class="text-base-content/70 text-sm truncate max-w-xs inline-block">
                                         {{ obj.description|default:"—"|truncatechars:60 }}

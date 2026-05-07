@@ -1,6 +1,7 @@
-<div id="row-{{ index }}" class="bg-base-100 border border-base-300 rounded-lg p-4 shadow-sm relative transition-all duration-200 hover:shadow-md"
+<div id="row-{{ index }}" class="bg-base-100 border {% if form.errors %}border-error{% else %}border-base-300{% endif %} rounded-lg p-4 shadow-sm relative transition-all duration-200 hover:shadow-md"
      x-data="memberCard({{ index }})"
      x-init="init()"
+     x-effect="updateJson()"
      @hpo-selected.stop="addHpoTerm($event.detail.id, $event.detail.label)">
     
     <!-- Header / Delete -->
@@ -11,6 +12,25 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
     </div>
+
+    {% if form.non_field_errors or form.father_ref.errors or form.mother_ref.errors or form.cross_identifiers_json.errors %}
+    <div class="alert alert-error mb-4 py-2 px-3 text-sm">
+        <div class="space-y-1">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+            {% for error in form.father_ref.errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+            {% for error in form.mother_ref.errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+            {% for error in form.cross_identifiers_json.errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Hidden Fields -->
     {{ form.id }}
@@ -25,7 +45,7 @@
             <div>
                 <label class="block mb-0.5 text-xs font-medium text-base-content/80">Full Name</label>
                 <input type="text" name="{{ form.full_name.html_name }}" value="{{ form.full_name.value|default:'' }}"
-                       class="input input-bordered w-full input-sm"
+                       class="input input-bordered w-full input-sm {% if form.full_name.errors %}input-error{% endif %}"
                        @input="updateMemberName(index, $event.target.value)"
                        placeholder="e.g. John Doe">
                 {% if form.full_name.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.full_name.errors.0 }}</p>{% endif %}
@@ -35,7 +55,7 @@
                 <!-- Father -->
                 <div>
                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Father</label>
-                    <select class="select select-bordered select-sm w-full text-xs"
+                    <select class="select select-bordered select-sm w-full text-xs {% if form.father_ref.errors %}select-error{% endif %}"
                             @change="document.getElementById('id_individuals-' + index + '-father_ref').value = $event.target.value">
                         <option value="">-- Select --</option>
                         <template x-for="m in members">
@@ -47,7 +67,7 @@
                 <!-- Mother -->
                 <div>
                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Mother</label>
-                    <select class="select select-bordered select-sm w-full text-xs"
+                    <select class="select select-bordered select-sm w-full text-xs {% if form.mother_ref.errors %}select-error{% endif %}"
                             @change="document.getElementById('id_individuals-' + index + '-mother_ref').value = $event.target.value">
                         <option value="">-- Select --</option>
                         <template x-for="m in members">
@@ -61,22 +81,30 @@
             <div>
                 <label class="block mb-0.5 text-xs font-medium text-base-content/80">TC Identity</label>
                 {{ form.tc_identity }}
+                {% if form.tc_identity.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.tc_identity.errors.0 }}</p>{% endif %}
             </div>
 
-            <div class="bg-base-200 rounded p-2 border border-base-300">
+            <div class="{% if form.cross_identifiers_json.errors %}bg-error/10 border-error ring-1 ring-error/30{% else %}bg-base-200 border-base-300{% endif %} rounded p-2 border">
                 <div class="flex justify-between items-center mb-1">
-                     <h4 class="text-[10px] font-bold text-base-content/60 uppercase tracking-wider">Cross IDs</h4>
-                     <button type="button" @click="addCrossId()" class="text-[10px] text-blue-600 hover:text-blue-800 hover:underline">+ ADD</button>
+                     <h4 class="text-[10px] font-bold {% if form.cross_identifiers_json.errors %}text-error{% else %}text-base-content/60{% endif %} uppercase tracking-wider">Cross IDs</h4>
+                     <button type="button" @click="addCrossId()" class="text-[10px] {% if form.cross_identifiers_json.errors %}text-error hover:text-error/80{% else %}text-blue-600 hover:text-blue-800{% endif %} hover:underline">+ ADD</button>
                 </div>
+                <p class="mb-1 text-[10px] {% if form.cross_identifiers_json.errors %}text-error/80{% else %}text-base-content/50{% endif %}">
+                    {% if form.cross_identifiers_json.errors %}
+                        {{ form.cross_identifiers_json.errors.0 }}
+                    {% else %}
+                        Each family member needs at least one cross identifier.
+                    {% endif %}
+                </p>
                 <div class="space-y-1.5">
                     <template x-for="(id, idx) in crossIds" :key="idx">
                         <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
-                            <select x-model="id.type_id" @change="updateJson()" class="select select-bordered select-xs w-16 shrink-0 px-1 text-[10px] h-6 min-h-0">
+                            <select x-model="id.type_id" @change="updateJson()" class="select select-bordered select-xs w-28 shrink-0 px-1 text-[10px] h-6 min-h-0">
                                 <template x-for="type in IDENTIFIER_TYPES">
                                     <option :value="type.id" x-text="type.name" :selected="type.id == id.type_id"></option>
                                 </template>
                             </select>
-                            <input type="text" x-model="id.value" @input="updateJson()" class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
+                            <input type="text" x-model="id.value" @input="updateJson()" class="input input-bordered input-xs flex-[0.85] w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
                             <button type="button" @click="removeCrossId(idx)" class="btn btn-ghost btn-xs text-red-500 min-h-0 h-6 w-6 p-0 rounded-full">✕</button>
                         </div>
                     </template>
@@ -87,14 +115,16 @@
 
         <!-- COLUMN 2: Clinical & Logistics -->
         <div class="space-y-3">
-             <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Sex</label>
                     {{ form.sex }}
+                    {% if form.sex.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.sex.errors.0 }}</p>{% endif %}
                 </div>
                 <div>
                      <label class="block mb-0.5 text-xs font-medium text-base-content/80">Date of Birth</label>
                      {{ form.birth_date }}
+                     {% if form.birth_date.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.birth_date.errors.0 }}</p>{% endif %}
                 </div>
             </div>
 
@@ -102,29 +132,29 @@
                 <div>
                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Status</label>
                     {{ form.statuses }}
+                    {% if form.statuses.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.statuses.errors.0 }}</p>{% endif %}
                 </div>
                 <div>
                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Council Date</label>
                     {{ form.council_date }}
+                    {% if form.council_date.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.council_date.errors.0 }}</p>{% endif %}
                 </div>
             </div>
 
             <div class="relative">
-                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Institution</label>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Institutions</label>
                 
-                <select name="{{ form.institution.html_name }}" class="hidden" x-ref="instSelect">
-                     <template x-if="selectedInst">
-                         <option :value="selectedInst.id" selected></option>
-                     </template>
-                </select>
+                <div class="hidden">
+                    {{ form.institution }}
+                </div>
 
                 <div class="relative">
                     <input type="text" 
                            x-model="instSearch"
                            @focus="instOpen = true"
                            @click.away="instOpen = false"
-                           placeholder="Search Institution..."
-                           class="input input-bordered w-full input-sm"
+                           placeholder="Search and add institutions..."
+                           class="input input-bordered w-full input-sm {% if form.institution.errors %}input-error{% endif %}"
                            :class="{'input-primary': instOpen}">
                     <div x-show="instOpen" 
                          class="absolute z-10 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
@@ -138,6 +168,16 @@
                         <div x-show="filteredInstitutions.length === 0" class="px-3 py-1.5 text-xs text-base-content/50">No matches.</div>
                     </div>
                 </div>
+                <div class="flex flex-wrap gap-1.5 mt-2 mb-1 min-h-[1.5rem]">
+                    <template x-for="inst in selectedInstitutions" :key="inst.id">
+                        <span class="badge badge-primary gap-1.5 p-2 text-xs">
+                            <span x-text="inst.name"></span>
+                            <button type="button" @click="removeInstitution(inst.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">✕</button>
+                        </span>
+                    </template>
+                    <span x-show="selectedInstitutions.length === 0" class="text-xs text-base-content/50 italic py-1">No institutions selected.</span>
+                </div>
+                {% if form.institution.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.institution.errors.0 }}</p>{% endif %}
             </div>
 
             <div>
@@ -147,6 +187,7 @@
                          <option :value="term.id" selected></option>
                      </template>
                 </select>
+                {% if form.hpo_terms.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.hpo_terms.errors.0 }}</p>{% endif %}
                 <div class="flex flex-wrap gap-1 mb-1 min-h-[1.5rem]">
                     <template x-for="term in hpoTerms" :key="term.id">
                         <span class="badge badge-primary gap-1 p-2 text-xs">
@@ -200,6 +241,7 @@
             <div>
                  <label class="block mb-0.5 text-xs font-medium text-base-content/80">Notes</label>
                  {{ form.note_content }}
+                 {% if form.note_content.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.note_content.errors.0 }}</p>{% endif %}
             </div>
         </div>
 

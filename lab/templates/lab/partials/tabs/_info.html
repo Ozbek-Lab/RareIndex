@@ -75,6 +75,12 @@
 
                 <div class="bg-base-200 rounded p-2 border border-base-300"
                      x-data="{
+                        defaultCrossIdTypeId: (
+                            (() => {
+                                const rareboost = identifier_types.find((type) => type.name === 'RareBoost');
+                                return rareboost || identifier_types[0] || {};
+                            })()
+                        ).id || '',
                         crossIds: [
                             {% for xid in individual.cross_ids.all %}
                                 {% if xid.id_type.use_priority != 1 and xid.id_type.use_priority != 2 %}
@@ -86,7 +92,7 @@
                             this.$refs.jsonInput.value = JSON.stringify(this.crossIds);
                         },
                         addCrossId() {
-                            this.crossIds.push({type_id: '', value: ''});
+                            this.crossIds.push({type_id: this.defaultCrossIdTypeId, value: ''});
                             this.updateJson();
                         },
                         removeCrossId(index) {
@@ -122,13 +128,13 @@
                         <!-- Dynamic Fields -->
                         <template x-for="(id, idx) in crossIds" :key="idx">
                             <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
-                                <select x-model="id.type_id" @change="updateJson()" class="select select-bordered select-xs w-16 shrink-0 px-1 text-[10px] h-6 min-h-0">
+                                <select x-model="id.type_id" @change="updateJson()" class="select select-bordered select-xs w-28 shrink-0 px-1 text-[10px] h-6 min-h-0">
                                     <option value="">-- Type --</option>
                                     {% for type in identifier_types %}
                                         <option value="{{ type.id }}">{{ type.name }}</option>
                                     {% endfor %}
                                 </select>
-                                <input type="text" x-model="id.value" @input="updateJson()" class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
+                                <input type="text" x-model="id.value" @input="updateJson()" class="input input-bordered input-xs flex-[0.85] w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
                                 <button type="button" @click="removeCrossId(idx)" class="btn btn-ghost btn-xs text-red-500 min-h-0 h-6 w-6 p-0 rounded-full text-[10px] flex items-center justify-center">✕</button>
                             </div>
                         </template>

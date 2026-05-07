@@ -27,7 +27,7 @@ from .views import (
     marimo_proxy,
     marimo_run_proxy,
 )
-from .profile_views import ProfileView, UpdateThemeView
+from .profile_views import ProfileView, UpdateThemeView, UpdateFontSizeView
 from .htmx_views import (
     RevealSensitiveFieldView,
     add_individual_row,
@@ -85,6 +85,8 @@ from .htmx_views import (
     report_replace_modal,
     variant_create_modal,
     variant_detail_partial,
+    variant_genebe_fetch,
+    variant_acmg_evidence_save,
     config_form,
     config_delete_confirm,
     config_delete,
@@ -149,6 +151,7 @@ urlpatterns = [
     # Profile & Theme
     path("profile/", ProfileView.as_view(), name="profile"),
     path("profile/update-theme/", UpdateThemeView.as_view(), name="update_theme"),
+    path("profile/update-font-size/", UpdateFontSizeView.as_view(), name="update_font_size"),
     
     # Status Updates
     path(
@@ -167,6 +170,8 @@ urlpatterns = [
     path("htmx/report/<int:report_id>/replace/", report_replace_modal, name="report_replace_modal"),
     path("htmx/variant/create/analysis/<int:analysis_id>/", variant_create_modal, name="variant_create_for_analysis_modal"),
     path("htmx/variant/create/individual/<int:individual_id>/", variant_create_modal, name="variant_create_for_individual_modal"),
+    path("htmx/variant/<int:pk>/genebe-fetch/", variant_genebe_fetch, name="variant_genebe_fetch"),
+    path("htmx/variant/<int:pk>/acmg-evidence/", variant_acmg_evidence_save, name="variant_acmg_evidence_save"),
     
     # Project Management
     path("htmx/individual/<int:pk>/projects/edit/", individual_projects_edit, name="individual_projects_edit"),

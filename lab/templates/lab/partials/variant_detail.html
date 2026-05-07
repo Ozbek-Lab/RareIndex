@@ -1,4 +1,4 @@
-{% load lab_tags %}
+{% load lab_tags variant_filters %}
 <div x-data="{ tab: 'variant' }" class="bg-base-100">
 
   <!-- Tabs -->
@@ -255,6 +255,7 @@
          x-transition:enter="transition ease-out duration-150"
          x-transition:enter-start="opacity-0 translate-y-1"
          x-transition:enter-end="opacity-100 translate-y-0">
+      {% include "variant/partials/_genebe_classification.html" with variant=variant %}
       {% if variant.classifications.count %}
       <div class="overflow-x-auto">
         <table class="table table-sm">
@@ -498,16 +499,129 @@
                 {% endfor %}
               </dl>
               {% endif %}
+              {% if display.gene_records %}
+              <div>
+                <h4 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider mb-2">Gene-specific ACMG</h4>
+                <div class="overflow-x-auto">
+                  <table class="table table-xs">
+                    <thead>
+                      <tr>
+                        <th>Gene</th>
+                        <th>Classification</th>
+                        <th>
+                          <span class="tooltip tooltip-bottom inline-block cursor-help" data-tip="B <=-7 | LB -1--6 | VUS 0-5 | LP 6-9 | P >=10">Score</span>
+                        </th>
+                        <th>Inheritance</th>
+                        <th>Transcript</th>
+                        <th>Criteria</th>
+                        {% if perms.variant.change_variant %}
+                        <th class="text-right">Action</th>
+                        {% endif %}
+                      </tr>
+                    </thead>
+                    {% for gene_item in display.gene_records %}
+                    <tbody x-data="{ open: false }">
+                      {% with acmg_result=gene_item|acmg_classification_for_gene:variant %}
+                      <tr>
+                        <td class="font-semibold">{{ gene_item.gene_symbol|default:"—" }}</td>
+                        <td>{{ acmg_result.label }}</td>
+                        <td class="font-mono">
+                          <span class="tooltip tooltip-top cursor-help" data-tip="B <=-7 | LB -1--6 | VUS 0-5 | LP 6-9 | P >=10">{{ acmg_result.score }}</span>
+                        </td>
+                        <td>{{ gene_item.inheritance_mode|default:"—" }}</td>
+                        <td class="font-mono text-xs">{{ gene_item.transcript|default:"—" }}</td>
+                        <td>
+                          {% with criteria_items=gene_item|acmg_criteria_with_gene:variant %}
+                            {% if criteria_items %}
+                            <div class="flex flex-wrap gap-1.5">
+                              {% for crit in criteria_items %}
+                              <div class="tooltip tooltip-top criteria-tooltip" data-tip="{{ crit.tooltip|default:crit.description }}">
+                                <span class="badge badge-xs whitespace-nowrap {{ crit.badge_class }} {% if crit.is_manual_override %}font-semibold{% endif %}">
+                                  {% if crit.is_manual_override %}<i class="fa-solid fa-star text-warning mr-1"></i>{% endif %}
+                                  {{ crit.display }}
+                                </span>
+                              </div>
+                              {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="font-mono text-xs">{{ gene_item.criteria|default:"—" }}</span>
+                            {% endif %}
+                          {% endwith %}
+                        </td>
+                        {% if perms.variant.change_variant %}
+                        <td class="text-right">
+                          <button type="button" class="btn btn-xs btn-outline gap-1 whitespace-nowrap" @click="open = !open">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                            <span x-text="open ? 'Close' : 'Edit Evidence'"></span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform" :class="{ 'rotate-180': open }"></i>
+                          </button>
+                        </td>
+                        {% endif %}
+                      </tr>
+                      {% if perms.variant.change_variant %}
+                      <tr x-show="open">
+                        <td colspan="7" class="bg-base-100">
+                          <form
+                            hx-post="{% url 'lab:variant_acmg_evidence_save' variant.pk %}"
+                            hx-target="#genebe-classification-{{ variant.pk }}"
+                            hx-swap="outerHTML"
+                            class="space-y-3 p-2"
+                          >
+                            <input type="hidden" name="gene_symbol" value="{{ gene_item.gene_symbol|default:'' }}">
+                            <input type="hidden" name="transcript" value="{{ gene_item.transcript|default:'' }}">
+                            <div class="flex items-center justify-between gap-3 border-b border-base-200 pb-2">
+                              <div>
+                                <h6 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Evidence table</h6>
+                                <p class="text-xs text-base-content/40">{{ gene_item.gene_symbol|default:"—" }} · {{ gene_item.transcript|default:"—" }}</p>
+                              </div>
+                            </div>
+                            {% include "variant/partials/_acmg_evidence_matrix.html" with gene_item=gene_item variant=variant %}
+                            <div class="flex items-center justify-end gap-2">
+                              <button type="button" class="btn btn-sm btn-ghost" @click="open = false">Cancel</button>
+                              <button type="submit" class="btn btn-sm btn-primary gap-2">
+                                <i class="fa-solid fa-floppy-disk"></i>
+                                Save evidence
+                              </button>
+                            </div>
+                          </form>
+                        </td>
+                      </tr>
+                      {% endif %}
+                      {% endwith %}
+                    </tbody>
+                    {% endfor %}
+                  </table>
+                </div>
+              </div>
+              {% endif %}
               {% if display.criteria %}
               <div>
                 <h4 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider mb-2">ACMG Criteria Met</h4>
-                <div class="flex flex-wrap gap-1.5">
-                  {% for criterion in display.criteria %}
-                  {% if criterion %}
-                  <span class="badge badge-sm badge-outline font-mono font-semibold">{{ criterion }}</span>
+                {% with criteria_items=display.criteria|parse_acmg_criteria_with_variant:variant %}
+                    {% if criteria_items %}
+                  <div class="flex flex-wrap gap-1.5">
+                    {% for crit in criteria_items %}
+                    <div
+                      class="tooltip tooltip-top criteria-tooltip"
+                      data-tip="{{ crit.tooltip|default:crit.description }}"
+                    >
+                      <span class="badge badge-sm whitespace-nowrap {{ crit.badge_class }} {% if crit.is_manual_override %}font-semibold{% endif %}">
+                        {% if crit.is_manual_override %}<i class="fa-solid fa-star text-warning mr-1"></i>{% endif %}
+                        {{ crit.display }}
+                      </span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                    <div class="flex flex-wrap gap-1.5">
+                      {% for criterion in display.criteria %}
+                      {% if criterion %}
+                      <span class="badge badge-sm badge-outline font-mono font-semibold">{{ criterion }}</span>
+                      {% endif %}
+                      {% endfor %}
+                    </div>
                   {% endif %}
-                  {% endfor %}
-                </div>
+                {% endwith %}
               </div>
               {% endif %}
             </div>

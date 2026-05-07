@@ -97,10 +97,12 @@ from lab.management.commands._import_helpers import (
     get_or_create_pipeline_type,
     get_or_create_sample_type,
     get_or_create_status,
+    get_or_create_status_group,
     get_or_create_test_type,
     get_or_create_contact,
     get_or_create_contact_for_user,
     get_or_create_user,
+    identifier_type_example_for_name,
     map_classification,
     map_inheritance,
     normalize_id,
@@ -163,6 +165,10 @@ YAYIN_ZYGOSITY_MAP = {
 REQUIRED_PLOT_TEMPLATE_SPECS = {
     "sample-distribution-sunburst": {
         "default_col_span": 1,
+        "show_download_menu": False,
+    },
+    "custom-sunburst": {
+        "default_col_span": 2,
         "show_download_menu": False,
     },
     "analysis-status-bar": {
@@ -974,67 +980,124 @@ class Command(BaseCommand):
         self.stdout.write("Step 1: Setting up statuses, identifier types, analysis types…")
         ct = self._content_types()
 
-        def s(name, desc, color, ct_key, icon):
-            return get_or_create_status(name, desc, color, self.admin_user,
-                                        ct.get(ct_key), icon)
+        def ct_for(key):
+            return ct.get(key)
+
+        def group_for(ct_key, group_name):
+            return get_or_create_status_group(group_name, ct_for(ct_key)) if group_name else None
+
+        def s(
+            name,
+            desc,
+            color,
+            ct_key,
+            icon,
+            short_name="",
+            group_name=None,
+            connected_class_keys=(),
+        ):
+            connected_classes = [ct_for(key) for key in connected_class_keys if ct_for(key)]
+            return get_or_create_status(
+                name,
+                desc,
+                color,
+                self.admin_user,
+                ct_for(ct_key),
+                icon,
+                short_name=short_name,
+                group=group_for(ct_key, group_name),
+                connected_classes=connected_classes or None,
+            )
 
         statuses = {
             "individual": {
-                "registered":  s("Registered",  "Initial status",                "gray",       "individual", "fa-user-plus"),
-                "solved":       s("Solved",       "Entry solved",                  "green",      "individual", "fa-circle-check"),
-                "unsolved":     s("Unsolved",     "Entry unsolved",                "red",        "individual", "fa-circle-xmark"),
-                "solved_plp":   s("Solved - P/LP","Solved pathogenic",            "green",      "individual", "fa-circle-check"),
-                "solved_vus":   s("Solved - VUS", "Solved with VUS",              "lightgreen", "individual", "fa-circle-check"),
-                "novel_gene":   s("Novel Gene Disease Assoc.", "Novel association","purple",    "individual", "fa-plus"),
-                "candidate":    s("Candidate gene-variant", "Candidate",          "orange",     "individual", "fa-magnifying-glass"),
+                "active":       s("Active",       "Imported / manually active",    "green",  "individual", "fa-user-check", short_name="Act", group_name="Activity"),
+                "inactive":     s("Inactive",     "Manually inactive",             "gray",   "individual", "fa-user-slash", short_name="Ina", group_name="Activity"),
+                "affected":     s("Affected",     "HPO present",                  "red",    "individual", "fa-disease", short_name="Aff", group_name="Affectedness"),
+                "healthy":      s("Healthy",      "No HPO currently set",         "green",  "individual", "fa-heart", short_name="Hea", group_name="Affectedness"),
+                "unsolved":     s("Unsolved",     "Entry unsolved",               "brown",  "individual", "fa-circle-xmark", short_name="Uns", group_name="Solved"),
+                "solved":       s("Solved",       "Entry solved",                 "green",  "individual", "fa-circle-check", short_name="Sol", group_name="Solved"),
+                "unsure_import": s("Unsure Import", "Imported from uncertain source", "orange", "individual", "fa-circle-question"),
             },
             "sample": {
-                "not_available":     s("Not Available",          "Placeholder",    "gray",   "sample", "fa-ban"),
-                "unsure_import":    s("Unsure Import",         "Import fallback","orange", "sample", "fa-circle-question"),
-                "pending_blood":     s("Pending Blood Recovery", "Awaiting draw",  "red",    "sample", "fa-droplet"),
-                "pending_isolation": s("Pending Isolation",      "Awaiting iso",   "yellow", "sample", "fa-vials"),
-                "available":         s("Available",              "Ready",          "green",  "sample", "fa-circle-check"),
+                "planned":          s("Planned",                   "Queued for processing",     "yellow", "sample", "fa-calendar", short_name="Plan", group_name="Process"),
+                "received":         s("Recieved - In lab process", "Received and processing",   "orange", "sample", "fa-vials", short_name="Rec", group_name="Process"),
+                "isolated":         s("Isolated",                  "Isolation complete",        "green",  "sample", "fa-circle-check", short_name="Iso", group_name="Process"),
+                "available":        s("Available",                "Available for use",         "green",  "sample", "fa-circle-check", short_name="Ava", group_name="Availability"),
+                "not_available":    s("Not Available",            "Not available",             "red",    "sample", "fa-ban", short_name="N/A", group_name="Availability", connected_class_keys=("individual",)),
+                "unsure_import":    s("Unsure Import",            "Import fallback",           "orange", "sample", "fa-circle-question"),
             },
             "test": {
-                "completed":   s("Completed",            "Done",                   "green",  "test", "fa-circle-check"),
-                "in_progress": s("In Progress",          "Ongoing",                "yellow", "test", "fa-spinner"),
-                "pending":     s("Pending",              "Waiting",                "red",    "test", "fa-clock"),
-                "previous":    s("Previous",             "Historical",             "orange", "test", "fa-clock-rotate-left"),
-                "unsure_import": s("Unsure Import",      "Import fallback",        "orange", "test", "fa-circle-question"),
-                "sent":        s("Sent",                 "Sent for sequencing",    "blue",   "test", "fa-paper-plane"),
-                "awaiting":    s("Awaiting Data Arrival","Waiting for data",       "red",    "test", "fa-hourglass-half"),
+                "planned":      s("Planned",                          "Waiting to start",          "yellow", "test", "fa-flask", short_name="Plan", group_name="Process", connected_class_keys=("individual",)),
+                "waiting":      s("Waiting Data/Bioinformatic process","Awaiting data / bioinfo",   "orange", "test", "fa-spinner", short_name="Wait", group_name="Process"),
+                "completed":    s("Data Delivered / Completed",       "Test completed",            "green",  "test", "fa-circle-check", short_name="Comp", group_name="Process"),
+                "previous":     s("Previous",                         "Historical",                "grey",   "test", "fa-clock-rotate-left", short_name="Prev", group_name="Previous"),
+                "unsure_import": s("Unsure Import",                   "Import fallback",           "orange", "test", "fa-circle-question"),
             },
             "pipeline": {
-                "completed":   s("Completed",   "Done",     "green",  "pipeline", "fa-circle-check"),
-                "in_progress": s("In Progress", "Ongoing",  "yellow", "pipeline", "fa-spinner"),
-                "unsure_import": s("Unsure Import", "Import fallback", "orange", "pipeline", "fa-circle-question"),
+                "planned":       s("Planned",                           "Queued",                     "yellow", "pipeline", "fa-diagram-project", short_name="Plan", group_name="Process"),
+                "waiting":       s("Waiting Data/Bioinformatic process","Awaiting data / bioinfo",    "orange", "pipeline", "fa-spinner", short_name="Wait", group_name="Process"),
+                "completed":     s("Bioinformatic process completed",   "Pipeline completed",         "green",  "pipeline", "fa-circle-check", short_name="Comp", group_name="Process"),
+                "unsure_import": s("Unsure Import",                    "Import fallback",            "orange", "pipeline", "fa-circle-question"),
             },
             "analysis": {
-                "completed":    s("Completed",    "Done",          "green",  "analysis", "fa-circle-check"),
-                "in_progress":  s("In Progress",  "Ongoing",       "yellow", "analysis", "fa-spinner"),
-                "pending_data": s("Pending Data", "Waiting",       "red",    "analysis", "fa-hourglass-half"),
-                "unsure_import": s("Unsure Import", "Import fallback", "orange", "analysis", "fa-circle-question"),
+                "planned":       s("Planned",                  "Queued",                     "yellow", "analysis", "fa-calendar", short_name="PLan", group_name="Process"),
+                "waiting":       s("Waiting Confirmation",    "Awaiting review",            "orange", "analysis", "fa-spinner", short_name="Conf", group_name="Process"),
+                "completed":     s("Completed",               "Analysis completed",         "blue",   "analysis", "fa-circle-check", short_name="Comp", group_name="Process", connected_class_keys=("individual",)),
+                "reported":      s("Reported",                "Reported to clinician",      "green",  "analysis", "fa-file-circle-check", short_name="Rep", group_name="Process"),
+                "initial":       s("Initial Analysis",        "Initial analysis",           "orange", "analysis", "fa-seedling", short_name="Int", group_name="Occasion"),
+                "reanalysis":    s("Reanalysis",              "Reanalysis",                 "yellow", "analysis", "fa-rotate", short_name="Rea", group_name="Occasion"),
+                "unsure_import": s("Unsure Import",            "Import fallback",            "orange", "analysis", "fa-circle-question"),
+            },
+            "analysisreport": {
+                "negative":      s("Negative",                "Negative result",           "red",    "analysisreport", "fa-circle-xmark", short_name="Neg", group_name="Result", connected_class_keys=("individual",)),
+                "positive":      s("Positive",                "Positive result",           "green",  "analysisreport", "fa-circle-check", short_name="Pos", group_name="Result", connected_class_keys=("individual",)),
+                "delivered":     s("Delivered to Clinician",  "Delivered to clinician",    "green",  "analysisreport", "fa-envelope-open-text", short_name="Del", group_name="Informed"),
+                "unsure_import": s("Unsure Import",           "Import fallback",           "orange", "analysisreport", "fa-circle-question"),
             },
             "project": {
-                "in_progress": s("In Progress", "Active",  "green",  "project", "fa-diagram-project"),
-                "setting_up":  s("Setting Up",  "Setup",   "yellow", "project", "fa-gears"),
-                "completed":   s("Completed",   "Done",    "gray",   "project", "fa-flag-checkered"),
+                "in_planning": s("In Planning", "Planning", "blue",   "project", "fa-compass-drafting", short_name="Plan", group_name="Process"),
+                "in_progress": s("In Progress", "Active",   "yellow", "project", "fa-diagram-project", short_name="Prog", group_name="Process"),
+                "on_hold":     s("On Hold",     "Paused",   "orange", "project", "fa-pause", short_name="Hold", group_name="Process"),
+                "completed":   s("Completed",   "Done",     "green",  "project", "fa-flag-checkered", short_name="Comp", group_name="Process"),
+                "cancelled":   s("Cancelled",   "Cancelled","grey",   "project", "fa-ban", short_name="Canc", group_name="Process"),
             },
             "task": {
-                "active":    s("Active",    "Ongoing", "yellow", "task", "fa-list-check"),
-                "completed": s("Completed", "Done",    "green",  "task", "fa-circle-check"),
-                "overdue":   s("Overdue",   "Late",    "red",    "task", "fa-triangle-exclamation"),
+                "assigned":  s("Assigned",  "Assigned", "yellow", "task", "fa-list-check", short_name="Ass", group_name="Process"),
+                "active":    s("Active",    "Ongoing",  "orange", "task", "fa-spinner", short_name="Act", group_name="Process"),
+                "completed": s("Completed", "Done",     "green",  "task", "fa-circle-check", short_name="Comp", group_name="Process"),
+                "cancelled": s("Cancelled", "Cancelled", "grey",   "task", "fa-ban", short_name="Canc", group_name="Process"),
+            },
+            "variant": {
+                "not_reported":  s("Not reported",                 "Not reported",               "red",    "variant", "fa-circle-question", short_name="NRep", group_name="Process"),
+                "reported":      s("Reported",                     "Reported",                   "green",  "variant", "fa-circle-check", short_name="Rep", group_name="Process"),
+                "causative":     s("Causative",                    "Causative",                  "green",  "variant", "fa-dna", short_name="Caus", group_name="Causativity", connected_class_keys=("individual",)),
+                "suspected":     s("Suspected Causative",          "Suspected causative",        "yellow", "variant", "fa-question", short_name="SCaus", group_name="Causativity"),
+                "secondary":     s("Secondary Finding",            "Secondary finding",          "blue",   "variant", "fa-circle-half-stroke", short_name="2nd", group_name="Causativity"),
+                "previous":      s("Previously reported",          "Previously reported",        "pink",   "variant", "fa-clock-rotate-left", short_name="PrevRep", group_name="Previous"),
+                "ruled_out":     s("Ruled Out",                    "Ruled out",                  "red",    "variant", "fa-xmark", short_name="R/O", group_name="Validity"),
+                "ongoing_sanger": s("Ongoing Sanger Confirmation", "Ongoing Sanger confirmation","purple", "variant", "fa-vial", short_name="Sang", group_name="Validity", connected_class_keys=("individual",)),
+                "ongoing_func":   s("Ongoing Functional Study",    "Ongoing functional study",   "blue",   "variant", "fa-flask", short_name="Func", group_name="Functional", connected_class_keys=("individual",)),
+                "novel_gene":     s("Novel Gene Disease Association","Novel gene-disease association","green","variant","fa-plus", short_name="Novel", group_name="Novel", connected_class_keys=("individual",)),
+                "candidate":      s("Candidate Gene-Variant Association","Candidate gene-variant association","yellow","variant","fa-magnifying-glass", short_name="Cand", group_name="Candidate", connected_class_keys=("individual",)),
             },
         }
 
         id_types = {}
         if not self.dry_run:
             for name in ("RareBoost", "Biobank"):
+                example = identifier_type_example_for_name(name)
                 id_type, _ = IdentifierType.objects.get_or_create(
                     name=name,
-                    defaults={"description": f"{name} identifier",
-                              "created_by": self.admin_user},
+                    defaults={
+                        "description": f"{name} identifier",
+                        "example": example,
+                        "created_by": self.admin_user,
+                    },
                 )
+                if not id_type.example:
+                    id_type.example = example
+                    id_type.save(update_fields=["example"])
                 id_types[name] = id_type
 
             for at_name in ("Clinical WES", "Clinical WGS", "Research WGS",
@@ -1049,6 +1112,29 @@ class Command(BaseCommand):
 
         return statuses, id_types
 
+    def _apply_hpo_terms_to_individual(self, individual, hpo_terms) -> None:
+        """Attach HPO terms and keep affectedness aligned with the HPO state."""
+        affected = self.statuses["individual"].get("affected")
+        healthy = self.statuses["individual"].get("healthy")
+        if hpo_terms:
+            individual.hpo_terms.add(*hpo_terms)
+            if not individual.is_affected:
+                individual.is_affected = True
+                individual.save(update_fields=["is_affected"])
+            if healthy and individual.statuses.filter(pk=healthy.pk).exists():
+                individual.statuses.remove(healthy)
+            if affected and not individual.statuses.filter(pk=affected.pk).exists():
+                individual.statuses.add(affected)
+            return
+
+        if individual.is_affected:
+            individual.is_affected = False
+            individual.save(update_fields=["is_affected"])
+        if affected and individual.statuses.filter(pk=affected.pk).exists():
+            individual.statuses.remove(affected)
+        if healthy and not individual.statuses.filter(pk=healthy.pk).exists():
+            individual.statuses.add(healthy)
+
     # ------------------------------------------------------------------
     # Workbook helpers
     # ------------------------------------------------------------------
@@ -1060,8 +1146,10 @@ class Command(BaseCommand):
             "test":       ContentType.objects.get_for_model(Test),
             "pipeline":   ContentType.objects.get_for_model(Pipeline),
             "analysis":   ContentType.objects.get_for_model(Analysis),
+            "analysisreport": ContentType.objects.get_for_model(AnalysisReport),
             "project":    ContentType.objects.get_for_model(Project),
             "task":       ContentType.objects.get_for_model(Task),
+            "variant":    ContentType.objects.get_for_model(Variant),
         }
 
     def _load_kurumlar_map(self, wb) -> dict:
@@ -1217,7 +1305,9 @@ class Command(BaseCommand):
     def _step3_individuals(self, rows, families, institutions, unknown_inst) -> set:
         self.stdout.write("Step 3: Individuals and cross identifiers…")
         all_individuals: set = set()
-        registered = self.statuses["individual"].get("registered")
+        active = self.statuses["individual"].get("active")
+        inactive = self.statuses["individual"].get("inactive")
+        unsure_import = self.statuses["individual"].get("unsure_import")
 
         for row in rows:
             lab_id = row.get("Özbek Lab. ID")
@@ -1257,7 +1347,8 @@ class Command(BaseCommand):
                          for n in inst_raw.split(",") if n.strip()]
             inst_list = [i for i in inst_list if i] or ([unknown_inst] if unknown_inst else [])
 
-            is_index = bool(re.search(r"\.1(\.|$)", str(lab_id)))
+            lab_id_str = str(lab_id).strip()
+            is_index = lab_id_str.endswith(".1")
 
             tc_val = row.get("TC Kimlik No")
             if isinstance(tc_val, float):
@@ -1272,7 +1363,6 @@ class Command(BaseCommand):
 
             sex_val         = normalize_sex(row.get("Cinsiyet"))
             is_alive_val    = to_bool(row.get("Yaşıyor mu?"))
-            is_affected_val = to_bool(row.get("Etkilenmiş mi?"))
             age_of_onset    = str(row.get("Age of Onset") or "").strip()
             council_date    = parse_date(row.get("Konsey Tarihi"))
             diagnosis       = str(row.get("Tanı") or "").strip()
@@ -1294,14 +1384,15 @@ class Command(BaseCommand):
                     is_index=is_index, tc_identity=tc_val,
                     sex=sex_val or "",
                     is_alive=True if is_alive_val is None else is_alive_val,
-                    is_affected=False if is_affected_val is None else is_affected_val,
+                    is_affected=False,
                     age_of_onset=age_of_onset, council_date=council_date,
                     diagnosis=diagnosis, diagnosis_date=diagnosis_date,
                     registration_date=registration_date,
                     created_by=self.admin_user,
                 )
-                if registered:
-                    individual.statuses.set([registered])
+                created_statuses = [status for status in (active, unsure_import) if status]
+                if created_statuses:
+                    individual.statuses.set(created_statuses)
                 self.stdout.write(self.style.SUCCESS(
                     f"  Created: {get_initials(full_name)} ({lab_id})"))
             else:
@@ -1319,12 +1410,17 @@ class Command(BaseCommand):
                     individual.sex = sex_val; changed = True
                 if is_alive_val is not None and individual.is_alive != is_alive_val:
                     individual.is_alive = is_alive_val; changed = True
-                if is_affected_val is not None and individual.is_affected != is_affected_val:
-                    individual.is_affected = is_affected_val; changed = True
                 if individual.is_index != is_index:
                     individual.is_index = is_index; changed = True
                 if changed:
                     individual.save()
+
+            if active and not individual.statuses.filter(pk=active.pk).exists():
+                individual.statuses.add(active)
+            if inactive and individual.statuses.filter(pk=inactive.pk).exists():
+                individual.statuses.remove(inactive)
+            if unsure_import and not individual.statuses.filter(pk=unsure_import.pk).exists():
+                individual.statuses.add(unsure_import)
 
             if inst_list:
                 individual.institution.set(inst_list)
@@ -1344,8 +1440,7 @@ class Command(BaseCommand):
                 self._apply_contact_details(physician, contact_values)
 
             hpo_terms = get_hpo_terms(row.get("HPO kodları"), self.stdout)
-            if hpo_terms:
-                individual.hpo_terms.add(*hpo_terms)
+            self._apply_hpo_terms_to_individual(individual, hpo_terms)
 
             # Projects
             projects_field = row.get("Projeler")
@@ -1399,10 +1494,17 @@ class Command(BaseCommand):
             id_value = id_value.strip()
             if not id_type_name or not id_value:
                 continue
+            example = identifier_type_example_for_name(id_type_name)
             id_type, _ = IdentifierType.objects.get_or_create(
                 name=id_type_name,
-                defaults={"description": f"{id_type_name} identifier",
-                          "created_by": self.admin_user})
+                defaults={
+                    "description": f"{id_type_name} identifier",
+                    "example": example,
+                    "created_by": self.admin_user,
+                })
+            if example and not id_type.example:
+                id_type.example = example
+                id_type.save(update_fields=["example"])
             CrossIdentifier.objects.get_or_create(
                 individual=individual, id_type=id_type,
                 defaults={"id_value": id_value, "created_by": self.admin_user})
@@ -1414,7 +1516,10 @@ class Command(BaseCommand):
     def _step4_samples(self, rows) -> None:
         self.stdout.write("Step 4: Samples…")
         available = self.statuses["sample"]["available"]
-        pending   = self.statuses["sample"]["pending_blood"]
+        not_available = self.statuses["sample"]["not_available"]
+        planned = self.statuses["sample"]["planned"]
+        received = self.statuses["sample"]["received"]
+        isolated = self.statuses["sample"]["isolated"]
 
         for row in rows:
             lab_id = row.get("Özbek Lab. ID")
@@ -1472,8 +1577,22 @@ class Command(BaseCommand):
                         existing.isolation_by = isolation_by; changed = True
                     if changed:
                         existing.save()
-                    if available and existing.receipt_date and not existing.statuses.exists():
-                        existing.statuses.set([available])
+                    if not existing.statuses.exists():
+                        status_set = []
+                        if existing.receipt_date:
+                            if available:
+                                status_set.append(available)
+                            if isolated:
+                                status_set.append(isolated)
+                            elif received:
+                                status_set.append(received)
+                        else:
+                            if not_available:
+                                status_set.append(not_available)
+                            if planned:
+                                status_set.append(planned)
+                        if status_set:
+                            existing.statuses.set(status_set)
                     sample = existing
                 else:
                     sample = Sample.objects.create(
@@ -1483,7 +1602,11 @@ class Command(BaseCommand):
                         isolation_by=isolation_by,
                         created_by=self.admin_user,
                     )
-                    sample.statuses.set([available if receipt_date else pending])
+                    if receipt_date:
+                        sample_statuses = [status for status in (available, isolated or received) if status]
+                    else:
+                        sample_statuses = [status for status in (not_available, planned) if status]
+                    sample.statuses.set(sample_statuses)
 
                 parse_and_add_notes(row.get("Örnek Notları"), sample, self.admin_user)
 
@@ -1575,9 +1698,14 @@ class Command(BaseCommand):
                 },
             )
             if test_created:
-                test_completed = self.statuses["test"].get("completed")
-                if test_completed:
-                    test.statuses.set([test_completed])
+                test_status = (
+                    self.statuses["test"].get("completed")
+                    if data_receipt_date
+                    else self.statuses["test"].get("waiting")
+                    or self.statuses["test"].get("planned")
+                )
+                if test_status:
+                    test.statuses.set([test_status])
             else:
                 if data_receipt_date and not test.data_receipt_date:
                     test.data_receipt_date = data_receipt_date
@@ -1610,8 +1738,7 @@ class Command(BaseCommand):
             if analiz_durumu:
                 nl = analiz_durumu.lower()
                 a_st = (self.statuses["analysis"]["completed"] if "complet" in nl
-                        else self.statuses["analysis"]["in_progress"] if "progress" in nl
-                        else self.statuses["analysis"]["pending_data"])
+                        else self.statuses["analysis"]["planned"])
                 if a_st:
                     analysis.statuses.set([a_st])
 
@@ -1850,8 +1977,9 @@ class Command(BaseCommand):
                 sample=sample, test_type=sanger_type,
                 defaults={"created_by": self.admin_user})
             if test_created:
-                self.statuses["test"].get("completed") and \
-                    test.statuses.set([self.statuses["test"]["completed"]])
+                test_completed = self.statuses["test"].get("completed")
+                if test_completed:
+                    test.statuses.set([test_completed])
 
             note_lines = "\n".join(filter(None, [
                 str(d.get("Chromosomal Position") or "").strip(),
@@ -1873,7 +2001,7 @@ class Command(BaseCommand):
         wgs_type = get_or_create_test_type("WGS", self.admin_user)
         self._backfill_testtype_report_fields(wgs_type)
         completed  = self.statuses["test"].get("completed")
-        awaiting   = self.statuses["test"].get("awaiting")
+        waiting    = self.statuses["test"].get("waiting")
         id_map = build_id_map()
         bb_type = self.id_types.get("Biobank")
 
@@ -1952,7 +2080,7 @@ class Command(BaseCommand):
             if status_raw == "geldi":
                 test_status = completed
             elif status_raw == "data bekleniyor":
-                test_status = awaiting
+                test_status = waiting
             else:
                 test_status = None
             if test_status and not test.statuses.exists():
@@ -2026,9 +2154,17 @@ class Command(BaseCommand):
                 tc_val = None
 
             # Cross-ID type
+            example = identifier_type_example_for_name(id_type_name)
             ext_id_type, _ = IdentifierType.objects.get_or_create(
                 name=id_type_name,
-                defaults={"description": id_type_name, "created_by": self.admin_user})
+                defaults={
+                    "description": id_type_name,
+                    "example": example,
+                    "created_by": self.admin_user,
+                })
+            if example and not ext_id_type.example:
+                ext_id_type.example = example
+                ext_id_type.save(update_fields=["example"])
 
             individual = Individual.objects.filter(
                 cross_ids__id_type=ext_id_type, cross_ids__id_value=id_value).first()
@@ -2041,8 +2177,11 @@ class Command(BaseCommand):
                     is_index=True, tc_identity=tc_val,
                     council_date=parse_date(d.get("Konsey Tarihi")),
                     created_by=self.admin_user)
-                if self.statuses["individual"].get("registered"):
-                    individual.statuses.set([self.statuses["individual"]["registered"]])
+                ext_active = self.statuses["individual"].get("active")
+                ext_unsure = self.statuses["individual"].get("unsure_import")
+                ext_statuses = [status for status in (ext_active, ext_unsure) if status]
+                if ext_statuses:
+                    individual.statuses.set(ext_statuses)
 
             if inst_list:
                 individual.institution.set(inst_list)
@@ -2071,8 +2210,7 @@ class Command(BaseCommand):
                 self._apply_contact_details(physician, contact_values)
 
             hpo_terms = get_hpo_terms(d.get("HPO kodları"), self.stdout)
-            if hpo_terms:
-                individual.hpo_terms.add(*hpo_terms)
+            self._apply_hpo_terms_to_individual(individual, hpo_terms)
 
             # Sample
             receipt_date = parse_date(d.get("Geliş Tarihi/ay/gün/yıl"))
@@ -2093,8 +2231,15 @@ class Command(BaseCommand):
                     })
                 if s_created:
                     avail = self.statuses["sample"]["available"]
-                    pend  = self.statuses["sample"]["pending_blood"]
-                    sample.statuses.set([avail if receipt_date else pend])
+                    not_available = self.statuses["sample"].get("not_available")
+                    planned = self.statuses["sample"].get("planned")
+                    received = self.statuses["sample"].get("received")
+                    isolated = self.statuses["sample"].get("isolated")
+                    if receipt_date:
+                        sample_statuses = [status for status in (avail, isolated or received) if status]
+                    else:
+                        sample_statuses = [status for status in (not_available, planned) if status]
+                    sample.statuses.set(sample_statuses)
                 parse_and_add_notes(d.get("Örnek Notları"), sample, self.admin_user)
 
             # Test
@@ -2145,7 +2290,7 @@ class Command(BaseCommand):
             defaults={"created_by": self.admin_user, "priority": "medium"})
         lr_type = get_or_create_test_type("Long Read WGS", self.admin_user)
         self._backfill_testtype_report_fields(lr_type)
-        sent_status = self.statuses["test"].get("sent")
+        sent_status = self.statuses["test"].get("waiting")
         note_cols = [
             "Hastalık Grubu",
             "Biyobankada mevcut örnek tipleri",
@@ -2699,11 +2844,15 @@ class Command(BaseCommand):
                 if not created_snv and analysis and snv.analysis_id != analysis.id:
                     snv.analysis = analysis; snv.save()
 
-                # Statuses (created on the fly; no fixed list yet — Q6)
+                # Statuses are seeded in step 1 and matched by name here.
                 varyant_durumu = str(d.get("Statuses") or "").strip()
                 if varyant_durumu and created_snv:
-                    v_st = get_or_create_status(
-                        varyant_durumu, "", "gray", self.admin_user, variant_ct)
+                    v_st = Status.objects.filter(
+                        content_type=variant_ct,
+                        name__iexact=varyant_durumu,
+                    ).first() or get_or_create_status(
+                        varyant_durumu, "", "gray", self.admin_user, variant_ct
+                    )
                     if v_st:
                         snv.statuses.set([v_st])
 
@@ -2909,6 +3058,9 @@ class Command(BaseCommand):
                             )
                         rep.file.save(stored_name, File(fh))
                         rep.save()
+                        report_unsure_import = self.statuses["analysisreport"].get("unsure_import")
+                        if report_unsure_import:
+                            rep.statuses.set([report_unsure_import])
 
     # ==================================================================
     # Step 20 — Yayın_İçi
@@ -3043,8 +3195,7 @@ class Command(BaseCommand):
 
             # HPO
             hpo_terms = get_hpo_terms(d.get("HPO"), self.stdout)
-            if hpo_terms:
-                individual.hpo_terms.add(*hpo_terms)
+            self._apply_hpo_terms_to_individual(individual, hpo_terms)
 
             # OMIM note
             omim = str(d.get("OMIM") or "").strip()
@@ -3241,63 +3392,92 @@ class Command(BaseCommand):
     def _process_rb_reanaliz(self, individual, text: str) -> None:
         """Handle the 'RareBoost Reanaliz/WGS/WES/RNA seq' column."""
         parts = [p.strip() for p in text.replace("\n", ",").split(",") if p.strip()]
-        has_reanalysis = any(p.lower() in {"reanalysis", "wgs reanalysis"} for p in parts)
-        if has_reanalysis:
-            order = (["WGS", "WES", "Targeted Panel"]
-                     if any(p.lower() == "wgs reanalysis" for p in parts)
-                     else ["WES", "WGS", "Targeted Panel"])
-            target_test = None
-            for name in order:
-                target_test = individual.get_all_tests().filter(
-                    test_type__name=name).order_by("id").first()
-                if target_test:
-                    break
-            if not target_test:
-                wes_tt = get_or_create_test_type("WES", self.admin_user)
-                self._backfill_testtype_report_fields(wes_tt)
-                sample = (individual.samples.first()
-                          or self._get_placeholder_sample(individual))
-                target_test = Test.objects.create(
-                    sample=sample, test_type=wes_tt, created_by=self.admin_user)
-                synthetic_statuses = [
-                    self.statuses["test"].get("previous"),
-                    self.statuses["test"].get("unsure_import"),
-                ]
-                target_test.statuses.set([s for s in synthetic_statuses if s])
+        if not parts:
+            return
 
-            pipeline_type = get_or_create_pipeline_type("Reanalysis", self.admin_user)
-            ct_pipeline = ContentType.objects.get_for_model(Pipeline)
-            from datetime import date as date_cls
-            pipeline = Pipeline.objects.create(
-                test=target_test,
+        def _normalize_analysis_token(part: str) -> str:
+            lower = part.lower().strip()
+            if "rna seq" in lower or "rnaseq" in lower or "rna-seq" in lower:
+                return "RNA Seq"
+            if "targeted panel" in lower:
+                return "Targeted Panel"
+            if "wes" in lower:
+                return "WES"
+            if "wgs" in lower:
+                return "WGS"
+            return part.strip()
+
+        normalized_tokens: list[str] = []
+        seen_tokens: set[str] = set()
+        for part in parts:
+            token = _normalize_analysis_token(part)
+            if token and token not in seen_tokens:
+                normalized_tokens.append(token)
+                seen_tokens.add(token)
+
+        if not normalized_tokens:
+            return
+
+        unsure_import = self.statuses["analysis"].get("unsure_import")
+        analysis_type_cache: dict[str, object] = {}
+        from datetime import date as date_cls
+
+        for token in normalized_tokens:
+            analysis_type = analysis_type_cache.get(token)
+            if analysis_type is None:
+                analysis_type = get_or_create_analysis_type(token, self.admin_user)
+                analysis_type_cache[token] = analysis_type
+
+            target_pipeline = (
+                Pipeline.objects.filter(
+                    test__sample__individual=individual,
+                    type__name__iexact=token,
+                )
+                .order_by("id")
+                .first()
+            )
+            if not target_pipeline:
+                target_pipeline = (
+                    Pipeline.objects.filter(
+                        test__sample__individual=individual,
+                        type__name__icontains=token,
+                    )
+                    .order_by("id")
+                    .first()
+                )
+
+            analysis = Analysis.objects.create(
+                pipeline=target_pipeline,
+                type=analysis_type,
                 performed_date=date_cls.today(),
-                performed_by=self.admin_user,
-                type=pipeline_type,
-                created_by=self.admin_user)
-            in_progress = Status.objects.filter(
-                name="In Progress", content_type=ct_pipeline).first()
-            if in_progress:
-                pipeline.statuses.set([in_progress])
+                created_by=self.admin_user,
+            )
+            analysis.performed_by.add(self.admin_user)
+            parse_and_add_notes(
+                "\n".join(filter(None, [
+                    f"RareBoost Reanaliz/WGS/WES/RNA seq: {text}",
+                    f"Normalized token: {token}",
+                ])),
+                analysis,
+                self.admin_user,
+            )
 
-        for p in parts:
-            if p.lower() in {"reanalysis", "wgs reanalysis"}:
-                continue
-            name = (p.upper() if p.lower() in {"wes", "wgs"}
-                    else "RNA Seq" if p.lower() in {"rna seq", "rnaseq", "rna-seq"}
-                    else "Targeted Panel" if p.lower() == "targeted panel"
-                    else p)
-            tt = get_or_create_test_type(name, self.admin_user)
-            self._backfill_testtype_report_fields(tt)
-            if not individual.get_all_tests().filter(test_type=tt).exists():
-                sample = (individual.samples.first()
-                          or self._get_placeholder_sample(individual))
-                test = Test.objects.create(
-                    sample=sample, test_type=tt, created_by=self.admin_user)
-                synthetic_statuses = [
-                    self.statuses["test"].get("previous"),
-                    self.statuses["test"].get("unsure_import"),
-                ]
-                test.statuses.set([s for s in synthetic_statuses if s])
+            if not target_pipeline:
+                self.stdout.write(self.style.WARNING(
+                    f"  RareBoost reanalysis: no matching pipeline found for {individual.primary_id} -> {token}; created Analysis with Unsure Import"))
+                self._record_issue(
+                    step="step20",
+                    sheet="GÜNCELyayıniciyedek",
+                    severity="warning",
+                    reason="No matching pipeline found for RareBoost reanalysis entry; created Analysis with Unsure Import.",
+                    lab_id=individual.primary_id,
+                    context={
+                        "raw_value": text,
+                        "normalized_token": token,
+                    },
+                )
+                if unsure_import:
+                    analysis.statuses.set([unsure_import])
 
     # ==================================================================
     # Internal helpers

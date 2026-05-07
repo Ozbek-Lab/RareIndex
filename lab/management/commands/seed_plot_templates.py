@@ -28,6 +28,20 @@ class Command(BaseCommand):
                 "is_published": True
             },
             {
+                "name": "Custom Sunburst",
+                "slug": "custom-sunburst",
+                "description": "Interactive sunburst with selectable class and three hierarchy layers.",
+                "target_model": "Individual",
+                "default_col_span": 2,
+                "show_download_menu": False,
+                "notebook_filename": "custom_sunburst.py",
+                "query_config": {
+                    "values": ["is_index", "is_affected", "statuses__name"],
+                    "annotate": {"count": {"count": "id"}}
+                },
+                "is_published": True
+            },
+            {
                 "name": "Analysis Status Bar Chart",
                 "slug": "analysis-status-bar",
                 "description": "Bar chart showing current progress of all analysis records.",

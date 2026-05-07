@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="font-size: {{ user_font_size_css|default:'100%' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,6 +19,65 @@
         .font-sans { font-family: 'Inter', sans-serif !important; }
         :root { --font-sans: 'Inter', sans-serif; }
         body { font-family: 'Inter', sans-serif; }
+
+        /* Soften the most saturated action buttons inside workflow views only. */
+        .workflow-tab .btn-primary,
+        .workflow-tab .btn-success,
+        .workflow-tab .btn-error,
+        .workflow-tab .btn-warning,
+        .workflow-tab .btn-info {
+            box-shadow: none !important;
+        }
+
+        .workflow-tab .btn-primary {
+            background-color: color-mix(in oklab, oklch(var(--p)) 58%, oklch(var(--b1)) 42%) !important;
+            border-color: color-mix(in oklab, oklch(var(--p)) 46%, oklch(var(--b3)) 54%) !important;
+            color: oklch(var(--pc)) !important;
+        }
+
+        .workflow-tab .btn-primary:hover {
+            background-color: color-mix(in oklab, oklch(var(--p)) 64%, oklch(var(--b1)) 36%) !important;
+        }
+
+        .workflow-tab .btn-success {
+            background-color: color-mix(in oklab, oklch(var(--su)) 56%, oklch(var(--b1)) 44%) !important;
+            border-color: color-mix(in oklab, oklch(var(--su)) 44%, oklch(var(--b3)) 56%) !important;
+            color: oklch(var(--suc)) !important;
+        }
+
+        .workflow-tab .btn-success:hover {
+            background-color: color-mix(in oklab, oklch(var(--su)) 62%, oklch(var(--b1)) 38%) !important;
+        }
+
+        .workflow-tab .btn-error {
+            background-color: color-mix(in oklab, oklch(var(--er)) 54%, oklch(var(--b1)) 46%) !important;
+            border-color: color-mix(in oklab, oklch(var(--er)) 42%, oklch(var(--b3)) 58%) !important;
+            color: oklch(var(--erc)) !important;
+        }
+
+        .workflow-tab .btn-error:hover {
+            background-color: color-mix(in oklab, oklch(var(--er)) 60%, oklch(var(--b1)) 40%) !important;
+        }
+
+        .workflow-tab .btn-warning {
+            background-color: color-mix(in oklab, oklch(var(--wa)) 54%, oklch(var(--b1)) 46%) !important;
+            border-color: color-mix(in oklab, oklch(var(--wa)) 42%, oklch(var(--b3)) 58%) !important;
+            color: oklch(var(--wac)) !important;
+        }
+
+        .workflow-tab .btn-warning:hover {
+            background-color: color-mix(in oklab, oklch(var(--wa)) 60%, oklch(var(--b1)) 40%) !important;
+        }
+
+        .workflow-tab .btn-info {
+            background-color: color-mix(in oklab, oklch(var(--in)) 54%, oklch(var(--b1)) 46%) !important;
+            border-color: color-mix(in oklab, oklch(var(--in)) 42%, oklch(var(--b3)) 58%) !important;
+            color: oklch(var(--inc)) !important;
+        }
+
+        .workflow-tab .btn-info:hover {
+            background-color: color-mix(in oklab, oklch(var(--in)) 60%, oklch(var(--b1)) 40%) !important;
+        }
     </style>
     
     <!-- Google Fonts: Inter -->
@@ -79,19 +138,40 @@
                 scrollbar-color: oklch(var(--b3)) transparent !important;
             }
         }
+
+        /* Wider hover cards for ACMG criteria so the manuscript summaries fit. */
+        .criteria-tooltip.tooltip::before {
+            max-width: min(44rem, calc(100vw - 2rem));
+            width: max-content;
+            white-space: normal;
+            text-align: left;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+
+        .criteria-tooltip.tooltip::after {
+            max-width: min(44rem, calc(100vw - 2rem));
+        }
     </style>
 </head>
 <body class="bg-base-100 min-h-screen flex flex-col" 
       @resize.window="if (window.innerWidth < 1024) sidebarOpen = false"
       x-data="{ 
     sidebarOpen: window.innerWidth < 1024 ? false : localStorage.getItem('sidebarOpen') === 'true',
-    theme: '{{ user_theme|default:"light" }}',
+    theme: '{{ user_theme|default:"light"|escapejs }}',
+    fontSize: '{{ user_font_size|default:"small"|escapejs }}',
+    fontSizeMap: { small: '100%', medium: '112.5%', large: '125%' },
     init() {
         document.documentElement.setAttribute('data-theme', this.theme);
+        document.documentElement.style.fontSize = this.fontSizeMap[this.fontSize] || this.fontSizeMap.small;
         this.$watch('theme', val => {
             document.documentElement.setAttribute('data-theme', val);
             // Local storage for quick flash prevention on load
             localStorage.setItem('theme', val);
+        });
+        this.$watch('fontSize', val => {
+            document.documentElement.style.fontSize = this.fontSizeMap[val] || this.fontSizeMap.small;
+            localStorage.setItem('fontSize', val);
         });
         this.$watch('sidebarOpen', val => {
             localStorage.setItem('sidebarOpen', val);

@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, HttpResponseForbidden, FileResponse, Http404
 from django.contrib.auth.decorators import login_required
 from django import forms
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.views.generic import View
@@ -11,6 +11,18 @@ from django.apps import apps
 from pathlib import Path
 from .models import Individual, Family, Project
 
+
+def _get_status_for_model(model, *names):
+    from django.contrib.contenttypes.models import ContentType
+    from .models import Status
+
+    ct = ContentType.objects.get_for_model(model)
+    qs = Status.objects.filter(content_type=ct)
+    for name in names:
+        status = qs.filter(name__iexact=name).first()
+        if status:
+            return status
+    return qs.first()
 
 
 class RevealSensitiveFieldView(View):
@@ -736,14 +748,16 @@ def update_status(request, content_type_id, object_id, status_id):
     partial_name = f"{ct.model}_status_badge"
     response = render(request, f"lab/partials/tabs/_workflow.html#{partial_name}", context)
 
-    # If updating an Individual, also send an OOB swap for the table row badge
-    if isinstance(obj, Individual):
+    # If we can resolve the owning Individual, also send an OOB swap for the
+    # table row badge so connected statuses stay in sync.
+    if individual:
         from lab.tables import _render_status_badges
+        from .status_utils import collect_individual_row_statuses
         from django.utils.html import format_html
-        badges_html = _render_status_badges(list(obj.statuses.all()))
+        badges_html = _render_status_badges(collect_individual_row_statuses(individual))
         oob_html = format_html(
             '<span id="individual-row-status-{}" hx-swap-oob="true">{}</span>',
-            obj.pk,
+            individual.pk,
             badges_html,
         )
         response.content += oob_html.encode("utf-8")
@@ -767,12 +781,16 @@ def sample_create_modal(request, individual_id):
             sample.individual = individual
             sample.created_by = request.user
             sample.save()
-            # Set statuses from form or default to "Registered"
+            # Set statuses from form or default to the sample workflow.
             selected_statuses = form.cleaned_data.get("statuses")
             if selected_statuses:
                 sample.statuses.set(selected_statuses)
             elif not sample.statuses.exists():
-                default_status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                default_status = _get_status_for_model(
+                    Sample,
+                    "Available" if sample.receipt_date else "Planned",
+                    "Not Available",
+                )
                 if default_status:
                     sample.statuses.add(default_status)
             
@@ -782,9 +800,9 @@ def sample_create_modal(request, individual_id):
     else:
         # Initial form: pre-set individual and default status
         initial = {"individual": individual}
-        status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+        status = _get_status_for_model(Sample, "Planned", "Available", "Not Available")
         if status:
-            initial["status"] = status
+            initial["statuses"] = [status]
             
         form = SampleForm(initial=initial)
         form.fields["individual"].queryset = Individual.objects.filter(pk=individual.pk)
@@ -826,7 +844,12 @@ def test_create_modal(request, sample_id):
             if selected_statuses:
                 test.statuses.set(selected_statuses)
             elif not test.statuses.exists():
-                default_status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                default_status = _get_status_for_model(
+                    Test,
+                    "Waiting Data/Bioinformatic process",
+                    "Planned",
+                    "Data Delivered / Completed",
+                )
                 if default_status:
                     test.statuses.add(default_status)
             
@@ -835,9 +858,9 @@ def test_create_modal(request, sample_id):
             return response
     else:
         initial = {"sample": sample}
-        status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+        status = _get_status_for_model(Test, "Planned", "Waiting Data/Bioinformatic process", "Data Delivered / Completed")
         if status:
-            initial["status"] = status
+            initial["statuses"] = [status]
             
         form = TestForm(initial=initial)
         form.fields["sample"].queryset = Sample.objects.filter(pk=sample.pk)
@@ -883,7 +906,12 @@ def pipeline_create_modal(request, test_id):
             if selected_statuses:
                 pipeline.statuses.set(selected_statuses)
             elif not pipeline.statuses.exists():
-                default_status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                default_status = _get_status_for_model(
+                    Pipeline,
+                    "Planned",
+                    "Waiting Data/Bioinformatic process",
+                    "Bioinformatic process completed",
+                )
                 if default_status:
                     pipeline.statuses.add(default_status)
             
@@ -892,9 +920,9 @@ def pipeline_create_modal(request, test_id):
             return response
     else:
         initial = {"test": test}
-        status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+        status = _get_status_for_model(Pipeline, "Planned", "Waiting Data/Bioinformatic process", "Bioinformatic process completed")
         if status:
-            initial["status"] = status
+            initial["statuses"] = [status]
             
         form = PipelineForm(initial=initial)
         form.fields["test"].queryset = Test.objects.filter(pk=test.pk)
@@ -937,7 +965,12 @@ def analysis_create_modal(request, pipeline_id):
             if selected_statuses:
                 analysis.statuses.set(selected_statuses)
             elif not analysis.statuses.exists():
-                default_status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+                default_status = _get_status_for_model(
+                    Analysis,
+                    "Planned",
+                    "Waiting Confirmation",
+                    "Completed",
+                )
                 if default_status:
                     analysis.statuses.add(default_status)
             
@@ -946,9 +979,9 @@ def analysis_create_modal(request, pipeline_id):
             return response
     else:
         initial = {"pipeline": pipeline}
-        status = Status.objects.filter(name__iexact="Registered").first() or Status.objects.first()
+        status = _get_status_for_model(Analysis, "Planned", "Waiting Confirmation", "Completed")
         if status:
-            initial["status"] = status
+            initial["statuses"] = [status]
             
         form = AnalysisForm(initial=initial)
         form.fields["pipeline"].queryset = Pipeline.objects.filter(pk=pipeline.pk)
@@ -971,8 +1004,9 @@ def analysis_create_modal(request, pipeline_id):
 def task_create_modal(request, content_type_id, object_id):
     """Render a task creation form or handle submission"""
     from .forms import TaskForm
-    from .models import Status, Individual, Sample, Test, Pipeline, Project
+    from .models import Status, Individual, Sample, Test, Pipeline, Project, Analysis
     from django.contrib.contenttypes.models import ContentType
+    from django.template.loader import render_to_string
     
     ct = get_object_or_404(ContentType, pk=content_type_id)
     Model = ct.model_class()
@@ -983,6 +1017,7 @@ def task_create_modal(request, content_type_id, object_id):
     target_id = "#workflow-content" # fallback
     partial_name = ""
     count_id = ""
+    submit_target = "#generic-modal-content"
     
     individual = None
     if isinstance(obj, Individual):
@@ -1001,12 +1036,20 @@ def task_create_modal(request, content_type_id, object_id):
         count_id = f"task-count-test-{obj.id}"
         individual = obj.sample.individual
     elif isinstance(obj, Pipeline):
-        # Pipeline tasks might need similar handling if added to the view
+        target_id = f"#pipeline-tasks-{obj.id}"
+        partial_name = "pipeline_tasks"
+        count_id = f"task-count-pipeline-{obj.id}"
         individual = obj.test.sample.individual
     elif isinstance(obj, Project):
+        target_id = f"#project-tasks-{obj.id}"
         # Tasks created directly on a Project are fixed to that project
         # (individual is not strictly needed here)
         individual = None
+    elif isinstance(obj, Analysis):
+        target_id = f"#analysis-tasks-{obj.id}"
+        partial_name = "analysis_tasks"
+        count_id = f"task-count-analysis-{obj.id}"
+        individual = obj.pipeline.test.sample.individual if obj.pipeline and obj.pipeline.test and obj.pipeline.test.sample else None
 
     if request.method == "POST":
         form = TaskForm(
@@ -1027,19 +1070,19 @@ def task_create_modal(request, content_type_id, object_id):
             if selected_statuses:
                 task.statuses.set(selected_statuses)
             elif not task.statuses.exists():
-                default_status = (
-                    Status.objects.filter(name__iexact="Active").first()
-                    or Status.objects.filter(name__iexact="Registered").first()
-                    or Status.objects.first()
-                )
+                default_status = _get_status_for_model(Task, "Assigned", "Active", "Completed")
                 if default_status:
                     task.statuses.add(default_status)
-            
+            success_html = render_to_string(
+                "lab/partials/modals/task_created_success.html",
+                {
+                    "task": task,
+                    "project": obj if isinstance(obj, Project) else task.project,
+                },
+                request=request,
+            )
+
             if isinstance(obj, Project):
-                # For project dropdown tasks: return the paginated tasks partial
-                # as an OOB innerHTML swap so the panel refreshes to page 1.
-                from django.core.paginator import Paginator
-                from django.template.loader import render_to_string
                 tasks_qs = (
                     obj.tasks
                     .exclude(statuses__name__iexact="Completed")
@@ -1055,41 +1098,38 @@ def task_create_modal(request, content_type_id, object_id):
                     request=request,
                 )
                 oob_tasks = (
-                    f'<div id="project-tasks-{obj.pk}" hx-swap-oob="innerHTML">'
-                    f'{tasks_html}</div>'
+                    f'<div id="{target_id.lstrip("#")}" hx-swap-oob="innerHTML">'
+                    f"{tasks_html}</div>"
                 )
-                return HttpResponse(oob_tasks)
+                return HttpResponse(success_html + oob_tasks)
 
-            # Targeted update for task list (Individual / Sample / Test)
             context = {
-                "individual": individual, 
+                "individual": individual,
                 "sample": obj if isinstance(obj, Sample) else None,
                 "test": obj if isinstance(obj, Test) else None,
             }
-            
-            # Render the specific partial for the list
-            response = render(request, f"lab/partials/tabs/_workflow.html#{partial_name}", context)
-            
-            # OOB Swap for Task Count
+            partial_html = render_to_string(
+                f"lab/partials/tabs/_workflow.html#{partial_name}",
+                context,
+                request=request,
+            )
             count = obj.tasks.count()
+            oob_target = target_id.lstrip("#")
             oob_html = f'''
             <div id="{count_id}" hx-swap-oob="true" 
                  class="flex items-center gap-1.5 tooltip tooltip-bottom" 
                  data-tip="{count} Tasks">
                 <i class="fa-solid fa-list-check"></i> {count}
             </div>
+            <div id="{oob_target}" hx-swap-oob="innerHTML">
+                {partial_html}
+            </div>
             '''
-            response.content += oob_html.encode("utf-8")
-            return response
-            
+            return HttpResponse(success_html + oob_html)
+
     else:
         initial = {"content_type": ct.pk, "object_id": object_id}
-        default_status = (
-            Status.objects.filter(name__iexact="Active").first()
-            or Status.objects.filter(name__iexact="Registered").first()
-            or Status.objects.filter(content_type__model="task").first()
-            or Status.objects.first()
-        )
+        default_status = _get_status_for_model(Task, "Assigned", "Active", "Completed")
         if default_status:
             initial["statuses"] = [default_status]
         form = TaskForm(
@@ -1131,10 +1171,14 @@ def task_create_modal(request, content_type_id, object_id):
         "individual": individual,
         "title": f"Add Task for {obj}",
         "action_url": request.path,
-        "hx_target": target_id,
+        "hx_target": submit_target,
         "submit_label": "Create Task",
     }
-    return render(request, "lab/partials/generic_modal_form.html", context)
+    response = render(request, "lab/partials/generic_modal_form.html", context)
+    if request.method == "POST":
+        response.headers["HX-Retarget"] = submit_target
+        response.headers["HX-Reswap"] = "innerHTML"
+    return response
 
 
 @login_required
@@ -1168,13 +1212,16 @@ def project_search(request):
 @login_required
 def project_individual_search(request, pk):
     project = get_object_or_404(Project, pk=pk)
-    query = request.GET.get("q", "").strip()
+    query = (request.GET.get("search") or request.GET.get("q") or "").strip()
     individuals = Individual.objects.none()
     if query:
         individuals = (
             Individual.objects
             .prefetch_related("cross_ids__id_type", "statuses")
-            .filter(cross_ids__id_value__icontains=query)
+            .filter(
+                Q(cross_ids__id_value__icontains=query)
+                | Q(cross_ids__id_type__name__icontains=query)
+            )
             .distinct()[:15]
         )
     already_in_project = set(project.individuals.values_list("pk", flat=True))
@@ -2120,17 +2167,61 @@ def _prepare_genebe_display(data):
         vd = data
 
     fields = {}
-    v = g(vd, 'acmg_classification') or g(data, 'acmg_classification')
-    if v: fields['ACMG Classification'] = v
-    v = g(vd, 'acmg_score') or g(data, 'acmg_score')
-    if v is not None: fields['ACMG Score'] = str(v)
-    v = g(vd, 'gnomad_af') or g(data, 'gnomad_af')
-    if v is not None:
-        try: fields['gnomAD AF'] = f"{float(v):.2e}"
-        except (TypeError, ValueError): fields['gnomAD AF'] = str(v)
+    def pick(*paths):
+        for path in paths:
+            value = g(vd, *path) if isinstance(path, tuple) else g(vd, path)
+            if value is None:
+                value = g(data, *path) if isinstance(path, tuple) else g(data, path)
+            if value is not None:
+                return value
+        return None
+
+    for label, path in [
+        ('Gene', ('gene_symbol',)),
+        ('Transcript', ('transcript',)),
+        ('Effect', ('effect',)),
+        ('ACMG Classification', ('acmg_classification',)),
+        ('ACMG Score', ('acmg_score',)),
+        ('ClinVar Classification', ('clinvar_classification',)),
+        ('ClinVar Review Status', ('clinvar_review_status',)),
+        ('Combined Pathogenicity', ('pathogenicity_classification_combined',)),
+        ('Population AF', ('frequency_reference_population',)),
+        ('gnomAD Exomes AF', ('gnomad_exomes_af',)),
+        ('gnomAD Genomes AF', ('gnomad_genomes_af',)),
+        ('Computational Prediction', ('computational_prediction_selected',)),
+        ('Splice Prediction', ('splice_prediction_selected',)),
+    ]:
+        v = pick(path)
+        if v is not None and v != '':
+            if label.endswith('AF'):
+                try:
+                    fields[label] = f"{float(v):.2e}"
+                except (TypeError, ValueError):
+                    fields[label] = str(v)
+            else:
+                fields[label] = str(v)
 
     criteria = g(vd, 'acmg_criteria') or g(data, 'acmg_criteria') or []
-    return {'type': 'genebe', 'fields': fields, 'criteria': criteria if isinstance(criteria, list) else [criteria]}
+    if isinstance(criteria, str):
+        criteria = [c.strip() for c in criteria.split(',') if c.strip()]
+    elif not isinstance(criteria, list):
+        criteria = [criteria] if criteria else []
+
+    gene_records = []
+    for item in g(vd, 'acmg_by_gene') or g(data, 'acmg_by_gene') or []:
+        if not isinstance(item, dict):
+            continue
+        gene_records.append({
+            'gene_symbol': item.get('gene_symbol'),
+            'verdict': item.get('verdict'),
+            'score': item.get('score'),
+            'inheritance_mode': item.get('inheritance_mode'),
+            'transcript': item.get('transcript'),
+            'criteria': item.get('criteria'),
+            'effects': item.get('effects'),
+        })
+
+    return {'type': 'genebe', 'fields': fields, 'criteria': criteria, 'gene_records': gene_records}
 
 
 def _prepare_generic_display(data):
@@ -2158,6 +2249,7 @@ def _prepare_annotation_display(annotation):
 def variant_detail_partial(request, pk):
     """Return the expanded detail panel for a single variant row."""
     from variant.models import Variant
+    from variant.forms import VariantACMGEvidenceOverrideForm
     variant = get_object_or_404(
         Variant.objects.select_related(
             "individual",
@@ -2172,6 +2264,7 @@ def variant_detail_partial(request, pk):
             "genes",
             "classifications__user",
             "annotations",
+            "acmg_evidence_overrides",
             "individual__samples__sample_type",
             "individual__samples__statuses",
             "individual__samples__tests__test_type",
@@ -2238,6 +2331,120 @@ def variant_detail_partial(request, pk):
         "variant": variant,
         "annotations_display": annotations_display,
         "gene_cohort_data": gene_cohort_data,
+        "manual_override_form": VariantACMGEvidenceOverrideForm(),
+        "manual_acmg_overrides": variant.acmg_evidence_overrides.filter(source="manual").order_by("criterion"),
+        "selected_criteria": [],
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def variant_genebe_fetch(request, pk):
+    from variant.models import Variant
+    from variant.services import AnnotationService
+    from variant.forms import VariantACMGEvidenceOverrideForm
+
+    if not request.user.has_perm("variant.change_variant"):
+        return HttpResponseForbidden("You do not have permission to fetch GeneBe classifications.")
+
+    variant = get_object_or_404(
+        Variant.objects.select_related("individual", "analysis").prefetch_related("annotations"),
+        pk=pk,
+    )
+
+    service = AnnotationService()
+    genebe_data = service.fetch_genebe(variant)
+    service.link_genes(variant)
+
+    variant = Variant.objects.prefetch_related("annotations", "acmg_evidence_overrides").get(pk=pk)
+
+    return render(request, "variant/partials/_genebe_classification.html", {
+        "variant": variant,
+        "genebe_data": genebe_data,
+        "manual_override_form": VariantACMGEvidenceOverrideForm(),
+        "manual_acmg_overrides": variant.acmg_evidence_overrides.filter(source="manual").order_by("criterion"),
+        "selected_criteria": [],
+    })
+
+
+@login_required
+@require_POST
+def variant_acmg_evidence_save(request, pk):
+    from variant.models import Variant, ACMGEvidenceOverride
+    from variant.templatetags.variant_filters import (
+        ACMG_CRITERIA_INFO,
+        _default_strength_for_info,
+        _imported_acmg_criteria_set,
+        _normalize_strength,
+        _record_acmg_map,
+    )
+
+    variant = get_object_or_404(Variant.objects.prefetch_related("annotations", "acmg_evidence_overrides"), pk=pk)
+
+    if not request.user.has_perm("variant.change_variant"):
+        return HttpResponseForbidden("You do not have permission to change ACMG evidence.")
+
+    catalog_criteria = set(ACMG_CRITERIA_INFO)
+    gene_symbol = (request.POST.get("gene_symbol") or "").strip()
+    transcript = (request.POST.get("transcript") or "").strip()
+    included_criteria = {
+        str(item).strip().replace(" ", "_").upper()
+        for item in request.POST.getlist("included_criteria")
+        if str(item).strip()
+    }
+    included_criteria &= catalog_criteria
+
+    imported_criteria = _imported_acmg_criteria_set(variant, gene_symbol, transcript) & catalog_criteria
+    imported_map = _record_acmg_map(variant, "genebe", gene_symbol, transcript)
+
+    for criterion in catalog_criteria:
+        default_strength = _default_strength_for_info(ACMG_CRITERIA_INFO[criterion])
+        imported_record = imported_map.get(criterion)
+        imported_strength = _normalize_strength(
+            imported_record.strength if imported_record else default_strength,
+            default_strength,
+        )
+        selected_strength = _normalize_strength(
+            request.POST.get(f"strength_{criterion}"),
+            "indeterminate" if criterion not in included_criteria else default_strength,
+        )
+        should_include = criterion in included_criteria and selected_strength != "indeterminate"
+        was_imported = criterion in imported_criteria
+
+        if should_include == was_imported and (
+            not should_include or selected_strength == imported_strength
+        ):
+            ACMGEvidenceOverride.objects.filter(
+                variant=variant,
+                gene_symbol=gene_symbol,
+                transcript=transcript,
+                criterion=criterion,
+                source="manual",
+            ).delete()
+            continue
+
+        ACMGEvidenceOverride.objects.update_or_create(
+            variant=variant,
+            gene_symbol=gene_symbol,
+            transcript=transcript,
+            criterion=criterion,
+            source="manual",
+            defaults={
+                "included": should_include,
+                "strength": selected_strength if should_include else "indeterminate",
+                "note": "",
+                "created_by": request.user,
+            },
+        )
+
+    variant = Variant.objects.prefetch_related("annotations", "acmg_evidence_overrides").get(pk=pk)
+
+    genebe = variant.annotations.filter(source="genebe").first()
+    genebe_data = genebe.data if genebe else None
+    return render(request, "variant/partials/_genebe_classification.html", {
+        "variant": variant,
+        "genebe_data": genebe_data,
+        "manual_acmg_overrides": variant.acmg_evidence_overrides.filter(source="manual").order_by("criterion"),
     })
 
 
@@ -2284,7 +2491,7 @@ def _get_config_registry():
         "identifiertype": {
             "model": IdentifierType, "form": IdentifierTypeForm,
             "label": "Identifier Types", "icon": "fa-solid fa-id-badge",
-            "fields": ["name", "use_priority", "is_shown_in_table"],
+            "fields": ["name", "example", "use_priority", "is_shown_in_table"],
             "usage_relation": "crossidentifier",
             "usage_label": "identifiers",
         },

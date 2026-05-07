@@ -4,6 +4,7 @@ Prerequisite checkpoints (mirrors import_all.py Step 0 / Step 1):
   0a  Load ontologies_data.json fixture if ontology table is empty
   0b  Import HGNC gene data if Gene table is empty
   0c  Run ozbek_set_id_priorities so IdentifierType priorities are configured
+  0d  Ensure published plot templates are seeded for gallery/dashboard use
 """
 
 import random
@@ -20,6 +21,7 @@ from django.utils import timezone
 from lab.models import (
     Analysis,
     AnalysisType,
+    AnalysisReport,
     CrossIdentifier,
     Family,
     IdentifierType,
@@ -29,18 +31,46 @@ from lab.models import (
     Pipeline,
     PipelineType,
     Project,
+    PlotTemplate,
     Sample,
     SampleType,
     Status,
+    StatusGroup,
     Task,
     Test,
     TestType,
 )
-from lab.management.commands._import_helpers import get_or_create_contact_for_user
+from lab.management.commands._import_helpers import (
+    get_or_create_contact_for_user,
+    get_or_create_status,
+    get_or_create_status_group,
+    identifier_type_example_for_name,
+)
 from ontologies.models import Ontology, Term
-from variant.models import Classification, Gene, SNV
+from variant.models import Classification, Gene, SNV, Variant
 
 User = get_user_model()
+
+REQUIRED_PLOT_TEMPLATE_SPECS = {
+    "sample-distribution-sunburst": {
+        "default_col_span": 1,
+        "show_download_menu": False,
+    },
+    "custom-sunburst": {
+        "default_col_span": 2,
+        "show_download_menu": False,
+    },
+    "analysis-status-bar": {
+        "default_col_span": 1,
+        "show_download_menu": False,
+    },
+    "hpo-term-network": {
+        "default_col_span": 2,
+        "show_download_menu": False,
+    },
+}
+
+REQUIRED_PLOT_TEMPLATE_SLUGS = set(REQUIRED_PLOT_TEMPLATE_SPECS)
 
 
 def _parse_report_text_field_reference_markdown(md_text: str) -> dict[str, dict[str, str]]:
@@ -190,8 +220,12 @@ class Command(BaseCommand):
             self.stdout.write("Creating normal user…")
             User.objects.create_user("normal", "normal@example.com", "normal")
 
+        # ── Checkpoint 0d: Plot templates ───────────────────────────
+        self._ensure_plot_templates()
+
         # ── Setup ──────────────────────────────────────────────────────
         all_statuses    = self._create_statuses(user)
+        self._individual_unsure_import_status = all_statuses["individual"].get("unsure_import")
         sample_types    = self._create_sample_types(user)
         test_types      = self._create_test_types(user)
         pipeline_types  = self._create_pipeline_types(user)
@@ -219,7 +253,7 @@ class Command(BaseCommand):
             mother_date = family_date + timedelta(days=random.randint(1, 3))
             mother = self._create_individual(
                 "Mother", family, user, institution,
-                all_statuses["individual"]["registered"],
+                all_statuses["individual"]["active"],
                 hpo_terms, is_index=False, creation_date=mother_date)
             self._create_note(mother, user)
             self._create_identifiers(
@@ -229,7 +263,7 @@ class Command(BaseCommand):
             father_date = family_date + timedelta(days=random.randint(1, 3))
             father = self._create_individual(
                 "Father", family, user, institution,
-                all_statuses["individual"]["registered"],
+                all_statuses["individual"]["active"],
                 hpo_terms, is_index=False, creation_date=father_date)
             self._create_note(father, user)
             self._create_identifiers(
@@ -307,33 +341,135 @@ class Command(BaseCommand):
                 "Step 0a: Fixture loaded but no Ontology objects found. "
                 "Check that ontologies_data.json is in a fixtures/ directory."))
 
+    def _ensure_plot_templates(self):
+        """Ensure the published Marimo-backed plot templates are seeded."""
+        existing_templates = {
+            slug: {
+                "default_col_span": default_col_span,
+                "show_download_menu": show_download_menu,
+            }
+            for slug, default_col_span, show_download_menu in PlotTemplate.objects.filter(
+                slug__in=REQUIRED_PLOT_TEMPLATE_SLUGS,
+                is_published=True,
+            ).values_list("slug", "default_col_span", "show_download_menu")
+        }
+        missing_slugs = sorted(REQUIRED_PLOT_TEMPLATE_SLUGS - set(existing_templates))
+        mismatched_specs = sorted(
+            slug
+            for slug, spec in REQUIRED_PLOT_TEMPLATE_SPECS.items()
+            if any(existing_templates.get(slug, {}).get(field) != value for field, value in spec.items())
+        )
+
+        if not missing_slugs and not mismatched_specs:
+            self.stdout.write("Step 0d: Plot templates already seeded.")
+            return
+
+        self.stdout.write(
+            self.style.WARNING(
+                f"Step 0d: Plot templates need seeding (missing={missing_slugs}, spec_mismatch={mismatched_specs}) — seeding defaults…"
+            )
+        )
+        call_command("seed_plot_templates")
+
     # ==================================================================
     # Setup helpers
     # ==================================================================
 
     def _create_statuses(self, user):
         """Create a status set per model type, returned as a nested dict."""
-        all_statuses = {}
-        status_data = {
-            "registered": ("Registered", "gray",   "fa-user-plus"),
-            "active":     ("Active",     "green",  "fa-play"),
-            "completed":  ("Completed",  "blue",   "fa-check-circle"),
-            "cancelled":  ("Cancelled",  "red",    "fa-times-circle"),
-            "pending":    ("Pending",    "yellow", "fa-clock"),
+        def ct_for(model):
+            return ContentType.objects.get_for_model(model)
+
+        def group_for(model, group_name):
+            return get_or_create_status_group(group_name, ct_for(model)) if group_name else None
+
+        def s(model, name, color, icon, short_name="", group_name=None, connected_models=()):
+            connected_classes = [ct_for(m) for m in connected_models]
+            return get_or_create_status(
+                name,
+                "",
+                color,
+                user,
+                ct_for(model),
+                icon,
+                short_name=short_name,
+                group=group_for(model, group_name),
+                connected_classes=connected_classes or None,
+            )
+
+        all_statuses = {
+            "individual": {
+                "active": s(Individual, "Active", "green", "fa-user-check", short_name="Act", group_name="Activity"),
+                "inactive": s(Individual, "Inactive", "grey", "fa-user-slash", short_name="Ina", group_name="Activity"),
+                "affected": s(Individual, "Affected", "red", "fa-disease", short_name="Aff", group_name="Affectedness"),
+                "healthy": s(Individual, "Healthy", "green", "fa-heart", short_name="Hea", group_name="Affectedness"),
+                "unsolved": s(Individual, "Unsolved", "brown", "fa-circle-xmark", short_name="Uns", group_name="Solved"),
+                "solved": s(Individual, "Solved", "green", "fa-circle-check", short_name="Sol", group_name="Solved"),
+                "unsure_import": s(Individual, "Unsure Import", "orange", "fa-circle-question"),
+            },
+            "sample": {
+                "planned": s(Sample, "Planned", "yellow", "fa-calendar", short_name="Plan", group_name="Process"),
+                "received": s(Sample, "Recieved - In lab process", "orange", "fa-vials", short_name="Rec", group_name="Process"),
+                "isolated": s(Sample, "Isolated", "green", "fa-circle-check", short_name="Iso", group_name="Process"),
+                "available": s(Sample, "Available", "green", "fa-circle-check", short_name="Ava", group_name="Availability"),
+                "not_available": s(Sample, "Not Available", "red", "fa-ban", short_name="N/A", group_name="Availability", connected_models=(Individual,)),
+                "unsure_import": s(Sample, "Unsure Import", "orange", "fa-circle-question"),
+            },
+            "test": {
+                "planned": s(Test, "Planned", "yellow", "fa-flask", short_name="Plan", group_name="Process", connected_models=(Individual,)),
+                "waiting": s(Test, "Waiting Data/Bioinformatic process", "orange", "fa-spinner", short_name="Wait", group_name="Process"),
+                "completed": s(Test, "Data Delivered / Completed", "green", "fa-circle-check", short_name="Comp", group_name="Process"),
+                "previous": s(Test, "Previous", "grey", "fa-clock-rotate-left", short_name="Prev", group_name="Previous"),
+                "unsure_import": s(Test, "Unsure Import", "orange", "fa-circle-question"),
+            },
+            "pipeline": {
+                "planned": s(Pipeline, "Planned", "yellow", "fa-diagram-project", short_name="Plan", group_name="Process"),
+                "waiting": s(Pipeline, "Waiting Data/Bioinformatic process", "orange", "fa-spinner", short_name="Wait", group_name="Process"),
+                "completed": s(Pipeline, "Bioinformatic process completed", "green", "fa-circle-check", short_name="Comp", group_name="Process"),
+                "unsure_import": s(Pipeline, "Unsure Import", "orange", "fa-circle-question"),
+            },
+            "analysis": {
+                "planned": s(Analysis, "Planned", "yellow", "fa-calendar", short_name="PLan", group_name="Process"),
+                "waiting": s(Analysis, "Waiting Confirmation", "orange", "fa-spinner", short_name="Conf", group_name="Process"),
+                "completed": s(Analysis, "Completed", "blue", "fa-circle-check", short_name="Comp", group_name="Process", connected_models=(Individual,)),
+                "reported": s(Analysis, "Reported", "green", "fa-file-circle-check", short_name="Rep", group_name="Process"),
+                "initial": s(Analysis, "Initial Analysis", "orange", "fa-seedling", short_name="Int", group_name="Occasion"),
+                "reanalysis": s(Analysis, "Reanalysis", "yellow", "fa-rotate", short_name="Rea", group_name="Occasion"),
+                "unsure_import": s(Analysis, "Unsure Import", "orange", "fa-circle-question"),
+            },
+            "analysisreport": {
+                "negative": s(AnalysisReport, "Negative", "red", "fa-circle-xmark", short_name="Neg", group_name="Result", connected_models=(Individual,)),
+                "positive": s(AnalysisReport, "Positive", "green", "fa-circle-check", short_name="Pos", group_name="Result", connected_models=(Individual,)),
+                "delivered": s(AnalysisReport, "Delivered to Clinician", "green", "fa-envelope-open-text", short_name="Del", group_name="Informed"),
+                "unsure_import": s(AnalysisReport, "Unsure Import", "orange", "fa-circle-question"),
+            },
+            "project": {
+                "in_planning": s(Project, "In Planning", "blue", "fa-compass-drafting", short_name="Plan", group_name="Process"),
+                "in_progress": s(Project, "In Progress", "yellow", "fa-diagram-project", short_name="Prog", group_name="Process"),
+                "on_hold": s(Project, "On Hold", "orange", "fa-pause", short_name="Hold", group_name="Process"),
+                "completed": s(Project, "Completed", "green", "fa-flag-checkered", short_name="Comp", group_name="Process"),
+                "cancelled": s(Project, "Cancelled", "grey", "fa-ban", short_name="Canc", group_name="Process"),
+            },
+            "task": {
+                "assigned": s(Task, "Assigned", "yellow", "fa-list-check", short_name="Ass", group_name="Process"),
+                "active": s(Task, "Active", "orange", "fa-spinner", short_name="Act", group_name="Process"),
+                "completed": s(Task, "Completed", "green", "fa-circle-check", short_name="Comp", group_name="Process"),
+                "cancelled": s(Task, "Cancelled", "grey", "fa-ban", short_name="Canc", group_name="Process"),
+            },
+            "variant": {
+                "not_reported": s(Variant, "Not reported", "red", "fa-circle-question", short_name="NRep", group_name="Process"),
+                "reported": s(Variant, "Reported", "green", "fa-circle-check", short_name="Rep", group_name="Process"),
+                "causative": s(Variant, "Causative", "green", "fa-dna", short_name="Caus", group_name="Causativity", connected_models=(Individual,)),
+                "suspected": s(Variant, "Suspected Causative", "yellow", "fa-question", short_name="SCaus", group_name="Causativity"),
+                "secondary": s(Variant, "Secondary Finding", "blue", "fa-circle-half-stroke", short_name="2nd", group_name="Causativity"),
+                "previous": s(Variant, "Previously reported", "pink", "fa-clock-rotate-left", short_name="PrevRep", group_name="Previous"),
+                "ruled_out": s(Variant, "Ruled Out", "red", "fa-xmark", short_name="R/O", group_name="Validity"),
+                "ongoing_sanger": s(Variant, "Ongoing Sanger Confirmation", "purple", "fa-vial", short_name="Sang", group_name="Validity", connected_models=(Individual,)),
+                "ongoing_func": s(Variant, "Ongoing Functional Study", "blue", "fa-flask", short_name="Func", group_name="Functional", connected_models=(Individual,)),
+                "novel_gene": s(Variant, "Novel Gene Disease Association", "green", "fa-plus", short_name="Novel", group_name="Novel", connected_models=(Individual,)),
+                "candidate": s(Variant, "Candidate Gene-Variant Association", "yellow", "fa-magnifying-glass", short_name="Cand", group_name="Candidate", connected_models=(Individual,)),
+            },
         }
-        from lab.models import Analysis as _Analysis, Sample as _Sample, Test as _Test
-        from lab.models import Pipeline as _Pipeline, Task as _Task
-        for model_type in [Individual, _Sample, _Test, _Pipeline, _Task, _Analysis]:
-            ct = ContentType.objects.get_for_model(model_type)
-            model_statuses = {}
-            for key, (name, color, icon) in status_data.items():
-                st, _ = Status.objects.get_or_create(
-                    name=name, content_type=ct,
-                    defaults={"color": color, "icon": icon, "created_by": user})
-                if not st.icon:
-                    st.icon = icon; st.save()
-                model_statuses[key] = st
-            all_statuses[model_type.__name__.lower()] = model_statuses
         return all_statuses
 
     def _create_sample_types(self, user):
@@ -423,11 +559,7 @@ class Command(BaseCommand):
                 "created_by": user,
             })
         if created:
-            ct = ContentType.objects.get_for_model(Project)
-            p_status, _ = Status.objects.get_or_create(
-                name="Ongoing", content_type=ct,
-                defaults={"color": "purple", "created_by": user})
-            proj.statuses.set([p_status])
+            proj.statuses.set([all_statuses["project"]["in_planning"]])
         return proj
 
     def _create_identifier_types(self, user):
@@ -438,10 +570,16 @@ class Command(BaseCommand):
         ]
         result = {}
         for name, description, priority, show_in_table in config:
+            example = identifier_type_example_for_name(name)
             id_type, _ = IdentifierType.objects.get_or_create(
                 name=name,
-                defaults={"description": description, "created_by": user,
-                           "use_priority": priority, "is_shown_in_table": show_in_table})
+                defaults={
+                    "description": description,
+                    "example": example,
+                    "created_by": user,
+                    "use_priority": priority,
+                    "is_shown_in_table": show_in_table,
+                })
             changed = False
             if id_type.use_priority != priority:
                 id_type.use_priority = priority; changed = True
@@ -449,6 +587,8 @@ class Command(BaseCommand):
                 id_type.is_shown_in_table = show_in_table; changed = True
             if not id_type.description:
                 id_type.description = description; changed = True
+            if example and not id_type.example:
+                id_type.example = example; changed = True
             if changed:
                 id_type.save()
             result[name.lower()] = id_type
@@ -502,6 +642,16 @@ class Command(BaseCommand):
         ind.institution.add(institution)
         if hpo_terms:
             ind.hpo_terms.add(*random.sample(hpo_terms, min(random.randint(1, 5), len(hpo_terms))))
+            if not ind.is_affected:
+                ind.is_affected = True
+                ind.save(update_fields=["is_affected"])
+        else:
+            if ind.is_affected:
+                ind.is_affected = False
+                ind.save(update_fields=["is_affected"])
+            unsure_import = getattr(self, "_individual_unsure_import_status", None)
+            if unsure_import and not ind.statuses.filter(pk=unsure_import.pk).exists():
+                ind.statuses.add(unsure_import)
         return ind
 
     def _create_identifiers(self, individual, identifier_types, lab_id, biobank_id, user):
@@ -553,7 +703,6 @@ class Command(BaseCommand):
                 base_date, timezone.datetime.min.time()
             ).replace(tzinfo=timezone.get_current_timezone())
 
-        # Assign a random subset (1–5) of available task statuses
         task_statuses = list(all_statuses.get("task", {}).values())
 
         for i in range(num_tasks):
@@ -569,10 +718,7 @@ class Command(BaseCommand):
             )
 
             if task_statuses:
-                max_count = min(5, len(task_statuses))
-                count = random.randint(1, max_count)
-                selected_statuses = random.sample(task_statuses, count)
-                task.statuses.set(selected_statuses)
+                task.statuses.set([random.choice(task_statuses)])
 
     # ==================================================================
     # Sample / Test / Pipeline / Analysis / Variant chain
@@ -584,9 +730,9 @@ class Command(BaseCommand):
         variants_per_analysis, tasks_per_object, user, all_statuses, project,
         analysis_types,
     ):
-        active_sample  = all_statuses["sample"].get("active")
-        active_test    = all_statuses["test"].get("active")
-        active_pipeline = all_statuses["pipeline"].get("active")
+        available_sample = all_statuses["sample"].get("available")
+        waiting_test = all_statuses["test"].get("waiting")
+        waiting_pipeline = all_statuses["pipeline"].get("waiting")
 
         for _ in range(num_samples):
             sample_type = random.choice(list(sample_types.values()))
@@ -599,8 +745,8 @@ class Command(BaseCommand):
                 isolation_by=contact,
                 created_by=user,
             )
-            if active_sample:
-                sample.statuses.set([active_sample])
+            if available_sample:
+                sample.statuses.set([available_sample])
             self._create_tasks(sample, user, all_statuses, project,
                                 tasks_per_object, receipt_date)
 
@@ -616,8 +762,8 @@ class Command(BaseCommand):
                     performed_by=institution,     # Institution FK
                     created_by=user,
                 )
-                if active_test:
-                    test.statuses.set([active_test])
+                if waiting_test:
+                    test.statuses.set([waiting_test])
                 self._create_tasks(test, user, all_statuses, project,
                                     tasks_per_object, performed_date)
 
@@ -632,8 +778,8 @@ class Command(BaseCommand):
                         performed_by=user,        # Pipeline.performed_by is still FK → User
                         created_by=user,
                     )
-                    if active_pipeline:
-                        pipeline.statuses.set([active_pipeline])
+                    if waiting_pipeline:
+                        pipeline.statuses.set([waiting_pipeline])
                     self._create_tasks(pipeline, user, all_statuses, project,
                                         tasks_per_object, pipeline_date)
 
@@ -655,7 +801,7 @@ class Command(BaseCommand):
     ):
         if analyses_per_pipeline <= 0:
             return
-        active_analysis = all_statuses["analysis"].get("active")
+        planned_analysis = all_statuses["analysis"].get("planned")
         types = list(analysis_types.values()) if analysis_types else []
 
         for _ in range(analyses_per_pipeline):
@@ -670,8 +816,8 @@ class Command(BaseCommand):
                 created_by=user,
             )
             analysis.performed_by.add(user)    # M2M — set after creation
-            if active_analysis:
-                analysis.statuses.set([active_analysis])
+            if planned_analysis:
+                analysis.statuses.set([planned_analysis])
 
             self._create_tasks(analysis, user, all_statuses, project,
                                 tasks_per_object, performed_date)
@@ -726,7 +872,7 @@ class Command(BaseCommand):
                 created_by=user,
             )
 
-            Classification.objects.create(
+            classification = Classification.objects.create(
                 variant=snv,
                 user=user,
                 classification=random.choice([
@@ -735,3 +881,29 @@ class Command(BaseCommand):
                 inheritance=random.choice(["ad", "ar", "de_novo", "unknown"]),
                 notes="Auto-generated classification",
             )
+            if classification.classification in {"pathogenic", "likely_pathogenic"}:
+                variant_statuses = [
+                    all_statuses["variant"].get("reported"),
+                    all_statuses["variant"].get("causative"),
+                ]
+                if random.random() < 0.7:
+                    variant_statuses.append(all_statuses["variant"].get("ongoing_sanger"))
+            elif classification.classification == "vus":
+                variant_statuses = [
+                    all_statuses["variant"].get("reported"),
+                    all_statuses["variant"].get("suspected"),
+                ]
+            else:
+                variant_statuses = [
+                    all_statuses["variant"].get("not_reported"),
+                    all_statuses["variant"].get("ruled_out"),
+                ]
+
+            if random.random() < 0.25:
+                variant_statuses.append(all_statuses["variant"].get("ongoing_func"))
+            if random.random() < 0.15:
+                variant_statuses.append(all_statuses["variant"].get("novel_gene"))
+            if random.random() < 0.15:
+                variant_statuses.append(all_statuses["variant"].get("candidate"))
+
+            snv.statuses.set([status for status in variant_statuses if status])

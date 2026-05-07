@@ -82,7 +82,6 @@ allele_validator = RegexValidator(
     code="invalid_allele",
 )
 
-
 class SNV(Variant):
     """Single Nucleotide Variant"""
     reference = models.CharField(max_length=255, validators=[allele_validator])
@@ -97,7 +96,6 @@ class SNV(Variant):
         if self.start is not None:
             self.end = self.start
         super().save(*args, **kwargs)
-
 
 class delins(Variant):
     """Simple deletion/insertion anchored at a single position."""
@@ -165,6 +163,55 @@ class Annotation(models.Model):
         return f"{self.source} for {self.variant}"
 
     history = HistoricalRecords()
+
+
+class ACMGEvidenceOverride(models.Model):
+    """Imported GeneBe evidence plus manual overrides for a variant gene row."""
+
+    SOURCE_CHOICES = [
+        ("genebe", "GeneBe Import"),
+        ("manual", "Manual Override"),
+    ]
+
+    variant = models.ForeignKey(
+        Variant,
+        on_delete=models.CASCADE,
+        related_name="acmg_evidence_overrides",
+    )
+    gene_symbol = models.CharField(max_length=100, blank=True, db_index=True)
+    transcript = models.CharField(max_length=100, blank=True)
+    criterion = models.CharField(max_length=20, db_index=True)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, db_index=True)
+    included = models.BooleanField(default=True)
+    strength = models.CharField(max_length=20, blank=True, default="")
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["gene_symbol", "transcript", "criterion", "source"]
+        unique_together = ["variant", "gene_symbol", "transcript", "criterion", "source"]
+
+    def save(self, *args, **kwargs):
+        self.gene_symbol = (self.gene_symbol or "").strip()
+        self.transcript = (self.transcript or "").strip()
+        if self.criterion:
+            self.criterion = self.criterion.strip().replace(" ", "_").upper()
+        if self.strength:
+            self.strength = self.strength.strip().replace(" ", "_").lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        state = "included" if self.included else "excluded"
+        scope = self.gene_symbol or "variant"
+        return f"{self.variant} {scope} {self.criterion} ({self.source}, {state})"
 
 class Classification(HistoryMixin, models.Model):
     """ACMG Classification for a Variant"""

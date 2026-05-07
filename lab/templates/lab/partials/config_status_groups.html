@@ -22,6 +22,7 @@
                         <th class="font-semibold px-4 py-2">Short Name</th>
                         <th class="font-semibold px-4 py-2">Color</th>
                         <th class="font-semibold px-4 py-2">Icon</th>
+                        <th class="font-semibold px-4 py-2">Connected Classes</th>
                         <th class="font-semibold px-4 py-2 text-right">Usage</th>
                         {% if section.can_change or section.can_delete %}
                         <th class="font-semibold px-4 py-2 text-right">Actions</th>
@@ -32,7 +33,7 @@
                     {% for subgrp in status_subgroups %}
                         {% if subgrp.grouper %}
                         <tr class="bg-base-200/30">
-                            <td colspan="{% if section.can_change or section.can_delete %}6{% else %}5{% endif %}"
+                            <td colspan="{% if section.can_change or section.can_delete %}7{% else %}6{% endif %}"
                                 class="px-4 py-1.5">
                                 <span class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
                                     <i class="fa-regular fa-circle-dot text-[9px]"></i>
@@ -68,6 +69,17 @@
                                     <span class="text-xs font-mono ml-1">{{ obj.icon }}</span>
                                 {% else %}
                                     <span class="text-base-content/30">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-2">
+                                {% if obj.connected_classes.all %}
+                                    <div class="flex flex-wrap gap-1">
+                                        {% for ct in obj.connected_classes.all %}
+                                            <span class="badge badge-ghost badge-xs">{{ ct.model|title }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <span class="text-base-content/30 text-xs">—</span>
                                 {% endif %}
                             </td>
                             <td class="px-4 py-2 text-right">

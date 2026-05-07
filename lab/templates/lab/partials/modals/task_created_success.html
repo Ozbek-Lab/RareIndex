@@ -1,0 +1,69 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-4">
+  <h3 class="font-bold text-lg text-primary flex items-center gap-2">
+    <i class="fa-solid fa-circle-check"></i>
+    Task Created
+  </h3>
+</div>
+
+<div class="space-y-5">
+  <div class="rounded-2xl border border-success/30 bg-success/10 px-5 py-4">
+    <div class="flex items-start gap-3">
+      <div class="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-success/15 text-success">
+        <i class="fa-solid fa-check text-lg"></i>
+      </div>
+      <div class="min-w-0">
+        <div class="text-xs font-semibold uppercase tracking-wider text-success/80">Saved successfully</div>
+        <h4 class="mt-1 text-xl font-bold text-base-content leading-tight">{{ task.title }}</h4>
+        <p class="mt-1 text-sm text-base-content/60">
+          Your task has been created and is ready to be reviewed.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+    <div class="rounded-xl border border-base-200 bg-base-100 px-4 py-3">
+      <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40">Assigned To</div>
+      <div class="mt-1 font-medium text-base-content">
+        {{ task.assigned_to.get_full_name|default:task.assigned_to.username }}
+      </div>
+    </div>
+    <div class="rounded-xl border border-base-200 bg-base-100 px-4 py-3">
+      <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40">Priority</div>
+      <div class="mt-1 font-medium text-base-content">{{ task.get_priority_display }}</div>
+    </div>
+    <div class="rounded-xl border border-base-200 bg-base-100 px-4 py-3">
+      <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40">Due Date</div>
+      <div class="mt-1 font-medium text-base-content">
+        {{ task.due_date|date:"d M Y, H:i"|default:"Not set" }}
+      </div>
+    </div>
+    <div class="rounded-xl border border-base-200 bg-base-100 px-4 py-3">
+      <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40">Linked To</div>
+      <div class="mt-1 font-medium text-base-content">
+        {% if project %}
+          <a href="{% url 'lab:project_detail' project.pk %}" class="text-primary hover:underline">
+            {{ project.name }}
+          </a>
+        {% elif task.content_object %}
+          {{ task.content_object }}
+        {% else %}
+          None
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-base-200">
+    <a href="{% url 'lab:task_detail' task.pk %}"
+       class="btn btn-ghost btn-sm gap-2">
+      <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+      Open Task
+    </a>
+    <button type="button"
+            class="btn btn-primary btn-sm px-6"
+            onclick="document.getElementById('generic-modal').close()">
+      Close
+    </button>
+  </div>
+</div>

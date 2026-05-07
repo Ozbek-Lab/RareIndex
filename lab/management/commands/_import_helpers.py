@@ -66,6 +66,15 @@ def parse_date_from_filename(filename):
 # ID utilities
 # ---------------------------------------------------------------------------
 
+def identifier_type_example_for_name(name):
+    """Return a valid sample identifier for well-known IdentifierType names."""
+    normalized = str(name or "").strip().lower()
+    if normalized == "rareboost":
+        return "RB_2025_01.1"
+    if normalized == "biobank":
+        return "RD3.F12.1"
+    return ""
+
 def get_family_id(lab_id):
     """Return the family-level prefix of a lab ID (everything before the first '.')."""
     if not lab_id:
@@ -296,8 +305,30 @@ def get_or_create_analysis_type(name, admin_user):
     return at
 
 
-def get_or_create_status(name, description, color, admin_user, content_type=None, icon=None):
-    """Get or create a Status, backfilling icon when the record already exists but differs."""
+def get_or_create_status_group(name, content_type=None):
+    """Get or create a StatusGroup by name/scope."""
+    from lab.models import StatusGroup
+    if not name:
+        return None
+    group, _ = StatusGroup.objects.get_or_create(
+        name=name,
+        content_type=content_type,
+    )
+    return group
+
+
+def get_or_create_status(
+    name,
+    description,
+    color,
+    admin_user,
+    content_type=None,
+    icon=None,
+    short_name="",
+    group=None,
+    connected_classes=None,
+):
+    """Get or create a Status and keep it aligned with the seeded definition."""
     from lab.models import Status
     if not name:
         return None
@@ -309,11 +340,31 @@ def get_or_create_status(name, description, color, admin_user, content_type=None
             'color': color or '#000000',
             'created_by': admin_user,
             'icon': icon,
+            'short_name': short_name or '',
+            'group': group,
         },
     )
-    if icon and (created or not status.icon or status.icon != icon):
+    changed = False
+    for attr, value in (
+        ("description", description or ""),
+        ("color", color or "#000000"),
+        ("short_name", short_name or ""),
+        ("group", group),
+        ("content_type", content_type),
+    ):
+        if getattr(status, attr) != value:
+            setattr(status, attr, value)
+            changed = True
+    if icon != status.icon:
         status.icon = icon
+        changed = True
+    if changed:
         status.save()
+    if connected_classes is not None:
+        current_ids = set(status.connected_classes.values_list("id", flat=True))
+        desired_ids = {ct.id for ct in connected_classes if ct}
+        if current_ids != desired_ids:
+            status.connected_classes.set(connected_classes)
     return status
 
 

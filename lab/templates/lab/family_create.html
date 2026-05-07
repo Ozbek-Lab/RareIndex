@@ -6,6 +6,28 @@
 
     <form method="post" class="space-y-6" id="family-form">
         {% csrf_token %}
+
+        {% if form.errors or individual_formset.non_form_errors or individual_formset.errors %}
+        <div class="alert alert-error shadow-sm">
+            <div>
+                <h3 class="font-semibold">Please fix the problems below</h3>
+                <ul class="list-disc pl-5 text-sm mt-2 space-y-1">
+                    {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                    {% for error in individual_formset.non_form_errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                    {% if form.errors %}
+                    <li>Family details need attention.</li>
+                    {% endif %}
+                    {% if individual_formset.errors %}
+                    <li>One or more family members need attention.</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
         
         <!-- Family Details -->
         <div class="p-6 bg-base-100 border border-base-300 rounded-lg shadow-sm">
@@ -14,7 +36,7 @@
                 <div>
                     <label class="block mb-2 text-sm font-medium text-base-content">Family ID</label>
                     {{ form.family_id }}
-                    {{ form.family_id.errors }}
+                    {% if form.family_id.errors %}<p class="mt-1 text-sm text-error">{{ form.family_id.errors.0 }}</p>{% endif %}
                 </div>
                 <div>
                     <label class="block mb-2 text-sm font-medium text-base-content">Consanguineous</label>
@@ -22,10 +44,12 @@
                         {{ form.is_consanguineous }}
                         <span class="ml-2 text-sm text-base-content/70">Yes / No / Unknown</span>
                     </div>
+                    {% if form.is_consanguineous.errors %}<p class="mt-1 text-sm text-error">{{ form.is_consanguineous.errors.0 }}</p>{% endif %}
                 </div>
                 <div class="md:col-span-2">
                     <label class="block mb-2 text-sm font-medium text-base-content">Description</label>
                     {{ form.description }} 
+                    {% if form.description.errors %}<p class="mt-1 text-sm text-error">{{ form.description.errors.0 }}</p>{% endif %}
                 </div>
             </div>
         </div>
@@ -33,8 +57,25 @@
         <!-- Individuals Section -->
         <div class="space-y-4">
             <h2 class="text-xl font-semibold text-base-content">Individuals</h2>
-            
+
             {{ individual_formset.management_form }}
+            {% if individual_formset.management_form.errors %}
+            <div class="alert alert-warning shadow-sm">
+                <span>The family member list could not be verified. Please refresh the page and try again.</span>
+            </div>
+            {% endif %}
+            {% if individual_formset.non_form_errors %}
+            <div class="alert alert-error shadow-sm">
+                <div>
+                    <h3 class="font-semibold">Family member validation failed</h3>
+                    <ul class="list-disc pl-5 text-sm mt-2 space-y-1">
+                        {% for error in individual_formset.non_form_errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Container for Rows -->
             <div id="individuals-container" class="space-y-6">
@@ -112,6 +153,7 @@
                         }
                     }
                 });
+
             },
 
             addMember() {
@@ -188,13 +230,19 @@
     }
 
     function memberCard(index) {
+        const defaultCrossIdTypeId = (
+            IDENTIFIER_TYPES.find((type) => type.name === 'RareBoost')
+            || IDENTIFIER_TYPES[0]
+            || {}
+        ).id || '';
+
         return {
             index: index,
             crossIds: [],
             hpoTerms: [], // Array of {id, label}
             instSearch: '',
             instOpen: false,
-            selectedInst: null,
+            selectedInstitutions: [],
             
             init() {
                // Load existing cross IDs
@@ -211,12 +259,18 @@
                // Simplified: We assume empty for creation, or we might need to inject initial data if form errors.
                // TODO: If re-render with errors, we need to repopulate hpoTerms.
                // We can look for <option selected> in the hidden select if we keep it?
-               
+               const select = this.institutionSelect;
+               if (select) {
+                   this.selectedInstitutions = Array.from(select.selectedOptions).map((option) => ({
+                       id: option.value,
+                       name: option.textContent.trim(),
+                   }));
+               }
             },
 
             // Cross IDs
             addCrossId() {
-                this.crossIds.push({ type_id: '', value: '' });
+                this.crossIds.push({ type_id: defaultCrossIdTypeId, value: '' });
                 this.updateJson();
             },
 
@@ -247,23 +301,50 @@
                 this.hpoTerms = this.hpoTerms.filter(t => t.id != id);
             },
             
-            // Institution
+            // Institutions
+            get institutionSelect() {
+                return document.querySelector(`select[name='individuals-${this.index}-institution']`);
+            },
+
+            syncInstitutions() {
+                const select = this.institutionSelect;
+                if (!select) {
+                    return;
+                }
+
+                Array.from(select.options).forEach((option) => {
+                    option.selected = this.selectedInstitutions.some((inst) => String(inst.id) === option.value);
+                });
+            },
+
+            addInstitution(inst) {
+                if (this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id))) {
+                    return;
+                }
+
+                this.selectedInstitutions.push(inst);
+                this.syncInstitutions();
+            },
+
+            removeInstitution(id) {
+                this.selectedInstitutions = this.selectedInstitutions.filter((inst) => String(inst.id) !== String(id));
+                this.syncInstitutions();
+            },
+
             get filteredInstitutions() {
                 if (this.instSearch === '') {
-                    return INSTITUTIONS;
+                    return INSTITUTIONS.filter((inst) => !this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id)));
                 }
                 return INSTITUTIONS.filter(inst => 
-                    inst.name.toLowerCase().includes(this.instSearch.toLowerCase())
+                    inst.name.toLowerCase().includes(this.instSearch.toLowerCase()) &&
+                    !this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id))
                 );
             },
             
             selectInstitution(inst) {
-                this.selectedInst = inst;
+                this.addInstitution(inst);
                 this.instOpen = false;
-                this.instSearch = inst.name;
-                // Update hidden select
-                const select = document.querySelector(`select[name='individuals-${this.index}-institution']`);
-                if(select) select.value = inst.id;
+                this.instSearch = '';
             }
         }
     }

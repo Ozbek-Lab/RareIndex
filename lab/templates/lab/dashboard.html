@@ -3,8 +3,12 @@
 
 {% block content %}
 <div class="p-4 lg:p-6 flex-1 flex flex-col overflow-hidden w-full relative" 
-     x-data="{ sidebarOpen: window.innerWidth < 1024 ? false : (JSON.parse(localStorage.getItem('dashboardSidebarOpen')) ?? true) }" 
-     x-init="$watch('sidebarOpen', val => localStorage.setItem('dashboardSidebarOpen', JSON.stringify(val)))"
+     x-data="{
+        sidebarOpen: window.innerWidth < 1024 ? false : (JSON.parse(localStorage.getItem('dashboardSidebarOpen') ?? 'true')),
+        plotsOpen: JSON.parse(localStorage.getItem('dashboardPlotsOpen') ?? 'true'),
+        tasksOpen: JSON.parse(localStorage.getItem('dashboardTasksOpen') ?? 'true')
+     }" 
+     x-init="$watch('sidebarOpen', val => localStorage.setItem('dashboardSidebarOpen', JSON.stringify(val))); $watch('plotsOpen', val => localStorage.setItem('dashboardPlotsOpen', JSON.stringify(val))); $watch('tasksOpen', val => localStorage.setItem('dashboardTasksOpen', JSON.stringify(val)))"
      @resize.window="if (window.innerWidth < 1024) sidebarOpen = false">
     
     <div class="flex flex-row gap-0 md:gap-6 flex-1 overflow-hidden relative" hx-trigger="taskChanged from:body" hx-get="{% url 'lab:dashboard' %}" hx-select=".dashboard-content-refresh" hx-target=".dashboard-content-refresh" hx-swap="outerHTML">
@@ -392,33 +396,53 @@
             <!-- Main Dashboard Body Area -->
             <div id="dashboard-body-container" class="flex-1 pb-8 flex flex-col gap-6">
                 <!-- Widgets Section -->
-                {% if widgets %}
-                <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
-                     id="widget-grid"
-                     x-init="
-                        Sortable.create($el, {
-                            animation: 150,
-                            handle: '.drag-handle',
-                            ghostClass: 'opacity-50',
-                            onEnd: function (evt) {
-                                const newOrder = Array.from($el.children).map(child => child.dataset.widgetId);
-                                const match = document.cookie.match(/csrftoken=([^;]+)/);
-                                const csrfToken = match ? match[1] : '';
-                                fetch('{% url 'lab:reorder_widgets' %}', {
-                                    method: 'PATCH',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRFToken': csrfToken
-                                    },
-                                    body: JSON.stringify({order: newOrder})
+                <section class="rounded-2xl border border-base-200 bg-base-100 shadow-sm overflow-hidden">
+                    <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-200">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-chart-column text-secondary"></i>
+                            <div>
+                                <h2 class="font-bold text-lg leading-none">Plots</h2>
+                                <p class="text-xs text-base-content/60 mt-1">Dashboard plots and visualizations</p>
+                            </div>
+                        </div>
+                        <button type="button"
+                                class="btn btn-ghost btn-sm gap-2"
+                                @click="plotsOpen = !plotsOpen"
+                                :aria-expanded="plotsOpen.toString()"
+                                title="Collapse or expand plots">
+                            <i class="fa-solid fa-chevron-down text-xs transition-transform duration-200"
+                               :class="{ 'rotate-180': plotsOpen }"></i>
+                            <span x-text="plotsOpen ? 'Collapse' : 'Expand'"></span>
+                        </button>
+                    </div>
+                    <div x-show="plotsOpen" x-collapse x-cloak class="p-4">
+                        {% if widgets %}
+                        <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
+                             id="widget-grid"
+                             x-init="
+                                Sortable.create($el, {
+                                    animation: 150,
+                                    handle: '.drag-handle',
+                                    ghostClass: 'opacity-50',
+                                    onEnd: function (evt) {
+                                        const newOrder = Array.from($el.children).map(child => child.dataset.widgetId);
+                                        const match = document.cookie.match(/csrftoken=([^;]+)/);
+                                        const csrfToken = match ? match[1] : '';
+                                        fetch('{% url 'lab:reorder_widgets' %}', {
+                                            method: 'PATCH',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'X-CSRFToken': csrfToken
+                                            },
+                                            body: JSON.stringify({order: newOrder})
+                                        });
+                                    }
                                 });
-                            }
-                        });
-                     ">
-                    {% for widget in widgets %}
-                    <div class="card bg-base-100 shadow-sm border border-base-200" data-widget-id="{{ widget.id }}" style="grid-column: span {{ widget.template.default_col_span|default:widget.col_span }}; grid-row: span {{ widget.row_span }};">
-                        <div class="card-body p-2 sm:p-3 flex flex-col min-h-0 relative">
+                             ">
+                            {% for widget in widgets %}
+                            <div class="card bg-base-100 shadow-sm border border-base-200" data-widget-id="{{ widget.id }}" style="grid-column: span {{ widget.template.default_col_span|default:widget.col_span }}; grid-row: span {{ widget.row_span }};">
+                                <div class="card-body p-2 sm:p-3 flex flex-col min-h-0 relative">
                             
                             {% if widget.template.slug == "hpo-term-network" %}
                             <div class="relative z-30 mb-1 flex flex-col gap-2">
@@ -548,14 +572,38 @@
                             </div>
                         </div>
                     </div>
-                    {% endfor %}
-</div>
-{% endif %}
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-sm text-base-content/60 px-1 py-2">No plots are available yet.</div>
+                        {% endif %}
+                    </div>
+                </section>
 
                 <!-- My Tasks Section -->
-                <div>
-                    {% include "lab/partials/dashboard/my_tasks.html" %}
-                </div>
+                <section class="rounded-2xl border border-base-200 bg-base-100 shadow-sm overflow-hidden">
+                    <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-200">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-primary"></i>
+                            <div>
+                                <h2 class="font-bold text-lg leading-none">My Tasks</h2>
+                                <p class="text-xs text-base-content/60 mt-1">Pending and recently completed work</p>
+                            </div>
+                        </div>
+                        <button type="button"
+                                class="btn btn-ghost btn-sm gap-2"
+                                @click="tasksOpen = !tasksOpen"
+                                :aria-expanded="tasksOpen.toString()"
+                                title="Collapse or expand tasks">
+                            <i class="fa-solid fa-chevron-down text-xs transition-transform duration-200"
+                               :class="{ 'rotate-180': tasksOpen }"></i>
+                            <span x-text="tasksOpen ? 'Collapse' : 'Expand'"></span>
+                        </button>
+                    </div>
+                    <div x-show="tasksOpen" x-collapse x-cloak class="p-4">
+                        {% include "lab/partials/dashboard/my_tasks.html" %}
+                    </div>
+                </section>
                 
                 <!-- Recent Activity Section -->
                 <div>

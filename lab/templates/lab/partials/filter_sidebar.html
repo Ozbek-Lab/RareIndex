@@ -1,4 +1,5 @@
 {% load lab_tags %}
+{% url 'lab:individual_list' as default_filter_url %}
 <div
   class="h-full flex flex-col bg-base-100 border-r border-base-200 w-80"
   x-data="{ 
@@ -24,8 +25,8 @@
     <h2 class="font-bold text-lg text-base-content">Filters</h2>
     <button
       class="btn btn-ghost btn-xs text-primary font-normal normal-case"
-      hx-get="{% url 'lab:individual_list' %}"
-      hx-target="body"
+      hx-get="{{ filter_reset_url|default:default_filter_url }}"
+      hx-target="{{ filter_reset_target|default:'body' }}"
       hx-push-url="true"
     >
       Reset All
@@ -34,8 +35,8 @@
 
   <form
     id="filter-form"
-    hx-get="{% url 'lab:individual_list' %}"
-    hx-target="#individual-table-container"
+    hx-get="{{ filter_url|default:default_filter_url }}"
+    hx-target="{{ filter_target|default:'#individual-table-container' }}"
     hx-trigger="change delay:500ms, filter-changed delay:500ms"
     hx-push-url="true"
     hx-indicator="#table-indicator"
@@ -70,7 +71,7 @@
             </h3>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.status.field.choices %}
-                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.status|get_item:choice.0 %}
+                {% with metadata=status_metadata.individual|get_item:choice.0 count=filter_counts.status|get_item:choice.0 %}
                   {% include "lab/components/tristate_status_pill.html" with name="status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'status' excluded_values=request.GET|get_list:'status__exclude' %}
                 {% endwith %}
               {% endfor %}
@@ -250,7 +251,7 @@
 
                 <!-- Dropdown Results -->
                 <div
-                    class="absolute z-50 mt-1 w-full bg-base-100 shadow-lg rounded-box border border-base-200 max-h-60 overflow-auto"
+                    class="mt-1 w-full bg-base-100 shadow-xl rounded-box border border-base-200 max-h-60 overflow-y-auto overscroll-contain"
                     x-show="focused"
                     style="display: none;"
                 >
@@ -499,7 +500,7 @@
             </h3>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__status.field.choices %}
-                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.sample_status|get_item:choice.0 %}
+                {% with metadata=status_metadata.sample|get_item:choice.0 count=filter_counts.sample_status|get_item:choice.0 %}
                   {% include "lab/components/tristate_status_pill.html" with name="samples__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'samples__status' excluded_values=request.GET|get_list:'samples__status__exclude' %}
                 {% endwith %}
               {% endfor %}
@@ -551,7 +552,7 @@
             </h3>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__status.field.choices %}
-                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.test_status|get_item:choice.0 %}
+                {% with metadata=status_metadata.test|get_item:choice.0 count=filter_counts.test_status|get_item:choice.0 %}
                   {% include "lab/components/tristate_status_pill.html" with name="samples__tests__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'samples__tests__status' excluded_values=request.GET|get_list:'samples__tests__status__exclude' %}
                 {% endwith %}
               {% endfor %}
@@ -603,7 +604,7 @@
             </h3>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__pipelines__status.field.choices %}
-                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.pipeline_status|get_item:choice.0 %}
+                {% with metadata=status_metadata.pipeline|get_item:choice.0 count=filter_counts.pipeline_status|get_item:choice.0 %}
                   {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'samples__tests__pipelines__status' excluded_values=request.GET|get_list:'samples__tests__pipelines__status__exclude' %}
                 {% endwith %}
               {% endfor %}
@@ -655,7 +656,7 @@
             </h3>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__pipelines__analyses__status.field.choices %}
-                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.analysis_status|get_item:choice.0 %}
+                {% with metadata=status_metadata.analysis|get_item:choice.0 count=filter_counts.analysis_status|get_item:choice.0 %}
                   {% include "lab/components/tristate_status_pill.html" with name="samples__tests__pipelines__analyses__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'samples__tests__pipelines__analyses__status' excluded_values=request.GET|get_list:'samples__tests__pipelines__analyses__status__exclude' %}
                 {% endwith %}
               {% endfor %}
@@ -707,7 +708,7 @@
             </h3>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.variants__status.field.choices %}
-                {% with metadata=status_metadata|get_item:choice.0 count=filter_counts.variant_status|get_item:choice.0 %}
+                {% with metadata=status_metadata.variant|get_item:choice.0 count=filter_counts.variant_status|get_item:choice.0 %}
                   {% include "lab/components/tristate_status_pill.html" with name="variants__status" value=choice.0 label=choice.1 color=metadata.color icon=metadata.icon count=count current_values=request.GET|get_list:'variants__status' excluded_values=request.GET|get_list:'variants__status__exclude' %}
                 {% endwith %}
               {% endfor %}

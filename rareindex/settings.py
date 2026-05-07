@@ -40,7 +40,7 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
 # Marimo configuration
-PLOT_ALLOWED_MODELS = ['Individual', 'Sample', 'Test', 'Analysis', 'Variant']
+PLOT_ALLOWED_MODELS = ['Individual', 'Sample', 'Test', 'Analysis', 'Pipeline', 'Project', 'Variant']
 MARIMO_NOTEBOOKS_DIR = BASE_DIR / 'lab/notebooks'
 # URL the *browser* uses to load `marimo run` (iframes, links). Use a host/port reachable from
 # the user’s machine — not an internal Docker service name unless the browser can resolve it.

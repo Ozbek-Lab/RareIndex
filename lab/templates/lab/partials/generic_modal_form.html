@@ -10,6 +10,15 @@
       hx-swap="innerHTML"
       class="space-y-4">
     {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="rounded-lg border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+        <div class="font-semibold mb-1">Please fix the highlighted fields below.</div>
+        {% if form.non_field_errors %}
+        <div class="text-xs">{{ form.non_field_errors.0 }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
     
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         {% for field in form %}

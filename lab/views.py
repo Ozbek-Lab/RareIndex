@@ -34,6 +34,7 @@ from .models import (
 )
 from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
 from .filters import IndividualFilter, ProjectFilter, VariantFilter
+from .status_utils import build_status_metadata_by_model
 from variant.models import Variant, Annotation as VariantAnnotation, Classification as VariantClassification
 
 logger = logging.getLogger(__name__)
@@ -572,7 +573,37 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         Annotates first_institution_name so the Institution column can be sorted.
         """
         qs = super().get_queryset()
-        qs = qs.prefetch_related("institution")
+        qs = qs.prefetch_related(
+            "institution",
+            "statuses",
+            "statuses__connected_classes",
+            "projects__statuses",
+            "projects__statuses__connected_classes",
+            "projects__tasks__statuses",
+            "projects__tasks__statuses__connected_classes",
+            "tasks__statuses",
+            "tasks__statuses__connected_classes",
+            "samples__statuses",
+            "samples__statuses__connected_classes",
+            "samples__tasks__statuses",
+            "samples__tasks__statuses__connected_classes",
+            "samples__tests__statuses",
+            "samples__tests__statuses__connected_classes",
+            "samples__tests__tasks__statuses",
+            "samples__tests__tasks__statuses__connected_classes",
+            "samples__tests__pipelines__statuses",
+            "samples__tests__pipelines__statuses__connected_classes",
+            "samples__tests__pipelines__tasks__statuses",
+            "samples__tests__pipelines__tasks__statuses__connected_classes",
+            "samples__tests__pipelines__analyses__statuses",
+            "samples__tests__pipelines__analyses__statuses__connected_classes",
+            "samples__tests__pipelines__analyses__tasks__statuses",
+            "samples__tests__pipelines__analyses__tasks__statuses__connected_classes",
+            "samples__tests__pipelines__analyses__reports__statuses",
+            "samples__tests__pipelines__analyses__reports__statuses__connected_classes",
+            "variants__statuses",
+            "variants__statuses__connected_classes",
+        )
 
         # Per-individual aggregate timestamps for related objects that belong
         # exclusively to a single Individual (no shared multi-individual models).
@@ -613,20 +644,11 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['total_count'] = self.model.objects.count()
-        # Status Metadata for colored pills
-        from .models import Status
-        statuses = Status.objects.all()
-        metadata = {}
-        for s in statuses:
-            metadata[s.name] = {
-                'color': s.color,
-                'icon': s.icon,
-                'short_name': s.short_name,
-            }
-        context['status_metadata'] = metadata
+        context['status_metadata'] = build_status_metadata_by_model()
         
-        # Filter counts are only needed on full page render (sidebar is present)
-        if not self.request.htmx:
+        # Filter counts are needed whenever the full page/sidebar renders.
+        # Skip them only for HTMX requests that swap just the table container.
+        if not self.request.htmx or self.request.headers.get("HX-Target") != "individual-table-container":
             context['filter_counts'] = _individual_filter_counts()
         else:
             context['filter_counts'] = {}
@@ -696,20 +718,10 @@ class ProjectListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['total_count'] = self.model.objects.count()
-        # Status Metadata for colored pills
-        from .models import Status
-        statuses = Status.objects.all()
-        metadata = {}
-        for s in statuses:
-            metadata[s.name] = {
-                'color': s.color,
-                'icon': s.icon,
-                'short_name': s.short_name,
-            }
-        context['status_metadata'] = metadata
+        context['status_metadata'] = build_status_metadata_by_model()
 
-        # Filter counts are only needed on full page render (sidebar is present)
-        if not self.request.htmx:
+        # Filter counts are needed whenever the full page/sidebar renders.
+        if not self.request.htmx or self.request.headers.get("HX-Target") != "project-table-container":
             context['filter_counts'] = _project_filter_counts()
         else:
             context['filter_counts'] = {}
@@ -745,21 +757,11 @@ class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["total_count"] = self.model.objects.count()
+        context["status_metadata"] = build_status_metadata_by_model()
 
-        statuses = Status.objects.all()
-        metadata = {}
-        for s in statuses:
-            metadata[s.name] = {
-                "color": s.color,
-                "icon": s.icon,
-                "short_name": s.short_name,
-            }
-        context["status_metadata"] = metadata
-
-        # Filter counts are only needed when the full page renders (sidebar included).
-        # HTMX filter/search/scroll requests only swap the table container, so skip
-        # the count queries entirely on those — they would be computed but never used.
-        if not self.request.htmx:
+        # Filter counts are needed whenever the full page/sidebar renders.
+        # Skip them only for HTMX requests that swap just the table container.
+        if not self.request.htmx or self.request.headers.get("HX-Target") != "variant-table-container":
             context["filter_counts"] = _variant_filter_counts()
         else:
             context["filter_counts"] = {}
@@ -781,19 +783,18 @@ class MapVisualizationView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        filterset = IndividualFilter(self.request.GET or None, queryset=Individual.objects.all())
+        qs = filterset.qs.filter(institution__city__isnull=False).distinct()
+
         # Aggregate counts by institution city for different views:
         # - individuals: distinct individuals per city
         # - families: distinct family units per city (family if present, otherwise individual)
-        # - probands: distinct index individuals (is_index=True) per city
-        qs = (
-            Individual.objects.filter(institution__city__isnull=False)
-            .values("id", "family_id", "is_index", "institution__city")
-            .order_by("institution__city")
-        )
+        # - affected: distinct affected individuals (is_affected=True) per city
+        qs = qs.values("id", "family_id", "is_affected", "institution__city").order_by("institution__city")
 
         city_individuals = {}
         city_families = {}
-        city_probands = {}
+        city_affected = {}
 
         for row in qs:
             city = row["institution__city"]
@@ -801,12 +802,12 @@ class MapVisualizationView(LoginRequiredMixin, TemplateView):
                 continue
             indiv_id = row["id"]
             family_id = row["family_id"]
-            is_index = row["is_index"]
+            is_affected = row["is_affected"]
 
             # Initialise per-city containers
             entry_indiv = city_individuals.setdefault(city, set())
             entry_fam = city_families.setdefault(city, set())
-            entry_prob = city_probands.setdefault(city, set())
+            entry_aff = city_affected.setdefault(city, set())
 
             # Individuals: distinct individuals per city
             entry_indiv.add(indiv_id)
@@ -815,18 +816,18 @@ class MapVisualizationView(LoginRequiredMixin, TemplateView):
             family_key = family_id if family_id is not None else f"self-{indiv_id}"
             entry_fam.add(family_key)
 
-            # Probands: index individuals only
-            if is_index:
-                entry_prob.add(indiv_id)
+            # Affected: affected individuals only
+            if is_affected:
+                entry_aff.add(indiv_id)
 
         city_counts_individuals = {city: len(ids) for city, ids in city_individuals.items()}
         city_counts_families = {city: len(keys) for city, keys in city_families.items()}
-        city_counts_probands = {city: len(ids) for city, ids in city_probands.items()}
+        city_counts_affected = {city: len(ids) for city, ids in city_affected.items()}
 
         all_cities = sorted(
             set(city_counts_individuals)
             | set(city_counts_families)
-            | set(city_counts_probands),
+            | set(city_counts_affected),
             key=lambda city: (-city_counts_individuals.get(city, 0), city),
         )
         city_rows = [
@@ -834,15 +835,34 @@ class MapVisualizationView(LoginRequiredMixin, TemplateView):
                 "city": city,
                 "individuals": city_counts_individuals.get(city, 0),
                 "families": city_counts_families.get(city, 0),
-                "probands": city_counts_probands.get(city, 0),
+                "affected": city_counts_affected.get(city, 0),
             }
             for city in all_cities
         ]
+        city_totals = {
+            "individuals": sum(city_counts_individuals.values()),
+            "families": sum(city_counts_families.values()),
+            "affected": sum(city_counts_affected.values()),
+        }
 
         context["city_counts_individuals"] = city_counts_individuals
         context["city_counts_families"] = city_counts_families
-        context["city_counts_probands"] = city_counts_probands
+        context["city_counts_affected"] = city_counts_affected
         context["city_rows"] = city_rows
+        context["city_totals"] = city_totals
+        context["filter"] = filterset
+        context["status_metadata"] = build_status_metadata_by_model()
+        context["filter_counts"] = _individual_filter_counts()
+        hpo_term_ids = self.request.GET.getlist("hpo_terms")
+        if hpo_term_ids:
+            from ontologies.models import Term
+            clean_ids = []
+            for tid in hpo_term_ids:
+                try:
+                    clean_ids.append(int(tid))
+                except ValueError:
+                    continue
+            context["selected_hpo_terms"] = Term.objects.filter(pk__in=clean_ids)
         return context
 
 from django.views.generic import ListView, DetailView
@@ -1136,9 +1156,20 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
 from django.views.generic import CreateView
 from django.shortcuts import redirect
 from django.forms import formset_factory
-from .forms import CreateFamilyForm, FamilyMemberForm
+from .forms import CreateFamilyForm, FamilyMemberForm, FamilyMemberFormSet
 from .models import Family, Note, CrossIdentifier, IdentifierType
 import json
+
+
+def _build_family_member_formset(*args, **kwargs):
+    return formset_factory(
+        FamilyMemberForm,
+        formset=FamilyMemberFormSet,
+        extra=0,
+        min_num=1,
+        validate_min=True,
+    )(*args, **kwargs)
+
 
 class FamilyCreateView(LoginRequiredMixin, CreateView):
     model = Family
@@ -1148,8 +1179,7 @@ class FamilyCreateView(LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        IndividualFormSet = formset_factory(FamilyMemberForm, extra=0)
-        
+
         # Pass identifier types to context for the frontend
         context['identifier_types'] = IdentifierType.objects.all()
         
@@ -1158,9 +1188,12 @@ class FamilyCreateView(LoginRequiredMixin, CreateView):
         context['institutions_list'] = list(Institution.objects.values('id', 'name'))
         
         if self.request.POST:
-            context['individual_formset'] = IndividualFormSet(self.request.POST, prefix='individuals')
+            context['individual_formset'] = _build_family_member_formset(
+                self.request.POST,
+                prefix='individuals',
+            )
         else:
-            context['individual_formset'] = IndividualFormSet(prefix='individuals')
+            context['individual_formset'] = _build_family_member_formset(prefix='individuals')
         return context
 
     def form_valid(self, form):
@@ -1190,7 +1223,11 @@ class FamilyCreateView(LoginRequiredMixin, CreateView):
                         individual.statuses.set(selected_statuses)
                     elif not individual.statuses.exists():
                         from .models import Status
-                        default_status = Status.objects.first()
+                        individual_ct = ContentType.objects.get_for_model(Individual)
+                        default_status = (
+                            Status.objects.filter(content_type=individual_ct, name__iexact="Active").first()
+                            or Status.objects.filter(content_type=individual_ct).first()
+                        )
                         if default_status:
                             individual.statuses.add(default_status)
                     
@@ -1254,7 +1291,7 @@ class FamilyCreateView(LoginRequiredMixin, CreateView):
 
             return redirect(self.success_url)
         else:
-            return self.render_to_response(self.get_context_data(form=form))
+            return self.render_to_response(self.get_context_data(form=form), status=400)
 
 class CompleteTaskView(LoginRequiredMixin, TemplateView):
     def post(self, request, pk):
@@ -1283,17 +1320,18 @@ class ReopenTaskView(LoginRequiredMixin, TemplateView):
             return HttpResponseForbidden("You cannot reopen this task.")
 
         # Reopen logic
-        if task.statuses.filter(name__iexact="completed").exists():
-            if task.previous_status:
-                task.statuses.set([task.previous_status])
-                task.previous_status = None
-            else:
-                pending_status = (
-                    Status.objects.filter(name__iexact="pending").first()
-                    or Status.objects.first()
-                )
-                if pending_status:
-                    task.statuses.set([pending_status])
+            if task.statuses.filter(name__iexact="completed").exists():
+                if task.previous_status:
+                    task.statuses.set([task.previous_status])
+                    task.previous_status = None
+                else:
+                    task_ct = ContentType.objects.get_for_model(Task)
+                    pending_status = (
+                        Status.objects.filter(content_type=task_ct, name__iexact="Assigned").first()
+                        or Status.objects.filter(content_type=task_ct).first()
+                    )
+                    if pending_status:
+                        task.statuses.set([pending_status])
 
             task.save(update_fields=["previous_status"])
 

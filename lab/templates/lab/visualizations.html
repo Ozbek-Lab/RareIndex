@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% url 'lab:map_visualization' as map_filter_url %}
 <div x-data="{ currentTab: 'turkey-choropleth' }" class="min-h-[calc(100vh-64px)] bg-white">
   <div class="border-b border-base-200 bg-white px-6 pt-4">
     <div class="flex flex-wrap items-end justify-between gap-3">
@@ -34,8 +35,13 @@
   </div>
 
   <div class="p-6 space-y-4">
-    <div x-show="currentTab === 'turkey-choropleth'" x-cloak>
-      {% include "lab/partials/visualizations/map.html" %}
+    <div x-show="currentTab === 'turkey-choropleth'" x-cloak class="flex gap-4 min-h-[calc(100vh-180px)]">
+      <aside class="w-80 flex-shrink-0">
+        {% include "lab/partials/filter_sidebar.html" with filter_url=map_filter_url filter_target="body" filter_reset_url=map_filter_url filter_reset_target="body" %}
+      </aside>
+      <main class="flex-1 min-w-0">
+        {% include "lab/partials/visualizations/map.html" %}
+      </main>
     </div>
 
     <div x-show="currentTab !== 'turkey-choropleth'" x-cloak class="rounded-box border border-base-200 bg-base-100 p-6 text-sm text-base-content/60">
