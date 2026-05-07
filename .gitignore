@@ -65,6 +65,5 @@ vcfpaths
 tailwindcss-linux-x64
 reports/
 .codex
-lab/tests/
-variant/tests/
+tests/
 *.igv_session.xml
