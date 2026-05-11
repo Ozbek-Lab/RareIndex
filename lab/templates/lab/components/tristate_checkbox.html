@@ -33,6 +33,10 @@
     }"
     class="flex items-center justify-between py-1 cursor-pointer group"
     @click="toggle()"
+    data-filter-option
+    data-filter-name="{{ name }}"
+    data-filter-value="{{ value }}"
+    data-filter-label="{{ label }}"
 >
     <div class="flex items-center gap-2">
         <!-- Visual Indicator -->

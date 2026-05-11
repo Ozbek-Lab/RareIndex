@@ -2614,6 +2614,27 @@ def _build_section_context(request, key, config):
         for k in sorted(groups):
             ordered[k] = groups[k]
         ctx["status_groups"] = ordered
+    elif key == "statusgroup":
+        groups = {}
+        status_groups = objects.select_related("content_type").order_by(
+            "content_type__app_label", "content_type__model", "name"
+        )
+        for status_group in status_groups:
+            if status_group.content_type:
+                group_key = status_group.content_type.model
+                group_label = status_group.content_type.model.replace("_", " ").title()
+            else:
+                group_key = "__global__"
+                group_label = "Global"
+            if group_key not in groups:
+                groups[group_key] = {"label": group_label, "objects": []}
+            groups[group_key]["objects"].append(status_group)
+        ordered = {}
+        if "__global__" in groups:
+            ordered["__global__"] = groups.pop("__global__")
+        for k in sorted(groups):
+            ordered[k] = groups[k]
+        ctx["status_group_scopes"] = ordered
 
     return ctx
 

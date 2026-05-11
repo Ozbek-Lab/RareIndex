@@ -80,7 +80,9 @@
             <!-- Container for Rows -->
             <div id="individuals-container" class="space-y-6">
                 {% for form in individual_formset %}
-                    {% include "lab/partials/family_member_card.html" with form=form index=forloop.counter0 %}
+                    {% if not form.DELETE.value %}
+                        {% include "lab/partials/family_member_card.html" with form=form index=forloop.counter0 %}
+                    {% endif %}
                 {% endfor %}
             </div>
 
@@ -191,40 +193,17 @@
             },
             
             removeMember(index) {
-                // We don't remove the DOM element completely to keep indices consistent with Django (usually),
-                // OR we mark it for deletion if Django supports DELETE.
-                // But formset_factory standard behavior relies on sequential indices or management form?
-                // Actually, if we just remove the node, and don't re-index, Django might complain if TOTAL_FORMS isn't accurate 
-                // OR if there are gaps. 
-                // FOR SIMPLICITY: We will hide the row and check the DELETE checkbox if it exists (Django formsets usually have one?)
-                // FamilyMemberForm doesn't seem to have can_delete=False/True explicitly set in factory.
-                // Assuming we can just hide it and mark hidden DELETE field if present, or just remove and reindex?
-                // Re-indexing is painful.
-                // Let's just remove the visual element and decrement total forms? NO, that breaks POST matching.
-                
-                // Strategy: Just mark as hidden and ignore?
-                // Better: If we remove the element, we should decrement total forms ONLY if it's the last one.
-                // If it's in the middle, we have a gap. Django Formsets don't like gaps by default unless we handle it.
-                // Given the constraints, let's just assume the user won't delete, or we just remove the element.
-                // Actually, let's try to remove it and let Django handle it? No.
-                
-                // Simplest approach: "Delete" button just removes it from DOM and we update TOTAL_FORMS?
-                // NO. Django expects forms 0 to N-1.
-                // Correct approach: Use `formset_factory(..., can_delete=True)`. We didn't set that.
-                // Let's ignore deletion logic for this iteration to keep it safe, or just hide.
-                
-                // The existing 'individual_form_row' had a delete button that just did .remove().
-                // That causes issues on POST if not the last one.
-                // Let's implement a safe DELETE: Mark a hidden DELETE field?
-                // We'll skip intricate delete logic and just allow removing from the end or simple remove.
-                
                 const el = document.getElementById(`row-${index}`);
-                if (el) el.remove();
+                const deleteInput = el?.querySelector(`input[name='individuals-${index}-DELETE']`);
+                if (deleteInput) {
+                    deleteInput.checked = true;
+                    deleteInput.value = 'on';
+                    el.classList.add('hidden');
+                } else if (el) {
+                    el.remove();
+                }
                 
                 this.members = this.members.filter(m => m.index !== index);
-                // NOTE: This causes "gaps" in indices (0, 2, 3). Django default formset might error.
-                // We might need to re-index all inputs on submit.
-                // For now, let's leave as is, user asked to IMPROVE the form, specifically parent selection.
             }
         }
     }
@@ -239,7 +218,7 @@
         return {
             index: index,
             crossIds: [],
-            hpoTerms: [], // Array of {id, label}
+            hpoTerms: [], // Array of {id, label, code}
             instSearch: '',
             instOpen: false,
             selectedInstitutions: [],
@@ -287,9 +266,9 @@
             },
             
             // HPO Terms
-            addHpoTerm(id, label) {
+            addHpoTerm(id, label, code = '') {
                 if (!this.hpoTerms.find(t => t.id == id)) {
-                    this.hpoTerms.push({id, label});
+                    this.hpoTerms.push({id, label, code});
                 }
                 // Clear search input (HTMX target) or reset generic way?
                 // The search results are in a separate div. We might want to clear them.

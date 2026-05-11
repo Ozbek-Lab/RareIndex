@@ -36,7 +36,9 @@
 
         <!-- Table -->
         <div x-show="open" x-transition:enter="transition-all duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
-            {% if section.status_groups %}
+            {% if section.status_group_scopes %}
+            {% include "lab/partials/config_status_group_scopes.html" %}
+            {% elif section.status_groups %}
             {% include "lab/partials/config_status_groups.html" %}
             {% elif section.objects %}
             <div class="overflow-x-auto">

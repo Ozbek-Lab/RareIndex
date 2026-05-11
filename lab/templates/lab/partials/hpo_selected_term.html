@@ -16,6 +16,10 @@
         }
      }"
      @click="toggle(); $nextTick(() => htmx.trigger(document.getElementById('filter-form'), 'change'))"
+     data-filter-option
+     data-filter-name="hpo_terms"
+     data-filter-value="{{ term.pk }}"
+     data-filter-label="{{ term.label }}"
      :class="{
         'badge-success text-success-content': state === 'include', 
         'badge-error text-error-content': state === 'exclude'

@@ -3,8 +3,6 @@
         state: 'neutral',
         value: '{{ value }}',
         name: '{{ name }}',
-        color: '{{ color|default:'gray' }}',
-        textColor: '{{ color|default:'gray'|contrast_color }}',
         icon: '{{ icon|default:'' }}',
         init() {
             // Check initial state from server-rendered active lists
@@ -37,28 +35,20 @@
             if (this.state === 'neutral') {
                 return classes + ' bg-base-100 border-base-300 text-base-content/70 hover:border-base-content/50';
             } else if (this.state === 'include') {
-                return classes + ' border-transparent shadow-sm';
+                return classes + ' bg-success/10 border-success text-success';
             } else if (this.state === 'exclude') {
                 return classes + ' bg-error/10 border-error text-error';
             }
             return classes;
-        },
-        get style() {
-            if (this.state === 'include') {
-                // If color is 'gray' (default), use a nice green for 'include'
-                let activeColor = this.color;
-                if (activeColor === 'gray') {
-                    activeColor = '#22c55e'; // Tailwind green-500
-                }
-                return `background-color: ${activeColor}; border-color: ${activeColor}; color: ${this.textColor};`;
-            }
-            return '';
         }
     }"
     x-init="init()"
     @click="toggle()"
     :class="classes"
-    :style="style"
+    data-filter-option
+    data-filter-name="{{ name }}"
+    data-filter-value="{{ value }}"
+    data-filter-label="{{ short_label|default:label|default:value }}"
 >
     <!-- Hidden Inputs -->
     <template x-if="state === 'include'">

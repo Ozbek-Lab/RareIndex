@@ -2,7 +2,7 @@
      x-data="memberCard({{ index }})"
      x-init="init()"
      x-effect="updateJson()"
-     @hpo-selected.stop="addHpoTerm($event.detail.id, $event.detail.label)">
+     @hpo-selected.stop="addHpoTerm($event.detail.id, $event.detail.label, $event.detail.code)">
     
     <!-- Header / Delete -->
     <div class="flex justify-between items-start mb-2 border-b border-base-200 pb-1">
@@ -37,6 +37,7 @@
     {{ form.cross_identifiers_json }}
     {{ form.father_ref }}
     {{ form.mother_ref }}
+    {% if form.DELETE %}<div class="hidden">{{ form.DELETE }}</div>{% endif %}
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -131,7 +132,119 @@
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Status</label>
-                    {{ form.statuses }}
+                    <div class="hidden">
+                        {{ form.statuses }}
+                    </div>
+                    {% regroup form.statuses.field.queryset by group.name as status_groups %}
+                    <div
+                        class="dropdown dropdown-bottom w-full"
+                        x-data="{
+                            selectedStatusIds: [],
+                            statuses: [
+                                {% for status in form.statuses.field.queryset %}
+                                    {
+                                        id: '{{ status.pk }}',
+                                        label: '{{ status.name|escapejs }}',
+                                        displayName: '{{ status.display_name|escapejs }}',
+                                        groupKey: '{{ status.group_id|default_if_none:"" }}',
+                                        color: '{{ status.color|default_if_none:"gray"|escapejs }}',
+                                        icon: '{{ status.icon|default_if_none:""|escapejs }}'
+                                    },
+                                {% endfor %}
+                            ],
+                            init() {
+                                const select = this.statusSelect;
+                                if (!select) return;
+                                this.selectedStatusIds = Array.from(select.selectedOptions).map(option => option.value);
+                            },
+                            get statusSelect() {
+                                return document.querySelector(`select[name='{{ form.statuses.html_name }}']`);
+                            },
+                            get selectedStatuses() {
+                                return this.statuses.filter(status => this.selectedStatusIds.includes(status.id));
+                            },
+                            isSelected(id) {
+                                return this.selectedStatusIds.includes(String(id));
+                            },
+                            toggleStatus(status) {
+                                const id = String(status.id);
+                                if (this.isSelected(id)) {
+                                    this.selectedStatusIds = this.selectedStatusIds.filter(value => value !== id);
+                                } else {
+                                    if (status.groupKey) {
+                                        const siblingIds = this.statuses
+                                            .filter(item => item.groupKey === status.groupKey)
+                                            .map(item => item.id);
+                                        this.selectedStatusIds = this.selectedStatusIds.filter(value => !siblingIds.includes(value));
+                                    }
+                                    this.selectedStatusIds.push(id);
+                                }
+                                this.syncSelect();
+                            },
+                            syncSelect() {
+                                const select = this.statusSelect;
+                                if (!select) return;
+                                Array.from(select.options).forEach(option => {
+                                    option.selected = this.selectedStatusIds.includes(option.value);
+                                });
+                            }
+                        }"
+                        x-init="init()"
+                    >
+                        <div tabindex="0" role="button" class="flex min-h-9 w-full cursor-pointer flex-wrap items-center gap-1 rounded-lg border border-base-300 bg-base-100/50 px-2 py-1 transition-all hover:bg-base-100">
+                            <template x-if="selectedStatuses.length">
+                                <template x-for="status in selectedStatuses" :key="status.id">
+                                    <span class="badge badge-sm badge-ghost gap-1.5 border-base-content/10 text-xs font-normal">
+                                        <template x-if="status.icon">
+                                            <i :class="status.icon.includes('fa-') && !status.icon.includes('fa-solid') && !status.icon.includes('fa-regular') && !status.icon.includes('fa-brands') ? 'fa-solid ' + status.icon : status.icon" class="text-xs" :style="`color: ${status.color};`"></i>
+                                        </template>
+                                        <template x-if="!status.icon">
+                                            <span class="size-2 rounded-full border border-base-100 ring-1 ring-base-content/10" :style="`background-color: ${status.color};`"></span>
+                                        </template>
+                                        <span x-text="status.displayName"></span>
+                                    </span>
+                                </template>
+                            </template>
+                            <span x-show="!selectedStatuses.length" class="badge badge-sm badge-ghost text-xs font-normal opacity-40">
+                                <i class="fa-solid fa-tag text-[10px]"></i>
+                                No Status
+                            </span>
+                            <i class="fa-solid fa-chevron-down ml-auto text-[10px] opacity-40"></i>
+                        </div>
+                        <ul tabindex="0" class="dropdown-content z-[100] menu mt-2 w-64 rounded-box border border-base-200 bg-base-100 p-1 shadow-2xl">
+                            {% for grp in status_groups %}
+                                {% if grp.grouper %}
+                                    <li class="menu-title flex items-center gap-1 px-3 pt-2 pb-0.5 text-[9px] uppercase opacity-50">
+                                        <i class="fa-regular fa-circle-dot text-[8px]"></i> {{ grp.grouper }}
+                                    </li>
+                                {% endif %}
+                                {% for status in grp.list %}
+                                    <li>
+                                        <button
+                                            type="button"
+                                            class="flex items-center gap-3 px-4 py-3 hover:bg-base-200"
+                                            :class="{ 'bg-base-200/60 font-semibold': isSelected('{{ status.pk }}') }"
+                                            @click="toggleStatus({ id: '{{ status.pk }}', groupKey: '{{ status.group_id|default_if_none:"" }}' })"
+                                        >
+                                            {% if status.icon %}
+                                                <i class="fa-solid {{ status.icon }} text-xs" style="color: {{ status.color }};"></i>
+                                            {% else %}
+                                                <span class="size-1.5 rounded-full ring-1 ring-base-content/10" style="background-color: {{ status.color }};"></span>
+                                            {% endif %}
+                                            <span class="flex-1 text-left">{{ status.name }}</span>
+                                            {% if grp.grouper %}
+                                                <i class="text-xs opacity-60" :class="isSelected('{{ status.pk }}') ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle opacity-20'"></i>
+                                            {% else %}
+                                                <i x-show="isSelected('{{ status.pk }}')" class="fa-solid fa-check text-xs opacity-50"></i>
+                                            {% endif %}
+                                        </button>
+                                    </li>
+                                {% endfor %}
+                            {% empty %}
+                                <li class="px-3 py-2 text-xs text-base-content/50">No statuses configured.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                     {% if form.statuses.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.statuses.errors.0 }}</p>{% endif %}
                 </div>
                 <div>
@@ -188,11 +301,16 @@
                      </template>
                 </select>
                 {% if form.hpo_terms.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.hpo_terms.errors.0 }}</p>{% endif %}
-                <div class="flex flex-wrap gap-1 mb-1 min-h-[1.5rem]">
+                <div class="flex flex-wrap gap-1.5 mb-2 min-h-[2rem]">
                     <template x-for="term in hpoTerms" :key="term.id">
-                        <span class="badge badge-primary gap-1 p-2 text-xs">
-                            <span x-text="term.label"></span>
-                            <button type="button" @click="removeHpoTerm(term.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">✕</button>
+                        <span class="inline-flex max-w-full items-center gap-2 rounded-md border border-primary/25 bg-primary/10 px-2.5 py-1.5 text-primary shadow-sm">
+                            <span class="flex min-w-0 flex-col leading-tight">
+                                <span class="max-w-[12rem] truncate text-xs font-semibold" x-text="term.label"></span>
+                                <span class="font-mono text-[10px] text-primary/70" x-text="term.code"></span>
+                            </span>
+                            <button type="button" @click="removeHpoTerm(term.id)" class="btn btn-ghost btn-xs btn-circle h-5 w-5 min-h-0 text-primary/70 hover:bg-primary/15 hover:text-primary">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
                         </span>
                     </template>
                     <span x-show="hpoTerms.length === 0" class="text-xs text-base-content/50 italic py-1">No terms selected.</span>

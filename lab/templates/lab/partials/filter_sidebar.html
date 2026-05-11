@@ -3,6 +3,36 @@
 <div
   class="h-full flex flex-col bg-base-100 border-r border-base-200 w-80"
   x-data="{ 
+        detailOpen: false,
+        advancedOpen: false,
+        advancedGroupMode: localStorage.getItem('rareindex.advancedFilterGroupMode') || 'all',
+        filterSummary: [],
+        fieldLabels: {
+            'status': 'Individual status',
+            'sex': 'Sex',
+            'is_alive': 'Vital status',
+            'is_affected': 'Affected status',
+            'is_index': 'Index status',
+            'has_report': 'Report availability',
+            'has_request_form': 'Request form availability',
+            'projects': 'Project',
+            'institution_name': 'Institution name',
+            'institution__city': 'Institution city',
+            'institution__speciality': 'Institution speciality',
+            'institution__center_name': 'Institution center',
+            'samples__sample_type': 'Sample type',
+            'samples__status': 'Sample status',
+            'samples__tests__test_type': 'Test type',
+            'samples__tests__status': 'Test status',
+            'samples__tests__pipelines__type': 'Pipeline type',
+            'samples__tests__pipelines__status': 'Pipeline status',
+            'samples__tests__pipelines__analyses__type': 'Analysis type',
+            'samples__tests__pipelines__analyses__status': 'Analysis status',
+            'variant_type': 'Variant type',
+            'variants__status': 'Variant status',
+            'variants__classifications__classification': 'Classification',
+            'hpo_terms': 'HPO terms'
+        },
         expanded: JSON.parse(localStorage.getItem('filterSidebarExpanded')) || {
             'individual': true, 
             'institution': false,
@@ -14,6 +44,65 @@
         },
         init() {
             this.$watch('expanded', val => localStorage.setItem('filterSidebarExpanded', JSON.stringify(val)));
+            this.$watch('advancedGroupMode', val => localStorage.setItem('rareindex.advancedFilterGroupMode', val));
+            this.$nextTick(() => this.updateFilterSummary());
+        },
+        fieldLabel(name) {
+            return this.fieldLabels[name] || name.replaceAll('__', ' ').replaceAll('_', ' ');
+        },
+        inputLabel(input) {
+            const wrapper = input.closest('[data-filter-option]');
+            if (wrapper?.dataset.filterLabel) {
+                return wrapper.dataset.filterLabel;
+            }
+            if (input.tagName === 'SELECT') {
+                return Array.from(input.selectedOptions).map(option => option.textContent.trim()).join(', ');
+            }
+            return input.value;
+        },
+        modeFor(form, name) {
+            const modeInput = form.querySelector(`[name='${CSS.escape(name)}__mode']`);
+            return modeInput?.value || 'any';
+        },
+        updateFilterSummary() {
+            const form = this.$refs.filterForm;
+            if (!form) return;
+            const included = {};
+            const excluded = {};
+            const controls = form.querySelectorAll('input[name], select[name]');
+            controls.forEach(input => {
+                if (input.disabled || input.name.endsWith('__mode') || input.name === 'filter_group_mode') return;
+                if (input.type === 'hidden' && !input.closest('[data-filter-option]')) return;
+                if (input.tagName === 'SELECT') {
+                    const values = Array.from(input.selectedOptions).filter(option => option.value !== '');
+                    if (!values.length) return;
+                    included[input.name] = values.map(option => option.textContent.trim());
+                    return;
+                }
+                if ((input.type === 'checkbox' || input.type === 'radio') && !input.checked) return;
+                if ((input.type === 'text' || input.type === 'number') && !input.value.trim()) return;
+                if (!input.value) return;
+                const isExcluded = input.name.endsWith('__exclude');
+                const fieldName = isExcluded ? input.name.slice(0, -9) : input.name;
+                const bucket = isExcluded ? excluded : included;
+                bucket[fieldName] ||= [];
+                bucket[fieldName].push(this.inputLabel(input));
+            });
+
+            const lines = [];
+            Object.entries(included).forEach(([name, values]) => {
+                const mode = this.modeFor(form, name);
+                const modeText = mode === 'all'
+                    ? 'matches all of'
+                    : mode === 'together'
+                        ? 'matches together on the same related record'
+                        : 'matches any of';
+                lines.push(`${this.fieldLabel(name)} ${modeText}: ${values.join(', ')}`);
+            });
+            Object.entries(excluded).forEach(([name, values]) => {
+                lines.push(`NOT ${this.fieldLabel(name)}: ${values.join(', ')}`);
+            });
+            this.filterSummary = lines;
         }
      }"
   x-init="init()"
@@ -22,19 +111,93 @@
   <div
     class="px-6 py-4 border-b border-base-200 flex justify-between items-center bg-base-100 sticky top-0 z-10"
   >
-    <h2 class="font-bold text-lg text-base-content">Filters</h2>
-    <button
-      class="btn btn-ghost btn-xs text-primary font-normal normal-case"
-      hx-get="{{ filter_reset_url|default:default_filter_url }}"
-      hx-target="{{ filter_reset_target|default:'body' }}"
-      hx-push-url="true"
+    <div
+      class="tooltip tooltip-right tooltip-end"
+      data-tip="Any: one selected value can match. All: every selected value must match. Together: conditions must match on the same related record. Red selections exclude."
     >
-      Reset All
-    </button>
+      <h2 class="font-bold text-lg text-base-content cursor-help" tabindex="0">Filters</h2>
+    </div>
+    <div class="flex items-center gap-1">
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs text-base-content/60 font-normal normal-case"
+        @click="detailOpen = !detailOpen; $nextTick(() => updateFilterSummary())"
+      >
+        Detail
+      </button>
+      <button
+        class="btn btn-ghost btn-xs text-primary font-normal normal-case"
+        hx-get="{{ filter_reset_url|default:default_filter_url }}"
+        hx-target="{{ filter_reset_target|default:'body' }}"
+        hx-push-url="true"
+      >
+        Reset All
+      </button>
+    </div>
+  </div>
+
+  <div
+    class="border-b border-base-200 bg-base-100 px-4 py-3 space-y-3"
+    x-show="detailOpen"
+    x-collapse
+    style="display: none;"
+  >
+    <div class="flex items-center justify-between gap-2">
+      <div class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Current Logic</div>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs text-base-content/60 font-normal normal-case"
+        @click="advancedOpen = !advancedOpen"
+      >
+        Advanced
+      </button>
+    </div>
+    <template x-if="filterSummary.length">
+      <ul class="space-y-1 text-xs text-base-content/70">
+        <template x-for="line in filterSummary" :key="line">
+          <li x-text="line"></li>
+        </template>
+      </ul>
+    </template>
+    <p x-show="!filterSummary.length" class="text-xs text-base-content/50">No active filters.</p>
+
+    <div
+      class="rounded-lg border border-base-200 bg-base-200/30 p-2 space-y-2"
+      x-show="advancedOpen"
+      x-collapse
+      style="display: none;"
+    >
+      <div class="text-xs font-semibold text-base-content/60">Advanced group connection</div>
+      <div
+        class="shrink-0 rounded-md border border-base-300 bg-base-100 text-[10px] font-medium shadow-inner"
+        style="display: flex; align-items: center; gap: 2px; padding: 2px; width: 150px;"
+      >
+        <input type="hidden" name="filter_group_mode" :value="advancedGroupMode" form="filter-form">
+        <button
+          type="button"
+          class="rounded text-center"
+          style="width: 72px; padding: 2px 4px;"
+          :class="advancedGroupMode === 'all' ? 'bg-base-content text-base-100 shadow-sm' : 'text-base-content/60 hover:text-base-content'"
+          @click="advancedGroupMode = 'all'; $nextTick(() => $refs.filterForm.dispatchEvent(new Event('filter-changed', { bubbles: true })))"
+        >
+          All groups
+        </button>
+        <button
+          type="button"
+          class="rounded text-center"
+          style="width: 72px; padding: 2px 4px;"
+          :class="advancedGroupMode === 'any' ? 'bg-base-content text-base-100 shadow-sm' : 'text-base-content/60 hover:text-base-content'"
+          @click="advancedGroupMode = 'any'; $nextTick(() => $refs.filterForm.dispatchEvent(new Event('filter-changed', { bubbles: true })))"
+        >
+          Any group
+        </button>
+      </div>
+    </div>
   </div>
 
   <form
     id="filter-form"
+    x-ref="filterForm"
     hx-get="{{ filter_url|default:default_filter_url }}"
     hx-target="{{ filter_target|default:'#individual-table-container' }}"
     hx-trigger="change delay:500ms, filter-changed delay:500ms"
@@ -42,6 +205,8 @@
     hx-indicator="#table-indicator"
     hx-include="[name='search']"
     class="flex-1 overflow-y-auto p-2 space-y-2"
+    @change="updateFilterSummary()"
+    @filter-changed="updateFilterSummary()"
     @submit.prevent
   >
     <!-- Individual Section -->
@@ -63,12 +228,11 @@
       <div class="collapse-content">
         <div class="space-y-6 pt-2">
           <!-- Status -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Status
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="status" %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.status.field.choices %}
                 {% with metadata=status_metadata.individual|get_item:choice.0 count=filter_counts.status|get_item:choice.0 %}
@@ -78,12 +242,11 @@
             </div>
           </div>
           <!-- Sex -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Sex
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Sex</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="sex" %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.sex.field.choices %}
                 {% with count=filter_counts.sex|get_item:choice.0 %}
@@ -93,12 +256,11 @@
             </div>
           </div>
           <!-- Vital Status -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Vital Status
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Vital Status</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="is_alive" %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.is_alive.field.choices %}
                 {% with count=filter_counts.is_alive|get_item:choice.0 %}
@@ -108,12 +270,11 @@
             </div>
           </div>
           <!-- Is Affected -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Is Affected
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Is Affected</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="is_affected" %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.is_affected.field.choices %}
                 {% with count=filter_counts.is_affected|get_item:choice.0 %}
@@ -123,12 +284,11 @@
             </div>
           </div>
           <!-- Is Index -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Is Index
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Is Index</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="is_index" %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.is_index.field.choices %}
                 {% with count=filter_counts.is_index|get_item:choice.0 %}
@@ -138,12 +298,11 @@
             </div>
           </div>
           <!-- Has Report -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Has Report
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Has Report</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="has_report" %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.has_report.field.choices %}
                 {% with count=filter_counts.has_report|get_item:choice.0 %}
@@ -153,12 +312,11 @@
             </div>
           </div>
           <!-- Has Request Form -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Has Request Form
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Has Request Form</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="has_request_form" %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.has_request_form.field.choices %}
                 {% with count=filter_counts.has_request_form|get_item:choice.0 %}
@@ -169,7 +327,7 @@
           </div>
           <!-- Project -->
           <div
-              class="space-y-2"
+              class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3"
               x-data="{ 
                   search: '',
                   focused: false,
@@ -201,9 +359,10 @@
               }"
               @click.outside="focused = false"
           >
-            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
-              Project
-            </h3>
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Project</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="projects" allow_together=True %}
+            </div>
 
             <!-- Native Hidden Select for HTMX Form Serialization -->
             <select name="projects" multiple class="hidden" x-model="selected">
@@ -273,15 +432,14 @@
 
           <!-- HPO Terms Search -->
           <div
-            class="space-y-2"
+            class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3"
             x-data="{ search: '' }"
             @click.outside="search = ''"
           >
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              HPO Terms
-            </h3>
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">HPO Terms</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="hpo_terms" %}
+            </div>
 
             <!-- Selected Terms -->
             <div
@@ -372,7 +530,7 @@
         <div class="space-y-6 pt-2">
 
           <!-- Name search -->
-          <div class="space-y-2">
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
             <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
               Name
             </h3>
@@ -404,10 +562,11 @@
           <!-- City -->
           {% with choices=filter.form.institution__city.field.choices %}
             {% if choices %}
-              <div class="space-y-2">
-                <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
-                  City
-                </h3>
+              <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">City</h3>
+                  {% include "lab/components/filter_logic_mode.html" with name="institution__city" allow_together=True %}
+                </div>
                 <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
                   {% for value, label in choices %}
                     {% with count=filter_counts.institution_city|get_item:value %}
@@ -422,10 +581,11 @@
           <!-- Speciality -->
           {% with choices=filter.form.institution__speciality.field.choices %}
             {% if choices %}
-              <div class="space-y-2">
-                <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
-                  Speciality
-                </h3>
+              <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Speciality</h3>
+                  {% include "lab/components/filter_logic_mode.html" with name="institution__speciality" allow_together=True %}
+                </div>
                 <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
                   {% for value, label in choices %}
                     {% with count=filter_counts.institution_speciality|get_item:value %}
@@ -440,10 +600,11 @@
           <!-- Center -->
           {% with choices=filter.form.institution__center_name.field.choices %}
             {% if choices %}
-              <div class="space-y-2">
-                <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
-                  Center
-                </h3>
+              <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Center</h3>
+                  {% include "lab/components/filter_logic_mode.html" with name="institution__center_name" allow_together=True %}
+                </div>
                 <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
                   {% for value, label in choices %}
                     {% with count=filter_counts.institution_center|get_item:value %}
@@ -477,12 +638,11 @@
       <div class="collapse-content">
         <div class="space-y-6 pt-2">
           <!-- Sample Type -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Type
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="samples__sample_type" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__sample_type.field.choices %}
                 {% with count=filter_counts.sample_type|get_item:choice.0 %}
@@ -492,12 +652,11 @@
             </div>
           </div>
           <!-- Sample Status -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Status
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="samples__status" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__status.field.choices %}
                 {% with metadata=status_metadata.sample|get_item:choice.0 count=filter_counts.sample_status|get_item:choice.0 %}
@@ -529,12 +688,11 @@
       <div class="collapse-content">
         <div class="space-y-6 pt-2">
           <!-- Test Type -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Type
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="samples__tests__test_type" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__test_type.field.choices %}
                 {% with count=filter_counts.test_type|get_item:choice.0 %}
@@ -544,12 +702,11 @@
             </div>
           </div>
           <!-- Test Status -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Status
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="samples__tests__status" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__status.field.choices %}
                 {% with metadata=status_metadata.test|get_item:choice.0 count=filter_counts.test_status|get_item:choice.0 %}
@@ -581,12 +738,11 @@
       <div class="collapse-content">
         <div class="space-y-6 pt-2">
           <!-- Pipeline Type -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Type
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="samples__tests__pipelines__type" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__pipelines__type.field.choices %}
                 {% with count=filter_counts.pipeline_type|get_item:choice.0 %}
@@ -596,12 +752,11 @@
             </div>
           </div>
           <!-- Pipeline Status -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Status
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="samples__tests__pipelines__status" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__pipelines__status.field.choices %}
                 {% with metadata=status_metadata.pipeline|get_item:choice.0 count=filter_counts.pipeline_status|get_item:choice.0 %}
@@ -633,12 +788,11 @@
       <div class="collapse-content">
         <div class="space-y-6 pt-2">
           <!-- Analysis Type -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Type
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="samples__tests__pipelines__analyses__type" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__pipelines__analyses__type.field.choices %}
                 {% with count=filter_counts.analysis_type|get_item:choice.0 %}
@@ -648,12 +802,11 @@
             </div>
           </div>
           <!-- Analysis Status -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Status
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="samples__tests__pipelines__analyses__status" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.samples__tests__pipelines__analyses__status.field.choices %}
                 {% with metadata=status_metadata.analysis|get_item:choice.0 count=filter_counts.analysis_status|get_item:choice.0 %}
@@ -685,12 +838,11 @@
       <div class="collapse-content">
         <div class="space-y-6 pt-2">
           <!-- Variant Type -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Type
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Type</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="variant_type" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.variant_type.field.choices %}
                 {% with count=filter_counts.variant_type|get_item:choice.0 %}
@@ -700,12 +852,11 @@
             </div>
           </div>
           <!-- Variant Status -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Status
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Status</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="variants__status" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.variants__status.field.choices %}
                 {% with metadata=status_metadata.variant|get_item:choice.0 count=filter_counts.variant_status|get_item:choice.0 %}
@@ -715,12 +866,11 @@
             </div>
           </div>
           <!-- Classification -->
-          <div class="space-y-2">
-            <h3
-              class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >
-              Classification
-            </h3>
+          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Classification</h3>
+              {% include "lab/components/filter_logic_mode.html" with name="variants__classifications__classification" allow_together=True %}
+            </div>
             <div class="flex flex-wrap gap-2">
               {% for choice in filter.form.variants__classifications__classification.field.choices %}
                 {% with count=filter_counts.classification|get_item:choice.0 %}
