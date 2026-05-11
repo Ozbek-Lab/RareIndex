@@ -1,0 +1,82 @@
+<div class="divide-y divide-base-200">
+    {% for scope_key, scope in section.status_group_scopes.items %}
+    <div class="px-5 py-4">
+        <div class="mb-3 flex items-center justify-between">
+            <h3 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-base-content/50">
+                <span class="inline-block h-2 w-2 rounded-full bg-base-content/20"></span>
+                {{ scope.label }}
+                <span class="badge badge-ghost badge-xs font-normal normal-case">{{ scope.objects|length }}</span>
+            </h3>
+        </div>
+
+        {% if scope.objects %}
+        <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-sm w-full">
+                <thead>
+                    <tr class="bg-base-200/40 text-xs uppercase text-base-content/50">
+                        <th class="px-4 py-2 font-semibold">Name</th>
+                        <th class="px-4 py-2 text-right font-semibold">Usage</th>
+                        {% if section.can_change or section.can_delete %}
+                        <th class="px-4 py-2 text-right font-semibold">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obj in scope.objects %}
+                    <tr class="hover:bg-base-200/40">
+                        <td class="px-4 py-2 text-sm font-medium">
+                            {{ obj.name }}
+                        </td>
+                        <td class="px-4 py-2 text-right">
+                            {% if obj.usage_count %}
+                            <span class="badge badge-ghost badge-sm font-normal tabular-nums">
+                                {{ obj.usage_count }} {{ section.usage_label }}
+                            </span>
+                            {% else %}
+                            <span class="text-xs text-base-content/30">—</span>
+                            {% endif %}
+                        </td>
+                        {% if section.can_change or section.can_delete %}
+                        <td class="px-4 py-2 text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                {% if section.can_change %}
+                                <button type="button"
+                                        class="btn btn-ghost btn-xs"
+                                        title="Edit"
+                                        hx-get="{% url 'lab:config_form_edit' section.key obj.pk %}"
+                                        hx-target="#generic-modal-content"
+                                        hx-swap="innerHTML"
+                                        onclick="document.getElementById('generic-modal').showModal()">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                {% endif %}
+                                {% if section.can_delete %}
+                                <button type="button"
+                                        class="btn btn-ghost btn-xs text-error"
+                                        title="Delete"
+                                        hx-get="{% url 'lab:config_delete_confirm' section.key obj.pk %}"
+                                        hx-target="#generic-modal-content"
+                                        hx-swap="innerHTML"
+                                        onclick="document.getElementById('generic-modal').showModal()">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-xs italic text-base-content/40">No status groups in this scope yet.</p>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div class="flex flex-col items-center justify-center gap-2 py-10 text-base-content/40">
+        <i class="fa-regular fa-circle-dot text-2xl"></i>
+        <p class="text-sm">No status groups yet.</p>
+    </div>
+    {% endfor %}
+</div>

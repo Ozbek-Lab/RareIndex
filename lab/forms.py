@@ -914,10 +914,16 @@ class FamilyMemberFormSet(BaseFormSet):
         if any(self.errors):
             return
 
-        total_forms = len(self.forms)
+        active_indices = {
+            index
+            for index, form in enumerate(self.forms)
+            if not (self.can_delete and self._should_delete_form(form))
+        }
 
         for index, form in enumerate(self.forms):
             if not hasattr(form, "cleaned_data"):
+                continue
+            if self.can_delete and self._should_delete_form(form):
                 continue
 
             father_ref = form.cleaned_data.get("father_ref")
@@ -936,7 +942,7 @@ class FamilyMemberFormSet(BaseFormSet):
                     form.add_error(field_name, f"{label} selection is invalid.")
                     continue
 
-                if ref_index < 0 or ref_index >= total_forms:
+                if ref_index not in active_indices:
                     form.add_error(
                         field_name,
                         f"{label} must reference one of the family members on this form.",

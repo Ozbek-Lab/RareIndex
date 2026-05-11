@@ -1,12 +1,53 @@
 import django_filters
 from django import forms
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual, Sample, Project, SampleType, TestType, Status, PipelineType,
     Institution, Test, Pipeline, Analysis, AnalysisType, TaggedStatus,
 )
 from variant.models import Classification, Variant, Annotation
+
+FILTER_MODE_SUFFIX = "__mode"
+FILTER_MODE_ANY = "any"
+FILTER_MODE_ALL = "all"
+FILTER_MODE_TOGETHER = "together"
+FILTER_GROUP_MODE_ANY = "any"
+
+
+def _get_filter_mode(data, field_name, allow_together=False):
+    if not data:
+        return FILTER_MODE_ANY
+    raw = data.get(f"{field_name}{FILTER_MODE_SUFFIX}", FILTER_MODE_ANY)
+    allowed = {FILTER_MODE_ANY, FILTER_MODE_ALL}
+    if allow_together:
+        allowed.add(FILTER_MODE_TOGETHER)
+    return raw if raw in allowed else FILTER_MODE_ANY
+
+
+def _filter_lookup_values(queryset, lookup_base, values, mode):
+    if not values:
+        return queryset
+    if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+        for item in values:
+            queryset = queryset.filter(**{lookup_base: item})
+        return queryset
+    return queryset.filter(**{f"{lookup_base}__in": values})
+
+
+def _matching_tagged_object_ids(model_class, status_values, mode=FILTER_MODE_ANY):
+    ct = ContentType.objects.get_for_model(model_class)
+    qs = TaggedStatus.objects.filter(content_type=ct, tag__in=status_values)
+    if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER} and status_values:
+        status_ids = [getattr(status, "pk", status) for status in status_values]
+        return (
+            qs.values("object_id")
+            .annotate(matched_statuses=Count("tag_id", distinct=True))
+            .filter(matched_statuses=len(set(status_ids)))
+            .values_list("object_id", flat=True)
+        )
+    return qs.values_list("object_id", flat=True)
+
 
 class TristateFilterMixin:
     """
@@ -19,12 +60,11 @@ class TristateFilterMixin:
         
         # 1. Handle Inclusion (standard behavior)
         if value:
-             # Standard "OR" logic for multiple choices in the same field.
-             # ModelMultipleChoiceFilter converts input strings to model instances in 'value'.
-             # MultipleChoiceFilter keeps strings in 'value'.
-             # In both cases, we want to filter by the field using 'in' lookup.
-            lookup = f"{self.field_name}__in"
-            queryset = queryset.filter(**{lookup: value})
+            mode = FILTER_MODE_ANY
+            if self.parent:
+                mode = _get_filter_mode(self.parent.data, self.field_name, allow_together=True)
+            lookup_base = self.field_name
+            queryset = _filter_lookup_values(queryset, lookup_base, value, mode)
 
         if not self.parent:
             return queryset.distinct()
@@ -74,11 +114,7 @@ def _filter_by_tagged_status(queryset, model_class, status_values, exclude=False
     Filter a queryset by statuses applied via TaggedStatus.
     status_values: queryset or list of Status instances.
     """
-    ct = ContentType.objects.get_for_model(model_class)
-    matched_ids = TaggedStatus.objects.filter(
-        content_type=ct,
-        tag__in=status_values,
-    ).values_list("object_id", flat=True)
+    matched_ids = _matching_tagged_object_ids(model_class, status_values)
     if exclude:
         return queryset.exclude(pk__in=matched_ids)
     return queryset.filter(pk__in=matched_ids)
@@ -196,21 +232,20 @@ class IndividualFilter(django_filters.FilterSet):
         label="ACMG Classification"
     )
 
-    has_report = django_filters.ChoiceFilter(
+    has_report = django_filters.MultipleChoiceFilter(
         choices=[('true', 'Yes'), ('false', 'No')],
         method='filter_has_report',
         label="Has Report",
-        empty_label=None,
     )
-    has_request_form = django_filters.ChoiceFilter(
+    has_request_form = django_filters.MultipleChoiceFilter(
         choices=[('true', 'Yes'), ('false', 'No')],
         method='filter_has_request_form',
         label="Has Request Form",
-        empty_label=None,
     )
     projects = django_filters.MultipleChoiceFilter(
         field_name='projects__name',
         choices=[],
+        method='filter_projects',
         label="Project",
     )
     
@@ -247,22 +282,33 @@ class IndividualFilter(django_filters.FilterSet):
         # 1. Handle Inclusion (OR logic for now, or keep existing logic)
         # Existing logic: individuals who have ANY of these terms
         if value:
-            selected_db_ids = set()
-            selected_obo_ids = set()
-            
-            for v in value:
+            mode = _get_filter_mode(self.data, name)
+            term_groups = []
+
+            for selected_value in value:
+                selected_db_ids = set()
+                selected_obo_ids = set()
                 try:
-                    selected_db_ids.add(int(v))
+                    selected_db_ids.add(int(selected_value))
                 except (ValueError, TypeError):
-                    selected_obo_ids.add(str(v))
-                    
-            relevant_term_ids = set()
-            if selected_db_ids:
-                relevant_term_ids.update(get_descendants(selected_db_ids))
-            if selected_obo_ids:
-                relevant_term_ids.update(get_descendants_from_obo(selected_obo_ids))
-            
-            queryset = queryset.filter(hpo_terms__in=relevant_term_ids)
+                    selected_obo_ids.add(str(selected_value))
+
+                relevant_term_ids = set()
+                if selected_db_ids:
+                    relevant_term_ids.update(get_descendants(selected_db_ids))
+                if selected_obo_ids:
+                    relevant_term_ids.update(get_descendants_from_obo(selected_obo_ids))
+                if relevant_term_ids:
+                    term_groups.append(relevant_term_ids)
+
+            if mode == FILTER_MODE_ALL:
+                for term_ids in term_groups:
+                    queryset = queryset.filter(hpo_terms__in=term_ids)
+            else:
+                all_relevant_term_ids = set()
+                for term_ids in term_groups:
+                    all_relevant_term_ids.update(term_ids)
+                queryset = queryset.filter(hpo_terms__in=all_relevant_term_ids)
 
         # 2. Handle Exclusion
         data = self.data
@@ -345,7 +391,11 @@ class IndividualFilter(django_filters.FilterSet):
     def _restrict_status_queryset(self, field_name, model_class):
         if field_name in self.filters:
             ct = ContentType.objects.get_for_model(model_class)
-            self.filters[field_name].queryset = Status.objects.filter(content_type=ct)
+            self.filters[field_name].queryset = (
+                Status.objects.filter(content_type=ct)
+                .select_related("group")
+                .order_by("group__name", "name")
+            )
 
     # --- Custom method filters for status fields (TaggedStatus/GenericFK based) ---
 
@@ -364,65 +414,67 @@ class IndividualFilter(django_filters.FilterSet):
         return Status.objects.none()
 
     def filter_individual_status(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, 'status')
         if value:
-            queryset = _filter_by_tagged_status(queryset, Individual, value)
+            matched_ids = _matching_tagged_object_ids(Individual, value, mode)
+            queryset = queryset.filter(pk__in=matched_ids)
         excluded = self._get_exclude_statuses('status', Individual)
         if excluded.exists():
             queryset = _filter_by_tagged_status(queryset, Individual, excluded, exclude=True)
         return queryset.distinct()
 
     def filter_sample_status(self, queryset, name, value):
-        sample_ct = ContentType.objects.get_for_model(Sample)
+        mode = _get_filter_mode(self.data, 'samples__status', allow_together=True)
         if value:
-            sample_ids = TaggedStatus.objects.filter(content_type=sample_ct, tag__in=value).values_list("object_id", flat=True)
+            sample_ids = _matching_tagged_object_ids(Sample, value, mode)
             queryset = queryset.filter(samples__id__in=sample_ids)
         excluded = self._get_exclude_statuses('samples__status', Sample)
         if excluded.exists():
-            excl_sample_ids = TaggedStatus.objects.filter(content_type=sample_ct, tag__in=excluded).values_list("object_id", flat=True)
+            excl_sample_ids = _matching_tagged_object_ids(Sample, excluded)
             queryset = queryset.exclude(samples__id__in=excl_sample_ids)
         return queryset.distinct()
 
     def filter_test_status(self, queryset, name, value):
-        test_ct = ContentType.objects.get_for_model(Test)
+        mode = _get_filter_mode(self.data, 'samples__tests__status', allow_together=True)
         if value:
-            test_ids = TaggedStatus.objects.filter(content_type=test_ct, tag__in=value).values_list("object_id", flat=True)
+            test_ids = _matching_tagged_object_ids(Test, value, mode)
             queryset = queryset.filter(samples__tests__id__in=test_ids)
         excluded = self._get_exclude_statuses('samples__tests__status', Test)
         if excluded.exists():
-            excl_ids = TaggedStatus.objects.filter(content_type=test_ct, tag__in=excluded).values_list("object_id", flat=True)
+            excl_ids = _matching_tagged_object_ids(Test, excluded)
             queryset = queryset.exclude(samples__tests__id__in=excl_ids)
         return queryset.distinct()
 
     def filter_pipeline_status(self, queryset, name, value):
-        pipeline_ct = ContentType.objects.get_for_model(Pipeline)
+        mode = _get_filter_mode(self.data, 'samples__tests__pipelines__status', allow_together=True)
         if value:
-            pipe_ids = TaggedStatus.objects.filter(content_type=pipeline_ct, tag__in=value).values_list("object_id", flat=True)
+            pipe_ids = _matching_tagged_object_ids(Pipeline, value, mode)
             queryset = queryset.filter(samples__tests__pipelines__id__in=pipe_ids)
         excluded = self._get_exclude_statuses('samples__tests__pipelines__status', Pipeline)
         if excluded.exists():
-            excl_ids = TaggedStatus.objects.filter(content_type=pipeline_ct, tag__in=excluded).values_list("object_id", flat=True)
+            excl_ids = _matching_tagged_object_ids(Pipeline, excluded)
             queryset = queryset.exclude(samples__tests__pipelines__id__in=excl_ids)
         return queryset.distinct()
 
     def filter_analysis_status(self, queryset, name, value):
-        analysis_ct = ContentType.objects.get_for_model(Analysis)
+        mode = _get_filter_mode(self.data, 'samples__tests__pipelines__analyses__status', allow_together=True)
         if value:
-            analysis_ids = TaggedStatus.objects.filter(content_type=analysis_ct, tag__in=value).values_list("object_id", flat=True)
+            analysis_ids = _matching_tagged_object_ids(Analysis, value, mode)
             queryset = queryset.filter(samples__tests__pipelines__analyses__id__in=analysis_ids)
         excluded = self._get_exclude_statuses('samples__tests__pipelines__analyses__status', Analysis)
         if excluded.exists():
-            excl_ids = TaggedStatus.objects.filter(content_type=analysis_ct, tag__in=excluded).values_list("object_id", flat=True)
+            excl_ids = _matching_tagged_object_ids(Analysis, excluded)
             queryset = queryset.exclude(samples__tests__pipelines__analyses__id__in=excl_ids)
         return queryset.distinct()
 
     def filter_variant_status(self, queryset, name, value):
-        variant_ct = ContentType.objects.get_for_model(Variant)
+        mode = _get_filter_mode(self.data, 'variants__status', allow_together=True)
         if value:
-            variant_ids = TaggedStatus.objects.filter(content_type=variant_ct, tag__in=value).values_list("object_id", flat=True)
+            variant_ids = _matching_tagged_object_ids(Variant, value, mode)
             queryset = queryset.filter(variants__id__in=variant_ids)
         excluded = self._get_exclude_statuses('variants__status', Variant)
         if excluded.exists():
-            excl_ids = TaggedStatus.objects.filter(content_type=variant_ct, tag__in=excluded).values_list("object_id", flat=True)
+            excl_ids = _matching_tagged_object_ids(Variant, excluded)
             queryset = queryset.exclude(variants__id__in=excl_ids)
         return queryset.distinct()
 
@@ -467,26 +519,264 @@ class IndividualFilter(django_filters.FilterSet):
         if 'Repeat' in excluded_values:
             exclude_q |= Q(variants__repeat__isnull=False)
             
+        mode = _get_filter_mode(self.data, name, allow_together=True)
         if value:
-            queryset = queryset.filter(q_obj)
+            if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+                for variant_type in value:
+                    if variant_type == 'SNV':
+                        queryset = queryset.filter(variants__snv__isnull=False)
+                    elif variant_type == 'CNV':
+                        queryset = queryset.filter(variants__cnv__isnull=False)
+                    elif variant_type == 'SV':
+                        queryset = queryset.filter(variants__sv__isnull=False)
+                    elif variant_type == 'Repeat':
+                        queryset = queryset.filter(variants__repeat__isnull=False)
+            else:
+                queryset = queryset.filter(q_obj)
         if excluded_values:
             queryset = queryset.exclude(exclude_q)
             
         return queryset.distinct()
 
     def filter_has_report(self, queryset, name, value):
-        if value == 'true':
+        values = set(value or [])
+        mode = _get_filter_mode(self.data, name)
+        if not values or values == {'true', 'false'} and mode == FILTER_MODE_ANY:
+            return queryset
+        if values == {'true', 'false'}:
+            return queryset.none()
+        if 'true' in values:
             return queryset.filter(samples__tests__pipelines__analyses__reports__isnull=False).distinct()
-        elif value == 'false':
+        if 'false' in values:
             return queryset.filter(samples__tests__pipelines__analyses__reports__isnull=True).distinct()
         return queryset
 
     def filter_has_request_form(self, queryset, name, value):
-        if value == 'true':
+        values = set(value or [])
+        mode = _get_filter_mode(self.data, name)
+        if not values or values == {'true', 'false'} and mode == FILTER_MODE_ANY:
+            return queryset
+        if values == {'true', 'false'}:
+            return queryset.none()
+        if 'true' in values:
             return queryset.filter(analysis_request_forms__isnull=False).distinct()
-        elif value == 'false':
+        if 'false' in values:
             return queryset.filter(analysis_request_forms__isnull=True).distinct()
         return queryset
+
+    def filter_projects(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        if not value:
+            return queryset
+        if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+            for project_name in value:
+                queryset = queryset.filter(projects__name=project_name)
+            return queryset.distinct()
+        return queryset.filter(projects__name__in=value).distinct()
+
+    def filter_queryset(self, queryset):
+        if self.data.get("filter_group_mode") == FILTER_GROUP_MODE_ANY:
+            return self._filter_queryset_any_group(queryset)
+        queryset = super().filter_queryset(queryset)
+        return self._apply_together_constraints(queryset)
+
+    def _filter_queryset_any_group(self, queryset):
+        base_queryset = queryset
+        search_value = self.form.cleaned_data.get("search")
+        if search_value:
+            base_queryset = self.filters["search"].filter(base_queryset, search_value)
+
+        base_queryset = self._apply_global_exclusions(base_queryset)
+
+        combined_queryset = queryset.none()
+        has_include_group = False
+
+        for name, filter_instance in self.filters.items():
+            if name == "search":
+                continue
+            value = self.form.cleaned_data.get(name)
+            if self._is_empty_filter_value(value):
+                continue
+
+            has_include_group = True
+            filtered_group = filter_instance.filter(base_queryset, value)
+            filtered_group = self._apply_together_constraints_for_fields(filtered_group, [name])
+            combined_queryset = combined_queryset | filtered_group
+
+        if not has_include_group:
+            return base_queryset.distinct()
+
+        return combined_queryset.distinct()
+
+    def _is_empty_filter_value(self, value):
+        if value is None or value == "":
+            return True
+        if hasattr(value, "exists"):
+            return not value.exists()
+        try:
+            return len(value) == 0
+        except TypeError:
+            return False
+
+    def _exclude_values_for(self, field_name):
+        exclude_key = f"{field_name}__exclude"
+        if hasattr(self.data, "getlist"):
+            return [value for value in self.data.getlist(exclude_key) if value != ""]
+        value = self.data.get(exclude_key)
+        if not value:
+            return []
+        return value if isinstance(value, list) else [value]
+
+    def _apply_global_exclusions(self, queryset):
+        for name in self.filters:
+            excluded_values = self._exclude_values_for(name)
+            if not excluded_values:
+                continue
+
+            field_queryset = queryset.model.objects.all()
+            field = self.filters[name].field
+            empty_value = getattr(field, "empty_value", None)
+            if empty_value is None:
+                empty_value = [] if isinstance(field, forms.MultipleChoiceField) else ""
+            excluded_queryset = self.filters[name].filter(field_queryset, empty_value)
+            queryset = queryset.exclude(pk__in=excluded_queryset.values("pk"))
+
+        return queryset.distinct()
+
+    def _values_for(self, field_name):
+        if hasattr(self.data, "getlist"):
+            return [value for value in self.data.getlist(field_name) if value != ""]
+        value = self.data.get(field_name)
+        if not value:
+            return []
+        return value if isinstance(value, list) else [value]
+
+    def _section_uses_together(self, field_names):
+        return any(
+            _get_filter_mode(self.data, field_name, allow_together=True) == FILTER_MODE_TOGETHER
+            for field_name in field_names
+        )
+
+    def _apply_model_values(self, queryset, lookup_base, values, mode):
+        if not values:
+            return queryset
+        if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+            for value in values:
+                queryset = queryset.filter(**{lookup_base: value})
+            return queryset
+        return queryset.filter(**{f"{lookup_base}__in": values})
+
+    def _apply_status_values_to_related_qs(self, related_qs, model_class, status_names, mode):
+        if not status_names:
+            return related_qs
+        status_values = Status.objects.filter(name__in=status_names)
+        matched_ids = _matching_tagged_object_ids(model_class, status_values, mode)
+        return related_qs.filter(pk__in=matched_ids)
+
+    def _apply_variant_type_values(self, queryset, values, mode, prefix=""):
+        if not values:
+            return queryset
+        lookups = {
+            'SNV': f'{prefix}snv__isnull',
+            'CNV': f'{prefix}cnv__isnull',
+            'SV': f'{prefix}sv__isnull',
+            'Repeat': f'{prefix}repeat__isnull',
+        }
+        if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+            for variant_type in values:
+                lookup = lookups.get(variant_type)
+                if lookup:
+                    queryset = queryset.filter(**{lookup: False})
+            return queryset
+        q_obj = Q()
+        for variant_type in values:
+            lookup = lookups.get(variant_type)
+            if lookup:
+                q_obj |= Q(**{lookup: False})
+        return queryset.filter(q_obj)
+
+    def _apply_together_constraints(self, queryset):
+        return self._apply_together_constraints_for_fields(queryset, None)
+
+    def _apply_together_constraints_for_fields(self, queryset, active_fields=None):
+        active_fields = set(active_fields) if active_fields is not None else None
+
+        def fields_are_active(field_names):
+            return active_fields is None or bool(active_fields.intersection(field_names))
+
+        institution_fields = ['institution__city', 'institution__speciality', 'institution__center_name']
+        if fields_are_active(institution_fields) and self._section_uses_together(institution_fields):
+            institution_qs = Institution.objects.all()
+            city_values = self._values_for('institution__city')
+            city_mode = _get_filter_mode(self.data, 'institution__city', allow_together=True)
+            institution_qs = self._apply_model_values(institution_qs, 'city', city_values, city_mode)
+            speciality_values = self._values_for('institution__speciality')
+            speciality_mode = _get_filter_mode(self.data, 'institution__speciality', allow_together=True)
+            institution_qs = self._apply_model_values(institution_qs, 'speciality', speciality_values, speciality_mode)
+            center_values = self._values_for('institution__center_name')
+            center_mode = _get_filter_mode(self.data, 'institution__center_name', allow_together=True)
+            institution_qs = self._apply_model_values(institution_qs, 'center_name', center_values, center_mode)
+            queryset = queryset.filter(institution__in=institution_qs)
+
+        sample_fields = ['samples__sample_type', 'samples__status']
+        if fields_are_active(sample_fields) and self._section_uses_together(sample_fields):
+            sample_qs = Sample.objects.all()
+            sample_type_values = self._values_for('samples__sample_type')
+            sample_type_mode = _get_filter_mode(self.data, 'samples__sample_type', allow_together=True)
+            sample_qs = self._apply_model_values(sample_qs, 'sample_type__name', sample_type_values, sample_type_mode)
+            sample_status_values = self._values_for('samples__status')
+            sample_status_mode = _get_filter_mode(self.data, 'samples__status', allow_together=True)
+            sample_qs = self._apply_status_values_to_related_qs(sample_qs, Sample, sample_status_values, sample_status_mode)
+            queryset = queryset.filter(samples__in=sample_qs)
+
+        test_fields = ['samples__tests__test_type', 'samples__tests__status']
+        if fields_are_active(test_fields) and self._section_uses_together(test_fields):
+            test_qs = Test.objects.all()
+            test_type_values = self._values_for('samples__tests__test_type')
+            test_type_mode = _get_filter_mode(self.data, 'samples__tests__test_type', allow_together=True)
+            test_qs = self._apply_model_values(test_qs, 'test_type__name', test_type_values, test_type_mode)
+            test_status_values = self._values_for('samples__tests__status')
+            test_status_mode = _get_filter_mode(self.data, 'samples__tests__status', allow_together=True)
+            test_qs = self._apply_status_values_to_related_qs(test_qs, Test, test_status_values, test_status_mode)
+            queryset = queryset.filter(samples__tests__in=test_qs)
+
+        pipeline_fields = ['samples__tests__pipelines__type', 'samples__tests__pipelines__status']
+        if fields_are_active(pipeline_fields) and self._section_uses_together(pipeline_fields):
+            pipeline_qs = Pipeline.objects.all()
+            pipeline_type_values = self._values_for('samples__tests__pipelines__type')
+            pipeline_type_mode = _get_filter_mode(self.data, 'samples__tests__pipelines__type', allow_together=True)
+            pipeline_qs = self._apply_model_values(pipeline_qs, 'type__name', pipeline_type_values, pipeline_type_mode)
+            pipeline_status_values = self._values_for('samples__tests__pipelines__status')
+            pipeline_status_mode = _get_filter_mode(self.data, 'samples__tests__pipelines__status', allow_together=True)
+            pipeline_qs = self._apply_status_values_to_related_qs(pipeline_qs, Pipeline, pipeline_status_values, pipeline_status_mode)
+            queryset = queryset.filter(samples__tests__pipelines__in=pipeline_qs)
+
+        analysis_fields = ['samples__tests__pipelines__analyses__type', 'samples__tests__pipelines__analyses__status']
+        if fields_are_active(analysis_fields) and self._section_uses_together(analysis_fields):
+            analysis_qs = Analysis.objects.all()
+            analysis_type_values = self._values_for('samples__tests__pipelines__analyses__type')
+            analysis_type_mode = _get_filter_mode(self.data, 'samples__tests__pipelines__analyses__type', allow_together=True)
+            analysis_qs = self._apply_model_values(analysis_qs, 'type__name', analysis_type_values, analysis_type_mode)
+            analysis_status_values = self._values_for('samples__tests__pipelines__analyses__status')
+            analysis_status_mode = _get_filter_mode(self.data, 'samples__tests__pipelines__analyses__status', allow_together=True)
+            analysis_qs = self._apply_status_values_to_related_qs(analysis_qs, Analysis, analysis_status_values, analysis_status_mode)
+            queryset = queryset.filter(samples__tests__pipelines__analyses__in=analysis_qs)
+
+        variant_fields = ['variant_type', 'variants__status', 'variants__classifications__classification']
+        if fields_are_active(variant_fields) and self._section_uses_together(variant_fields):
+            variant_qs = Variant.objects.all()
+            variant_type_values = self._values_for('variant_type')
+            variant_type_mode = _get_filter_mode(self.data, 'variant_type', allow_together=True)
+            variant_qs = self._apply_variant_type_values(variant_qs, variant_type_values, variant_type_mode)
+            variant_status_values = self._values_for('variants__status')
+            variant_status_mode = _get_filter_mode(self.data, 'variants__status', allow_together=True)
+            variant_qs = self._apply_status_values_to_related_qs(variant_qs, Variant, variant_status_values, variant_status_mode)
+            classification_values = self._values_for('variants__classifications__classification')
+            classification_mode = _get_filter_mode(self.data, 'variants__classifications__classification', allow_together=True)
+            variant_qs = self._apply_model_values(variant_qs, 'classifications__classification', classification_values, classification_mode)
+            queryset = queryset.filter(variants__in=variant_qs)
+
+        return queryset.distinct()
 
 class VariantFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")

@@ -1,4 +1,5 @@
 import logging
+import re
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -640,7 +641,7 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
             )
         )
 
-        return qs
+        return qs.order_by("-last_activity", "-id")
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -892,14 +893,17 @@ class HPOTermSearchView(LoginRequiredMixin, ListView):
         return context
     
     def get_queryset(self):
-        query = self.request.GET.get('q')
+        query = (self.request.GET.get('q') or '').strip()
         if not query:
             return Term.objects.none()
+
+        identifier_query = re.sub(r'(?i)^HP\s*:?\s*', '', query).strip()
+        search_filter = Q(label__icontains=query) | Q(identifier__icontains=query)
+        if identifier_query and identifier_query != query:
+            search_filter |= Q(identifier__icontains=identifier_query)
             
         # Base filter
-        qs = Term.objects.filter(
-            Q(label__icontains=query) | Q(identifier__icontains=query)
-        ).filter(ontology__type=1) # HPO Only
+        qs = Term.objects.filter(search_filter).filter(ontology__type=1) # HPO Only
         
         # Exclude already selected terms
         individual_id = self.request.GET.get('individual_id')
@@ -1169,6 +1173,7 @@ def _build_family_member_formset(*args, **kwargs):
         extra=0,
         min_num=1,
         validate_min=True,
+        can_delete=True,
     )(*args, **kwargs)
 
 

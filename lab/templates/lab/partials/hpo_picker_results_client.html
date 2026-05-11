@@ -4,7 +4,7 @@
     {% for term in results %}
     <li>
         <button type="button"
-                onclick="this.dispatchEvent(new CustomEvent('hpo-selected', {bubbles: true, detail: {id: '{{ term.id }}', label: '{{ term.label|escapejs }}'}})); this.closest('ul').remove();"
+                onclick="this.dispatchEvent(new CustomEvent('hpo-selected', {bubbles: true, detail: {id: '{{ term.id }}', label: '{{ term.label|escapejs }}', code: '{{ term.term|default:term.identifier|escapejs }}'}})); this.closest('ul').remove();"
                 class="flex flex-col items-start px-3 py-2 text-left w-full hover:bg-base-200">
             <span class="text-sm font-bold text-base-content">{{ term.label }}</span>
             <span class="text-xs font-mono opacity-50">{{ term.term|default:term.identifier }}</span>

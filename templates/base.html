@@ -152,7 +152,160 @@
         .criteria-tooltip.tooltip::after {
             max-width: min(44rem, calc(100vw - 2rem));
         }
+
+        body.tooltip-portal-enabled .tooltip::before,
+        body.tooltip-portal-enabled .tooltip::after {
+            display: none !important;
+        }
+
+        .global-tooltip-portal {
+            position: fixed;
+            z-index: 2147483647;
+            max-width: min(24rem, calc(100vw - 1rem));
+            padding: 0.375rem 0.625rem;
+            border-radius: 0.375rem;
+            background: oklch(var(--bc));
+            color: oklch(var(--b1));
+            box-shadow: 0 10px 24px rgb(0 0 0 / 0.18);
+            font-size: 0.75rem;
+            line-height: 1.25;
+            white-space: normal;
+            text-align: left;
+            pointer-events: none;
+            opacity: 0;
+            transform: translate3d(0, 2px, 0);
+            transition: opacity 120ms ease, transform 120ms ease;
+        }
+
+        .global-tooltip-portal.is-visible {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+        }
     </style>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            document.body.classList.add("tooltip-portal-enabled");
+
+            let tooltipTarget = null;
+            let tooltipPortal = null;
+            const margin = 8;
+
+            const getPlacement = (element) => {
+                const classes = element.classList;
+                const side = classes.contains("tooltip-right")
+                    ? "right"
+                    : classes.contains("tooltip-left")
+                        ? "left"
+                        : classes.contains("tooltip-bottom")
+                            ? "bottom"
+                            : "top";
+                const align = classes.contains("tooltip-start")
+                    ? "start"
+                    : classes.contains("tooltip-end")
+                        ? "end"
+                        : "center";
+                return { side, align };
+            };
+
+            const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+            const positionTooltip = () => {
+                if (!tooltipTarget || !tooltipPortal) return;
+
+                const rect = tooltipTarget.getBoundingClientRect();
+                const tipRect = tooltipPortal.getBoundingClientRect();
+                const { side, align } = getPlacement(tooltipTarget);
+
+                let top;
+                let left;
+
+                if (side === "right" || side === "left") {
+                    left = side === "right"
+                        ? rect.right + margin
+                        : rect.left - tipRect.width - margin;
+
+                    if (align === "start") {
+                        top = rect.top;
+                    } else if (align === "end") {
+                        top = rect.bottom - tipRect.height;
+                    } else {
+                        top = rect.top + (rect.height - tipRect.height) / 2;
+                    }
+                } else {
+                    top = side === "bottom"
+                        ? rect.bottom + margin
+                        : rect.top - tipRect.height - margin;
+
+                    if (align === "start") {
+                        left = rect.left;
+                    } else if (align === "end") {
+                        left = rect.right - tipRect.width;
+                    } else {
+                        left = rect.left + (rect.width - tipRect.width) / 2;
+                    }
+                }
+
+                tooltipPortal.style.left = `${clamp(left, margin, window.innerWidth - tipRect.width - margin)}px`;
+                tooltipPortal.style.top = `${clamp(top, margin, window.innerHeight - tipRect.height - margin)}px`;
+            };
+
+            const showTooltip = (target) => {
+                const text = target?.getAttribute("data-tip");
+                if (!text) return;
+
+                tooltipTarget = target;
+                if (!tooltipPortal) {
+                    tooltipPortal = document.createElement("div");
+                    tooltipPortal.className = "global-tooltip-portal";
+                    tooltipPortal.setAttribute("role", "tooltip");
+                    document.body.appendChild(tooltipPortal);
+                }
+
+                tooltipPortal.textContent = text;
+                tooltipPortal.classList.remove("is-visible");
+                tooltipPortal.style.left = "0px";
+                tooltipPortal.style.top = "0px";
+                requestAnimationFrame(() => {
+                    positionTooltip();
+                    tooltipPortal.classList.add("is-visible");
+                });
+            };
+
+            const hideTooltip = () => {
+                tooltipTarget = null;
+                if (tooltipPortal) {
+                    tooltipPortal.classList.remove("is-visible");
+                }
+            };
+
+            document.addEventListener("mouseover", (event) => {
+                const target = event.target.closest(".tooltip[data-tip]");
+                if (target && !target.contains(event.relatedTarget)) {
+                    showTooltip(target);
+                }
+            });
+
+            document.addEventListener("mouseout", (event) => {
+                const target = event.target.closest(".tooltip[data-tip]");
+                if (target && !target.contains(event.relatedTarget)) {
+                    hideTooltip();
+                }
+            });
+
+            document.addEventListener("focusin", (event) => {
+                const target = event.target.closest(".tooltip[data-tip]");
+                if (target) showTooltip(target);
+            });
+
+            document.addEventListener("focusout", (event) => {
+                if (event.target.closest(".tooltip[data-tip]")) hideTooltip();
+            });
+
+            window.addEventListener("scroll", positionTooltip, true);
+            window.addEventListener("resize", positionTooltip);
+        });
+    </script>
 </head>
 <body class="bg-base-100 min-h-screen flex flex-col" 
       @resize.window="if (window.innerWidth < 1024) sidebarOpen = false"

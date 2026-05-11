@@ -12,6 +12,8 @@ def get_list(dictionary, key):
 
 @register.filter
 def get_item(dictionary, key):
+    if not hasattr(dictionary, "get"):
+        return None
     return dictionary.get(key)
 
 
