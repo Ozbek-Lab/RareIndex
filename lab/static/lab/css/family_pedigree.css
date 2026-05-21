@@ -1,0 +1,62 @@
+.family-pedigree-panel {
+    min-width: 0;
+}
+
+.family-pedigree-canvas {
+    min-height: 12rem;
+    max-height: 16rem;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    background: oklch(var(--b1));
+}
+
+.family-pedigree-canvas svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    overflow: hidden;
+}
+
+.family-pedigree-canvas .ped_label,
+.family-pedigree-canvas .indi_details {
+    fill: oklch(var(--bc) / 0.72);
+}
+
+.family-pedigree-placeholder,
+.family-pedigree-error {
+    min-height: 12rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    color: oklch(var(--bc) / 0.45);
+    font-size: 0.8125rem;
+    text-align: center;
+}
+
+.family-pedigree-error {
+    color: oklch(var(--er));
+}
+
+.family-pedigree-legend {
+    display: inline-block;
+    width: 0.625rem;
+    height: 0.625rem;
+    margin-right: 0.25rem;
+    vertical-align: -0.0625rem;
+    border: 1px solid oklch(var(--bc) / 0.45);
+    background: oklch(var(--b1));
+}
+
+.family-pedigree-legend-square {
+    border-radius: 0.125rem;
+}
+
+.family-pedigree-legend-circle {
+    border-radius: 999px;
+}
+
+.family-pedigree-legend-affected {
+    border-radius: 0.125rem;
+    background: oklch(var(--bc) / 0.45);
+}

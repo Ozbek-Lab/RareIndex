@@ -95,6 +95,128 @@
             {% endfor %}
         </div>
     </div>
+    {% elif model_name == "contact" %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4"
+         x-data="{
+            institutionSearch: '',
+            institutionOpen: false,
+            selectedInstitutions: [],
+            institutions: [
+                {% for option in form.institutions.field.queryset %}
+                    {id: '{{ option.pk }}', name: '{{ option.name|escapejs }}'},
+                {% endfor %}
+            ],
+            init() {
+                this.loadSelectedInstitutions();
+            },
+            institutionSelect() {
+                return this.$refs.institutionSelect?.querySelector('select');
+            },
+            loadSelectedInstitutions() {
+                const select = this.institutionSelect();
+                if (!select) return;
+                this.selectedInstitutions = Array.from(select.selectedOptions).map((option) => ({
+                    id: option.value,
+                    name: option.textContent.trim(),
+                }));
+            },
+            syncInstitutions() {
+                const select = this.institutionSelect();
+                if (!select) return;
+                Array.from(select.options).forEach((option) => {
+                    option.selected = this.selectedInstitutions.some((inst) => String(inst.id) === option.value);
+                });
+            },
+            addInstitution(inst) {
+                if (this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id))) return;
+                this.selectedInstitutions.push(inst);
+                this.syncInstitutions();
+                this.institutionSearch = '';
+                this.institutionOpen = false;
+            },
+            removeInstitution(id) {
+                this.selectedInstitutions = this.selectedInstitutions.filter((inst) => String(inst.id) !== String(id));
+                this.syncInstitutions();
+            },
+            get filteredInstitutions() {
+                const search = this.institutionSearch.toLowerCase();
+                return this.institutions.filter((inst) => {
+                    const alreadySelected = this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id));
+                    return !alreadySelected && (!search || inst.name.toLowerCase().includes(search));
+                });
+            }
+         }"
+         x-init="init()">
+        {% for field in form %}
+            {% if field.name == "institutions" %}
+            <div class="form-control w-full md:col-span-2">
+                <label class="label py-1">
+                    <span class="label-text font-semibold text-xs opacity-70">
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-error ml-0.5">*</span>{% endif %}
+                    </span>
+                    {% if field.help_text %}
+                    <span class="label-text-alt opacity-50 text-xs">{{ field.help_text }}</span>
+                    {% endif %}
+                </label>
+                <div class="hidden" x-ref="institutionSelect">{{ field }}</div>
+                <div class="relative">
+                    <input type="text"
+                           x-model="institutionSearch"
+                           @focus="institutionOpen = true"
+                           @click.away="institutionOpen = false"
+                           placeholder="Search and add institutions..."
+                           class="input input-bordered w-full {% if field.errors %}input-error{% endif %}"
+                           :class="{'input-primary': institutionOpen}">
+                    <div x-show="institutionOpen"
+                         class="absolute z-20 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-56 overflow-y-auto"
+                         x-transition>
+                        <template x-for="inst in filteredInstitutions" :key="inst.id">
+                            <div @click="addInstitution(inst)"
+                                 class="px-3 py-2 text-sm cursor-pointer hover:bg-base-200 text-base-content"
+                                 x-text="inst.name"></div>
+                        </template>
+                        <div x-show="filteredInstitutions.length === 0" class="px-3 py-2 text-sm text-base-content/50">No matches.</div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mt-2 min-h-[1.75rem]">
+                    <template x-for="inst in selectedInstitutions" :key="inst.id">
+                        <span class="badge badge-primary gap-1.5 p-3 text-xs">
+                            <span x-text="inst.name"></span>
+                            <button type="button" @click="removeInstitution(inst.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                        </span>
+                    </template>
+                    <span x-show="selectedInstitutions.length === 0" class="text-sm text-base-content/50 italic py-1">No institutions selected.</span>
+                </div>
+                {% if field.errors %}
+                <label class="label py-0">
+                    <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                </label>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="form-control w-full {% if field.is_hidden %}hidden{% endif %} {% if field.field.widget.input_type == 'textarea' or field.name == 'description' or field.name == 'contact' or field.name == 'notes' %}md:col-span-2{% endif %}">
+                <label class="label py-1">
+                    <span class="label-text font-semibold text-xs opacity-70">
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-error ml-0.5">*</span>{% endif %}
+                    </span>
+                    {% if field.help_text %}
+                    <span class="label-text-alt opacity-50 text-xs">{{ field.help_text }}</span>
+                    {% endif %}
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                <label class="label py-0">
+                    <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                </label>
+                {% endif %}
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
     {% else %}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         {% for field in form %}

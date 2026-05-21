@@ -49,6 +49,10 @@ def collect_individual_row_statuses(individual):
             statuses.append(status)
             seen.add(status.pk)
 
+    def add_object_statuses(obj):
+        if hasattr(obj, "statuses"):
+            add_statuses(obj.statuses.all())
+
     # Direct individual statuses first.
     for status in individual.statuses.all():
         if status.pk in seen:
@@ -66,19 +70,23 @@ def collect_individual_row_statuses(individual):
 
     # Connected workflow objects.
     for sample in individual.samples.all():
-        add_statuses(sample.tasks.all())
-        add_statuses(sample.statuses.all())
+        add_object_statuses(sample)
+        for task in sample.tasks.all():
+            add_object_statuses(task)
         for test in sample.tests.all():
-            add_statuses(test.tasks.all())
-            add_statuses(test.statuses.all())
+            add_object_statuses(test)
+            for task in test.tasks.all():
+                add_object_statuses(task)
             for pipeline in test.pipelines.all():
-                add_statuses(pipeline.tasks.all())
-                add_statuses(pipeline.statuses.all())
+                add_object_statuses(pipeline)
+                for task in pipeline.tasks.all():
+                    add_object_statuses(task)
                 for analysis in pipeline.analyses.all():
-                    add_statuses(analysis.tasks.all())
-                    add_statuses(analysis.statuses.all())
+                    add_object_statuses(analysis)
+                    for task in analysis.tasks.all():
+                        add_object_statuses(task)
                     for report in analysis.reports.all():
-                        add_statuses(report.statuses.all())
+                        add_object_statuses(report)
 
     for variant in individual.variants.all():
         add_statuses(variant.statuses.all())

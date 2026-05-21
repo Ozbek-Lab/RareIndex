@@ -1,0 +1,12 @@
+<button
+    type="button"
+    class="btn btn-ghost btn-xs btn-square h-5 min-h-0 w-5 text-base-content/35 hover:text-error tooltip tooltip-left"
+    data-tip="Delete {{ label }}"
+    hx-get="{% url 'lab:workflow_delete_confirm' model_name object.pk %}"
+    hx-target="#generic-modal-content"
+    hx-swap="innerHTML"
+    onclick="document.getElementById('generic-modal').showModal()"
+    aria-label="Delete {{ label }}"
+>
+    <i class="fa-solid fa-trash text-[9px]"></i>
+</button>

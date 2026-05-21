@@ -3,7 +3,7 @@
 {% block title %}Configurations{% endblock %}
 
 {% block content %}
-<div class="p-6 max-w-7xl mx-auto space-y-6">
+<div class="p-4 md:p-6 w-full max-w-[96rem] mx-auto space-y-4">
 
     <!-- Page Header -->
     <div class="flex items-center justify-between">
@@ -14,7 +14,7 @@
     </div>
 
     <!-- Sections grid -->
-    <div class="space-y-4">
+    <div class="space-y-1.5">
         {% for section in sections %}
             {% include "lab/partials/config_section.html" %}
         {% endfor %}

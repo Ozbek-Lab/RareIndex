@@ -5,7 +5,9 @@
     </h3>
 </div>
 
-<form hx-post="{{ action_url }}"
+<form method="post"
+      action="{{ action_url }}"
+      hx-post="{{ action_url }}"
       hx-target="#generic-modal-content"
       hx-swap="innerHTML"
       class="space-y-4">
@@ -32,4 +34,3 @@
         </button>
     </div>
 </form>
-

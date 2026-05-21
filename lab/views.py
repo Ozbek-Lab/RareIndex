@@ -33,6 +33,7 @@ from .models import (
     Institution,
     PlotTemplate,
     DashboardWidget,
+    Family,
 )
 from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
 from .filters import IndividualFilter, ProjectFilter, VariantFilter
@@ -210,6 +211,23 @@ def _individual_filter_counts():
         for row in Individual.objects.values('is_index').annotate(c=Count('id'))
     })
 
+    family_consanguinity_counts = {
+        "false": 0,
+        "unknown": Individual.objects.filter(
+            Q(family__isnull=True) |
+            Q(family__is_consanguineous__isnull=True)
+        ).distinct().count(),
+        "true": 0,
+    }
+    family_consanguinity_counts.update({
+        str(row["family__is_consanguineous"]).lower(): row["c"]
+        for row in Individual.objects.filter(
+            family__is_consanguineous__isnull=False
+        )
+        .values("family__is_consanguineous")
+        .annotate(c=Count("id", distinct=True))
+    })
+
     # Has Report
     has_report_counts = {
         'true': Individual.objects.filter(samples__tests__pipelines__analyses__reports__isnull=False).distinct().count(),
@@ -363,6 +381,7 @@ def _individual_filter_counts():
         "is_alive":                 is_alive_counts,
         "is_affected":              is_affected_counts,
         "is_index":                 is_index_counts,
+        "family_consanguinity":      family_consanguinity_counts,
         "has_report":               has_report_counts,
         "has_request_form":         has_request_form_counts,
         "projects":                 projects_counts,
@@ -871,6 +890,85 @@ from django.views.generic import ListView, DetailView
 from django.db.models import Q
 from ontologies.models import Term
 
+
+def _normalize_hpo_identifier(value):
+    digits = re.sub(r"\D", "", value or "")
+    if not digits:
+        return ""
+    return digits.zfill(7)
+
+
+def _best_hpo_match(query):
+    query = (query or "").strip()
+    if not query:
+        return None
+
+    code_match = re.search(r"(?i)\bHP\s*:?\s*(\d{4,7})\b", query)
+    if code_match:
+        identifier = _normalize_hpo_identifier(code_match.group(1))
+        exact_code_match = Term.objects.filter(ontology__type=1, identifier=identifier).first()
+        if exact_code_match:
+            return exact_code_match
+
+    text_query = re.sub(r"(?i)\bHP\s*:?\s*\d{4,7}\b", " ", query).strip()
+    text_query = re.sub(r"\s+", " ", text_query)
+    identifier_query = _normalize_hpo_identifier(query)
+
+    search_filter = Q()
+    if text_query:
+        search_filter |= Q(label__icontains=text_query)
+    if identifier_query:
+        search_filter |= Q(identifier__icontains=identifier_query)
+    if not search_filter:
+        search_filter = Q(label__icontains=query)
+
+    from django.db.models import Case, When, Value, IntegerField
+    from django.db.models.functions import Length
+
+    qs = Term.objects.filter(ontology__type=1).filter(search_filter)
+    return (
+        qs.annotate(
+            is_exact=Case(
+                When(label__iexact=text_query or query, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            starts_with=Case(
+                When(label__istartswith=text_query or query, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            label_len=Length("label"),
+        )
+        .order_by("is_exact", "starts_with", "label_len", "label")
+        .first()
+    )
+
+
+@login_required
+def hpo_bulk_match(request):
+    raw_query = request.GET.get("q", "")
+    chunks = [chunk.strip() for chunk in raw_query.split(",") if chunk.strip()]
+    results = []
+    seen_ids = set()
+
+    for chunk in chunks:
+        term = _best_hpo_match(chunk)
+        if not term or term.pk in seen_ids:
+            continue
+        seen_ids.add(term.pk)
+        results.append(
+            {
+                "id": term.pk,
+                "label": term.label,
+                "code": term.term,
+                "query": chunk,
+            }
+        )
+
+    return JsonResponse({"results": results})
+
+
 class HPOTermSearchView(LoginRequiredMixin, ListView):
     model = Term
     context_object_name = "results"
@@ -1036,10 +1134,14 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
             'projects',
             'family__individuals',
             'family__individuals__cross_ids__id_type',
+            'family__individuals__mother',
+            'family__individuals__father',
             'family__individuals__statuses',
         ).get(pk=self.kwargs['pk'])
         
         context['individual'] = individual
+        context['workflow_content_id'] = f"workflow-content-{individual.pk}"
+        context['workflow_target_id'] = f"#{context['workflow_content_id']}"
 
         primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
         secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
@@ -1177,6 +1279,17 @@ def _build_family_member_formset(*args, **kwargs):
     )(*args, **kwargs)
 
 
+def _family_member_formset_data(post_data):
+    data = post_data.copy()
+    data.setdefault("individuals-MIN_NUM_FORMS", "1")
+    data.setdefault("individuals-MAX_NUM_FORMS", "1000")
+    if data.get("individuals-MIN_NUM_FORMS") == "":
+        data["individuals-MIN_NUM_FORMS"] = "1"
+    if data.get("individuals-MAX_NUM_FORMS") == "":
+        data["individuals-MAX_NUM_FORMS"] = "1000"
+    return data
+
+
 class FamilyCreateView(LoginRequiredMixin, CreateView):
     model = Family
     form_class = CreateFamilyForm
@@ -1195,7 +1308,7 @@ class FamilyCreateView(LoginRequiredMixin, CreateView):
         
         if self.request.POST:
             context['individual_formset'] = _build_family_member_formset(
-                self.request.POST,
+                _family_member_formset_data(self.request.POST),
                 prefix='individuals',
             )
         else:
@@ -1207,6 +1320,7 @@ class FamilyCreateView(LoginRequiredMixin, CreateView):
         individual_formset = context['individual_formset']
         
         if individual_formset.is_valid():
+            family_institutions = form.cleaned_data.get('institutions')
             self.object = form.save(commit=False)
             self.object.created_by = self.request.user
             self.object.save()
@@ -1221,7 +1335,7 @@ class FamilyCreateView(LoginRequiredMixin, CreateView):
                     individual.created_by = self.request.user
                     
                     individual.save()
-                    individual.institution.set(inline_form.cleaned_data['institution'])
+                    individual.institution.set(family_institutions)
                     individual.hpo_terms.set(inline_form.cleaned_data['hpo_terms'])
                     # Set statuses from the form
                     selected_statuses = inline_form.cleaned_data.get('statuses')

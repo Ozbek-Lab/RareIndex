@@ -254,47 +254,32 @@
                 </div>
             </div>
 
-            <div class="relative">
-                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Institutions</label>
-                
-                <div class="hidden">
-                    {{ form.institution }}
-                </div>
-
-                <div class="relative">
-                    <input type="text" 
-                           x-model="instSearch"
-                           @focus="instOpen = true"
-                           @click.away="instOpen = false"
-                           placeholder="Search and add institutions..."
-                           class="input input-bordered w-full input-sm {% if form.institution.errors %}input-error{% endif %}"
-                           :class="{'input-primary': instOpen}">
-                    <div x-show="instOpen" 
-                         class="absolute z-10 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
-                         x-transition>
-                        <template x-for="inst in filteredInstitutions" :key="inst.id">
-                            <div @click="selectInstitution(inst)"
-                                 class="px-3 py-1.5 text-xs cursor-pointer hover:bg-base-200 text-base-content"
-                                 x-text="inst.name">
-                            </div>
-                        </template>
-                        <div x-show="filteredInstitutions.length === 0" class="px-3 py-1.5 text-xs text-base-content/50">No matches.</div>
-                    </div>
-                </div>
-                <div class="flex flex-wrap gap-1.5 mt-2 mb-1 min-h-[1.5rem]">
-                    <template x-for="inst in selectedInstitutions" :key="inst.id">
-                        <span class="badge badge-primary gap-1.5 p-2 text-xs">
-                            <span x-text="inst.name"></span>
-                            <button type="button" @click="removeInstitution(inst.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">✕</button>
-                        </span>
-                    </template>
-                    <span x-show="selectedInstitutions.length === 0" class="text-xs text-base-content/50 italic py-1">No institutions selected.</span>
-                </div>
-                {% if form.institution.errors %}<p class="text-red-500 text-xs mt-0.5">{{ form.institution.errors.0 }}</p>{% endif %}
+            <div class="hidden">
+                {{ form.institution }}
             </div>
 
             <div>
-                <label class="block mb-0.5 text-xs font-medium text-base-content/80">HPO Terms</label>
+                <div class="mb-1 flex items-center justify-between gap-2">
+                    <label class="block text-xs font-medium text-base-content/80">HPO Terms</label>
+                    <div class="flex min-w-0 items-center gap-1">
+                        <label class="input input-bordered input-xs flex h-7 w-44 min-w-0 items-center gap-1 bg-base-100/60">
+                            <input type="text"
+                                   class="min-w-0 grow text-[11px]"
+                                   placeholder="Paste HPOs..."
+                                   x-model="bulkHpoQuery"
+                                   @keydown.enter.prevent="bulkAddHpoTerms()"
+                                   autocomplete="off" />
+                        </label>
+                        <button type="button"
+                                class="btn btn-ghost btn-xs h-7 min-h-0 w-7 rounded-full border border-base-300 p-0"
+                                :disabled="bulkHpoLoading || !bulkHpoQuery.trim()"
+                                @click="bulkAddHpoTerms()"
+                                title="Add matching HPO terms">
+                            <span x-show="!bulkHpoLoading"><i class="fa-solid fa-plus text-[10px]"></i></span>
+                            <span x-show="bulkHpoLoading" class="loading loading-spinner loading-xs"></span>
+                        </button>
+                    </div>
+                </div>
                 <select name="{{ form.hpo_terms.html_name }}" multiple class="hidden">
                      <template x-for="term in hpoTerms" :key="term.id">
                          <option :value="term.id" selected></option>

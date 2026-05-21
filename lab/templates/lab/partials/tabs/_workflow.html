@@ -1,5 +1,5 @@
 {% load lab_tags %}
-<div class="workflow-tab space-y-1" style="--padding-card: 0.1rem;">
+<div class="workflow-tab space-y-1 rounded-box bg-base-100 p-2" style="--padding-card: 0.1rem;">
     <!-- Individual Status Header - Row Style -->
     <div class="card bg-base-100 border border-base-200 shadow-sm mb-2">
         <div class="card-body p-0">
@@ -25,12 +25,17 @@
                          </div>
                      </div>
                     {% if perms.lab.add_sample %}
-                    <button class="btn btn-primary btn-xs gap-1 font-normal"
+                    <button type="button"
+                            id="workflow-add-sample-button"
+                            class="btn btn-primary btn-xs gap-1 font-normal"
                             hx-get="{% url 'lab:sample_create_modal' individual.id %}"
                             hx-target="#generic-modal-content"
-                            onclick="document.getElementById('generic-modal').showModal()">
+                            hx-swap="innerHTML"
+                            hx-disabled-elt="this"
+                            onclick="document.getElementById('generic-modal').showModal()"
+                            aria-label="Add sample for {{ individual.primary_id }}">
                         <i class="fa-solid fa-plus text-[10px]"></i>
-                        Add Sample
+                        <span>Add Sample</span>
                     </button>
                     {% endif %}
                 </div>
@@ -129,6 +134,7 @@
                         <th>Type</th>
                         <th>Genes</th>
                         <th>Added</th>
+                        {% if perms.variant.delete_variant %}<th class="w-8"></th>{% endif %}
                     </tr>
                 </thead>
                 {% for variant in external_variants %}
@@ -154,9 +160,14 @@
                         <td class="text-xs">{{ variant.type }}</td>
                         <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
                         <td class="text-xs text-base-content/50">{{ variant.created_at|date:"M d, Y" }}</td>
+                        {% if perms.variant.delete_variant %}
+                        <td class="text-right">
+                            {% include "lab/partials/workflow_delete_button.html" with object=variant model_name="variant" label="variant" %}
+                        </td>
+                        {% endif %}
                     </tr>
                     <tr x-cloak x-show="open" class="bg-base-50/40">
-                        <td colspan="5" class="px-1 pt-0 pb-1">
+                        <td colspan="{% if perms.variant.delete_variant %}6{% else %}5{% endif %}" class="px-1 pt-0 pb-1">
                             <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
                                 <div id="variant-detail-previous-{{ variant.id }}" class="p-2">
                                     <div class="text-[10px] text-base-content/40 italic px-1 py-2">
@@ -178,7 +189,8 @@
     <div class="flex flex-col gap-1 border-l-2 border-secondary/50 ml-4 pl-4 space-y-2 relative">
     {% if individual.samples.exists %}
         {% for sample in individual.samples.all %}
-        <div class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50 transition-all duration-200 group" x-data="{ expanded: true }">
+        {% partialdef sample_card inline %}
+        <div id="sample-card-{{ sample.id }}" class="card bg-base-100 border border-base-200 shadow-md overflow-visible relative focus-within:z-50 transition-all duration-200 group" x-data="{ expanded: true }">
             <div class="absolute pointer-events-none" style="top:0;bottom:0;left:0;width:4px;background-color:oklch(var(--s)/0.35);border-radius:var(--rounded-box,1rem) 0 0 var(--rounded-box,1rem);z-index:20;"></div>
             <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
             <div class="card-body p-0 overflow-visible relative z-10">
@@ -211,11 +223,15 @@
                         {% if perms.lab.add_test %}
                         <button hx-get="{% url 'lab:test_create_modal' sample.id %}"
                                 hx-target="#generic-modal-content"
+                                hx-swap="innerHTML"
                                 onclick="document.getElementById('generic-modal').showModal()"
                                 class="btn btn-primary btn-xs gap-1 font-normal">
                             <i class="fa-solid fa-plus"></i>
                             Add Test
                         </button>
+                        {% endif %}
+                        {% if perms.lab.delete_sample %}
+                            {% include "lab/partials/workflow_delete_button.html" with object=sample model_name="sample" label="sample" %}
                         {% endif %}
                     </div>
                 </div>
@@ -282,7 +298,9 @@
                         {% if sample.tests.exists %}
                             <div class="pl-4 border-l-2 border-primary/50 ml-4 space-y-3 relative">
                                 {% for test in sample.tests.all %}
+                                {% partialdef test_card inline %}
                                 <div
+                                    id="test-card-{{ test.id }}"
                                     class="relative mb-2 last:mb-0"
                                     x-data="{ expanded: {% if test|has_status:'Previous' %}false{% else %}true{% endif %} }"
                                 >
@@ -316,11 +334,15 @@
                                                      {% if perms.lab.add_pipeline %}
                                                      <button hx-get="{% url 'lab:pipeline_create_modal' test.id %}"
                                                             hx-target="#generic-modal-content"
+                                                            hx-swap="innerHTML"
                                                             onclick="document.getElementById('generic-modal').showModal()"
                                                             class="btn btn-primary btn-xs gap-1 font-normal">
                                                         <i class="fa-solid fa-plus text-[10px]"></i>
                                                         Add Pipeline
                                                     </button>
+                                                    {% endif %}
+                                                    {% if perms.lab.delete_test %}
+                                                        {% include "lab/partials/workflow_delete_button.html" with object=test model_name="test" label="test" %}
                                                     {% endif %}
                                                 </div>
                                                 </div>
@@ -379,6 +401,7 @@
                                                     </div>
                                                 </div>
                                             </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -387,7 +410,8 @@
                                         {% if test.pipelines.exists %}
                                         <div class="pl-4 border-l-2 border-accent/50 ml-4 mt-2 space-y-3 relative z-10">
                                             {% for pipeline in test.pipelines.all %}
-                                            <div class="relative" x-data="{ expanded: true }">
+                                            {% partialdef pipeline_card inline %}
+                                            <div id="pipeline-card-{{ pipeline.id }}" class="relative" x-data="{ expanded: true }">
                                                 <!-- Pipeline Node -->
                                                 <div class="absolute -left-4 top-0 h-6 w-4 border-b border-l border-base-300 rounded-bl-lg z-0"></div>
                                                 
@@ -418,11 +442,15 @@
                                                                  {% if perms.lab.add_analysis %}
                                                                  <button hx-get="{% url 'lab:analysis_create_modal' pipeline.id %}"
                                                                         hx-target="#generic-modal-content"
+                                                                        hx-swap="innerHTML"
                                                                         onclick="document.getElementById('generic-modal').showModal()"
                                                                         class="btn btn-primary btn-xs gap-1 font-normal">
                                                                     <i class="fa-solid fa-plus text-[10px]"></i>
                                                                     Add Analysis
                                                                 </button>
+                                                                {% endif %}
+                                                                 {% if perms.lab.delete_pipeline %}
+                                                                    {% include "lab/partials/workflow_delete_button.html" with object=pipeline model_name="pipeline" label="pipeline" %}
                                                                  {% endif %}
                                                             </div>
                                                         </div>
@@ -564,6 +592,9 @@
                                                                                     Add Variant
                                                                                 </button>
                                                                                 {% endif %}
+                                                                                {% if perms.lab.delete_analysis %}
+                                                                                    {% include "lab/partials/workflow_delete_button.html" with object=analysis model_name="analysis" label="analysis" %}
+                                                                                {% endif %}
                                                                             </div>
                                                                         </div>
                                 
@@ -696,6 +727,9 @@
                                                                                         <i class="fa-solid fa-download text-[9px]"></i>
                                                                                     </a>
                                                                                     {% endif %}
+                                                                                    {% if perms.lab.delete_analysisreport %}
+                                                                                        {% include "lab/partials/workflow_delete_button.html" with object=report model_name="report" label="report" %}
+                                                                                    {% endif %}
                                                                                 </div>
                                                                             </div>
                                                                         {% if report.variants.exists %}
@@ -725,9 +759,14 @@
                                                                                         <td class="text-[9px]">{{ variant.get_zygosity_display }}</td>
                                                                                         <td class="text-[9px]">{{ variant.type }}</td>
                                                                                         <td class="italic text-[9px]">{{ variant.genes.all|join:", "|default:"--" }}</td>
+                                                                                        {% if perms.variant.delete_variant %}
+                                                                                        <td class="text-right">
+                                                                                            {% include "lab/partials/workflow_delete_button.html" with object=variant model_name="variant" label="variant" %}
+                                                                                        </td>
+                                                                                        {% endif %}
                                                                                     </tr>
                                                                                     <tr x-cloak x-show="open" class="bg-base-50/40">
-                                                                                        <td colspan="4" class="px-1 pt-0 pb-1">
+                                                                                        <td colspan="{% if perms.variant.delete_variant %}5{% else %}4{% endif %}" class="px-1 pt-0 pb-1">
                                                                                             <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
                                                                                                 <div id="variant-detail-report-{{ report.id }}-{{ variant.id }}" class="p-2">
                                                                                                     <div class="text-[10px] text-base-content/40 italic px-1 py-2">
@@ -762,7 +801,7 @@
                                                                     <form
                                                                         id="unreported-variants-form-{{ analysis.id }}"
                                                                         hx-post="{% url 'lab:analysis_report_generate' analysis.id %}"
-                                                                        hx-target="#workflow-content"
+                                                                        hx-target="{{ workflow_target_id|default:'#workflow-content' }}"
                                                                         hx-swap="innerHTML"
                                                                     >
                                                                     {% csrf_token %}
@@ -786,6 +825,7 @@
                                                                                     <th>Zyg.</th>
                                                                                     <th>Type</th>
                                                                                     <th>Genes</th>
+                                                                                    {% if perms.variant.delete_variant %}<th class="w-8"></th>{% endif %}
                                                                                 </tr>
                                                                             </thead>
                                                                             {% for variant in analysis.unreported_variants|slice:":10" %}
@@ -812,9 +852,14 @@
                                                                                         <td class="text-xs">{{ variant.get_zygosity_display }}</td>
                                                                                         <td class="text-xs">{{ variant.type }}</td>
                                                                                         <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
+                                                                                        {% if perms.variant.delete_variant %}
+                                                                                        <td class="text-right">
+                                                                                            {% include "lab/partials/workflow_delete_button.html" with object=variant model_name="variant" label="variant" %}
+                                                                                        </td>
+                                                                                        {% endif %}
                                                                                     </tr>
                                                                                     <tr x-cloak x-show="open" class="bg-base-50/40">
-                                                                                        <td colspan="5" class="px-1 pt-0 pb-1">
+                                                                                        <td colspan="{% if perms.variant.delete_variant %}6{% else %}5{% endif %}" class="px-1 pt-0 pb-1">
                                                                                             <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
                                                                                                 <div id="variant-detail-analysis-{{ analysis.id }}-{{ variant.id }}" class="p-2">
                                                                                                     <div class="text-[10px] text-base-content/40 italic px-1 py-2">
@@ -846,11 +891,13 @@
                                                     </div>
                                                 </div>
                                             </div>
+                                            {% endpartialdef %}
                                             {% endfor %}
                                         </div>
                                         {% endif %}
                                     </div>
                                 </div>
+                                {% endpartialdef %}
                                 {% endfor %}
                             </div>
                         {% else %}
@@ -860,6 +907,7 @@
                 </div>
             </div>
         </div>
+        {% endpartialdef %}
         {% endfor %}
     {% else %}
         <div class="flex flex-col items-center justify-center py-4 border-2 border-dashed border-base-200 rounded-box text-base-content/40">
@@ -868,6 +916,7 @@
             <span class="text-sm mt-1">This individual has no samples to display in the workflow.</span>
         </div>
     {% endif %}
+</div>
 </div>
 
 {% partialdef sample_status_badge %}

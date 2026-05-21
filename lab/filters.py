@@ -4,7 +4,7 @@ from django.db.models import Count, Q
 from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual, Sample, Project, SampleType, TestType, Status, PipelineType,
-    Institution, Test, Pipeline, Analysis, AnalysisType, TaggedStatus,
+    Institution, Test, Pipeline, Analysis, AnalysisType, TaggedStatus, Family,
 )
 from variant.models import Classification, Variant, Annotation
 
@@ -102,6 +102,52 @@ class TristateMultipleChoiceFilter(TristateFilterMixin, django_filters.MultipleC
 class TristateModelMultipleChoiceFilter(TristateFilterMixin, django_filters.ModelMultipleChoiceFilter):
     pass
 
+class FamilyConsanguinityFilter(TristateMultipleChoiceFilter):
+    def filter(self, queryset, value):
+        if not self.parent or not self.parent.data:
+            return queryset.distinct()
+
+        data = self.parent.data
+
+        def values_for(key):
+            if hasattr(data, "getlist"):
+                return [item for item in data.getlist(key) if item != ""]
+            raw = data.get(key, [])
+            if not isinstance(raw, list):
+                raw = [raw]
+            return [item for item in raw if item != ""]
+
+        def build_query(values):
+            query = Q()
+            known_values = []
+            if "true" in values:
+                known_values.append(True)
+            if "false" in values:
+                known_values.append(False)
+            if known_values:
+                query |= Q(family__is_consanguineous__in=known_values)
+            if "unknown" in values:
+                query |= (
+                    Q(family__isnull=True) |
+                    Q(family__is_consanguineous__isnull=True)
+                )
+            return query
+
+        selected_values = values_for(self.field_name)
+        excluded_values = values_for(f"{self.field_name}__exclude")
+
+        if selected_values:
+            mode = _get_filter_mode(data, self.field_name)
+            if mode == FILTER_MODE_ALL and len(set(selected_values)) > 1:
+                queryset = queryset.none()
+            else:
+                queryset = queryset.filter(build_query(selected_values))
+
+        if excluded_values:
+            queryset = queryset.exclude(build_query(excluded_values))
+
+        return queryset.distinct()
+
 class OpenMultipleChoiceField(forms.MultipleChoiceField):
     def valid_value(self, value):
         return True
@@ -150,6 +196,24 @@ class IndividualFilter(django_filters.FilterSet):
     is_alive = TristateMultipleChoiceFilter(choices=[(True, 'Alive'), (False, 'Deceased')])
     is_affected = TristateMultipleChoiceFilter(choices=[(True, 'Affected'), (False, 'Unaffected')])
     is_index = TristateMultipleChoiceFilter(choices=[(True, 'Yes'), (False, 'No')], label="Is Index")
+    age_of_onset_months_min = django_filters.NumberFilter(
+        field_name="age_of_onset_in_months",
+        lookup_expr="gte",
+        label="Minimum Age of Onset (months)",
+    )
+    age_of_onset_months_max = django_filters.NumberFilter(
+        field_name="age_of_onset_in_months",
+        lookup_expr="lte",
+        label="Maximum Age of Onset (months)",
+    )
+    family__is_consanguineous = FamilyConsanguinityFilter(
+        choices=[
+            ("false", "Non-Consanguineous"),
+            ("unknown", "Unknown"),
+            ("true", "Consanguineous"),
+        ],
+        label="Family Consanguinity",
+    )
 
     # Sample Fields
     samples__status = TristateModelMultipleChoiceFilter(
@@ -479,11 +543,24 @@ class IndividualFilter(django_filters.FilterSet):
         return queryset.distinct()
 
     def filter_search(self, queryset, name, value):
-        return queryset.filter(
-            Q(full_name__icontains=value) | 
+        if not value:
+            return queryset
+
+        search_query = (
             Q(cross_ids__id_value__icontains=value) |
             Q(id__icontains=value)
-        ).distinct()
+        )
+        request_user = getattr(getattr(self, "request", None), "user", None)
+        if request_user and request_user.has_perm("lab.view_sensitive_data"):
+            needle = str(value).strip().casefold()
+            matching_name_ids = [
+                individual.pk
+                for individual in queryset.only("pk", "full_name")
+                if needle in str(individual.full_name or "").casefold()
+            ]
+            if matching_name_ids:
+                search_query |= Q(pk__in=matching_name_ids)
+        return queryset.filter(search_query).distinct()
 
     def filter_variant_type(self, queryset, name, value):
         if not value:

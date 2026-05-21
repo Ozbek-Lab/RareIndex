@@ -1,6 +1,7 @@
 import os
 import json
 from django import template
+from django.utils.safestring import mark_safe
 
 register = template.Library()
 
@@ -179,6 +180,100 @@ def json_pretty(value):
 @register.filter
 def basename(value):
     return os.path.basename(value)
+
+
+def _pedigree_sex(individual, role=None):
+    if role == "mother":
+        return "F"
+    if role == "father":
+        return "M"
+    if getattr(individual, "sex", None) == "male":
+        return "M"
+    if getattr(individual, "sex", None) == "female":
+        return "F"
+    return "U"
+
+
+@register.simple_tag
+def family_pedigree_dataset(family, proband=None):
+    """Serialize a family into pedigreejs' client-side dataset format."""
+    if not family:
+        return mark_safe("[]")
+
+    members = list(family.individuals.all())
+    indexed_proband = next((member for member in members if member.is_index), None)
+    if indexed_proband:
+        proband = indexed_proband
+    by_id = {member.pk: member for member in members}
+    placeholders = {}
+    parent_roles = {}
+
+    def node_name(individual):
+        return f"i_{individual.pk}"
+
+    def placeholder_name(role, child):
+        return f"unknown_{role}_for_i_{child.pk}"
+
+    def ensure_parent(parent, role, child):
+        if parent:
+            by_id[parent.pk] = parent
+            parent_roles[parent.pk] = role
+            return node_name(parent)
+        name = placeholder_name(role, child)
+        placeholders[name] = {
+            "name": name,
+            "display_name": f"Unknown {role}",
+            "sex": "M" if role == "father" else "F",
+            "top_level": True,
+            "exclude": True,
+        }
+        return name
+
+    pending = list(members)
+    processed = set()
+    while pending:
+        member = pending.pop(0)
+        if member.pk in processed:
+            continue
+        processed.add(member.pk)
+        if member.mother_id or member.father_id:
+            for parent, role in ((member.mother, "mother"), (member.father, "father")):
+                if parent and parent.pk not in by_id:
+                    by_id[parent.pk] = parent
+                    pending.append(parent)
+                ensure_parent(parent, role, member)
+
+    dataset = []
+    for member in list(by_id.values()):
+        item = {
+            "name": node_name(member),
+            "display_name": member.primary_id,
+            "sex": _pedigree_sex(member, parent_roles.get(member.pk)),
+            "status": 0 if getattr(member, "is_alive", True) else 1,
+            "famid": str(family.family_id),
+        }
+        if getattr(member, "is_affected", False):
+            item["affected"] = True
+        if proband and member.pk == proband.pk:
+            item["proband"] = True
+        if member.mother_id or member.father_id:
+            item["mother"] = ensure_parent(member.mother, "mother", member)
+            item["father"] = ensure_parent(member.father, "father", member)
+        else:
+            item["top_level"] = True
+        if member.mother_id and member.mother_id in by_id:
+            item["mother"] = node_name(member.mother)
+        if member.father_id and member.father_id in by_id:
+            item["father"] = node_name(member.father)
+        if member.mother_id and item.get("mother") == node_name(member):
+            item.pop("mother", None)
+        if member.father_id and item.get("father") == node_name(member):
+            item.pop("father", None)
+        dataset.append(item)
+
+    dataset.extend(placeholders.values())
+    payload = json.dumps(dataset, ensure_ascii=False, default=str).replace("</", "<\\/")
+    return mark_safe(payload)
 
 
 _CSS_NAMED_COLORS = {

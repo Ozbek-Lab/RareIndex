@@ -6,7 +6,7 @@
 </div>
 
 <form hx-post="{{ action_url }}"
-      hx-target="#workflow-content"
+      hx-target="{{ workflow_target_id|default:'#workflow-content' }}"
       hx-swap="innerHTML"
       class="space-y-4">
     {% csrf_token %}

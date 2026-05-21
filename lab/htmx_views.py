@@ -25,6 +25,32 @@ def _get_status_for_model(model, *names):
     return qs.first()
 
 
+def _resolve_workflow_individual(obj):
+    if isinstance(obj, Individual):
+        return obj
+
+    for path in (
+        ("individual",),
+        ("sample", "individual"),
+        ("test", "sample", "individual"),
+        ("pipeline", "test", "sample", "individual"),
+        ("analysis", "pipeline", "test", "sample", "individual"),
+    ):
+        current = obj
+        for attr in path:
+            current = getattr(current, attr, None)
+            if current is None:
+                break
+        if isinstance(current, Individual):
+            return current
+
+    content_object = getattr(obj, "content_object", None)
+    if content_object is not None and content_object is not obj:
+        return _resolve_workflow_individual(content_object)
+
+    return None
+
+
 class RevealSensitiveFieldView(View):
     def get(self, request, model_name, pk, field_name):
         if not request.user.has_perm("lab.view_sensitive_data"):
@@ -422,6 +448,99 @@ def individual_demographics_display(request, pk):
     individual = get_object_or_404(Individual, pk=pk)
     context = {"individual": individual, "edit_mode": False}
     return render(request, "lab/partials/tabs/_info.html#demographics_content", context)
+
+
+def _individual_contact_context(individual, form=None, edit_mode=False):
+    import json
+
+    from .models import Contact, Institution
+
+    if form is None and edit_mode:
+        from .forms import IndividualContactInformationForm
+
+        form = IndividualContactInformationForm(instance=individual)
+
+    institutions = Institution.objects.prefetch_related("staff").order_by("name")
+    contacts = Contact.objects.order_by("full_name")
+
+    return {
+        "individual": individual,
+        "form": form,
+        "edit_mode": edit_mode,
+        "institutions_json": json.dumps(
+            [
+                {
+                    "id": str(institution.id),
+                    "name": institution.name,
+                    "staffIds": [str(contact.id) for contact in institution.staff.all()],
+                }
+                for institution in institutions
+            ]
+        ),
+        "contacts_json": json.dumps(
+            [
+                {
+                    "id": str(contact.id),
+                    "name": contact.full_name,
+                }
+                for contact in contacts
+            ]
+        ),
+    }
+
+
+@login_required
+def individual_contact_information_display(request, pk):
+    individual = get_object_or_404(
+        Individual.objects.prefetch_related("institution", "physicians"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "lab/partials/tabs/_info.html#contact_information_content",
+        _individual_contact_context(individual),
+    )
+
+
+@login_required
+def individual_contact_information_edit(request, pk):
+    individual = get_object_or_404(
+        Individual.objects.prefetch_related("institution", "physicians"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "lab/partials/tabs/_info.html#contact_information_content",
+        _individual_contact_context(individual, edit_mode=True),
+    )
+
+
+@login_required
+@require_POST
+def individual_contact_information_save(request, pk):
+    individual = get_object_or_404(Individual, pk=pk)
+    from .forms import IndividualContactInformationForm
+
+    form = IndividualContactInformationForm(request.POST, instance=individual)
+    if form.is_valid():
+        form.save()
+        individual = get_object_or_404(
+            Individual.objects.prefetch_related("institution", "physicians"),
+            pk=pk,
+        )
+        return render(
+            request,
+            "lab/partials/tabs/_info.html#contact_information_content",
+            _individual_contact_context(individual),
+        )
+
+    return render(
+        request,
+        "lab/partials/tabs/_info.html#contact_information_content",
+        _individual_contact_context(individual, form=form, edit_mode=True),
+    )
+
+
 @login_required
 def individual_demographics_display(request, pk):
     individual = get_object_or_404(Individual, pk=pk)
@@ -489,6 +608,7 @@ def family_id_save(request, pk):
     individual_pk = request.POST.get("individual_pk", "")
     individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else None
     new_id = request.POST.get("family_id", "").strip()
+    consanguinity_value = request.POST.get("is_consanguineous", "")
     error = None
     if not new_id:
         error = "Family name cannot be empty."
@@ -500,9 +620,16 @@ def family_id_save(request, pk):
             "individual_pk": individual_pk,
             "error": error,
             "value": new_id,
+            "consanguinity_value": consanguinity_value,
         })
     family.family_id = new_id
-    family.save(update_fields=["family_id"])
+    if consanguinity_value == "true":
+        family.is_consanguineous = True
+    elif consanguinity_value == "false":
+        family.is_consanguineous = False
+    else:
+        family.is_consanguineous = None
+    family.save(update_fields=["family_id", "is_consanguineous"])
     # Re-render the title div (display mode)
     ctx = {
         "family": family,
@@ -602,7 +729,18 @@ def family_remove_member(request, pk):
 @login_required
 def individual_family_section(request, pk):
     """Return the family section partial for OOB refresh."""
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_object_or_404(
+        Individual.objects.select_related("family", "mother", "father")
+        .prefetch_related(
+            "cross_ids__id_type",
+            "family__individuals",
+            "family__individuals__cross_ids__id_type",
+            "family__individuals__mother",
+            "family__individuals__father",
+            "family__individuals__statuses",
+        ),
+        pk=pk,
+    )
     return render(request, "lab/partials/tabs/_family.html", {"individual": individual})
 
 
@@ -704,6 +842,45 @@ def individual_clinical_summary_display(request, pk):
 
 
 @login_required
+def individual_age_of_onset_months_edit(request, pk):
+    individual = get_object_or_404(Individual, pk=pk)
+    from .forms import AgeOfOnsetMonthsForm
+    form = AgeOfOnsetMonthsForm(instance=individual)
+    context = {
+        "individual": individual,
+        "form": form,
+        "edit_onset_months": True,
+    }
+    return render(request, "lab/partials/tabs/_phenotype.html#age_of_onset_months_content", context)
+
+
+@login_required
+@require_POST
+def individual_age_of_onset_months_save(request, pk):
+    individual = get_object_or_404(Individual, pk=pk)
+    from .forms import AgeOfOnsetMonthsForm
+    form = AgeOfOnsetMonthsForm(request.POST, instance=individual)
+    if form.is_valid():
+        form.save()
+        context = {"individual": individual}
+        return render(request, "lab/partials/tabs/_phenotype.html#age_of_onset_months_content", context)
+
+    context = {
+        "individual": individual,
+        "form": form,
+        "edit_onset_months": True,
+    }
+    return render(request, "lab/partials/tabs/_phenotype.html#age_of_onset_months_content", context)
+
+
+@login_required
+def individual_age_of_onset_months_display(request, pk):
+    individual = get_object_or_404(Individual, pk=pk)
+    context = {"individual": individual}
+    return render(request, "lab/partials/tabs/_phenotype.html#age_of_onset_months_content", context)
+
+
+@login_required
 @require_POST
 def update_status(request, content_type_id, object_id, status_id):
     """
@@ -736,13 +913,10 @@ def update_status(request, content_type_id, object_id, status_id):
                 obj.statuses.remove(sibling)
         obj.statuses.add(toggle_status)
 
+    individual = _resolve_workflow_individual(obj)
     context = {
         ct.model: obj,
-        "individual": obj if isinstance(obj, Individual) else (
-            getattr(obj, "individual", None) or
-            getattr(getattr(obj, "sample", None), "individual", None) or
-            getattr(getattr(getattr(obj, "test", None), "sample", None), "individual", None)
-        ),
+        "individual": individual,
     }
 
     partial_name = f"{ct.model}_status_badge"
@@ -764,24 +938,47 @@ def update_status(request, content_type_id, object_id, status_id):
 
     return response
 
+def _workflow_sample_status_options(form):
+    if form.is_bound:
+        selected_ids = set(form.data.getlist(form.add_prefix("statuses")))
+    else:
+        initial_statuses = form.initial.get("statuses") or []
+        selected_ids = {str(getattr(status, "pk", status)) for status in initial_statuses}
+
+    options = []
+    for status in form.fields["statuses"].queryset:
+        options.append(
+            {
+                "id": str(status.pk),
+                "status": status,
+                "group_name": status.group.name if status.group_id else "",
+                "selected": str(status.pk) in selected_ids,
+            }
+        )
+    return options
+
+
 @login_required
 def sample_create_modal(request, individual_id):
-    """Render a sample creation form or handle submission"""
-    from .forms import SampleForm
-    from .models import Individual, Status
-    
+    """Render the workflow sample creation modal or handle submission."""
+    import json
+
+    from .forms import WorkflowSampleCreateForm
+    from .models import Individual, Note, Sample
+
+    if not request.user.has_perm("lab.add_sample"):
+        return HttpResponseForbidden("You do not have permission to add samples.")
+
     individual = get_object_or_404(Individual, pk=individual_id)
-    
+
     if request.method == "POST":
-        form = SampleForm(request.POST)
-        form.fields["individual"].queryset = Individual.objects.filter(pk=individual.pk)
-        form.fields["individual"].required = False  # disabled fields are not submitted
+        form = WorkflowSampleCreateForm(request.POST, individual=individual)
         if form.is_valid():
             sample = form.save(commit=False)
             sample.individual = individual
             sample.created_by = request.user
             sample.save()
-            # Set statuses from form or default to the sample workflow.
+
             selected_statuses = form.cleaned_data.get("statuses")
             if selected_statuses:
                 sample.statuses.set(selected_statuses)
@@ -793,40 +990,47 @@ def sample_create_modal(request, individual_id):
                 )
                 if default_status:
                     sample.statuses.add(default_status)
-            
+
+            note_content = form.cleaned_data.get("note_content", "").strip()
+            if note_content:
+                Note.objects.create(
+                    content=note_content,
+                    user=request.user,
+                    content_object=sample,
+                )
+
             response = HttpResponse(status=204)
-            response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
+            response["HX-Trigger"] = json.dumps(
+                {
+                    "workflowRefreshed": True,
+                    "closeModal": True,
+                    "close-modal": True,
+                }
+            )
             return response
     else:
-        # Initial form: pre-set individual and default status
-        initial = {"individual": individual}
+        initial = {}
         status = _get_status_for_model(Sample, "Planned", "Available", "Not Available")
         if status:
-            initial["statuses"] = [status]
-            
-        form = SampleForm(initial=initial)
-        form.fields["individual"].queryset = Individual.objects.filter(pk=individual.pk)
-        # Individual is fixed – show it but make it non-interactable
-        form.fields["individual"].disabled = True
-        form.fields["individual"].widget.attrs["class"] = (
-            form.fields["individual"].widget.attrs.get("class", "")
-            + " pointer-events-none bg-base-200/60"
-        )
+            initial["statuses"] = [status.pk]
+
+        form = WorkflowSampleCreateForm(initial=initial, individual=individual)
 
     context = {
         "form": form,
         "individual": individual,
-        "title": "Add New Sample",
         "action_url": request.path,
+        "status_options": _workflow_sample_status_options(form),
     }
-    return render(request, "lab/partials/generic_modal_form.html", context)
+    return render(request, "lab/partials/modals/sample_create_modal.html", context)
 
 
 @login_required
 def test_create_modal(request, sample_id):
     """Render a test creation form or handle submission"""
     from .forms import TestForm
-    from .models import Sample, Status
+    from .models import Sample, Test
+    from django.template.loader import render_to_string
     
     sample = get_object_or_404(Sample, pk=sample_id)
     individual = sample.individual
@@ -852,9 +1056,44 @@ def test_create_modal(request, sample_id):
                 )
                 if default_status:
                     test.statuses.add(default_status)
-            
-            response = HttpResponse(status=204)
-            response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
+
+            sample = (
+                Sample.objects.select_related("individual", "sample_type")
+                .prefetch_related(
+                    "statuses",
+                    "tasks",
+                    "notes",
+                    "tests",
+                    "tests__statuses",
+                    "tests__tasks",
+                    "tests__notes",
+                    "tests__pipelines",
+                    "tests__pipelines__statuses",
+                    "tests__pipelines__tasks",
+                    "tests__pipelines__notes",
+                    "tests__pipelines__analyses",
+                    "tests__pipelines__analyses__statuses",
+                    "tests__pipelines__analyses__tasks",
+                    "tests__pipelines__analyses__notes",
+                    "tests__pipelines__analyses__reports",
+                    "tests__pipelines__analyses__found_variants",
+                )
+                .get(pk=sample.pk)
+            )
+            individual = sample.individual
+            sample_html = render_to_string(
+                "lab/partials/tabs/_workflow.html#sample_card",
+                {"individual": individual, "sample": sample},
+                request=request,
+            )
+            sample_html = sample_html.replace(
+                f'id="sample-card-{sample.id}"',
+                f'id="sample-card-{sample.id}" hx-swap-oob="outerHTML"',
+                1,
+            )
+            response = HttpResponse(sample_html)
+            response["HX-Reswap"] = "none"
+            response["HX-Trigger"] = '{"closeModal": true, "close-modal": true}'
             return response
     else:
         initial = {"sample": sample}
@@ -880,6 +1119,7 @@ def test_create_modal(request, sample_id):
         "sample": sample,
         "title": f"Add Test for Sample {sample.id}",
         "action_url": request.path,
+        "close_on_success": True,
     }
     return render(request, "lab/partials/generic_modal_form.html", context)
 
@@ -888,7 +1128,8 @@ def test_create_modal(request, sample_id):
 def pipeline_create_modal(request, test_id):
     """Render a pipeline creation form or handle submission"""
     from .forms import PipelineForm
-    from .models import Test, Status
+    from .models import Pipeline, Test
+    from django.template.loader import render_to_string
     
     test = get_object_or_404(Test, pk=test_id)
     individual = test.sample.individual
@@ -914,9 +1155,40 @@ def pipeline_create_modal(request, test_id):
                 )
                 if default_status:
                     pipeline.statuses.add(default_status)
-            
-            response = HttpResponse(status=204)
-            response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
+
+            test = (
+                Test.objects.select_related("sample__individual", "test_type")
+                .prefetch_related(
+                    "statuses",
+                    "tasks",
+                    "notes",
+                    "pipelines",
+                    "pipelines__statuses",
+                    "pipelines__tasks",
+                    "pipelines__notes",
+                    "pipelines__analyses",
+                    "pipelines__analyses__statuses",
+                    "pipelines__analyses__tasks",
+                    "pipelines__analyses__notes",
+                    "pipelines__analyses__reports",
+                    "pipelines__analyses__found_variants",
+                )
+                .get(pk=test.pk)
+            )
+            individual = test.sample.individual
+            test_html = render_to_string(
+                "lab/partials/tabs/_workflow.html#test_card",
+                {"individual": individual, "test": test},
+                request=request,
+            )
+            test_html = test_html.replace(
+                f'id="test-card-{test.id}"',
+                f'id="test-card-{test.id}" hx-swap-oob="outerHTML"',
+                1,
+            )
+            response = HttpResponse(test_html)
+            response["HX-Reswap"] = "none"
+            response["HX-Trigger"] = '{"closeModal": true, "close-modal": true}'
             return response
     else:
         initial = {"test": test}
@@ -939,6 +1211,7 @@ def pipeline_create_modal(request, test_id):
         "test": test,
         "title": f"Add Pipeline for Test {test.id}",
         "action_url": request.path,
+        "close_on_success": True,
     }
     return render(request, "lab/partials/generic_modal_form.html", context)
 
@@ -947,7 +1220,8 @@ def pipeline_create_modal(request, test_id):
 def analysis_create_modal(request, pipeline_id):
     """Render an analysis creation form or handle submission"""
     from .forms import AnalysisForm
-    from .models import Pipeline, Status
+    from .models import Analysis, Pipeline
+    from django.template.loader import render_to_string
     
     pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
     individual = pipeline.test.sample.individual
@@ -973,9 +1247,36 @@ def analysis_create_modal(request, pipeline_id):
                 )
                 if default_status:
                     analysis.statuses.add(default_status)
-            
-            response = HttpResponse(status=204)
-            response["HX-Trigger"] = '{"workflowRefreshed": true, "closeModal": true}'
+
+            pipeline = (
+                Pipeline.objects.select_related("test__sample__individual", "type")
+                .prefetch_related(
+                    "statuses",
+                    "tasks",
+                    "notes",
+                    "analyses",
+                    "analyses__statuses",
+                    "analyses__tasks",
+                    "analyses__notes",
+                    "analyses__reports",
+                    "analyses__found_variants",
+                )
+                .get(pk=pipeline.pk)
+            )
+            individual = pipeline.test.sample.individual
+            pipeline_html = render_to_string(
+                "lab/partials/tabs/_workflow.html#pipeline_card",
+                {"individual": individual, "pipeline": pipeline},
+                request=request,
+            )
+            pipeline_html = pipeline_html.replace(
+                f'id="pipeline-card-{pipeline.id}"',
+                f'id="pipeline-card-{pipeline.id}" hx-swap-oob="outerHTML"',
+                1,
+            )
+            response = HttpResponse(pipeline_html)
+            response["HX-Reswap"] = "none"
+            response["HX-Trigger"] = '{"closeModal": true, "close-modal": true}'
             return response
     else:
         initial = {"pipeline": pipeline}
@@ -998,6 +1299,7 @@ def analysis_create_modal(request, pipeline_id):
         "pipeline": pipeline,
         "title": f"Add Analysis for Pipeline {pipeline.id}",
         "action_url": request.path,
+        "close_on_success": True,
     }
     return render(request, "lab/partials/generic_modal_form.html", context)
 @login_required
@@ -1007,6 +1309,7 @@ def task_create_modal(request, content_type_id, object_id):
     from .models import Status, Individual, Sample, Test, Pipeline, Project, Analysis
     from django.contrib.contenttypes.models import ContentType
     from django.template.loader import render_to_string
+    from variant.models import Variant
     
     ct = get_object_or_404(ContentType, pk=content_type_id)
     Model = ct.model_class()
@@ -1018,6 +1321,7 @@ def task_create_modal(request, content_type_id, object_id):
     partial_name = ""
     count_id = ""
     submit_target = "#generic-modal-content"
+    partial_template = "lab/partials/tabs/_workflow.html"
     
     individual = None
     if isinstance(obj, Individual):
@@ -1050,6 +1354,12 @@ def task_create_modal(request, content_type_id, object_id):
         partial_name = "analysis_tasks"
         count_id = f"task-count-analysis-{obj.id}"
         individual = obj.pipeline.test.sample.individual if obj.pipeline and obj.pipeline.test and obj.pipeline.test.sample else None
+    elif isinstance(obj, Variant):
+        target_id = f"#variant-tasks-{obj.id}"
+        partial_name = "variant_tasks"
+        count_id = f"task-count-variant-{obj.id}"
+        partial_template = "lab/partials/variant_detail.html"
+        individual = obj.individual
 
     if request.method == "POST":
         form = TaskForm(
@@ -1107,20 +1417,32 @@ def task_create_modal(request, content_type_id, object_id):
                 "individual": individual,
                 "sample": obj if isinstance(obj, Sample) else None,
                 "test": obj if isinstance(obj, Test) else None,
+                "pipeline": obj if isinstance(obj, Pipeline) else None,
+                "analysis": obj if isinstance(obj, Analysis) else None,
+                "variant": obj if isinstance(obj, Variant) else None,
             }
             partial_html = render_to_string(
-                f"lab/partials/tabs/_workflow.html#{partial_name}",
+                f"{partial_template}#{partial_name}",
                 context,
                 request=request,
             )
             count = obj.tasks.count()
             oob_target = target_id.lstrip("#")
+            if isinstance(obj, Variant):
+                count_html = (
+                    f'<span id="{count_id}" hx-swap-oob="true" '
+                    f'class="badge badge-xs badge-ghost ml-1">{count}</span>'
+                )
+            else:
+                count_html = f'''
+                <div id="{count_id}" hx-swap-oob="true" 
+                     class="flex items-center gap-1.5 tooltip tooltip-bottom" 
+                     data-tip="{count} Tasks">
+                    <i class="fa-solid fa-list-check"></i> {count}
+                </div>
+                '''
             oob_html = f'''
-            <div id="{count_id}" hx-swap-oob="true" 
-                 class="flex items-center gap-1.5 tooltip tooltip-bottom" 
-                 data-tip="{count} Tasks">
-                <i class="fa-solid fa-list-check"></i> {count}
-            </div>
+            {count_html}
             <div id="{oob_target}" hx-swap-oob="innerHTML">
                 {partial_html}
             </div>
@@ -1483,6 +1805,7 @@ def project_create_modal(request):
         "title": "Add Project",
         "action_url": request.path,
         "hx_target": "#project-table-container",
+        "close_on_success": True,
     }
     return render(request, "lab/partials/generic_modal_form.html", context)
 
@@ -1547,6 +1870,7 @@ def report_create_modal(request, analysis_id):
     
     analysis = get_object_or_404(Analysis, pk=analysis_id)
     individual = analysis.pipeline.test.sample.individual
+    workflow_target_id = f"#workflow-content-{individual.pk}"
     
     if request.method == "POST":
         form = AnalysisReportForm(request.POST, request.FILES, analysis=analysis)
@@ -1558,7 +1882,11 @@ def report_create_modal(request, analysis_id):
             form.save_m2m()
             
             # Refresh the workflow tab
-            return render(request, "lab/partials/tabs/_workflow.html", {"individual": individual})
+            return render(
+                request,
+                "lab/partials/tabs/_workflow.html",
+                {"individual": individual, "workflow_target_id": workflow_target_id},
+            )
     else:
         form = AnalysisReportForm(analysis=analysis)
 
@@ -1567,6 +1895,7 @@ def report_create_modal(request, analysis_id):
         "form": form,
         "title": title,
         "action_url": request.path,
+        "workflow_target_id": workflow_target_id,
     }
     return render(request, "lab/partials/modals/upload_modal_form.html", context)
 
@@ -1596,6 +1925,7 @@ def generate_analysis_report_docx(request, analysis_id):
         return HttpResponseBadRequest("Analysis is missing pipeline/test/sample linkage.")
 
     individual = analysis.pipeline.test.sample.individual
+    workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
     variant_ids = request.GET.getlist("variant_ids") if request.method == "GET" else request.POST.getlist("variant_ids")
     report_mode = (
         request.GET.get("report_mode", "positive")
@@ -1613,6 +1943,7 @@ def generate_analysis_report_docx(request, analysis_id):
             "action_url": request.path,
             "analysis": analysis,
             "individual": individual,
+            "workflow_target_id": workflow_target_id,
             "variant_ids": variant_ids,
             "selected_count": len(variant_ids),
             "report_mode": report_mode,
@@ -1626,6 +1957,7 @@ def generate_analysis_report_docx(request, analysis_id):
             "action_url": request.path,
             "analysis": analysis,
             "individual": individual,
+            "workflow_target_id": workflow_target_id,
             "variant_ids": variant_ids,
             "selected_count": len(variant_ids),
             "report_mode": report_mode,
@@ -1854,14 +2186,19 @@ def generate_analysis_report_docx(request, analysis_id):
     if not negative:
         report.variants.set(list(selected_qs))
 
-    html = render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
+    workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
+    html = render(
+        request,
+        "lab/partials/tabs/_workflow.html",
+        {"individual": individual, "workflow_target_id": workflow_target_id},
+    ).content.decode()
     close_oob = (
         '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
         '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
         "</div>"
     )
     response = HttpResponse(html + close_oob)
-    response["HX-Retarget"] = "#workflow-content"
+    response["HX-Retarget"] = workflow_target_id
     response["HX-Reswap"] = "innerHTML"
     return response
 
@@ -1876,6 +2213,7 @@ def report_replace_modal(request, report_id):
 
     report = get_object_or_404(AnalysisReport.objects.select_related("analysis__pipeline__test__sample__individual"), pk=report_id)
     individual = report.analysis.pipeline.test.sample.individual if report.analysis and report.analysis.pipeline_id else None
+    workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
 
     @require_http_methods(["GET", "POST"])
     def _inner(request):
@@ -1899,8 +2237,13 @@ def report_replace_modal(request, report_id):
                     report.preview_file.delete(save=False)
                 report.delete()
 
+                workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
                 html = (
-                    render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
+                    render(
+                        request,
+                        "lab/partials/tabs/_workflow.html",
+                        {"individual": individual, "workflow_target_id": workflow_target_id},
+                    ).content.decode()
                     if individual
                     else ""
                 )
@@ -1910,7 +2253,7 @@ def report_replace_modal(request, report_id):
                     "</div>"
                 )
                 response = HttpResponse(html + close_oob)
-                response["HX-Retarget"] = "#workflow-content"
+                response["HX-Retarget"] = workflow_target_id
                 response["HX-Reswap"] = "innerHTML"
                 return response
 
@@ -1921,8 +2264,13 @@ def report_replace_modal(request, report_id):
             if form.is_valid():
                 report.file = form.cleaned_data["file"]
                 report.save(update_fields=["file"])
+                workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
                 html = (
-                    render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
+                    render(
+                        request,
+                        "lab/partials/tabs/_workflow.html",
+                        {"individual": individual, "workflow_target_id": workflow_target_id},
+                    ).content.decode()
                     if individual
                     else ""
                 )
@@ -1932,7 +2280,7 @@ def report_replace_modal(request, report_id):
                     "</div>"
                 )
                 response = HttpResponse(html + close_oob)
-                response["HX-Retarget"] = "#workflow-content"
+                response["HX-Retarget"] = workflow_target_id
                 response["HX-Reswap"] = "innerHTML"
                 return response
         else:
@@ -1945,10 +2293,191 @@ def report_replace_modal(request, report_id):
             "report": report,
             "can_change_report": can_change_report,
             "can_delete_report": can_delete_report,
+            "workflow_target_id": workflow_target_id,
         }
         return render(request, "lab/partials/modals/report_replace_modal.html", context)
 
     return _inner(request)
+
+
+def _workflow_delete_registry():
+    from .models import Analysis, AnalysisReport, Pipeline, Sample, Test
+    from variant.models import Variant
+
+    return {
+        "sample": {
+            "model": Sample,
+            "label": "Sample",
+            "permission": "lab.delete_sample",
+            "blockers": (
+                ("Tests", lambda obj: obj.tests.all()),
+            ),
+        },
+        "test": {
+            "model": Test,
+            "label": "Test",
+            "permission": "lab.delete_test",
+            "blockers": (
+                ("Pipelines", lambda obj: obj.pipelines.all()),
+            ),
+        },
+        "pipeline": {
+            "model": Pipeline,
+            "label": "Pipeline",
+            "permission": "lab.delete_pipeline",
+            "blockers": (
+                ("Analyses", lambda obj: obj.analyses.all()),
+            ),
+        },
+        "analysis": {
+            "model": Analysis,
+            "label": "Analysis",
+            "permission": "lab.delete_analysis",
+            "blockers": (
+                ("Variants", lambda obj: obj.found_variants.all()),
+                ("Reports", lambda obj: obj.reports.all()),
+            ),
+        },
+        "variant": {
+            "model": Variant,
+            "label": "Variant",
+            "permission": "variant.delete_variant",
+            "blockers": (
+                ("Reports", lambda obj: obj.reports.all()),
+            ),
+        },
+        "report": {
+            "model": AnalysisReport,
+            "label": "Report",
+            "permission": "lab.delete_analysisreport",
+            "blockers": (),
+        },
+    }
+
+
+def _workflow_delete_blockers(obj, config):
+    blockers = []
+    limit = 10
+
+    for label, queryset_fn in config.get("blockers", ()):
+        queryset = queryset_fn(obj)
+        total = queryset.count()
+        if not total:
+            continue
+        blockers.append(
+            {
+                "label": label,
+                "count": total,
+                "objects": [str(item) for item in queryset[:limit]],
+                "truncated": total > limit,
+            }
+        )
+
+    return blockers
+
+
+def _workflow_delete_context(model_name, obj, config, error=""):
+    individual = _resolve_workflow_individual(obj)
+    workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
+    blockers = _workflow_delete_blockers(obj, config)
+    return {
+        "obj": obj,
+        "model_name": model_name,
+        "label": config["label"],
+        "blockers": blockers,
+        "can_delete": not blockers,
+        "delete_url": reverse("lab:workflow_delete", kwargs={"model_name": model_name, "pk": obj.pk}),
+        "workflow_target_id": workflow_target_id,
+        "error": error,
+    }
+
+
+def _close_generic_modal(response):
+    response["HX-Trigger"] = "close-modal"
+    return response
+
+
+@login_required
+def workflow_delete_confirm(request, model_name, pk):
+    registry = _workflow_delete_registry()
+    config = registry.get(model_name)
+    if not config:
+        return HttpResponse(status=404)
+    if not request.user.has_perm(config["permission"]):
+        return HttpResponseForbidden("You do not have permission to delete this item.")
+
+    obj = get_object_or_404(config["model"], pk=pk)
+    context = _workflow_delete_context(model_name, obj, config)
+    return render(request, "lab/partials/modals/workflow_delete_confirm.html", context)
+
+
+@login_required
+@require_POST
+def workflow_delete(request, model_name, pk):
+    from django.db.models.deletion import ProtectedError
+
+    registry = _workflow_delete_registry()
+    config = registry.get(model_name)
+    if not config:
+        return HttpResponse(status=404)
+    if not request.user.has_perm(config["permission"]):
+        return HttpResponseForbidden("You do not have permission to delete this item.")
+
+    obj = get_object_or_404(config["model"], pk=pk)
+    individual = _resolve_workflow_individual(obj)
+    blockers = _workflow_delete_blockers(obj, config)
+    if blockers:
+        context = _workflow_delete_context(
+            model_name,
+            obj,
+            config,
+            error="This item cannot be deleted while connected objects exist.",
+        )
+        response = render(request, "lab/partials/modals/workflow_delete_confirm.html", context)
+        response.headers["HX-Retarget"] = "#generic-modal-content"
+        response.headers["HX-Reswap"] = "innerHTML"
+        return response
+
+    try:
+        if model_name == "report":
+            if obj.file:
+                obj.file.delete(save=False)
+            if obj.preview_file:
+                obj.preview_file.delete(save=False)
+        obj.delete()
+    except ProtectedError as exc:
+        protected = [
+            {
+                "label": protected_obj._meta.verbose_name_plural.title(),
+                "count": 1,
+                "objects": [str(protected_obj)],
+                "truncated": False,
+            }
+            for protected_obj in list(exc.protected_objects)[:10]
+        ]
+        context = _workflow_delete_context(
+            model_name,
+            obj,
+            config,
+            error="This item cannot be deleted because protected records depend on it.",
+        )
+        context["blockers"] = protected or context["blockers"]
+        context["can_delete"] = False
+        response = render(request, "lab/partials/modals/workflow_delete_confirm.html", context)
+        response.headers["HX-Retarget"] = "#generic-modal-content"
+        response.headers["HX-Reswap"] = "innerHTML"
+        return response
+
+    if not individual:
+        return _close_generic_modal(HttpResponse(status=204))
+
+    workflow_target_id = f"#workflow-content-{individual.pk}"
+    workflow_html = render(
+        request,
+        "lab/partials/tabs/_workflow.html",
+        {"individual": individual, "workflow_target_id": workflow_target_id},
+    ).content.decode()
+    return _close_generic_modal(HttpResponse(workflow_html))
 
 
 @login_required
@@ -2008,18 +2537,23 @@ def variant_create_modal(request, individual_id=None, analysis_id=None):
             variant.created_by = request.user
             variant.save()
 
-            html = render(request, "lab/partials/tabs/_workflow.html", {"individual": individual}).content.decode()
-            close_oob = (
-                '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
-                '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
-                "</div>"
+            workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
+            workflow_html = render(
+                request,
+                "lab/partials/tabs/_workflow.html",
+                {"individual": individual, "workflow_target_id": workflow_target_id},
+            ).content.decode()
+            target_id = workflow_target_id.lstrip("#")
+            response = HttpResponse(
+                f'<div id="{target_id}" hx-swap-oob="innerHTML">{workflow_html}</div>'
             )
-            response = HttpResponse(html + close_oob)
-            response["HX-Retarget"] = "#workflow-content"
-            response["HX-Reswap"] = "innerHTML"
+            response["HX-Reswap"] = "none"
+            response["HX-Trigger"] = '{"closeModal": true, "close-modal": true}'
             return response
     else:
         form = form_class()
+
+    workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
 
     for field_name, field in form.fields.items():
         current_classes = field.widget.attrs.get("class", "")
@@ -2050,6 +2584,7 @@ def variant_create_modal(request, individual_id=None, analysis_id=None):
             "form": form,
             "variant_type": variant_type,
             "variant_add_post_url": post_url,
+            "workflow_target_id": workflow_target_id,
         },
     )
 
@@ -2265,6 +2800,10 @@ def variant_detail_partial(request, pk):
             "classifications__user",
             "annotations",
             "acmg_evidence_overrides",
+            "notes__user",
+            "notes__private_owner",
+            "tasks__assigned_to",
+            "tasks__statuses",
             "individual__samples__sample_type",
             "individual__samples__statuses",
             "individual__samples__tests__test_type",
@@ -2453,9 +2992,9 @@ def variant_acmg_evidence_save(request, pk):
 # ---------------------------------------------------------------------------
 
 def _get_config_registry():
-    from .models import SampleType, TestType, Institution, PipelineType, AnalysisType, IdentifierType, Status, StatusGroup
+    from .models import Contact, SampleType, TestType, Institution, PipelineType, AnalysisType, IdentifierType, Status, StatusGroup
     from .forms import (
-        SampleTypeForm, TestTypeForm, InstitutionConfigForm,
+        ContactConfigForm, SampleTypeForm, TestTypeForm, InstitutionConfigForm,
         PipelineTypeForm, AnalysisTypeForm, IdentifierTypeForm,
         StatusConfigForm, StatusGroupConfigForm,
     )
@@ -2518,6 +3057,17 @@ def _get_config_registry():
             # M2M fields are invisible to Django's Collector, so we guard manually.
             "m2m_protections": [
                 {"accessor": "individuals", "verbose_name": "individual"},
+            ],
+        },
+        "contact": {
+            "model": Contact, "form": ContactConfigForm,
+            "label": "Contacts", "icon": "fa-solid fa-address-book",
+            "fields": ["full_name", "emails", "phones", "institutions_as_staff"],
+            "usage_relation": "patients",
+            "usage_label": "patients",
+            "m2m_protections": [
+                {"accessor": "patients", "verbose_name": "individual"},
+                {"accessor": "institutions_as_staff", "verbose_name": "institution"},
             ],
         },
     }
@@ -2829,12 +3379,7 @@ def config_delete(request, model_name, pk):
         response.headers["HX-Reswap"] = "innerHTML"
         return response
 
-    # Success – return refreshed section + close modal OOB
+    # Success – return refreshed section and close the modal via HTMX event.
     ctx = {"section": _build_section_context(request, model_name, config)}
     section_html = render(request, "lab/partials/config_section.html", ctx).content.decode()
-    close_oob = (
-        '<div id="generic-modal-content" hx-swap-oob="innerHTML">'
-        '<div x-data x-init="$nextTick(() => document.getElementById(\'generic-modal\').close())"></div>'
-        '</div>'
-    )
-    return HttpResponse(section_html + close_oob)
+    return _close_generic_modal(HttpResponse(section_html))

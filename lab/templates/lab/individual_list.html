@@ -57,7 +57,7 @@
                                form="filter-form"
                                value="{{ request.GET.search|default:'' }}"
                                class="grow min-w-0" 
-                               placeholder="Search ID, Name..."
+                               placeholder="{% if perms.lab.view_sensitive_data %}Search ID, Name...{% else %}Search ID...{% endif %}"
                                hx-get="{% url 'lab:individual_list' %}"
                                hx-target="#individual-table-container"
                                hx-trigger="keyup delay:500ms changed"

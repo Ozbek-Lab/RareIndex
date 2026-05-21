@@ -6,7 +6,7 @@
 </div>
 
 <form hx-post="{{ action_url }}" 
-      hx-target="{{ hx_target|default:'#workflow-content' }}" 
+      hx-target="{{ hx_target|default:'#generic-modal-content' }}" 
       hx-swap="innerHTML"
       class="space-y-4">
     {% csrf_token %}
@@ -107,7 +107,7 @@
                     </div>
                     {% regroup field.field.queryset by group.name as status_groups %}
                     <div class="dropdown dropdown-bottom w-full">
-                        <div tabindex="0" role="button" class="flex min-h-9 w-full cursor-pointer flex-wrap items-center gap-1 rounded-lg border border-base-300 bg-base-100/50 px-2 py-1 transition-all hover:bg-base-100">
+                        <div tabindex="0" role="button" class="flex min-h-9 w-full cursor-pointer flex-wrap items-center gap-1 rounded-lg border border-base-content/25 bg-base-100 px-2 py-1 shadow-sm transition-all hover:border-primary/40 hover:bg-base-100 focus:outline-none focus:ring-2 focus:ring-primary/20">
                             <template x-if="selectedStatuses.length">
                                 <template x-for="status in selectedStatuses" :key="status.id">
                                     <span class="badge badge-sm badge-ghost gap-1.5 border-base-content/10 text-xs font-normal">
@@ -127,7 +127,7 @@
                             </span>
                             <i class="fa-solid fa-chevron-down ml-auto text-[10px] opacity-40"></i>
                         </div>
-                        <ul tabindex="0" class="dropdown-content z-[100] menu mt-2 w-64 rounded-box border border-base-200 bg-base-100 p-1 shadow-2xl">
+                        <ul tabindex="0" class="dropdown-content z-[100] menu mt-2 w-64 rounded-box border border-base-content/20 bg-base-100 p-1 shadow-2xl">
                             {% for grp in status_groups %}
                                 {% if grp.grouper %}
                                     <li class="menu-title flex items-center gap-1 px-3 pt-2 pb-0.5 text-[9px] uppercase opacity-50">
@@ -228,6 +228,18 @@
                     {% endif %}
                 </div>
             {% elif field.name == "object_id" %}
+                <div class="form-control w-full md:col-span-2 {% if field.is_hidden %}hidden{% endif %}">
+                    <label class="label py-1">
+                        <span class="label-text font-semibold text-xs opacity-70">{{ field.label }}</span>
+                    </label>
+                    {{ field }}
+                    {% if field.errors %}
+                        <label class="label py-0">
+                            <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                </div>
+            {% elif field.name == "note_content" %}
                 <div class="form-control w-full md:col-span-2 {% if field.is_hidden %}hidden{% endif %}">
                     <label class="label py-1">
                         <span class="label-text font-semibold text-xs opacity-70">{{ field.label }}</span>

@@ -1,0 +1,74 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-4">
+    <h3 class="font-bold text-lg text-error flex items-center gap-2">
+        <i class="fa-solid fa-trash"></i>
+        Delete {{ label }}
+    </h3>
+</div>
+
+<div class="space-y-4">
+    <div class="rounded-lg border border-base-200 bg-base-200/30 px-3 py-2">
+        <div class="text-xs uppercase tracking-wide text-base-content/50 font-bold mb-1">Selected item</div>
+        <div class="text-sm font-medium break-words">{{ obj }}</div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error text-sm py-2">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    {% if blockers %}
+    <div class="rounded-lg border border-error/30 bg-error/5 p-3">
+        <div class="font-semibold text-sm text-error flex items-center gap-2 mb-2">
+            <i class="fa-solid fa-lock"></i>
+            Cannot delete while connected objects exist
+        </div>
+        <div class="space-y-3">
+            {% for group in blockers %}
+            <div>
+                <div class="text-xs font-bold uppercase text-base-content/60 mb-1">
+                    {{ group.label }} · {{ group.count }}
+                </div>
+                <ul class="list-disc pl-5 text-xs text-base-content/70 space-y-1">
+                    {% for blocker in group.objects %}
+                    <li class="break-words">{{ blocker }}</li>
+                    {% endfor %}
+                    {% if group.truncated %}
+                    <li class="italic">More connected objects not shown.</li>
+                    {% endif %}
+                </ul>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="rounded-lg border border-success/30 bg-success/5 p-3 text-sm text-base-content/70">
+        <div class="font-semibold text-success flex items-center gap-2 mb-1">
+            <i class="fa-solid fa-check"></i>
+            No blocking connected objects found
+        </div>
+        <p>This {{ label|lower }} can be deleted.</p>
+    </div>
+    {% endif %}
+
+    <div class="modal-action mt-6 pt-4 border-t border-base-200 flex justify-between">
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('generic-modal').close()">
+            Cancel
+        </button>
+        <form method="post"
+              action="{{ delete_url }}"
+              hx-post="{{ delete_url }}"
+              hx-target="{{ workflow_target_id|default:'#workflow-content' }}"
+              hx-swap="innerHTML">
+            {% csrf_token %}
+            <button type="submit"
+                    class="btn btn-error btn-sm px-6"
+                    {% if not can_delete %}disabled aria-disabled="true"{% endif %}>
+                DELETE
+            </button>
+        </form>
+    </div>
+</div>

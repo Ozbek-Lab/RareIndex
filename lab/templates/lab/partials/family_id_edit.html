@@ -3,7 +3,7 @@
     <form hx-post="{% url 'lab:family_id_save' family.pk %}"
           hx-target="#family-title-{{ family.pk }}"
           hx-swap="outerHTML"
-          class="flex items-center gap-2">
+          class="flex flex-wrap items-center gap-2">
         {% csrf_token %}
         <input type="hidden" name="individual_pk" value="{{ individual_pk }}">
         <span class="text-sm uppercase font-bold text-base-content/50">Family</span>
@@ -12,6 +12,23 @@
                value="{{ value|default:family.family_id }}"
                class="input input-bordered input-xs font-mono w-44 {% if error %}input-error{% endif %}"
                autofocus>
+        <div
+            class="shrink-0 rounded-lg border border-base-content/25 bg-base-100 text-[10px] font-medium shadow-sm ring-1 ring-base-content/10"
+            style="display: flex; align-items: center; gap: 3px; padding: 3px; width: 300px;"
+            x-data="{
+                value: '{% if consanguinity_value is not None %}{{ consanguinity_value }}{% elif family.is_consanguineous %}true{% elif family.is_consanguineous is False %}false{% else %}{% endif %}',
+                buttonClass(option) {
+                    return this.value === option
+                        ? 'bg-base-content text-base-100'
+                        : 'text-base-content/60 hover:text-base-content';
+                }
+            }"
+        >
+            <input type="hidden" name="is_consanguineous" :value="value">
+            <button type="button" class="rounded text-center" style="width: 122px; padding: 2px 4px;" :class="buttonClass('false')" @click="value = 'false'">Non-Consanguineous</button>
+            <button type="button" class="rounded text-center" style="width: 68px; padding: 2px 4px;" :class="buttonClass('')" @click="value = ''">Unknown</button>
+            <button type="button" class="rounded text-center" style="width: 98px; padding: 2px 4px;" :class="buttonClass('true')" @click="value = 'true'">Consanguineous</button>
+        </div>
         {% if error %}
             <span class="text-error text-xs">{{ error }}</span>
         {% endif %}

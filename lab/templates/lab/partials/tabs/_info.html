@@ -27,6 +27,13 @@
         </div>
     </div>
 
+    <!-- Contact Information -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm col-span-2" id="contact-information-card-{{ individual.pk }}">
+        <div class="card-body p-4">
+            {% partial contact_information_content %}
+        </div>
+    </div>
+
 </div>
 
 <div class="mt-6"
@@ -75,12 +82,12 @@
 
                 <div class="bg-base-200 rounded p-2 border border-base-300"
                      x-data="{
-                        defaultCrossIdTypeId: (
-                            (() => {
-                                const rareboost = identifier_types.find((type) => type.name === 'RareBoost');
-                                return rareboost || identifier_types[0] || {};
-                            })()
-                        ).id || '',
+                        identifierTypes: [
+                            {% for type in identifier_types %}
+                                {id: '{{ type.id }}', name: '{{ type.name|escapejs }}'},
+                            {% endfor %}
+                        ],
+                        defaultCrossIdTypeId: '',
                         crossIds: [
                             {% for xid in individual.cross_ids.all %}
                                 {% if xid.id_type.use_priority != 1 and xid.id_type.use_priority != 2 %}
@@ -88,6 +95,11 @@
                                 {% endif %}
                             {% endfor %}
                         ],
+                        init() {
+                            const rareboost = this.identifierTypes.find((type) => type.name === 'RareBoost');
+                            this.defaultCrossIdTypeId = (rareboost || this.identifierTypes[0] || {}).id || '';
+                            this.updateJson();
+                        },
                         updateJson() {
                             this.$refs.jsonInput.value = JSON.stringify(this.crossIds);
                         },
@@ -100,7 +112,7 @@
                             this.updateJson();
                         }
                      }"
-                     x-init="updateJson()">
+                     x-init="init()">
                     
                     <input type="hidden" name="{{ form.cross_identifiers_json.html_name }}" x-ref="jsonInput">
 
@@ -134,8 +146,14 @@
                                         <option value="{{ type.id }}">{{ type.name }}</option>
                                     {% endfor %}
                                 </select>
-                                <input type="text" x-model="id.value" @input="updateJson()" class="input input-bordered input-xs flex-[0.85] w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
-                                <button type="button" @click="removeCrossId(idx)" class="btn btn-ghost btn-xs text-red-500 min-h-0 h-6 w-6 p-0 rounded-full text-[10px] flex items-center justify-center">✕</button>
+                                <input type="text" x-model="id.value" @input="updateJson()" class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
+                                <button type="button"
+                                        @click="removeCrossId(idx)"
+                                        class="btn btn-ghost btn-xs shrink-0 text-error min-h-0 h-6 w-6 p-0 rounded-full flex items-center justify-center"
+                                        title="Remove cross ID"
+                                        aria-label="Remove cross ID">
+                                    <i class="fa-solid fa-xmark text-[10px]"></i>
+                                </button>
                             </div>
                         </template>
                     </div>
@@ -220,6 +238,252 @@
                 </dd>
             </div>
         </dl>
+    {% endif %}
+{% endpartialdef %}
+
+{% partialdef contact_information_content %}
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="card-title text-sm uppercase text-base-content/50">Contact Information</h3>
+        {% if not edit_mode %}
+        <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
+                data-tip="Edit Contact Information"
+                hx-get="{% url 'lab:individual_contact_information_edit' individual.pk %}"
+                hx-target="#contact-information-card-{{ individual.pk }} .card-body"
+                hx-swap="innerHTML">
+            <i class="fa-solid fa-pencil"></i>
+        </button>
+        {% endif %}
+    </div>
+
+    {% if edit_mode %}
+        <form hx-post="{% url 'lab:individual_contact_information_save' individual.pk %}"
+              hx-target="#contact-information-card-{{ individual.pk }} .card-body"
+              hx-swap="innerHTML"
+              class="space-y-4"
+              x-data="{
+                institutionSearch: '',
+                institutionOpen: false,
+                contactSearch: '',
+                contactOpen: false,
+                selectedInstitutions: [],
+                selectedContacts: [],
+                institutions: JSON.parse('{{ institutions_json|escapejs }}'),
+                contacts: JSON.parse('{{ contacts_json|escapejs }}'),
+                init() {
+                    this.selectedInstitutions = this.selectedFromSelect(this.$refs.institutionSelect);
+                    this.selectedContacts = this.selectedFromSelect(this.$refs.contactSelect);
+                    this.pruneSelectedContacts();
+                },
+                fieldSelect(ref) {
+                    return ref && ref.tagName === 'SELECT' ? ref : ref?.querySelector('select');
+                },
+                selectedFromSelect(ref) {
+                    const select = this.fieldSelect(ref);
+                    if (!select) return [];
+                    return Array.from(select.selectedOptions).map((option) => ({
+                        id: option.value,
+                        name: option.textContent.trim(),
+                    }));
+                },
+                sync(ref, selected) {
+                    const select = this.fieldSelect(ref);
+                    if (!select) return;
+                    Array.from(select.options).forEach((option) => {
+                        option.selected = selected.some((item) => String(item.id) === option.value);
+                    });
+                },
+                addInstitution(inst) {
+                    if (this.selectedInstitutions.some((item) => String(item.id) === String(inst.id))) return;
+                    this.selectedInstitutions.push(inst);
+                    this.sync(this.$refs.institutionSelect, this.selectedInstitutions);
+                    this.pruneSelectedContacts();
+                    this.institutionSearch = '';
+                    this.institutionOpen = false;
+                },
+                removeInstitution(id) {
+                    this.selectedInstitutions = this.selectedInstitutions.filter((item) => String(item.id) !== String(id));
+                    this.sync(this.$refs.institutionSelect, this.selectedInstitutions);
+                    this.pruneSelectedContacts();
+                },
+                addContact(contact) {
+                    if (this.selectedContacts.some((item) => String(item.id) === String(contact.id))) return;
+                    this.selectedContacts.push(contact);
+                    this.sync(this.$refs.contactSelect, this.selectedContacts);
+                    this.contactSearch = '';
+                    this.contactOpen = false;
+                },
+                removeContact(id) {
+                    this.selectedContacts = this.selectedContacts.filter((item) => String(item.id) !== String(id));
+                    this.sync(this.$refs.contactSelect, this.selectedContacts);
+                },
+                get eligibleContactIds() {
+                    const ids = new Set();
+                    this.selectedInstitutions.forEach((selectedInstitution) => {
+                        const institution = this.institutions.find((item) => String(item.id) === String(selectedInstitution.id));
+                        (institution?.staffIds || []).forEach((id) => ids.add(String(id)));
+                    });
+                    return ids;
+                },
+                pruneSelectedContacts() {
+                    const eligibleIds = this.eligibleContactIds;
+                    this.selectedContacts = this.selectedContacts.filter((contact) => eligibleIds.has(String(contact.id)));
+                    this.sync(this.$refs.contactSelect, this.selectedContacts);
+                },
+                get filteredInstitutions() {
+                    const search = this.institutionSearch.toLowerCase();
+                    return this.institutions.filter((inst) => {
+                        const selected = this.selectedInstitutions.some((item) => String(item.id) === String(inst.id));
+                        return !selected && (!search || inst.name.toLowerCase().includes(search));
+                    });
+                },
+                get filteredContacts() {
+                    const search = this.contactSearch.toLowerCase();
+                    const eligibleIds = this.eligibleContactIds;
+                    return this.contacts.filter((contact) => {
+                        const selected = this.selectedContacts.some((item) => String(item.id) === String(contact.id));
+                        return eligibleIds.has(String(contact.id))
+                            && !selected
+                            && (!search || contact.name.toLowerCase().includes(search));
+                    });
+                }
+              }"
+              x-init="init()">
+            {% csrf_token %}
+            <div class="hidden">
+                <div x-ref="institutionSelect">{{ form.institution }}</div>
+                <div x-ref="contactSelect">{{ form.physicians }}</div>
+            </div>
+
+            <div>
+                <label class="block mb-1.5 text-xs font-medium text-base-content/80">Institutions</label>
+                <div class="relative">
+                    <input type="text"
+                           x-model="institutionSearch"
+                           @focus="institutionOpen = true"
+                           @click.away="institutionOpen = false"
+                           placeholder="Search and add institutions..."
+                           class="input input-bordered input-sm w-full {% if form.institution.errors %}input-error{% endif %}"
+                           :class="{'input-primary': institutionOpen}">
+                    <div x-show="institutionOpen"
+                         class="absolute z-20 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-56 overflow-y-auto"
+                         x-transition>
+                        <template x-for="inst in filteredInstitutions" :key="inst.id">
+                            <div @click="addInstitution(inst)"
+                                 class="px-3 py-2 text-sm cursor-pointer hover:bg-base-200 text-base-content"
+                                 x-text="inst.name"></div>
+                        </template>
+                        <div x-show="filteredInstitutions.length === 0" class="px-3 py-2 text-sm text-base-content/50">No matches.</div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mt-2 min-h-[1.75rem]">
+                    <template x-for="inst in selectedInstitutions" :key="inst.id">
+                        <span class="badge badge-primary gap-1.5 p-3 text-xs">
+                            <span x-text="inst.name"></span>
+                            <button type="button" @click="removeInstitution(inst.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                        </span>
+                    </template>
+                    <span x-show="selectedInstitutions.length === 0" class="text-sm text-base-content/50 italic py-1">No institutions selected.</span>
+                </div>
+                {% if form.institution.errors %}<p class="mt-1 text-xs text-error">{{ form.institution.errors.0 }}</p>{% endif %}
+            </div>
+
+            <div>
+                <label class="block mb-1.5 text-xs font-medium text-base-content/80">Clinicians</label>
+                <div class="relative">
+                    <input type="text"
+                           x-model="contactSearch"
+                           @focus="contactOpen = true"
+                           @click.away="contactOpen = false"
+                           placeholder="Search and add clinicians..."
+                           class="input input-bordered input-sm w-full {% if form.physicians.errors %}input-error{% endif %}"
+                           :class="{'input-primary': contactOpen}">
+                    <div x-show="contactOpen"
+                         class="absolute z-20 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-56 overflow-y-auto"
+                         x-transition>
+                        <template x-for="contact in filteredContacts" :key="contact.id">
+                            <div @click="addContact(contact)"
+                                 class="px-3 py-2 text-sm cursor-pointer hover:bg-base-200 text-base-content"
+                                 x-text="contact.name"></div>
+                        </template>
+                        <div x-show="selectedInstitutions.length === 0" class="px-3 py-2 text-sm text-base-content/50">Select an institution first.</div>
+                        <div x-show="selectedInstitutions.length > 0 && filteredContacts.length === 0" class="px-3 py-2 text-sm text-base-content/50">No matching clinicians for the selected institution(s).</div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mt-2 min-h-[1.75rem]">
+                    <template x-for="contact in selectedContacts" :key="contact.id">
+                        <span class="badge badge-secondary gap-1.5 p-3 text-xs">
+                            <span x-text="contact.name"></span>
+                            <button type="button" @click="removeContact(contact.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                        </span>
+                    </template>
+                    <span x-show="selectedContacts.length === 0" class="text-sm text-base-content/50 italic py-1">No clinicians selected.</span>
+                </div>
+                {% if form.physicians.errors %}<p class="mt-1 text-xs text-error">{{ form.physicians.errors.0 }}</p>{% endif %}
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" class="btn btn-sm btn-ghost"
+                        hx-get="{% url 'lab:individual_contact_information_display' individual.pk %}"
+                        hx-target="#contact-information-card-{{ individual.pk }} .card-body"
+                        hx-swap="innerHTML">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+            </div>
+        </form>
+    {% else %}
+        <div class="grid gap-8 md:grid-cols-2" style="grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));">
+            <div>
+                <h4 class="text-xs font-bold uppercase tracking-wide text-base-content/50 mb-2">Institutions</h4>
+                <div class="space-y-2">
+                    {% for institution in individual.institution.all %}
+                        <div class="rounded border border-base-200 bg-base-100 p-3">
+                            <div class="font-medium text-sm text-base-content">{{ institution.name }}</div>
+                            <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-base-content/65">
+                                {% if institution.official_name %}<div><span class="font-medium">Official:</span> {{ institution.official_name }}</div>{% endif %}
+                                {% if institution.center_name %}<div><span class="font-medium">Center:</span> {{ institution.center_name }}</div>{% endif %}
+                                {% if institution.city %}<div><span class="font-medium">City:</span> {{ institution.city }}</div>{% endif %}
+                                {% if institution.speciality %}<div><span class="font-medium">Speciality:</span> {{ institution.speciality }}</div>{% endif %}
+                            </div>
+                            {% if institution.contact %}
+                                <div class="mt-2 text-xs text-base-content/70 whitespace-pre-line">{{ institution.contact }}</div>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <div class="text-sm text-base-content/40 italic">No institutions selected.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-xs font-bold uppercase tracking-wide text-base-content/50 mb-2">Clinicians</h4>
+                <div class="space-y-2">
+                    {% for contact in individual.physicians.all %}
+                        <div class="rounded border border-base-200 bg-base-100 p-3">
+                            <div class="font-medium text-sm text-base-content">{{ contact.full_name }}</div>
+                            <div class="mt-1 space-y-1 text-xs text-base-content/65">
+                                {% if contact.emails %}
+                                    <div><span class="font-medium">Email:</span> {{ contact.emails|join:", " }}</div>
+                                {% endif %}
+                                {% if contact.phones %}
+                                    <div><span class="font-medium">Phone:</span> {{ contact.phones|join:", " }}</div>
+                                {% endif %}
+                                {% if contact.notes %}
+                                    <div class="text-base-content/70 whitespace-pre-line">{{ contact.notes }}</div>
+                                {% endif %}
+                                {% if not contact.emails and not contact.phones and not contact.notes %}
+                                    <div class="text-base-content/40 italic">No contact details stored.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="text-sm text-base-content/40 italic">No clinicians selected.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     {% endif %}
 {% endpartialdef %}
 
@@ -408,6 +672,15 @@
                 <dd class="text-sm text-base-content col-span-2">
                     {% if individual.family %}
                         <span class="font-mono font-semibold">{{ individual.family.family_id }}</span>
+                        {% if individual.family.is_consanguineous %}
+                            <span class="badge badge-warning badge-sm ml-2 gap-1">
+                                <i class="fa-solid fa-circle-nodes text-[10px]"></i> Consanguineous
+                            </span>
+                        {% elif individual.family.is_consanguineous is False %}
+                            <span class="badge badge-ghost badge-sm ml-2 text-base-content/40">Non-consanguineous</span>
+                        {% else %}
+                            <span class="badge badge-ghost badge-sm ml-2 text-base-content/40">Unknown consanguinity</span>
+                        {% endif %}
                         {% if individual.is_index %}
                             <div class="badge badge-primary badge-sm ml-2">Index Case</div>
                         {% endif %}

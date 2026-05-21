@@ -39,12 +39,61 @@
                     {% if form.family_id.errors %}<p class="mt-1 text-sm text-error">{{ form.family_id.errors.0 }}</p>{% endif %}
                 </div>
                 <div>
-                    <label class="block mb-2 text-sm font-medium text-base-content">Consanguineous</label>
-                    <div class="mt-2">
-                        {{ form.is_consanguineous }}
-                        <span class="ml-2 text-sm text-base-content/70">Yes / No / Unknown</span>
+                    <label class="block mb-2 text-sm font-medium text-base-content">Consanguinity</label>
+                    <div
+                        class="rounded-lg border border-base-content/25 bg-base-100 text-[10px] font-medium shadow-sm ring-1 ring-base-content/10"
+                        style="display: flex; align-items: center; gap: 3px; padding: 3px; width: 300px; max-width: 100%;"
+                        x-data="{
+                            value: '{{ form.is_consanguineous.value|default_if_none:"" }}',
+                            buttonClass(option) {
+                                return this.value === option
+                                    ? 'bg-base-content text-base-100'
+                                    : 'text-base-content/60 hover:text-base-content';
+                            }
+                        }"
+                    >
+                        <input type="hidden" name="{{ form.is_consanguineous.html_name }}" :value="value">
+                        <button type="button" class="rounded text-center" style="width: 122px; padding: 2px 4px;" :class="buttonClass('false')" @click="value = 'false'">Non-Consanguineous</button>
+                        <button type="button" class="rounded text-center" style="width: 68px; padding: 2px 4px;" :class="buttonClass('')" @click="value = ''">Unknown</button>
+                        <button type="button" class="rounded text-center" style="width: 98px; padding: 2px 4px;" :class="buttonClass('true')" @click="value = 'true'">Consanguineous</button>
                     </div>
                     {% if form.is_consanguineous.errors %}<p class="mt-1 text-sm text-error">{{ form.is_consanguineous.errors.0 }}</p>{% endif %}
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block mb-2 text-sm font-medium text-base-content">Institutions</label>
+                    <div class="hidden">
+                        {{ form.institutions }}
+                    </div>
+                    <div class="relative">
+                        <input type="text"
+                               x-model="familyInstitutionSearch"
+                               @focus="familyInstitutionOpen = true"
+                               @click.away="familyInstitutionOpen = false"
+                               placeholder="Search and add institutions for all family members..."
+                               class="input input-bordered w-full {% if form.institutions.errors %}input-error{% endif %}"
+                               :class="{'input-primary': familyInstitutionOpen}">
+                        <div x-show="familyInstitutionOpen"
+                             class="absolute z-20 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-56 overflow-y-auto"
+                             x-transition>
+                            <template x-for="inst in filteredFamilyInstitutions" :key="inst.id">
+                                <div @click="selectFamilyInstitution(inst)"
+                                     class="px-3 py-2 text-sm cursor-pointer hover:bg-base-200 text-base-content"
+                                     x-text="inst.name">
+                                </div>
+                            </template>
+                            <div x-show="filteredFamilyInstitutions.length === 0" class="px-3 py-2 text-sm text-base-content/50">No matches.</div>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 mt-2 min-h-[1.75rem]">
+                        <template x-for="inst in selectedFamilyInstitutions" :key="inst.id">
+                            <span class="badge badge-primary gap-1.5 p-3 text-xs">
+                                <span x-text="inst.name"></span>
+                                <button type="button" @click="removeFamilyInstitution(inst.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">✕</button>
+                            </span>
+                        </template>
+                        <span x-show="selectedFamilyInstitutions.length === 0" class="text-sm text-base-content/50 italic py-1">No institutions selected.</span>
+                    </div>
+                    {% if form.institutions.errors %}<p class="mt-1 text-sm text-error">{{ form.institutions.errors.0 }}</p>{% endif %}
                 </div>
                 <div class="md:col-span-2">
                     <label class="block mb-2 text-sm font-medium text-base-content">Description</label>
@@ -134,10 +183,14 @@
             totalFormsInput: document.getElementById('id_individuals-TOTAL_FORMS'),
             count: 0,
             members: [], // { index: 0, name: '', sex: '' } strictly for parent referencing UI
+            familyInstitutionSearch: '',
+            familyInstitutionOpen: false,
+            selectedFamilyInstitutions: [],
             
             init() {
                 // Initialize based on existing server-rendered forms
                 this.count = parseInt(this.totalFormsInput.value);
+                this.loadFamilyInstitutions();
                 
                 // Populate members array from DOM if re-rendering (e.g. valid errors)
                 // We scan for inputs with name ending in 'full_name' to find indices and values
@@ -156,6 +209,58 @@
                     }
                 });
 
+            },
+
+            get familyInstitutionSelect() {
+                return document.querySelector("select[name='institutions']");
+            },
+
+            loadFamilyInstitutions() {
+                const select = this.familyInstitutionSelect;
+                if (!select) {
+                    return;
+                }
+                this.selectedFamilyInstitutions = Array.from(select.selectedOptions).map((option) => ({
+                    id: option.value,
+                    name: option.textContent.trim(),
+                }));
+            },
+
+            syncFamilyInstitutions() {
+                const select = this.familyInstitutionSelect;
+                if (!select) {
+                    return;
+                }
+                Array.from(select.options).forEach((option) => {
+                    option.selected = this.selectedFamilyInstitutions.some((inst) => String(inst.id) === option.value);
+                });
+            },
+
+            addFamilyInstitution(inst) {
+                if (this.selectedFamilyInstitutions.some((selected) => String(selected.id) === String(inst.id))) {
+                    return;
+                }
+                this.selectedFamilyInstitutions.push(inst);
+                this.syncFamilyInstitutions();
+            },
+
+            removeFamilyInstitution(id) {
+                this.selectedFamilyInstitutions = this.selectedFamilyInstitutions.filter((inst) => String(inst.id) !== String(id));
+                this.syncFamilyInstitutions();
+            },
+
+            get filteredFamilyInstitutions() {
+                const search = this.familyInstitutionSearch.toLowerCase();
+                return INSTITUTIONS.filter((inst) => {
+                    const alreadySelected = this.selectedFamilyInstitutions.some((selected) => String(selected.id) === String(inst.id));
+                    return !alreadySelected && (!search || inst.name.toLowerCase().includes(search));
+                });
+            },
+
+            selectFamilyInstitution(inst) {
+                this.addFamilyInstitution(inst);
+                this.familyInstitutionOpen = false;
+                this.familyInstitutionSearch = '';
             },
 
             addMember() {
@@ -219,9 +324,8 @@
             index: index,
             crossIds: [],
             hpoTerms: [], // Array of {id, label, code}
-            instSearch: '',
-            instOpen: false,
-            selectedInstitutions: [],
+            bulkHpoQuery: '',
+            bulkHpoLoading: false,
             
             init() {
                // Load existing cross IDs
@@ -238,13 +342,6 @@
                // Simplified: We assume empty for creation, or we might need to inject initial data if form errors.
                // TODO: If re-render with errors, we need to repopulate hpoTerms.
                // We can look for <option selected> in the hidden select if we keep it?
-               const select = this.institutionSelect;
-               if (select) {
-                   this.selectedInstitutions = Array.from(select.selectedOptions).map((option) => ({
-                       id: option.value,
-                       name: option.textContent.trim(),
-                   }));
-               }
             },
 
             // Cross IDs
@@ -279,52 +376,31 @@
             removeHpoTerm(id) {
                 this.hpoTerms = this.hpoTerms.filter(t => t.id != id);
             },
-            
-            // Institutions
-            get institutionSelect() {
-                return document.querySelector(`select[name='individuals-${this.index}-institution']`);
-            },
 
-            syncInstitutions() {
-                const select = this.institutionSelect;
-                if (!select) {
+            async bulkAddHpoTerms() {
+                const query = this.bulkHpoQuery.trim();
+                if (!query || this.bulkHpoLoading) {
                     return;
                 }
 
-                Array.from(select.options).forEach((option) => {
-                    option.selected = this.selectedInstitutions.some((inst) => String(inst.id) === option.value);
-                });
-            },
-
-            addInstitution(inst) {
-                if (this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id))) {
-                    return;
+                this.bulkHpoLoading = true;
+                try {
+                    const response = await fetch(`{% url 'lab:hpo_bulk_match' %}?q=${encodeURIComponent(query)}`, {
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    });
+                    if (!response.ok) {
+                        return;
+                    }
+                    const data = await response.json();
+                    (data.results || []).forEach((term) => {
+                        this.addHpoTerm(term.id, term.label, term.code || '');
+                    });
+                    this.bulkHpoQuery = '';
+                } finally {
+                    this.bulkHpoLoading = false;
                 }
-
-                this.selectedInstitutions.push(inst);
-                this.syncInstitutions();
-            },
-
-            removeInstitution(id) {
-                this.selectedInstitutions = this.selectedInstitutions.filter((inst) => String(inst.id) !== String(id));
-                this.syncInstitutions();
-            },
-
-            get filteredInstitutions() {
-                if (this.instSearch === '') {
-                    return INSTITUTIONS.filter((inst) => !this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id)));
-                }
-                return INSTITUTIONS.filter(inst => 
-                    inst.name.toLowerCase().includes(this.instSearch.toLowerCase()) &&
-                    !this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id))
-                );
             },
             
-            selectInstitution(inst) {
-                this.addInstitution(inst);
-                this.instOpen = false;
-                this.instSearch = '';
-            }
         }
     }
 </script>

@@ -27,6 +27,7 @@ from .models import (
     AnalysisReport,
     IdentifierType,
     StatusGroup,
+    Contact,
     validate_rareboost_id_value,
     validate_biobank_id_value,
 )
@@ -385,9 +386,32 @@ class SampleForm(BaseForm):
         label="Statuses",
         widget=forms.SelectMultiple(),
     )
+    note_content = forms.CharField(
+        required=False,
+        label="Note",
+        widget=forms.Textarea(attrs={
+            "rows": 3,
+            "placeholder": "Add an initial note...",
+            "class": "resize-none",
+        }),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        field_order = [
+            "individual",
+            "sample_type",
+            "statuses",
+            "receipt_date",
+            "processing_date",
+            "isolation_by",
+            "sample_measurements",
+            "note_content",
+        ]
+        self.fields = OrderedDict(
+            [(name, self.fields[name]) for name in field_order if name in self.fields]
+            + [(name, field) for name, field in self.fields.items() if name not in field_order]
+        )
         if self.instance and self.instance.pk:
             self.initial["statuses"] = self.instance.statuses.all()
 
@@ -395,6 +419,74 @@ class SampleForm(BaseForm):
         model = Sample
         fields = [
             "individual",
+            "sample_type",
+            "receipt_date",
+            "processing_date",
+            "isolation_by",
+            "sample_measurements",
+        ]
+        widgets = {
+            "receipt_date": forms.DateInput(attrs={"type": "date"}),
+            "processing_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+
+class WorkflowSampleCreateForm(BaseForm):
+    statuses = forms.ModelMultipleChoiceField(
+        queryset=Status.objects.none(),
+        required=False,
+        label="Status",
+        widget=forms.CheckboxSelectMultiple(),
+    )
+    note_content = forms.CharField(
+        required=False,
+        label="Initial note",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 3,
+                "placeholder": "Add an initial sample note...",
+                "class": "resize-none",
+            }
+        ),
+    )
+
+    def __init__(self, *args, individual=None, **kwargs):
+        self.individual = individual
+        super().__init__(*args, **kwargs)
+
+        self.fields["sample_type"].queryset = SampleType.objects.order_by("name")
+        self.fields["sample_type"].empty_label = "Choose a sample type"
+        self.fields["sample_type"].label = "Sample type"
+        self.fields["receipt_date"].label = "Received"
+        self.fields["processing_date"].label = "Processed"
+        self.fields["isolation_by"].label = "Isolated by"
+        self.fields["sample_measurements"].label = "Measurements"
+        self.fields["sample_measurements"].widget.attrs.setdefault(
+            "placeholder",
+            "Volume, concentration, tube count...",
+        )
+
+        if "statuses" in self.fields:
+            self.fields["statuses"].help_text = (
+                "Pick the current sample state. Leave empty to use the default."
+            )
+
+    def clean_statuses(self):
+        statuses = list(self.cleaned_data.get("statuses") or [])
+        seen_groups = {}
+        for status in statuses:
+            if not status.group_id:
+                continue
+            if status.group_id in seen_groups:
+                raise forms.ValidationError(
+                    "Choose only one status from each status group."
+                )
+            seen_groups[status.group_id] = status
+        return statuses
+
+    class Meta:
+        model = Sample
+        fields = [
             "sample_type",
             "receipt_date",
             "processing_date",
@@ -813,6 +905,23 @@ class StatusForm(BaseForm):
 
 
 class CreateFamilyForm(BaseForm):
+    is_consanguineous = forms.TypedChoiceField(
+        choices=[
+            ("false", "Non-Consanguineous"),
+            ("", "Unknown"),
+            ("true", "Consanguineous"),
+        ],
+        coerce=lambda value: {"true": True, "false": False}.get(value, None),
+        empty_value=None,
+        required=False,
+    )
+    institutions = forms.ModelMultipleChoiceField(
+        queryset=Institution.objects.all(),
+        required=False,
+        label="Institutions",
+        widget=forms.SelectMultiple(),
+    )
+
     class Meta:
         model = Family
         fields = [
@@ -854,6 +963,7 @@ class FamilyMemberForm(BaseForm):
         super().__init__(*args, **kwargs)
         # Ensure institutions are selectable
         self.fields["institution"].queryset = Institution.objects.all()
+        self.fields["institution"].required = False
         # Set HPO terms widget attributes
         self.fields["hpo_terms"].widget.attrs.update({
              # "class": "hidden", # Standard select for now
@@ -1252,6 +1362,50 @@ class IndividualDemographicsForm(BaseForm):
         return instance
 
 
+class IndividualContactInformationForm(BaseForm):
+    class Meta:
+        model = Individual
+        fields = ["institution", "physicians"]
+        widgets = {
+            "institution": forms.SelectMultiple(),
+            "physicians": forms.SelectMultiple(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["institution"].queryset = Institution.objects.all().order_by("name")
+        self.fields["institution"].required = False
+        self.fields["physicians"].queryset = Contact.objects.all().order_by("full_name")
+        self.fields["physicians"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        institutions = cleaned_data.get("institution")
+        physicians = cleaned_data.get("physicians")
+
+        if not physicians:
+            return cleaned_data
+
+        eligible_contact_ids = set(
+            Contact.objects.filter(institutions_as_staff__in=institutions or [])
+            .distinct()
+            .values_list("id", flat=True)
+        )
+        invalid_physicians = [
+            physician.full_name
+            for physician in physicians
+            if physician.id not in eligible_contact_ids
+        ]
+        if invalid_physicians:
+            self.add_error(
+                "physicians",
+                "Clinicians must be staff of the selected institution(s): "
+                + ", ".join(invalid_physicians),
+            )
+
+        return cleaned_data
+
+
 class ClinicalSummaryForm(BaseForm):
     class Meta:
         model = Individual
@@ -1274,6 +1428,21 @@ class ClinicalSummaryForm(BaseForm):
             "icd11_code": forms.TextInput(
                 attrs={
                     "placeholder": "e.g. LDBS",
+                }
+            ),
+        }
+
+
+class AgeOfOnsetMonthsForm(forms.ModelForm):
+    class Meta:
+        model = Individual
+        fields = ["age_of_onset_in_months"]
+        widgets = {
+            "age_of_onset_in_months": forms.NumberInput(
+                attrs={
+                    "class": "input input-bordered input-xs w-28",
+                    "step": "1",
+                    "placeholder": "Months",
                 }
             ),
         }
@@ -1346,6 +1515,60 @@ class InstitutionConfigForm(BaseForm):
         widgets = {
             "contact": forms.Textarea(attrs={"rows": 3}),
         }
+
+
+class ContactConfigForm(BaseForm):
+    emails_text = forms.CharField(
+        required=False,
+        label="Emails",
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="One email address per line.",
+    )
+    phones_text = forms.CharField(
+        required=False,
+        label="Phones",
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="One phone number per line.",
+    )
+    institutions = forms.ModelMultipleChoiceField(
+        queryset=Institution.objects.none(),
+        required=False,
+        label="Institutions",
+        widget=forms.SelectMultiple(attrs={"class": "select select-bordered w-full h-32"}),
+        help_text="Institutions where this contact is staff.",
+    )
+
+    class Meta:
+        model = Contact
+        fields = ["full_name", "emails_text", "phones_text", "notes", "institutions"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["institutions"].queryset = Institution.objects.order_by("name")
+        if self.instance and self.instance.pk:
+            self.fields["emails_text"].initial = "\n".join(self.instance.emails or [])
+            self.fields["phones_text"].initial = "\n".join(self.instance.phones or [])
+            self.fields["institutions"].initial = self.instance.institutions_as_staff.all()
+
+    @staticmethod
+    def _lines(value):
+        return [line.strip() for line in str(value or "").splitlines() if line.strip()]
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.emails = self._lines(self.cleaned_data.get("emails_text"))
+        instance.phones = self._lines(self.cleaned_data.get("phones_text"))
+        self.save_m2m = self._save_contact_m2m
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+    def _save_contact_m2m(self):
+        self.instance.institutions_as_staff.set(self.cleaned_data.get("institutions") or [])
 
 
 class PipelineTypeForm(BaseForm):
@@ -1473,6 +1696,17 @@ class StatusConfigForm(BaseForm):
 
 
 class FamilyConfigForm(BaseForm):
+    is_consanguineous = forms.TypedChoiceField(
+        choices=[
+            ("false", "Non-Consanguineous"),
+            ("", "Unknown"),
+            ("true", "Consanguineous"),
+        ],
+        coerce=lambda value: {"true": True, "false": False}.get(value, None),
+        empty_value=None,
+        required=False,
+    )
+
     class Meta:
         model = Family
         fields = ["family_id", "is_consanguineous", "description"]

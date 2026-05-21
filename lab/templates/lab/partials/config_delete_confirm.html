@@ -76,7 +76,9 @@
             onclick="document.getElementById('generic-modal').close()">
         Cancel
     </button>
-    <form hx-post="{{ delete_url }}"
+    <form method="post"
+          action="{{ delete_url }}"
+          hx-post="{{ delete_url }}"
           hx-target="#config-section-{{ model_name }}"
           hx-swap="outerHTML"
           class="inline">

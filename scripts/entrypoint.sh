@@ -10,6 +10,9 @@ python manage.py makemigrations lab
 python manage.py migrate
 
 # Collect static files
+echo "Downloading frontend vendor assets..."
+python scripts/download_static_vendor.py
+
 echo "Collecting static files..."
 python manage.py collectstatic --no-input
 

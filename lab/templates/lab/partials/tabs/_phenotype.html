@@ -232,6 +232,8 @@
                 </dd>
             </div>
 
+            {% partial age_of_onset_months_content %}
+
             <div class="grid grid-cols-3 gap-4">
                 <dt class="text-sm font-medium text-base-content/70">Affected Status</dt>
                 <dd class="text-sm text-base-content col-span-2">
@@ -253,3 +255,46 @@
     {% endif %}
 {% endpartialdef %}
 
+{% partialdef age_of_onset_months_content %}
+    <div class="grid grid-cols-3 gap-4" id="age-of-onset-months-{{ individual.pk }}">
+        <dt class="text-sm font-medium text-base-content/70">Age of Onset (months)</dt>
+        <dd class="text-sm text-base-content col-span-2">
+            {% if edit_onset_months %}
+                <form hx-post="{% url 'lab:individual_age_of_onset_months_save' individual.pk %}"
+                      hx-target="#age-of-onset-months-{{ individual.pk }}"
+                      hx-swap="outerHTML"
+                      class="flex items-center gap-2">
+                    {% csrf_token %}
+                    {{ form.age_of_onset_in_months }}
+                    {% if form.age_of_onset_in_months.errors %}
+                        <span class="text-error text-xs">{{ form.age_of_onset_in_months.errors.0 }}</span>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary btn-xs">Save</button>
+                    <button type="button"
+                            hx-get="{% url 'lab:individual_age_of_onset_months_display' individual.pk %}"
+                            hx-target="#age-of-onset-months-{{ individual.pk }}"
+                            hx-swap="outerHTML"
+                            class="btn btn-ghost btn-xs">Cancel</button>
+                </form>
+            {% else %}
+                <div class="flex items-center gap-2">
+                    <span class="font-mono">
+                        {% if individual.age_of_onset_in_months is not None %}
+                            {{ individual.age_of_onset_in_months }}
+                        {% else %}
+                            --
+                        {% endif %}
+                    </span>
+                    <button type="button"
+                            hx-get="{% url 'lab:individual_age_of_onset_months_edit' individual.pk %}"
+                            hx-target="#age-of-onset-months-{{ individual.pk }}"
+                            hx-swap="outerHTML"
+                            class="btn btn-ghost btn-xs btn-circle"
+                            title="Edit age of onset in months">
+                        <i class="fa-solid fa-pencil text-[10px]"></i>
+                    </button>
+                </div>
+            {% endif %}
+        </dd>
+    </div>
+{% endpartialdef %}

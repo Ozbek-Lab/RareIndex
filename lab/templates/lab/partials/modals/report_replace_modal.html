@@ -8,7 +8,7 @@
 
 {% if can_change_report %}
 <form hx-post="{{ action_url }}"
-      hx-target="#workflow-content"
+      hx-target="{{ workflow_target_id|default:'#workflow-content' }}"
       hx-swap="innerHTML"
       hx-encoding="multipart/form-data"
       class="space-y-4">
@@ -52,7 +52,7 @@
             {% endif %}
         </div>
         <form hx-post="{{ action_url }}"
-              hx-target="#workflow-content"
+              hx-target="{{ workflow_target_id|default:'#workflow-content' }}"
               hx-swap="innerHTML"
               class="shrink-0">
             {% csrf_token %}

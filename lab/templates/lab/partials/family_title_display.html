@@ -7,7 +7,7 @@
                 <span class="badge badge-sm badge-warning gap-1 normal-case font-normal">
                     <i class="fa-solid fa-circle-nodes text-[10px]"></i> Consanguineous
                 </span>
-            {% elif family.is_consanguineous == False %}
+            {% elif family.is_consanguineous is False %}
                 <span class="badge badge-sm badge-ghost text-base-content/40 normal-case font-normal">Non-consanguineous</span>
             {% endif %}
         </h3>

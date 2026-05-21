@@ -44,3 +44,7 @@ django-widget-tweaks
 django-taggit
 marimo
 python-docx
+
+# Frontend vendor assets are intentionally not installed by pip.
+# After installing requirements, run:
+#   python scripts/download_static_vendor.py

@@ -26,7 +26,7 @@ Processing order
 ----------------
   0a Load ontologies_data.json fixture (if Ontology table empty)
   0b import_hgnc_data (if Gene table empty)
-  1  Setup statuses / IdentifierTypes / AnalysisTypes / ozbek_set_id_priorities
+  1  Setup statuses / IdentifierTypes / ozbek_set_id_priorities
   2  Families + Institutions (OZBEK LAB pass 1)
   3  Individuals + CrossIdentifiers (OZBEK LAB pass 2)
   4  Samples (OZBEK LAB pass 3)
@@ -116,6 +116,23 @@ from lab.management.commands._import_helpers import (
 
 User = get_user_model()
 
+
+def normalize_consanguinity_value(value):
+    """Map imported consanguinity values to a nullable boolean."""
+    bool_value = to_bool(value)
+    if bool_value is not None:
+        return bool_value
+
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text in {"mild", "mildly", "mildly consanguineous", "hafif", "hafif akraba", "hafif akrabalık"}:
+        return None
+    if text in {"unknown", "bilinmiyor", "belirsiz", "na", "n/a", "-"}:
+        return None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Zygosity map (spreadsheet labels → model choice keys)
 # ---------------------------------------------------------------------------
@@ -182,6 +199,19 @@ REQUIRED_PLOT_TEMPLATE_SPECS = {
 }
 
 REQUIRED_PLOT_TEMPLATE_SLUGS = set(REQUIRED_PLOT_TEMPLATE_SPECS)
+
+ANALYSIS_IMPORT_STATUS_NAMES = {
+    "reported": "Reported",
+    "waiting analysis": "Waiting Analysis",
+    "waiting_analysis": "Waiting Analysis",
+    "planned": "Planned",
+    "plan": "Planned",
+    "performed": "Performed",
+    "analyzed": "Analyzed",
+    "analysed": "Analyzed",
+    "waiting data arrival": "Waiting Data Arrival",
+    "waiting_data_arrival": "Waiting Data Arrival",
+}
 
 
 def _parse_report_text_field_reference_markdown(md_text: str) -> dict[str, dict[str, str]]:
@@ -573,6 +603,13 @@ class Command(BaseCommand):
                 linked_user.email = email_to_set
                 linked_user.save(update_fields=["email"])
 
+    def _link_physician_to_individual_and_institutions(self, individual, physician, institutions) -> None:
+        """Link an imported clinician to the individual and the individual's source institutions."""
+        individual.physicians.add(physician)
+        for institution in institutions or []:
+            if institution:
+                institution.staff.add(physician)
+
     def _build_clinician_assignments(self, clinician_field, first_contact_field, second_contact_field):
         assignments = _build_clinician_assignments(
             clinician_field,
@@ -697,7 +734,7 @@ class Command(BaseCommand):
                              "Qatar - Long Read WGS Project")
         self._step_long_read(wb, "Dubai-Uzun Okuma Hastaları", "Dubai",
                              "Dubai - Long Read WGS Project")
-        self._step_cp_cohort(wb)
+        # self._step_cp_cohort(wb)
         self._step_rna_seq(wb)
         self._step_gennext_analiz(wb)       # links Analiz Takip analyses to pipelines
         self._step_rarepipe_analiz(wb)      # ⚠ skipped — no date column yet
@@ -977,7 +1014,7 @@ class Command(BaseCommand):
     # ==================================================================
 
     def _step1_setup(self) -> tuple:
-        self.stdout.write("Step 1: Setting up statuses, identifier types, analysis types…")
+        self.stdout.write("Step 1: Setting up statuses and identifier types…")
         ct = self._content_types()
 
         def ct_for(key):
@@ -1100,10 +1137,6 @@ class Command(BaseCommand):
                     id_type.save(update_fields=["example"])
                 id_types[name] = id_type
 
-            for at_name in ("Clinical WES", "Clinical WGS", "Research WGS",
-                            "Research WES", "RNA-seq", "Reanalysis"):
-                get_or_create_analysis_type(at_name, self.admin_user)
-
             Institution.objects.get_or_create(
                 name="Unknown",
                 defaults={"contact": "Placeholder", "created_by": self.admin_user},
@@ -1112,8 +1145,8 @@ class Command(BaseCommand):
 
         return statuses, id_types
 
-    def _apply_hpo_terms_to_individual(self, individual, hpo_terms) -> None:
-        """Attach HPO terms and keep affectedness aligned with the HPO state."""
+    def _apply_hpo_terms_to_individual(self, individual, hpo_terms, hpo_source=None) -> None:
+        """Attach HPO terms and update affectedness when the import field is explicit."""
         affected = self.statuses["individual"].get("affected")
         healthy = self.statuses["individual"].get("healthy")
         if hpo_terms:
@@ -1127,13 +1160,14 @@ class Command(BaseCommand):
                 individual.statuses.add(affected)
             return
 
-        if individual.is_affected:
-            individual.is_affected = False
-            individual.save(update_fields=["is_affected"])
-        if affected and individual.statuses.filter(pk=affected.pk).exists():
-            individual.statuses.remove(affected)
-        if healthy and not individual.statuses.filter(pk=healthy.pk).exists():
-            individual.statuses.add(healthy)
+        if str(hpo_source or "").strip().casefold() == "ss":
+            if individual.is_affected:
+                individual.is_affected = False
+                individual.save(update_fields=["is_affected"])
+            if affected and individual.statuses.filter(pk=affected.pk).exists():
+                individual.statuses.remove(affected)
+            if healthy and not individual.statuses.filter(pk=healthy.pk).exists():
+                individual.statuses.add(healthy)
 
     # ------------------------------------------------------------------
     # Workbook helpers
@@ -1151,6 +1185,31 @@ class Command(BaseCommand):
             "task":       ContentType.objects.get_for_model(Task),
             "variant":    ContentType.objects.get_for_model(Variant),
         }
+
+    def _analysis_status_for_import_value(self, value):
+        normalized = re.sub(r"\s+", " ", str(value or "").strip().lower())
+        if not normalized:
+            return None
+
+        status_name = ANALYSIS_IMPORT_STATUS_NAMES.get(normalized)
+        if not status_name:
+            return None
+
+        cached_status = next(
+            (
+                status
+                for status in self.statuses.get("analysis", {}).values()
+                if status.name.lower() == status_name.lower()
+            ),
+            None,
+        )
+        if cached_status:
+            return cached_status
+
+        return Status.objects.filter(
+            content_type=self._content_types()["analysis"],
+            name__iexact=status_name,
+        ).first()
 
     def _load_kurumlar_map(self, wb) -> dict:
         """Load institution metadata from the Kurumlar sheet (replaces Gönderen Kurum Harita)."""
@@ -1369,7 +1428,8 @@ class Command(BaseCommand):
             diagnosis_date  = parse_date(row.get("Tanı Tarihi"))
             birth_date      = parse_date(row.get("Doğum Tarihi"))
             icd11_code      = str(row.get("ICD11") or "").strip()
-            consanguinity   = to_bool(row.get("Akrabalık"))
+            consanguinity_raw = row.get("Akrabalık")
+            consanguinity   = normalize_consanguinity_value(consanguinity_raw)
             registration_date = parse_date(row.get("Geliş Tarihi"))
 
             individual = find_individual_by_rareboost_id(lab_id)
@@ -1425,7 +1485,7 @@ class Command(BaseCommand):
             if inst_list:
                 individual.institution.set(inst_list)
 
-            if consanguinity is not None and family and family.is_consanguineous != consanguinity:
+            if str(consanguinity_raw or "").strip() and family and family.is_consanguineous != consanguinity:
                 family.is_consanguineous = consanguinity
                 family.save()
 
@@ -1436,11 +1496,16 @@ class Command(BaseCommand):
             )
             for clinician_name, contact_values in clinician_assignments:
                 physician = get_or_create_contact(clinician_name, self.admin_user)
-                individual.physicians.add(physician)
+                self._link_physician_to_individual_and_institutions(
+                    individual,
+                    physician,
+                    inst_list,
+                )
                 self._apply_contact_details(physician, contact_values)
 
-            hpo_terms = get_hpo_terms(row.get("HPO kodları"), self.stdout)
-            self._apply_hpo_terms_to_individual(individual, hpo_terms)
+            hpo_source = row.get("HPO kodları")
+            hpo_terms = get_hpo_terms(hpo_source, self.stdout)
+            self._apply_hpo_terms_to_individual(individual, hpo_terms, hpo_source)
 
             # Projects
             projects_field = row.get("Projeler")
@@ -1460,6 +1525,14 @@ class Command(BaseCommand):
             if tamamlanan:
                 parse_and_add_notes(
                     f"Tamamlanan tetkikler\n{tamamlanan}", individual, self.admin_user)
+                self._import_completed_tests_from_field(
+                    individual,
+                    tamamlanan,
+                    step="step3",
+                    sheet="OZBEK LAB",
+                    lab_id=lab_id,
+                    row=row,
+                )
 
             # CrossIdentifiers
             rb_type = self.id_types.get("RareBoost")
@@ -1508,6 +1581,32 @@ class Command(BaseCommand):
             CrossIdentifier.objects.get_or_create(
                 individual=individual, id_type=id_type,
                 defaults={"id_value": id_value, "created_by": self.admin_user})
+
+    def _import_completed_tests_from_field(
+        self,
+        individual,
+        raw,
+        sample=None,
+        step="",
+        sheet="",
+        lab_id=None,
+        row=None,
+    ) -> None:
+        completed_status = self.statuses["test"].get("completed")
+        if not raw or not completed_status:
+            return
+
+        target_sample = sample or individual.samples.first() or self._get_placeholder_sample(individual)
+        for test_name in self._normalize_test_tokens(str(raw)):
+            test_type = get_or_create_test_type(test_name, self.admin_user)
+            self._backfill_testtype_report_fields(test_type)
+            test, _ = Test.objects.get_or_create(
+                sample=target_sample,
+                test_type=test_type,
+                defaults={"created_by": self.admin_user},
+            )
+            if not test.statuses.filter(pk=completed_status.pk).exists():
+                test.statuses.add(completed_status)
 
     # ==================================================================
     # Step 4 — Samples
@@ -1736,11 +1835,19 @@ class Command(BaseCommand):
                 analysis.performed_by.set(performers)
 
             if analiz_durumu:
-                nl = analiz_durumu.lower()
-                a_st = (self.statuses["analysis"]["completed"] if "complet" in nl
-                        else self.statuses["analysis"]["planned"])
+                a_st = self._analysis_status_for_import_value(analiz_durumu)
                 if a_st:
                     analysis.statuses.set([a_st])
+                else:
+                    self._record_issue(
+                        step="step5",
+                        sheet="Analiz Takip",
+                        severity="warning",
+                        reason="Analysis status was not found for imported Analiz Durumu.",
+                        lab_id=lab_id,
+                        row=d,
+                        context={"analiz_durumu": analiz_durumu},
+                    )
 
             # Notes on Analysis (Test Notları goes HERE, not on Test)
             parse_and_add_notes(d.get("Test Notları"), analysis, self.admin_user)
@@ -2206,11 +2313,16 @@ class Command(BaseCommand):
             )
             for clinician_name, contact_values in clinician_assignments:
                 physician = get_or_create_contact(clinician_name, self.admin_user)
-                individual.physicians.add(physician)
+                self._link_physician_to_individual_and_institutions(
+                    individual,
+                    physician,
+                    inst_list,
+                )
                 self._apply_contact_details(physician, contact_values)
 
-            hpo_terms = get_hpo_terms(d.get("HPO kodları"), self.stdout)
-            self._apply_hpo_terms_to_individual(individual, hpo_terms)
+            hpo_source = d.get("HPO kodları")
+            hpo_terms = get_hpo_terms(hpo_source, self.stdout)
+            self._apply_hpo_terms_to_individual(individual, hpo_terms, hpo_source)
 
             # Sample
             receipt_date = parse_date(d.get("Geliş Tarihi/ay/gün/yıl"))
@@ -2265,6 +2377,15 @@ class Command(BaseCommand):
             if tamamlanan:
                 parse_and_add_notes(
                     f"Tamamlanan tetkikler\n{tamamlanan}", individual, self.admin_user)
+                self._import_completed_tests_from_field(
+                    individual,
+                    tamamlanan,
+                    sample=sample,
+                    step="step10",
+                    sheet="External",
+                    lab_id=lab_id,
+                    row=d,
+                )
 
             # Projects
             projects_field = d.get("Projeler")
@@ -3151,8 +3272,9 @@ class Command(BaseCommand):
                 individual.save()
 
             # Consanguinity
-            cons = to_bool(d.get("Consanguinity"))
-            if cons is not None and individual.family and \
+            consanguinity_raw = d.get("Consanguinity")
+            cons = normalize_consanguinity_value(consanguinity_raw)
+            if str(consanguinity_raw or "").strip() and individual.family and \
                     individual.family.is_consanguineous != cons:
                 individual.family.is_consanguineous = cons
                 individual.family.save()
@@ -3190,12 +3312,17 @@ class Command(BaseCommand):
                 )
                 for klin, contact_values in clinician_assignments:
                     physician = get_or_create_contact(klin, self.admin_user)
-                    inst.staff.add(physician)
+                    self._link_physician_to_individual_and_institutions(
+                        individual,
+                        physician,
+                        [inst],
+                    )
                     self._apply_contact_details(physician, contact_values)
 
             # HPO
-            hpo_terms = get_hpo_terms(d.get("HPO"), self.stdout)
-            self._apply_hpo_terms_to_individual(individual, hpo_terms)
+            hpo_source = d.get("HPO")
+            hpo_terms = get_hpo_terms(hpo_source, self.stdout)
+            self._apply_hpo_terms_to_individual(individual, hpo_terms, hpo_source)
 
             # OMIM note
             omim = str(d.get("OMIM") or "").strip()

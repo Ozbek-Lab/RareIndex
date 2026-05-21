@@ -87,6 +87,13 @@
 
     <!-- Font Awesome -->
     <link rel="stylesheet" href="{% static 'vendor/fontawesome/css/all.min.css' %}">
+    <link rel="stylesheet" href="{% static 'lab/css/family_pedigree.css' %}">
+
+    <!-- Pedigree rendering (local vendor assets) -->
+    <script defer src="{% static 'vendor/js/jquery-3.7.1.min.js' %}"></script>
+    <script defer src="{% static 'vendor/js/d3.v7.9.0.min.js' %}"></script>
+    <script defer src="{% static 'vendor/js/pedigreejs.v5.0.0.min.js' %}"></script>
+    <script defer src="{% static 'lab/js/family_pedigree.js' %}"></script>
     
     <!-- HTMX -->
     <script defer src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -382,7 +389,7 @@
     </dialog>
     
     <!-- Generic Modal for Samples, Tests, etc. -->
-    <dialog id="generic-modal" class="modal" x-data @close="$refs.content.innerHTML = '<div class=\'flex justify-center p-8\'><span class=\'loading loading-spinner loading-md\'></span></div>'" @closeModal.window="$el.close()">
+    <dialog id="generic-modal" class="modal" x-data @close="$refs.content.innerHTML = '<div class=\'flex justify-center p-8\'><span class=\'loading loading-spinner loading-md\'></span></div>'" @closeModal.window="$el.close()" @close-modal.window="$el.close()">
       <div class="modal-box bg-base-100" style="width: min(96vw, 96rem); max-width: 96rem;">
         <form method="dialog">
           <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>

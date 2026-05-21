@@ -47,8 +47,8 @@
         </div>
 
         <!-- Workflow Tab -->
-        <div x-show="currentTab === 'workflow'" style="display: none;" id="workflow-content"
-             hx-get="?partial=workflow"
+        <div x-show="currentTab === 'workflow'" style="display: none;" id="{{ workflow_content_id|default:'workflow-content' }}"
+             hx-get="{% url 'lab:individual_detail' individual.pk %}?partial=workflow"
              hx-trigger="workflowRefreshed from:body"
              hx-swap="innerHTML"
              x-transition:enter="transition ease-out duration-200"

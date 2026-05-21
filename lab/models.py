@@ -15,6 +15,7 @@ from encrypted_model_fields.fields import (
 from simple_history.models import HistoricalRecords
 from django.utils import timezone
 from pathlib import Path
+import re
 from taggit.managers import TaggableManager
 from taggit.models import GenericTaggedItemBase
 from .middleware import get_current_user
@@ -482,6 +483,7 @@ class Individual(HistoryMixin, models.Model):
     sex = models.CharField(max_length=10, choices=[("male", "Male"), ("female", "Female"), ("other", "Other")], null=True, blank=True)
     is_alive = models.BooleanField(default=True)
     age_of_onset = models.CharField(max_length=255, null=True, blank=True)
+    age_of_onset_in_months = models.IntegerField(null=True, blank=True)
     hpo_terms = models.ManyToManyField(
         "ontologies.Term",
         related_name="individuals",
@@ -629,6 +631,75 @@ class Individual(HistoryMixin, models.Model):
 
     def __str__(self):
         return f"{self.individual_id}"
+
+    @staticmethod
+    def age_of_onset_has_month_or_year_unit(age_of_onset):
+        if not age_of_onset:
+            return False
+
+        tokens = [
+            token.strip().strip(".,;:()[]{}").lower()
+            for token in str(age_of_onset).split()
+        ]
+        year_tokens = {"year", "years", "yıl", "yaş"}
+        month_tokens = {"month", "months", "ay", "aylık"}
+        return any(token in year_tokens or token in month_tokens for token in tokens)
+
+    @staticmethod
+    def parse_age_of_onset_in_months(age_of_onset):
+        if not age_of_onset:
+            return None
+
+        tokens = [
+            token.strip().strip(".,;:()[]{}").lower()
+            for token in str(age_of_onset).split()
+        ]
+        year_tokens = {"year", "years", "yıl", "yaş"}
+        month_tokens = {"month", "months", "ay", "aylık"}
+
+        multiplier = None
+        if any(token in year_tokens for token in tokens):
+            multiplier = 12
+        elif any(token in month_tokens for token in tokens):
+            multiplier = 1
+
+        if multiplier is None:
+            return None
+
+        for token in tokens:
+            normalized = token.replace(",", ".")
+            if re.fullmatch(r"-?\d+(?:\.\d+)?", normalized):
+                return int(float(normalized) * multiplier)
+
+        return None
+
+    def save(self, *args, **kwargs):
+        should_update_onset_months = self.pk is None
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "age_of_onset" in update_fields:
+            should_update_onset_months = True
+        elif self.pk is not None:
+            try:
+                old_age_of_onset = type(self).objects.only("age_of_onset").get(
+                    pk=self.pk
+                ).age_of_onset
+                should_update_onset_months = old_age_of_onset != self.age_of_onset
+            except type(self).DoesNotExist:
+                should_update_onset_months = True
+
+        if should_update_onset_months and self.age_of_onset_has_month_or_year_unit(
+            self.age_of_onset
+        ):
+            self.age_of_onset_in_months = self.parse_age_of_onset_in_months(
+                self.age_of_onset
+            )
+        else:
+            should_update_onset_months = False
+
+        update_fields = kwargs.get("update_fields")
+        if should_update_onset_months and update_fields is not None and "age_of_onset" in update_fields:
+            kwargs["update_fields"] = set(update_fields) | {"age_of_onset_in_months"}
+        super().save(*args, **kwargs)
 
 
 class Sample(HistoryMixin, models.Model):
@@ -909,7 +980,7 @@ class Analysis(HistoryMixin, models.Model):
     @property
     def has_connected_variants(self):
         """Whether this analysis has any variants to show in report-related sections."""
-        return self.unreported_variants.exists() or self.reports.filter(variants__isnull=False).exists()
+        return self.unreported_variants.exists() or self.reports.exists()
 
 
 class IdentifierType(HistoryMixin, models.Model):

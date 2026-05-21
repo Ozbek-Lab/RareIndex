@@ -1,19 +1,20 @@
 {% load lab_tags %}
 <div id="config-section-{{ section.key }}"
-     class="card bg-base-100 shadow-sm border border-base-200"
-     x-data="{ open: true }">
+     class="rounded-lg bg-base-100 shadow-sm border border-base-200 overflow-hidden"
+     x-data="{ open: false }">
 
     <!-- Card Header -->
-    <div class="card-body p-0">
-        <div class="flex items-center justify-between px-5 py-4 border-b border-base-200 cursor-pointer select-none"
+    <div class="p-0">
+        <div class="flex items-center justify-between px-4 py-2.5 cursor-pointer select-none"
+             :class="open ? 'border-b border-base-200' : ''"
              @click="open = !open">
             <div class="flex items-center gap-3">
-                <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">
-                    <i class="{{ section.icon }} text-sm"></i>
+                <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 text-primary">
+                    <i class="{{ section.icon }} text-xs"></i>
                 </span>
                 <div>
-                    <h2 class="text-base font-semibold text-base-content">{{ section.label }}</h2>
-                    <span class="text-xs text-base-content/50">{{ section.objects.count }} entr{{ section.objects.count|pluralize:"y,ies" }}</span>
+                    <h2 class="text-sm font-semibold text-base-content">{{ section.label }}</h2>
+                    <span class="text-[11px] text-base-content/50">{{ section.objects.count }} entr{{ section.objects.count|pluralize:"y,ies" }}</span>
                 </div>
             </div>
             <div class="flex items-center gap-2">
@@ -35,14 +36,18 @@
         </div>
 
         <!-- Table -->
-        <div x-show="open" x-transition:enter="transition-all duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+        <div x-show="open"
+             x-transition:enter="transition-all duration-150"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             class="pb-4">
             {% if section.status_group_scopes %}
             {% include "lab/partials/config_status_group_scopes.html" %}
             {% elif section.status_groups %}
             {% include "lab/partials/config_status_groups.html" %}
             {% elif section.objects %}
             <div class="overflow-x-auto">
-                <table class="table table-sm w-full">
+                <table class="table table-sm w-full {% if section.key == 'contact' %}min-w-[72rem]{% endif %}">
                     <thead>
                         <tr class="text-xs text-base-content/50 uppercase">
                             {% for field in section.fields %}
@@ -53,6 +58,8 @@
                                 {% elif field == "is_consanguineous" %}Consanguineous
                                 {% elif field == "short_name" %}Short Name
                                 {% elif field == "content_type" %}Scope
+                                {% elif field == "full_name" %}Name
+                                {% elif field == "institutions_as_staff" %}Institutions
                                 {% else %}{{ field|title }}
                                 {% endif %}
                             </th>
@@ -93,9 +100,11 @@
                                         {% if obj.is_consanguineous is None %}
                                             <span class="text-base-content/40 text-xs">—</span>
                                         {% elif obj.is_consanguineous %}
-                                            <i class="fa-solid fa-check text-success"></i>
+                                            <span class="badge badge-warning badge-sm">Consanguineous</span>
+                                        {% elif obj.is_consanguineous is False %}
+                                            <span class="badge badge-ghost badge-sm">Non</span>
                                         {% else %}
-                                            <i class="fa-solid fa-xmark text-base-content/40"></i>
+                                            <span class="text-base-content/40 text-xs">—</span>
                                         {% endif %}
                                     {% else %}
                                         {{ obj|class_name }}
@@ -124,9 +133,30 @@
                                     <span class="text-base-content/70 text-sm truncate max-w-xs inline-block">
                                         {{ obj.description|default:"—"|truncatechars:60 }}
                                     </span>
+                                {% elif field == "emails" %}
+                                    {% if obj.emails %}
+                                        <span class="text-sm text-base-content/70">{{ obj.emails|join:", "|truncatechars:80 }}</span>
+                                    {% else %}
+                                        <span class="text-base-content/40 text-xs">—</span>
+                                    {% endif %}
+                                {% elif field == "phones" %}
+                                    {% if obj.phones %}
+                                        <span class="text-sm text-base-content/70">{{ obj.phones|join:", "|truncatechars:80 }}</span>
+                                    {% else %}
+                                        <span class="text-base-content/40 text-xs">—</span>
+                                    {% endif %}
+                                {% elif field == "institutions_as_staff" %}
+                                    <div class="flex flex-wrap gap-1 max-w-md">
+                                        {% for institution in obj.institutions_as_staff.all %}
+                                            <span class="badge badge-ghost badge-sm">{{ institution.name|truncatechars:36 }}</span>
+                                        {% empty %}
+                                            <span class="text-base-content/40 text-xs">—</span>
+                                        {% endfor %}
+                                    </div>
                                 {% else %}
                                     <span class="text-sm">
                                         {% if field == "name" %}{{ obj.name|default:"—" }}
+                                        {% elif field == "full_name" %}{{ obj.full_name|default:"—" }}
                                         {% elif field == "city" %}{{ obj.city|default:"—" }}
                                         {% elif field == "speciality" %}{{ obj.speciality|default:"—" }}
                                         {% elif field == "family_id" %}{{ obj.family_id|default:"—" }}

@@ -11,7 +11,7 @@
                         <span class="badge badge-sm badge-warning gap-1 normal-case font-normal">
                             <i class="fa-solid fa-circle-nodes text-[10px]"></i> Consanguineous
                         </span>
-                    {% elif family.is_consanguineous == False %}
+                    {% elif family.is_consanguineous is False %}
                         <span class="badge badge-sm badge-ghost text-base-content/40 normal-case font-normal">Non-consanguineous</span>
                     {% endif %}
                 </h3>
@@ -38,6 +38,24 @@
             <span class="badge badge-ghost badge-sm text-base-content/50">
                 {{ family.individuals.count }} member{{ family.individuals.count|pluralize }}
             </span>
+        </div>
+        {% family_pedigree_dataset family individual as pedigree_json %}
+        <div class="family-pedigree-panel mb-3 rounded-lg border border-base-200 bg-base-100/70 p-3"
+             data-family-pedigree
+             data-pedigree-target-id="family-pedigree-{{ family.pk }}-{{ individual.pk }}"
+             data-pedigree-data-id="family-pedigree-data-{{ family.pk }}-{{ individual.pk }}">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="text-xs font-semibold uppercase text-base-content/45">
+                    Pedigree
+                </div>
+                <div class="flex items-center gap-3 text-[11px] text-base-content/45">
+                    <span><span class="family-pedigree-legend family-pedigree-legend-square"></span> Male</span>
+                    <span><span class="family-pedigree-legend family-pedigree-legend-circle"></span> Female</span>
+                    <span><span class="family-pedigree-legend family-pedigree-legend-affected"></span> Affected</span>
+                </div>
+            </div>
+            <div id="family-pedigree-{{ family.pk }}-{{ individual.pk }}" class="family-pedigree-canvas"></div>
+            <script type="application/json" id="family-pedigree-data-{{ family.pk }}-{{ individual.pk }}">{{ pedigree_json|safe }}</script>
         </div>
         <div class="overflow-x-auto rounded-lg border border-base-200">
             <table class="table table-sm w-full">

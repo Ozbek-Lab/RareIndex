@@ -5,6 +5,7 @@ from datetime import datetime, date
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.utils.text import slugify
 from django.utils import timezone
 
 User = get_user_model()
@@ -192,19 +193,30 @@ def build_id_map():
 # User / lookup helpers
 # ---------------------------------------------------------------------------
 
+def ascii_email_local_part(value):
+    """Return an ASCII-safe email local-part for generated placeholder emails."""
+    slug = slugify(str(value or ""), allow_unicode=False).replace("-", "_")
+    slug = re.sub(r"[^a-zA-Z0-9._+-]+", "_", slug).strip("._+-")
+    return slug.lower() or "user"
+
+
 def get_or_create_user(name, admin_user):
     """Normalise *name* to a username and get-or-create the User row."""
     if not name:
         return admin_user
     username = str(name).strip().lower().replace(' ', '_')
+    generated_email = f"{ascii_email_local_part(username)}@example.com"
     user = User.objects.filter(username=username).first()
     if user:
+        if user.email and user.email.endswith("@example.com") and not user.email.isascii():
+            user.email = generated_email
+            user.save(update_fields=["email"])
         return user
     parts = str(name).strip().split()
     try:
         user = User.objects.create_user(
             username=username,
-            email=f'{username}@example.com',
+            email=generated_email,
             password='changeme123',
             first_name=parts[0] if parts else name,
             last_name=parts[1] if len(parts) > 1 else '',
