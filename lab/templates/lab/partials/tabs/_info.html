@@ -440,16 +440,34 @@
                 <div class="space-y-2">
                     {% for institution in individual.institution.all %}
                         <div class="rounded border border-base-200 bg-base-100 p-3">
-                            <div class="font-medium text-sm text-base-content">{{ institution.name }}</div>
+                            <div class="flex items-start gap-2">
+                                <div class="font-medium text-sm text-base-content flex-1">{{ institution.name }}</div>
+                                {% if institution.contact %}
+                                    <div class="relative shrink-0"
+                                         x-data="{ open: false }"
+                                         @mouseenter="open = true"
+                                         @mouseleave="open = false"
+                                         @click.outside="open = false">
+                                        <button type="button"
+                                                class="btn btn-ghost btn-xs btn-circle h-5 min-h-0 w-5 text-base-content/45 hover:text-primary"
+                                                aria-label="Institution contact details"
+                                                @click.stop="open = !open"
+                                                @focus="open = true"
+                                                @blur="open = false">
+                                            <i class="fa-solid fa-circle-info text-[10px]"></i>
+                                        </button>
+                                        <div x-show="open"
+                                             style="display: none; position: absolute; right: 0; top: 100%; z-index: 20; margin-top: 0.25rem; max-width: 16rem; min-width: 12rem; white-space: pre-line;"
+                                             class="rounded border border-base-200 bg-base-100 px-2 py-1.5 text-xs text-base-content/75 shadow-lg">{{ institution.contact }}</div>
+                                    </div>
+                                {% endif %}
+                            </div>
                             <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-base-content/65">
                                 {% if institution.official_name %}<div><span class="font-medium">Official:</span> {{ institution.official_name }}</div>{% endif %}
                                 {% if institution.center_name %}<div><span class="font-medium">Center:</span> {{ institution.center_name }}</div>{% endif %}
                                 {% if institution.city %}<div><span class="font-medium">City:</span> {{ institution.city }}</div>{% endif %}
                                 {% if institution.speciality %}<div><span class="font-medium">Speciality:</span> {{ institution.speciality }}</div>{% endif %}
                             </div>
-                            {% if institution.contact %}
-                                <div class="mt-2 text-xs text-base-content/70 whitespace-pre-line">{{ institution.contact }}</div>
-                            {% endif %}
                         </div>
                     {% empty %}
                         <div class="text-sm text-base-content/40 italic">No institutions selected.</div>

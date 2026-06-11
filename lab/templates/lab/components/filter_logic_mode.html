@@ -1,6 +1,6 @@
 <div
   class="shrink-0 rounded-md border border-base-300 bg-base-200/40 text-[10px] font-medium shadow-inner"
-  style="display: flex; align-items: center; gap: 2px; padding: 2px; width: {% if allow_together %}150px{% else %}86px{% endif %};"
+  style="display: grid; grid-template-columns: {% if allow_together %}1fr 1.55fr 1fr{% else %}1fr 1fr{% endif %}; align-items: center; gap: 2px; padding: 2px; width: {% if allow_together %}128px{% else %}76px{% endif %}; max-width: 100%;"
   x-data="{
     fieldName: '{{ name }}',
     allowTogether: {{ allow_together|yesno:'true,false' }},
@@ -36,9 +36,9 @@
   x-init="init()"
 >
   <input type="hidden" :name="`${fieldName}__mode`" :value="mode">
-  <button type="button" class="rounded text-center" style="width: 40px; padding: 2px 4px;" :class="buttonClass('any')" @click="mode = 'any'">Any</button>
+  <button type="button" class="min-w-0 rounded text-center leading-tight" style="padding: 2px 3px;" :class="buttonClass('any')" @click="mode = 'any'">Any</button>
   {% if allow_together %}
-    <button type="button" class="rounded text-center" style="width: 64px; padding: 2px 4px;" :class="buttonClass('together')" @click="mode = 'together'">Together</button>
+    <button type="button" class="min-w-0 rounded text-center leading-tight" style="padding: 2px 3px;" :class="buttonClass('together')" @click="mode = 'together'">Together</button>
   {% endif %}
-  <button type="button" class="rounded text-center" style="width: 40px; padding: 2px 4px;" :class="buttonClass('all')" @click="mode = 'all'">All</button>
+  <button type="button" class="min-w-0 rounded text-center leading-tight" style="padding: 2px 3px;" :class="buttonClass('all')" @click="mode = 'all'">All</button>
 </div>

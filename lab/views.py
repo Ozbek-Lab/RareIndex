@@ -84,6 +84,33 @@ def _plot_ensure_dict_rows(qs):
     return qs.values()
 
 
+def _dashboard_group_status_counts(model, counts):
+    """Return status count rows grouped by StatusGroup for dashboard stat cards."""
+    ct = ContentType.objects.get_for_model(model)
+    statuses = (
+        Status.objects.filter(content_type=ct)
+        .select_related("group")
+        .order_by("group__name", "name")
+    )
+    grouped = []
+    group_index = {}
+
+    for status in statuses:
+        group_name = status.group.name if status.group else "Other"
+        if group_name not in group_index:
+            group_index[group_name] = {
+                "name": group_name,
+                "rows": [],
+            }
+            grouped.append(group_index[group_name])
+        group_index[group_name]["rows"].append({
+            "name": status.name,
+            "count": counts.get(status.name, 0),
+        })
+
+    return grouped
+
+
 def _variant_filter_counts():
     """
     Returns per-option counts for the variant filter sidebar.
@@ -490,6 +517,36 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context['individual_filter_counts'] = _individual_filter_counts()
         context['project_filter_counts'] = _project_filter_counts()
         context['variant_filter_counts'] = _variant_filter_counts()
+        context["dashboard_status_groups"] = {
+            "individual": _dashboard_group_status_counts(
+                Individual,
+                context["individual_filter_counts"].get("status", {}),
+            ),
+            "sample": _dashboard_group_status_counts(
+                Sample,
+                context["individual_filter_counts"].get("sample_status", {}),
+            ),
+            "project": _dashboard_group_status_counts(
+                Project,
+                context["project_filter_counts"].get("status", {}),
+            ),
+            "variant": _dashboard_group_status_counts(
+                Variant,
+                context["variant_filter_counts"].get("status", {}),
+            ),
+            "test": _dashboard_group_status_counts(
+                Test,
+                context["individual_filter_counts"].get("test_status", {}),
+            ),
+            "pipeline": _dashboard_group_status_counts(
+                Pipeline,
+                context["individual_filter_counts"].get("pipeline_status", {}),
+            ),
+            "analysis": _dashboard_group_status_counts(
+                Analysis,
+                context["individual_filter_counts"].get("analysis_status", {}),
+            ),
+        }
 
         # Lightweight institution breakdown (top cities)
         context['institution_city_counts'] = (

@@ -19,7 +19,7 @@
             <div class="overflow-x-auto mb-2 shrink-0">
                 <div class="stats stats-horizontal shadow w-max gap-2 min-w-full pb-2">
                     <!-- Individuals -->
-                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 order-1" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 order-1" style="order: 1;" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="stat-figure text-primary flex items-center gap-1">
@@ -38,26 +38,21 @@
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
-                            {% with status_counts=individual_filter_counts.status sex_counts=individual_filter_counts.sex is_alive_counts=individual_filter_counts.is_alive %}
+                            {% with sex_counts=individual_filter_counts.sex is_alive_counts=individual_filter_counts.is_alive %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="flex flex-col gap-y-1">
-                                    {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between ">
-                                            <span>{{ name|status_display }}</span>
-                                            <span class="font-semibold">{{ count }}</span>
-                                        </div>
-                                    {% endfor %}
-                                </div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.individual %}
                             </div>
                             <div class="mt-2">
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sex</div>
                                 <div class="flex flex-col gap-y-1">
                                     {% for name, count in sex_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
                                             <span>{{ name|title }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                             </div>
@@ -65,12 +60,14 @@
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By vital status</div>
                                 <div class="flex flex-col gap-y-1">
                                     {% for alive, count in is_alive_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
                                             <span>
                                                 {% if alive %}Alive{% else %}Deceased / Unknown{% endif %}
                                             </span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                             </div>
@@ -79,7 +76,7 @@
                     </div>
 
                     <!-- Samples -->
-                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-2" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-2" style="order: 2;" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="stat-figure text-secondary flex items-center gap-1">
@@ -98,33 +95,28 @@
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
-                            {% with type_counts=individual_filter_counts.sample_type status_counts=individual_filter_counts.sample_status %}
+                            {% with type_counts=individual_filter_counts.sample_type %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sample type</div>
                                 <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
                                             <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sample status</div>
-                                <div class="flex flex-col gap-y-1">
-                                    {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between ">
-                                            <span>{{ name|status_display }}</span>
-                                            <span class="font-semibold">{{ count }}</span>
-                                        </div>
-                                    {% endfor %}
-                                </div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.sample %}
                             </div>
                             {% endwith %}
                         </div>
                     </div>
 
                     <!-- Projects -->
-                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-7" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-7" style="order: 7;" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="stat-figure text-info flex items-center gap-1">
@@ -143,24 +135,21 @@
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
-                            {% with status_counts=project_filter_counts.status priority_counts=project_filter_counts.priority %}
+                            {% with priority_counts=project_filter_counts.priority %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="flex flex-col gap-y-1 mb-2">
-                                    {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between ">
-                                            <span>{{ name|status_display }}</span>
-                                            <span class="font-semibold">{{ count }}</span>
-                                        </div>
-                                    {% endfor %}
+                                <div class="mb-2">
+                                    {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.project %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By priority</div>
                                 <div class="flex flex-col gap-y-1">
                                     {% for name, count in priority_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
                                             <span>{{ name|title }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                             </div>
@@ -169,7 +158,7 @@
                     </div>
 
                     <!-- Variants -->
-                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-6" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-6" style="order: 6;" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="stat-figure text-accent flex items-center gap-1">
@@ -188,42 +177,39 @@
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
-                            {% with type_counts=variant_filter_counts.variant_type class_counts=variant_filter_counts.classification status_counts=variant_filter_counts.status %}
+                            {% with type_counts=variant_filter_counts.variant_type class_counts=variant_filter_counts.classification %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By type</div>
                                 <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
                                             <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By classification</div>
                                 <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in class_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
-                                            <span>{{ name }}</span>
+                                            <span>{{ name|classification_display }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="flex flex-col gap-y-1">
-                                    {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between ">
-                                            <span>{{ name|status_display }}</span>
-                                            <span class="font-semibold">{{ count }}</span>
-                                        </div>
-                                    {% endfor %}
-                                </div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.variant %}
                             </div>
                             {% endwith %}
                         </div>
                     </div>
 
                     <!-- Tests -->
-                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-3" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-3" style="order: 3;" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="stat-figure text-secondary flex items-center gap-1">
@@ -242,33 +228,28 @@
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
-                            {% with type_counts=individual_filter_counts.test_type status_counts=individual_filter_counts.test_status %}
+                            {% with type_counts=individual_filter_counts.test_type %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By test type</div>
                                 <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
                                             <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="flex flex-col gap-y-1">
-                                    {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between ">
-                                            <span>{{ name|status_display }}</span>
-                                            <span class="font-semibold">{{ count }}</span>
-                                        </div>
-                                    {% endfor %}
-                                </div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.test %}
                             </div>
                             {% endwith %}
                         </div>
                     </div>
 
                     <!-- Pipelines -->
-                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-4" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-4" style="order: 4;" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="stat-figure text-info flex items-center gap-1">
@@ -287,33 +268,28 @@
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
-                            {% with type_counts=individual_filter_counts.pipeline_type status_counts=individual_filter_counts.pipeline_status %}
+                            {% with type_counts=individual_filter_counts.pipeline_type %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By pipeline type</div>
                                 <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
                                             <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="flex flex-col gap-y-1">
-                                    {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between ">
-                                            <span>{{ name|status_display }}</span>
-                                            <span class="font-semibold">{{ count }}</span>
-                                        </div>
-                                    {% endfor %}
-                                </div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.pipeline %}
                             </div>
                             {% endwith %}
                         </div>
                     </div>
 
                     <!-- Analyses -->
-                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-5" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-5" style="order: 5;" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="stat-figure text-warning flex items-center gap-1">
@@ -332,33 +308,28 @@
                             </div>
                         </div>
                         <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
-                            {% with type_counts=individual_filter_counts.analysis_type status_counts=individual_filter_counts.analysis_status %}
+                            {% with type_counts=individual_filter_counts.analysis_type %}
                             <div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By analysis type</div>
                                 <div class="flex flex-col gap-y-1 mb-2">
                                     {% for name, count in type_counts.items %}
+                                        {% if count %}
                                         <div class="flex justify-between ">
                                             <span>{{ name }}</span>
                                             <span class="font-semibold">{{ count }}</span>
                                         </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                                 <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
-                                <div class="flex flex-col gap-y-1">
-                                    {% for name, count in status_counts.items %}
-                                        <div class="flex justify-between ">
-                                            <span>{{ name|status_display }}</span>
-                                            <span class="font-semibold">{{ count }}</span>
-                                        </div>
-                                    {% endfor %}
-                                </div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.analysis %}
                             </div>
                             {% endwith %}
                         </div>
                     </div>
 
                     <!-- Institutions -->
-                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-8" x-data="{ open: false }">
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-8" style="order: 8;" x-data="{ open: false }">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="stat-figure text-primary flex items-center gap-1">

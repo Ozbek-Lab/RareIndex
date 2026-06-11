@@ -164,6 +164,20 @@ def status_display(name):
 
 
 @register.filter
+def classification_display(value):
+    """Return the human-readable label for a variant classification key."""
+    if not value:
+        return ""
+    try:
+        from variant.models import Classification
+
+        choices = dict(Classification.CLASSIFICATION_CHOICES)
+        return choices.get(value, str(value).replace("_", " ").title())
+    except Exception:
+        return str(value).replace("_", " ").title()
+
+
+@register.filter
 def grch_to_hg(value):
     """Convert GRCh38/GRCh37 assembly names to UCSC hg38/hg19 style."""
     return {'GRCh38': 'hg38', 'GRCh37': 'hg19'}.get(str(value), str(value))
