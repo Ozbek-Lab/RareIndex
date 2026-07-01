@@ -68,9 +68,3 @@ reports/
 tests/
 *.igv_session.xml
 
-# Downloadable frontend vendor assets.
-# Keep project-owned files under lab/static/lab tracked, but fetch third-party
-# browser bundles with scripts/download_static_vendor.py instead of committing
-# full vendor packages and generated icon trees.
-lab/static/vendor/
-!lab/static/vendor/.gitkeep
