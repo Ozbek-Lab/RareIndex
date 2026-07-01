@@ -1,0 +1,763 @@
+{% extends "base.html" %}
+{% load lab_tags %}
+
+{% block content %}
+<div class="p-4 lg:p-6 flex-1 flex flex-col overflow-hidden w-full relative" 
+     x-data="{
+        sidebarOpen: window.innerWidth < 1024 ? false : (JSON.parse(localStorage.getItem('dashboardSidebarOpen') ?? 'true')),
+        plotsOpen: JSON.parse(localStorage.getItem('dashboardPlotsOpen') ?? 'true'),
+        tasksOpen: JSON.parse(localStorage.getItem('dashboardTasksOpen') ?? 'true')
+     }" 
+     x-init="$watch('sidebarOpen', val => localStorage.setItem('dashboardSidebarOpen', JSON.stringify(val))); $watch('plotsOpen', val => localStorage.setItem('dashboardPlotsOpen', JSON.stringify(val))); $watch('tasksOpen', val => localStorage.setItem('dashboardTasksOpen', JSON.stringify(val)))"
+     @resize.window="if (window.innerWidth < 1024) sidebarOpen = false">
+    
+    <div class="flex flex-row gap-0 md:gap-6 flex-1 overflow-hidden relative" hx-trigger="taskChanged from:body" hx-get="{% url 'lab:dashboard' %}" hx-select=".dashboard-content-refresh" hx-target=".dashboard-content-refresh" hx-swap="outerHTML">
+        
+        <!-- Main Content Area: Stats + Tasks -->
+        <div class="flex-1 dashboard-content-refresh flex flex-col overflow-y-auto overflow-x-hidden pr-2">
+            <!-- Top Stats Strip -->
+            <div class="overflow-x-auto mb-2 shrink-0">
+                <div class="stats stats-horizontal shadow w-max gap-2 min-w-full pb-2">
+                    <!-- Individuals -->
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 order-1" style="order: 1;" x-data="{ open: false }">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="stat-figure text-primary flex items-center gap-1">
+                                    <i class="fa-solid fa-users text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
+                                </div>
+                                <div class="stat-title text-xs lg:text-sm">Individuals</div>
+                                <div class="stat-value text-xl lg:text-2xl text-primary">{{ individual_count|default:"..." }}</div>
+                                <div class="stat-desc text-[10px]">Registered patients</div>
+                                
+                            </div>
+                        </div>
+                        <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
+                            {% with sex_counts=individual_filter_counts.sex is_alive_counts=individual_filter_counts.is_alive %}
+                            <div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.individual %}
+                            </div>
+                            <div class="mt-2">
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sex</div>
+                                <div class="flex flex-col gap-y-1">
+                                    {% for name, count in sex_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|title }}</span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By vital status</div>
+                                <div class="flex flex-col gap-y-1">
+                                    {% for alive, count in is_alive_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>
+                                                {% if alive %}Alive{% else %}Deceased / Unknown{% endif %}
+                                            </span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <!-- Samples -->
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-2" style="order: 2;" x-data="{ open: false }">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="stat-figure text-secondary flex items-center gap-1">
+                                    <i class="fa-solid fa-vial text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
+                                </div>
+                                <div class="stat-title text-xs lg:text-sm">Samples</div>
+                                <div class="stat-value text-xl lg:text-2xl text-secondary">{{ sample_count|default:"..." }}</div>
+                                <div class="stat-desc text-[10px]">Processed samples</div>
+                                
+                            </div>
+                        </div>
+                        <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
+                            {% with type_counts=individual_filter_counts.sample_type %}
+                            <div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sample type</div>
+                                <div class="flex flex-col gap-y-1 mb-2">
+                                    {% for name, count in type_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By sample status</div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.sample %}
+                            </div>
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <!-- Projects -->
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-7" style="order: 7;" x-data="{ open: false }">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="stat-figure text-info flex items-center gap-1">
+                                    <i class="fa-solid fa-briefcase text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
+                                </div>
+                                <div class="stat-title text-xs lg:text-sm">Projects</div>
+                                <div class="stat-value text-xl lg:text-2xl text-info">{{ project_count|default:"..." }}</div>
+                                <div class="stat-desc text-[10px]">Active & archived</div>
+                                
+                            </div>
+                        </div>
+                        <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
+                            {% with priority_counts=project_filter_counts.priority %}
+                            <div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
+                                <div class="mb-2">
+                                    {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.project %}
+                                </div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By priority</div>
+                                <div class="flex flex-col gap-y-1">
+                                    {% for name, count in priority_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|title }}</span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <!-- Variants -->
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-6" style="order: 6;" x-data="{ open: false }">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="stat-figure text-accent flex items-center gap-1">
+                                    <i class="fa-solid fa-dna text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
+                                </div>
+                                <div class="stat-title text-xs lg:text-sm">Variants</div>
+                                <div class="stat-value text-xl lg:text-2xl text-accent">{{ variant_count|default:"..." }}</div>
+                                <div class="stat-desc text-[10px]">Total curated variants</div>
+                                
+                            </div>
+                        </div>
+                        <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
+                            {% with type_counts=variant_filter_counts.variant_type class_counts=variant_filter_counts.classification %}
+                            <div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By type</div>
+                                <div class="flex flex-col gap-y-1 mb-2">
+                                    {% for name, count in type_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By classification</div>
+                                <div class="flex flex-col gap-y-1 mb-2">
+                                    {% for name, count in class_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ name|classification_display }}</span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.variant %}
+                            </div>
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <!-- Tests -->
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-3" style="order: 3;" x-data="{ open: false }">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="stat-figure text-secondary flex items-center gap-1">
+                                    <i class="fa-solid fa-flask-vial text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
+                                </div>
+                                <div class="stat-title text-xs lg:text-sm">Tests</div>
+                                <div class="stat-value text-xl lg:text-2xl text-secondary">{{ test_count|default:"..." }}</div>
+                                <div class="stat-desc text-[10px]">Total tests</div>
+                                
+                            </div>
+                        </div>
+                        <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
+                            {% with type_counts=individual_filter_counts.test_type %}
+                            <div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By test type</div>
+                                <div class="flex flex-col gap-y-1 mb-2">
+                                    {% for name, count in type_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.test %}
+                            </div>
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <!-- Pipelines -->
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-4" style="order: 4;" x-data="{ open: false }">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="stat-figure text-info flex items-center gap-1">
+                                    <i class="fa-solid fa-diagram-project text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
+                                </div>
+                                <div class="stat-title text-xs lg:text-sm">Pipelines</div>
+                                <div class="stat-value text-xl lg:text-2xl text-info">{{ pipeline_count|default:"..." }}</div>
+                                <div class="stat-desc text-[10px]">Total pipelines</div>
+                                
+                            </div>
+                        </div>
+                        <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
+                            {% with type_counts=individual_filter_counts.pipeline_type %}
+                            <div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By pipeline type</div>
+                                <div class="flex flex-col gap-y-1 mb-2">
+                                    {% for name, count in type_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.pipeline %}
+                            </div>
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <!-- Analyses -->
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-5" style="order: 5;" x-data="{ open: false }">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="stat-figure text-warning flex items-center gap-1">
+                                    <i class="fa-solid fa-microscope text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
+                                </div>
+                                <div class="stat-title text-xs lg:text-sm">Analyses</div>
+                                <div class="stat-value text-xl lg:text-2xl text-warning">{{ analysis_count|default:"..." }}</div>
+                                <div class="stat-desc text-[10px]">Total analyses</div>
+                                
+                            </div>
+                        </div>
+                        <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
+                            {% with type_counts=individual_filter_counts.analysis_type %}
+                            <div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By analysis type</div>
+                                <div class="flex flex-col gap-y-1 mb-2">
+                                    {% for name, count in type_counts.items %}
+                                        {% if count %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ name }}</span>
+                                            <span class="font-semibold">{{ count }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">By status</div>
+                                {% include "lab/partials/dashboard/status_groups.html" with groups=dashboard_status_groups.analysis %}
+                            </div>
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <!-- Institutions -->
+                    <div class="stat p-4 content-start flex-1 shrink-0 min-w-[240px] border-b-0 border-l border-base-200 order-8" style="order: 8;" x-data="{ open: false }">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="stat-figure text-primary flex items-center gap-1">
+                                    <i class="fa-solid fa-hospital text-2xl"></i>
+                                    <button type="button"
+                                        @click.stop="open = !open"
+                                        class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100">
+                                    <i class="fa-solid fa-chevron-down text-[11px]"
+                                       :class="{ 'rotate-180': open }"></i>
+                                </button>
+                                </div>
+                                <div class="stat-title text-xs lg:text-sm">Institutions</div>
+                                <div class="stat-value text-xl lg:text-2xl text-primary">{{ institution_count|default:"..." }}</div>
+                                <div class="stat-desc text-[10px]">Registered centers</div>
+                                
+                            </div>
+                        </div>
+                        <div x-show="open" x-collapse x-cloak class="mt-3 text-[11px] space-y-2">
+                            <div>
+                                <div class="font-semibold uppercase tracking-wide text-[10px] mb-1">Top cities</div>
+                                <div class="flex flex-col gap-y-1">
+                                    {% for row in institution_city_counts %}
+                                        <div class="flex justify-between ">
+                                            <span>{{ row.city|default:"(Unknown)" }}</span>
+                                            <span class="font-semibold">{{ row.c }}</span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Dashboard Body Area -->
+            <div id="dashboard-body-container" class="flex-1 pb-8 flex flex-col gap-6">
+                <!-- Widgets Section -->
+                <section class="rounded-2xl border border-base-200 bg-base-100 shadow-sm overflow-hidden">
+                    <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-200">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-chart-column text-secondary"></i>
+                            <div>
+                                <h2 class="font-bold text-lg leading-none">Plots</h2>
+                                <p class="text-xs text-base-content/60 mt-1">Dashboard plots and visualizations</p>
+                            </div>
+                        </div>
+                        <button type="button"
+                                class="btn btn-ghost btn-sm gap-2"
+                                @click="plotsOpen = !plotsOpen"
+                                :aria-expanded="plotsOpen.toString()"
+                                title="Collapse or expand plots">
+                            <i class="fa-solid fa-chevron-down text-xs transition-transform duration-200"
+                               :class="{ 'rotate-180': plotsOpen }"></i>
+                            <span x-text="plotsOpen ? 'Collapse' : 'Expand'"></span>
+                        </button>
+                    </div>
+                    <div x-show="plotsOpen" x-collapse x-cloak class="p-4">
+                        {% if widgets %}
+                        <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
+                             id="widget-grid"
+                             x-init="
+                                Sortable.create($el, {
+                                    animation: 150,
+                                    handle: '.drag-handle',
+                                    ghostClass: 'opacity-50',
+                                    onEnd: function (evt) {
+                                        const newOrder = Array.from($el.children).map(child => child.dataset.widgetId);
+                                        const match = document.cookie.match(/csrftoken=([^;]+)/);
+                                        const csrfToken = match ? match[1] : '';
+                                        fetch('{% url 'lab:reorder_widgets' %}', {
+                                            method: 'PATCH',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'X-CSRFToken': csrfToken
+                                            },
+                                            body: JSON.stringify({order: newOrder})
+                                        });
+                                    }
+                                });
+                             ">
+                            {% for widget in widgets %}
+                            <div class="card bg-base-100 shadow-sm border border-base-200" data-widget-id="{{ widget.id }}" style="grid-column: span {{ widget.template.default_col_span|default:widget.col_span }}; grid-row: span {{ widget.row_span }};">
+                                <div class="card-body p-2 sm:p-3 flex flex-col min-h-0 relative">
+                            
+                            {% if widget.template.slug == "hpo-term-network" %}
+                            <div class="relative z-30 mb-1 flex flex-col gap-2">
+                                <div data-hpo-title>
+                                    <h2 class="card-title text-base drag-handle cursor-move flex items-center gap-2">
+                                        <i class="fa-solid fa-grip-vertical text-base-content/30 hover:text-base-content/70"></i>
+                                        {{ widget.template.name }}
+                                    </h2>
+                                    <p class="text-xs text-base-content/70">{{ widget.template.description }}</p>
+                                </div>
+                                <div class="flex flex-wrap items-center justify-between gap-2"
+                                     data-hpo-toolbar
+                                     data-hpo-controls
+                                     data-widget-id="{{ widget.id }}"
+                                     data-base-src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}">
+                                    <div class="flex flex-wrap items-center gap-2 rounded-lg border border-base-200 bg-base-100/90 p-2 text-xs shadow-sm backdrop-blur">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium text-base-content/70">Layout</span>
+                                            <div class="join join-horizontal">
+                                                <button type="button"
+                                                        class="btn btn-xs join-item btn-outline"
+                                                        data-hpo-layout="Circular">Circular</button>
+                                                <button type="button"
+                                                        class="btn btn-xs join-item btn-outline"
+                                                        data-hpo-layout="Layered">Layered</button>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium text-base-content/70">Theme</span>
+                                            <div class="join join-horizontal">
+                                                <button type="button"
+                                                        class="btn btn-xs join-item btn-outline"
+                                                        data-hpo-theme="Icefire">Icefire</button>
+                                                <button type="button"
+                                                        class="btn btn-xs join-item btn-outline"
+                                                        data-hpo-theme="Rainbow">Rainbow</button>
+                                            </div>
+                                        </div>
+                                        <label class="flex items-center gap-2 font-medium text-base-content/70">
+                                            <span>Consolidation threshold</span>
+                                            <input type="number"
+                                                   min="1"
+                                                   max="24"
+                                                   step="1"
+                                                   value="12"
+                                                   class="input input-bordered input-xs w-20"
+                                                   data-hpo-threshold>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <button class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+                                                type="button"
+                                                data-fullscreen-toggle
+                                                title="Fullscreen">
+                                            <i class="fa-solid fa-expand text-[11px]" data-fullscreen-icon></i>
+                                        </button>
+                                        {% if user.is_staff %}
+                                        <a class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+                                           href="{% url 'lab:marimo_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                           target="_blank" rel="noopener noreferrer"
+                                           title="Edit notebook in Marimo">
+                                            <i class="fa-solid fa-pen-to-square text-[11px]"></i>
+                                        </a>
+                                        {% endif %}
+                                        <button class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-error hover:bg-error/10"
+                                                hx-post="{% url 'lab:remove_widget' widget.id %}"
+                                                hx-target="closest .card"
+                                                hx-swap="outerHTML"
+                                                title="Remove from Dashboard">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="relative z-30 flex justify-between items-start mb-1 shrink-0 gap-2">
+                                <div>
+                                    <h2 class="card-title text-base drag-handle cursor-move flex items-center gap-2">
+                                        <i class="fa-solid fa-grip-vertical text-base-content/30 hover:text-base-content/70"></i>
+                                        {{ widget.template.name }}
+                                    </h2>
+                                    <p class="text-xs text-base-content/70">{{ widget.template.description }}</p>
+                                </div>
+                                <div class="relative z-30 flex items-center gap-1 shrink-0">
+                                    <button class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+                                            type="button"
+                                            data-fullscreen-toggle
+                                            title="Fullscreen">
+                                        <i class="fa-solid fa-expand text-[11px]" data-fullscreen-icon></i>
+                                    </button>
+                                    {% if user.is_staff %}
+                                    <a class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+                                       href="{% url 'lab:marimo_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                       target="_blank" rel="noopener noreferrer"
+                                       title="Edit notebook in Marimo">
+                                        <i class="fa-solid fa-pen-to-square text-[11px]"></i>
+                                    </a>
+                                    {% endif %}
+                                    <button class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-error hover:bg-error/10"
+                                            hx-post="{% url 'lab:remove_widget' widget.id %}"
+                                            hx-target="closest .card"
+                                            hx-swap="outerHTML"
+                                            title="Remove from Dashboard">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <div class="w-full min-w-0 min-h-0 self-stretch flex-1">
+                                <iframe
+                                    :key="'plot-widget-{{ widget.id }}'"
+                                    {% if widget.template.slug == "hpo-term-network" %}
+                                    src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&layout=Circular&theme=Icefire&threshold=12&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                    data-base-src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                    {% else %}
+                                    src="{% url 'lab:marimo_run_proxy' %}?file={{ widget.template.notebook_filename|urlencode }}&show_download_menu={{ widget.template.show_download_menu|yesno:'1,0' }}"
+                                    {% endif %}
+                                    allow="fullscreen"
+                                    allowfullscreen
+                                    class="block w-full border-0 bg-transparent"
+                                    style="height: 1px; min-height: 28rem; overflow: hidden;"
+                                    data-widget-id="{{ widget.id }}"
+                                    title="{{ widget.template.name }}"
+                                    loading="eager"
+                                ></iframe>
+                            </div>
+                        </div>
+                    </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-sm text-base-content/60 px-1 py-2">No plots are available yet.</div>
+                        {% endif %}
+                    </div>
+                </section>
+
+                <!-- My Tasks Section -->
+                <section class="rounded-2xl border border-base-200 bg-base-100 shadow-sm overflow-hidden">
+                    <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-200">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-primary"></i>
+                            <div>
+                                <h2 class="font-bold text-lg leading-none">My Tasks</h2>
+                                <p class="text-xs text-base-content/60 mt-1">Pending and recently completed work</p>
+                            </div>
+                        </div>
+                        <button type="button"
+                                class="btn btn-ghost btn-sm gap-2"
+                                @click="tasksOpen = !tasksOpen"
+                                :aria-expanded="tasksOpen.toString()"
+                                title="Collapse or expand tasks">
+                            <i class="fa-solid fa-chevron-down text-xs transition-transform duration-200"
+                               :class="{ 'rotate-180': tasksOpen }"></i>
+                            <span x-text="tasksOpen ? 'Collapse' : 'Expand'"></span>
+                        </button>
+                    </div>
+                    <div x-show="tasksOpen" x-collapse x-cloak class="p-4">
+                        {% include "lab/partials/dashboard/my_tasks.html" %}
+                    </div>
+                </section>
+                
+                <!-- Recent Activity Section -->
+                <div>
+                    <h2 class="font-bold text-lg mb-4 flex items-center gap-2">
+                        <i class="fas fa-rss text-secondary pl-2"></i>
+                        Recent Activity
+                    </h2>
+                    <div class="bg-base-100 rounded-xl shadow-sm border border-base-200 overflow-y-auto text-sm h-96">
+                        {% include "lab/partials/dashboard/news_feed.html" %}
+                    </div>
+                </div>
+            </div>
+</div>
+</div>
+</div>
+<script>
+(function () {
+  function findFrame(sourceWindow) {
+    return Array.from(document.querySelectorAll('iframe[data-widget-id]')).find(function (frame) {
+      return frame.contentWindow === sourceWindow;
+    });
+  }
+
+  window.addEventListener('message', function (event) {
+    var data = event.data;
+    if (!data || data.type !== 'marimo-embed-height') return;
+    if (typeof data.height !== 'number' || data.height <= 0) return;
+    var frame = findFrame(event.source);
+    if (!frame) return;
+    var card = frame.closest('.card');
+    if (card && card.getAttribute('data-dashboard-fullscreen') === '1') {
+      frame.style.height = '100%';
+      frame.style.minHeight = '0';
+      return;
+    }
+    frame.style.height = Math.ceil(data.height) + 'px';
+    frame.style.minHeight = Math.ceil(Math.max(data.height, 288)) + 'px';
+  });
+
+  function initHpoControls() {
+    document.querySelectorAll('[data-hpo-controls]').forEach(function (controls) {
+      var widgetId = controls.getAttribute('data-widget-id');
+      var card = controls.closest('.card');
+      if (!card) return;
+      var frame = card.querySelector('iframe[data-widget-id="' + widgetId + '"]');
+      if (!frame) return;
+
+      var baseSrc = controls.getAttribute('data-base-src');
+      if (!baseSrc) return;
+
+      var layoutButtons = Array.from(controls.querySelectorAll('[data-hpo-layout]'));
+      var themeButtons = Array.from(controls.querySelectorAll('[data-hpo-theme]'));
+      var thresholdInput = controls.querySelector('[data-hpo-threshold]');
+
+      var state = {
+        layout: 'Circular',
+        theme: 'Icefire',
+        threshold: thresholdInput && thresholdInput.value ? thresholdInput.value : '12'
+      };
+      var thresholdTimer = null;
+
+      function setButtonState(buttons, attrName, value) {
+        buttons.forEach(function (btn) {
+          var active = btn.getAttribute(attrName) === value;
+          btn.classList.toggle('btn-primary', active);
+          btn.classList.toggle('btn-outline', !active);
+        });
+      }
+
+      function refreshFrame() {
+        var url = new URL(baseSrc, window.location.origin);
+        url.searchParams.set('layout', state.layout);
+        url.searchParams.set('theme', state.theme);
+        url.searchParams.set('threshold', state.threshold);
+        if (card.getAttribute('data-dashboard-fullscreen') === '1') {
+          url.searchParams.set('fullscreen', '1');
+        } else {
+          url.searchParams.delete('fullscreen');
+        }
+        frame.src = url.toString();
+        setButtonState(layoutButtons, 'data-hpo-layout', state.layout);
+        setButtonState(themeButtons, 'data-hpo-theme', state.theme);
+      }
+
+      layoutButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          state.layout = btn.getAttribute('data-hpo-layout') || 'Circular';
+          refreshFrame();
+        });
+      });
+
+      themeButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          state.theme = btn.getAttribute('data-hpo-theme') || 'Icefire';
+          refreshFrame();
+        });
+      });
+
+      if (thresholdInput) {
+        thresholdInput.addEventListener('input', function () {
+          var value = thresholdInput.value;
+          window.clearTimeout(thresholdTimer);
+          thresholdTimer = window.setTimeout(function () {
+            state.threshold = value || '12';
+            refreshFrame();
+          }, 250);
+        });
+      }
+
+      refreshFrame();
+    });
+  }
+
+  function initFullscreenControls() {
+    document.querySelectorAll('[data-fullscreen-toggle]').forEach(function (button) {
+      var card = button.closest('.card');
+      if (!card) return;
+      var dashboard = document.querySelector('.dashboard-content-refresh');
+      var body = card.querySelector('.card-body');
+      var frame = card.querySelector('iframe[data-widget-id]');
+      var icon = button.querySelector('[data-fullscreen-icon]');
+      function applyFullscreenState(isFullscreen) {
+        card.setAttribute('data-dashboard-fullscreen', isFullscreen ? '1' : '0');
+        if (dashboard) {
+          dashboard.style.overflow = isFullscreen ? 'hidden' : '';
+        }
+        if (card) {
+          card.style.position = isFullscreen ? 'fixed' : '';
+          card.style.inset = isFullscreen ? '0' : '';
+          card.style.zIndex = isFullscreen ? '9999' : '';
+          card.style.width = isFullscreen ? '100vw' : '';
+          card.style.height = isFullscreen ? '100vh' : '';
+          card.style.margin = isFullscreen ? '0' : '';
+          card.style.borderRadius = isFullscreen ? '0' : '';
+        }
+        if (body) {
+          body.style.height = isFullscreen ? '100%' : '';
+          body.style.flex = isFullscreen ? '1 1 auto' : '';
+        }
+        if (frame) {
+          frame.style.height = isFullscreen ? '100%' : '';
+          frame.style.minHeight = isFullscreen ? '0' : '';
+        }
+      }
+
+      function syncButton() {
+        var isFullscreen = card.getAttribute('data-dashboard-fullscreen') === '1';
+        if (icon) {
+          icon.className = 'fa-solid ' + (isFullscreen ? 'fa-compress' : 'fa-expand') + ' text-[11px]';
+        }
+        button.setAttribute('title', isFullscreen ? 'Exit fullscreen' : 'Fullscreen');
+      }
+
+      button.addEventListener('click', function () {
+        var isFullscreen = card.getAttribute('data-dashboard-fullscreen') === '1';
+        applyFullscreenState(!isFullscreen);
+        syncButton();
+
+        if (frame) {
+          var url = new URL(frame.src, window.location.origin);
+          if (!isFullscreen) {
+            url.searchParams.set('fullscreen', '1');
+          } else {
+            url.searchParams.delete('fullscreen');
+          }
+          frame.src = url.toString();
+        }
+      });
+
+      applyFullscreenState(false);
+      syncButton();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      initHpoControls();
+      initFullscreenControls();
+    });
+  } else {
+    initHpoControls();
+    initFullscreenControls();
+  }
+})();
+</script>
+{% endblock %}

@@ -30,7 +30,21 @@ langchain-community
 langchain-core
 sqlalchemy
 requests
+PyJWT
 django-environ
 gunicorn
 psycopg2-binary
 
+
+django-tables2
+django-filter
+pypandoc
+weasyprint
+django-widget-tweaks
+django-taggit
+marimo
+python-docx
+
+# Frontend vendor assets are intentionally not installed by pip.
+# After installing requirements, run:
+#   python scripts/download_static_vendor.py

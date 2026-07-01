@@ -2,28 +2,28 @@ import requests
 import json
 from django.utils import timezone
 from django.db.models import Count, Q
-from .models import Annotation
-from lab.models import Analysis, Status
+from .models import Annotation, ACMGEvidenceOverride
+from lab.models import Pipeline, Status, Individual
 
 class DiagnosticService:
     """Service to calculate diagnostic yield and analysis statistics"""
 
-    def get_diagnostic_yield(self, analysis_type=None):
+    def get_diagnostic_yield(self, pipeline_type=None):
         """
-        Calculate diagnostic yield: Solved Analyses / Total Analyses
+        Calculate diagnostic yield: Solved Pipelines / Total Pipelines
         Returns a dict with counts and percentage.
         """
-        queryset = Analysis.objects.all()
-        if analysis_type:
-            queryset = queryset.filter(type=analysis_type)
+        queryset = Pipeline.objects.all()
+        if pipeline_type:
+            queryset = queryset.filter(type=pipeline_type)
             
         total = queryset.count()
         if total == 0:
             return {"total": 0, "solved": 0, "yield_percentage": 0.0}
             
-        # Define solved statuses
-        solved_statuses = ["Solved - P/LP", "Solved - VUS"]
-        solved_count = queryset.filter(status__name__in=solved_statuses).count()
+        solved_count = queryset.filter(
+            test__sample__individual__statuses__name__iexact="Solved"
+        ).distinct().count()
         
         return {
             "total": total,
@@ -32,9 +32,10 @@ class DiagnosticService:
         }
 
     def get_variants_leading_to_diagnosis(self):
-        """Return variants linked to solved analyses"""
-        solved_statuses = ["Solved - P/LP", "Solved - VUS"]
-        return Analysis.objects.filter(status__name__in=solved_statuses).values_list('found_variants', flat=True)
+        """Return variants linked to solved individuals."""
+        from variant.models import Variant
+        solved_individuals = Individual.objects.filter(statuses__name__iexact="Solved").distinct()
+        return Variant.objects.filter(individual__in=solved_individuals).values_list("id", flat=True).distinct()
 
 
 class AnnotationService:
@@ -122,25 +123,47 @@ class AnnotationService:
         return None
 
     def fetch_genebe(self, variant):
-        """Fetch annotation from Genebe"""
-        # https://api.genebe.net/cloud/api-public/v1/variant/{variant}
-        # Variant format: chr-pos-ref-alt
-        
-        if hasattr(variant, 'snv'):
-            snv = variant.snv
-            variant_str = f"{snv.chromosome}-{snv.start}-{snv.reference}-{snv.alternate}"
-            
-            url = f"https://api.genebe.net/cloud/api-public/v1/variants/{variant_str}"
-            params = {'genome': 'hg38'}
-            
-            try:
-                response = requests.get(url, params=params)
-                if response.status_code == 200:
-                    data = response.json()
-                    self._save_annotation(variant, "genebe", data)
-                    return data
-            except Exception as e:
-                print(f"Error fetching Genebe: {e}")
+        """Fetch annotation from GeneBe."""
+        snv = getattr(variant, "snv", None)
+        if snv is None and hasattr(variant, "reference") and hasattr(variant, "alternate"):
+            snv = variant
+
+        if snv is None:
+            return None
+
+        ref = getattr(snv, "reference", None)
+        alt = getattr(snv, "alternate", None)
+        pos = getattr(snv, "start", None)
+        chrom = getattr(snv, "chromosome", None)
+
+        if not all([chrom, pos, ref, alt]):
+            return None
+
+        chrom = str(chrom).removeprefix("chr")
+        url = "https://api.genebe.net/cloud/api-public/v1/variant"
+        params = {
+            "chr": chrom,
+            "pos": pos,
+            "ref": ref,
+            "alt": alt,
+            "genome": "hg38",
+        }
+
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers={"Accept": "application/json"},
+                timeout=20,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                self._save_annotation(variant, "genebe", data)
+                self._sync_genebe_evidence(variant, data)
+                return data
+            print(f"GeneBe Error: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"Error fetching GeneBe: {e}")
         return None
 
     def _save_annotation(self, variant, source, data):
@@ -154,6 +177,66 @@ class AnnotationService:
                 'updated_at': timezone.now()
             }
         )
+
+    def _sync_genebe_evidence(self, variant, data):
+        """Store normalized GeneBe criteria rows for later manual overrides."""
+        from .templatetags.variant_filters import parse_acmg_criteria
+
+        if not isinstance(data, dict):
+            return
+
+        variant_items = data.get("variants") if isinstance(data.get("variants"), list) else []
+        if not variant_items and data:
+            variant_items = [data]
+
+        evidence_rows = []
+        seen = set()
+
+        def add_criteria(raw_value, gene_symbol="", transcript=""):
+            gene_symbol = (gene_symbol or "").strip()
+            transcript = (transcript or "").strip()
+            for item in parse_acmg_criteria(raw_value):
+                code = item.get("code")
+                key = (gene_symbol, transcript, code)
+                if code and key not in seen:
+                    seen.add(key)
+                    evidence_rows.append((gene_symbol, transcript, code, item.get("strength", "")))
+
+        for item in variant_items:
+            if not isinstance(item, dict):
+                continue
+            add_criteria(item.get("acmg_criteria"))
+            for gene_record in item.get("acmg_by_gene", []) or []:
+                if isinstance(gene_record, dict):
+                    add_criteria(
+                        gene_record.get("criteria"),
+                        gene_record.get("gene_symbol"),
+                        gene_record.get("transcript"),
+                    )
+
+        current_qs = ACMGEvidenceOverride.objects.filter(variant=variant, source="genebe")
+        for record in current_qs:
+            key = (
+                (record.gene_symbol or "").strip(),
+                (record.transcript or "").strip(),
+                (record.criterion or "").strip().replace(" ", "_").upper(),
+            )
+            if key not in seen:
+                record.delete()
+
+        for gene_symbol, transcript, code, strength in evidence_rows:
+            ACMGEvidenceOverride.objects.update_or_create(
+                variant=variant,
+                gene_symbol=gene_symbol,
+                transcript=transcript,
+                criterion=code,
+                source="genebe",
+                defaults={
+                    "included": True,
+                    "strength": strength,
+                    "note": "",
+                },
+            )
 
     def link_genes(self, variant):
         """Link variant to genes based on annotations"""
@@ -183,9 +266,29 @@ class AnnotationService:
                 if isinstance(gene_data, dict) and "symbol" in gene_data:
                     gene_symbols.add(gene_data["symbol"])
             # cadd.gene.symbol (not always present)
-            
+
+        # Parse GeneBe data
+        genebe_annotations = variant.annotations.filter(source="genebe")
+        for annotation in genebe_annotations:
+            data = annotation.data if isinstance(annotation.data, dict) else {}
+            variant_items = data.get("variants") if isinstance(data.get("variants"), list) else []
+            if not variant_items and data:
+                variant_items = [data]
+
+            for item in variant_items:
+                if not isinstance(item, dict):
+                    continue
+                gene_symbol = item.get("gene_symbol")
+                if gene_symbol:
+                    gene_symbols.add(gene_symbol)
+                for gene_record in item.get("acmg_by_gene", []) or []:
+                    if isinstance(gene_record, dict) and gene_record.get("gene_symbol"):
+                        gene_symbols.add(gene_record["gene_symbol"])
+                for consequence in item.get("consequences", []) or []:
+                    if isinstance(consequence, dict) and consequence.get("gene_symbol"):
+                        gene_symbols.add(consequence["gene_symbol"])
+
         if gene_symbols:
             genes = Gene.objects.filter(symbol__in=gene_symbols)
             variant.genes.add(*genes)
             print(f"Linked genes {gene_symbols} to variant {variant}")
-

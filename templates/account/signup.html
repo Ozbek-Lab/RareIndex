@@ -1,0 +1,55 @@
+{% extends "account/base.html" %}
+{% load i18n %}
+{% load widget_tweaks %}
+
+{% block head_title %}{% trans "Sign Up" %}{% endblock %}
+
+{% block account_content %}
+  <h2 class="card-title justify-center text-3xl font-bold text-center mb-4">{% trans "Sign Up" %}</h2>
+
+  <form class="space-y-4" method="POST" action="{% url 'account_signup' %}">
+    {% csrf_token %}
+    
+    {% if form.errors %}
+      <div class="alert alert-error">
+        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <span>{% blocktrans %}Please correct the errors below.{% endblocktrans %}</span>
+      </div>
+      {% for field in form %}
+          {% for error in field.errors %}
+              <div class="text-error text-sm">{{ error }}</div>
+          {% endfor %}
+      {% endfor %}
+      {% for error in form.non_field_errors %}
+          <div class="text-error text-sm">{{ error }}</div>
+      {% endfor %}
+    {% endif %}
+
+    {% for field in form %}
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text">{{ field.label }}</span>
+        </label>
+        {% render_field field class="input input-bordered w-full" placeholder=field.label %}
+        {% if field.help_text %}
+          <label class="label">
+            <span class="label-text-alt text-base-content/60">{{ field.help_text|safe }}</span>
+          </label>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    {% if redirect_field_value %}
+    <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+    {% endif %}
+
+    <div class="card-actions justify-end mt-4">
+      <button class="btn btn-primary w-full" type="submit">{% trans "Sign Up" %}</button>
+    </div>
+  </form>
+  
+  <div class="text-center mt-4">
+    <span class="text-sm">{% trans "Already have an account?" %} </span>
+    <a href="{{ login_url }}" class="link link-primary text-sm">{% trans "Sign In" %}</a>
+  </div>
+{% endblock %}

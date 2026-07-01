@@ -2,7 +2,7 @@ from django.dispatch import receiver
 from simple_history.signals import post_create_historical_record
 from notifications.signals import notify
 from django.contrib.auth import get_user_model
-from lab.models import Task, Individual, Sample, Test, Analysis, Project
+from lab.models import Task, Individual, Sample, Test, Analysis, Pipeline, Project
 
 User = get_user_model()
 
@@ -41,7 +41,7 @@ def get_field_diff(new_hist, old_hist):
 
 @receiver(post_create_historical_record)
 def notify_on_history(sender, history_instance, **kwargs):
-    tracked_models = (Task, Individual, Sample, Test, Analysis, Project)
+    tracked_models = (Task, Individual, Sample, Test, Analysis, Pipeline, Project)
     instance = history_instance.instance
     if not isinstance(instance, tracked_models):
         return

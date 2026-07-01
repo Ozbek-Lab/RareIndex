@@ -43,6 +43,14 @@ staticfiles/
 *.xlsx
 *.tsv
 *.csv
+*.dump
+Özbek Vaka Başvuru Formları/
+Teknik Raporlar/
+*.docx
+*.doc
+*.pdf
+*.zip
+report_text_field_reference.md
 
 # User-specific files
 create_ozbek_users.py
@@ -54,3 +62,9 @@ lab/management/commands/create_ozbek_users.py
 lab/management/commands/add_individuals_to_project.py
 node_modules/
 vcfpaths
+tailwindcss-linux-x64
+reports/
+.codex
+tests/
+*.igv_session.xml
+

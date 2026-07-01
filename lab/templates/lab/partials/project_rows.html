@@ -1,0 +1,146 @@
+{% load django_tables2 %}
+{% load i18n %}
+{% load lab_tags %}
+
+{% if table.page.has_previous and request.GET.direction != 'down' %}
+<!-- Top Sentinel for Loading Upwards -->
+<tr hx-get="{% clean_pagination_url table.page.previous_page_number %}&direction=up"
+    hx-trigger="intersect once"
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-push-url="{% clean_pagination_url table.page.previous_page_number %}"
+    hx-indicator="#infinite-spinner-top">
+    <td colspan="{{ table.columns|length }}" class="p-0">
+        <div id="infinite-spinner-top" class="flex justify-center items-center p-4 w-full bg-base-100/50">
+             <span class="loading loading-spinner loading-md text-primary"></span>
+             <span class="ml-2 text-xs text-base-content/50">Loading previous...</span>
+        </div>
+    </td>
+</tr>
+{% endif %}
+
+{% for row in table.paginated_rows %}
+    <tr {{ row.attrs.as_html }} 
+        class="hover:bg-base-200/50 transition-colors border-b-0 cursor-pointer"
+        :class="{'bg-base-200': expandedId === '{{ row.record.pk }}', 'cursor-pointer': true}"
+        @click="if (!$event.target.closest('button, a, input, select')) { expandedId = expandedId === '{{ row.record.pk }}' ? null : '{{ row.record.pk }}' }"
+        {% if forloop.first %}
+        x-data
+        x-intersect.threshold.20="history.replaceState(null, '', '{% clean_pagination_url table.page.number %}')"
+        {% endif %}>
+        {% for column, cell in row.items %}
+            <td {{ column.attrs.td.as_html }}>
+                {% if forloop.first %}
+                    <span>
+                        {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
+                    </span>
+                {% else %}
+                    {% if column.localize == None %}{{ cell }}{% else %}{% if column.localize %}{{ cell|localize }}{% else %}{{ cell|unlocalize }}{% endif %}{% endif %}
+                {% endif %}
+            </td>
+        {% endfor %}
+    </tr>
+    <!-- Expanded Row -->
+    <tr x-show="expandedId === '{{ row.record.pk }}'" x-collapse x-cloak class="bg-base-100 border-b border-base-200">
+        <td colspan="{{ table.columns|length }}" class="p-0">
+            <div class="p-4">
+                <div class="mb-3 flex justify-end">
+                    <a href="{% url 'lab:project_detail' row.record.pk %}"
+                       class="btn btn-sm btn-primary gap-2 font-normal"
+                       hx-boost="false">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+                        View Detail
+                    </a>
+                </div>
+                <!-- Top row: Description & Details (as before) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                    <div>
+                        <h4 class="font-semibold text-sm text-base-content/60 mb-2">Description</h4>
+                        <p class="text-sm text-base-content">
+                            {{ row.record.description|default:"No description provided." }}
+                        </p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-sm text-base-content/60 mb-2">Details</h4>
+                        <div class="space-y-1 text-sm">
+                            <div><span class="font-medium">Due Date:</span> {{ row.record.due_date|default:"Not set" }}</div>
+                            <div><span class="font-medium">Created By:</span> {{ row.record.created_by.username }}</div>
+                            <div><span class="font-medium">Created:</span> {{ row.record.created_at|date:"M d, Y" }}</div>
+                            <div><span class="font-medium">Individuals:</span> {{ row.record.individuals.count }} individual{{ row.record.individuals.count|pluralize }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom row: Notes & Tasks, matching individual/sample layout -->
+                <div class="grid grid-cols-1 md:grid-cols-2 border-t border-base-200 pt-3">
+                    <!-- Project Notes -->
+                    <div class="p-1 md:pr-3 border-b md:border-b-0 md:border-r border-base-200/50">
+                        <h4 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center gap-1">
+                            <i class="fa-solid fa-comment-dots"></i>
+                            Project Notes
+                        </h4>
+                        {% include "lab/partials/notes/list.html" with notes=row.record.notes|visible_to:user object=row.record content_type="Project" %}
+                    </div>
+
+                    <!-- Project Tasks -->
+                    <div class="p-1 bg-base-200/5">
+                        <h4 class="text-xs uppercase text-base-content/50 mb-1 font-bold flex items-center justify-between gap-1">
+                            <div class="flex items-center gap-1">
+                                <i class="fa-solid fa-list-check"></i>
+                                Project Tasks
+                            </div>
+                            {% get_content_type_id row.record as project_ct %}
+                            <button hx-get="{% url 'lab:task_create_modal' project_ct row.record.id %}"
+                                    hx-target="#generic-modal-content"
+                                    onclick="document.getElementById('generic-modal').showModal()"
+                                    class="btn btn-primary btn-xs gap-1 font-normal">
+                                <i class="fa-solid fa-plus"></i>
+                                Add Task
+                            </button>
+                        </h4>
+                        <div id="project-tasks-{{ row.record.id }}"
+                             x-data="{ tasksLoaded: false }"
+                             x-effect="if (expandedId === '{{ row.record.pk }}' && !tasksLoaded) { tasksLoaded = true; htmx.trigger($el, 'loadTasks'); }"
+                             hx-get="{% url 'lab:project_tasks_page' row.record.pk %}"
+                             hx-trigger="loadTasks"
+                             hx-target="this"
+                             hx-swap="innerHTML">
+                            <div class="flex justify-center py-2">
+                                <span class="loading loading-spinner loading-xs text-base-content/30"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </td>
+    </tr>
+{% endfor %}
+
+{% if table.page.has_next %}
+    {% if request.GET.direction != 'up' %}
+    <!-- Sentinel Row for Infinite Scroll -->
+    <tr hx-get="{% clean_pagination_url table.page.next_page_number %}&direction=down"
+        hx-trigger="intersect once"
+        hx-target="this"
+        hx-swap="outerHTML"
+        hx-push-url="{% clean_pagination_url table.page.next_page_number %}"
+        hx-indicator="#infinite-spinner-bottom">
+        <td colspan="{{ table.columns|length }}" class="p-0">
+            <div id="infinite-spinner-bottom" class="flex justify-center items-center p-8 w-full">
+                 <span class="loading loading-spinner loading-lg text-primary"></span>
+                 <span class="ml-2 text-sm text-base-content/50">Loading more...</span>
+            </div>
+        </td>
+    </tr>
+    {% endif %}
+{% else %}
+    <tr>
+        <td colspan="{{ table.columns|length }}">
+            <div class="p-4 text-center text-base-content/40 italic text-sm border-t border-base-200">
+                <i class="fa-solid fa-check-circle mr-2"></i>
+                End of results
+            </div>
+        </td>
+    </tr>
+{% endif %}

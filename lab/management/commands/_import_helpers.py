@@ -1,0 +1,551 @@
+"""Shared helper utilities extracted for reuse across data import management commands."""
+
+import re
+from datetime import datetime, date
+
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.utils.text import slugify
+from django.utils import timezone
+
+User = get_user_model()
+
+
+# ---------------------------------------------------------------------------
+# Date parsing
+# ---------------------------------------------------------------------------
+
+def parse_date(value):
+    """Parse a date from an Excel datetime object or various string formats."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or text.lower() in {"na", "n/a", "none", "null", "-"}:
+            return None
+
+        # Try the raw string and common date-only prefixes before giving up.
+        candidates = [text]
+        for separator in ("T", " "):
+            if separator in text:
+                candidates.append(text.split(separator, 1)[0].strip())
+
+        formats = (
+            "%d/%m/%Y",
+            "%d-%m-%Y",
+            "%d.%m.%Y",
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+        )
+        for candidate in candidates:
+            for fmt in formats:
+                try:
+                    return datetime.strptime(candidate, fmt).date()
+                except ValueError:
+                    continue
+            try:
+                return date.fromisoformat(candidate)
+            except ValueError:
+                continue
+    return None
+
+
+def parse_date_from_filename(filename):
+    """Extract a date from an 8-digit YYYYMMDD segment embedded in a filename."""
+    match = re.search(r'(\d{8})', filename)
+    if not match:
+        raise ValueError(f'Cannot find 8-digit date in filename {filename!r}')
+    raw = match.group(1)
+    return date(int(raw[:4]), int(raw[4:6]), int(raw[6:8]))
+
+
+# ---------------------------------------------------------------------------
+# ID utilities
+# ---------------------------------------------------------------------------
+
+def identifier_type_example_for_name(name):
+    """Return a valid sample identifier for well-known IdentifierType names."""
+    normalized = str(name or "").strip().lower()
+    if normalized == "rareboost":
+        return "RB_2025_01.1"
+    if normalized == "biobank":
+        return "RD3.F12.1"
+    return ""
+
+def get_family_id(lab_id):
+    """Return the family-level prefix of a lab ID (everything before the first '.')."""
+    if not lab_id:
+        return None
+    return str(lab_id).split('.')[0]
+
+
+def normalize_import_id(value):
+    """Normalize an import-time ID for tolerant matching."""
+    if value is None:
+        return ""
+    return str(value).strip().rstrip(".")
+
+
+def rareboost_lookup_variants(value):
+    """Return tolerated RareBoost ID variants for import-time lookups.
+
+    Import data can lag behind cohort renumbering, so we treat `... .1` and
+    `... .1.1` as interchangeable when resolving an existing individual.
+    """
+    base = normalize_import_id(value)
+    if not base:
+        return []
+
+    variants = [base]
+    if base.endswith(".1.1"):
+        variants.append(re.sub(r"(\.1)\.1$", r"\1", base))
+    elif base.endswith(".1"):
+        variants.append(f"{base}.1")
+
+    seen = set()
+    ordered = []
+    for variant in variants:
+        if variant and variant not in seen:
+            ordered.append(variant)
+            seen.add(variant)
+    return ordered
+
+
+def find_individual_by_rareboost_id(lab_id):
+    """Find an individual by RareBoost ID, allowing import-time renumbering."""
+    from lab.models import Individual
+
+    candidates = rareboost_lookup_variants(lab_id)
+    if not candidates:
+        return None
+    return Individual.objects.filter(
+        cross_ids__id_type__name="RareBoost",
+        cross_ids__id_value__in=candidates,
+    ).first()
+
+
+def find_individual_by_import_identifier(lab_id):
+    """Find an individual by an import filename/row identifier.
+
+    This resolves RareBoost IDs with import-time renumbering and then falls
+    back to exact cross-identifier value matching across any identifier type.
+    """
+    from lab.models import Individual
+
+    candidates = []
+    for candidate in rareboost_lookup_variants(lab_id):
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    normalized = normalize_import_id(lab_id)
+    if normalized and normalized not in candidates:
+        candidates.append(normalized)
+
+    if not candidates:
+        return None
+
+    return Individual.objects.filter(cross_ids__id_value__in=candidates).first()
+
+
+def normalize_id(value):
+    """Replace '.', '_', '-' with '.' for separator-agnostic ID comparison."""
+    return re.sub(r'[._\-]', '.', str(value))
+
+
+def build_id_map():
+    """Return {normalized_cross_id_value: Individual} built in bulk to avoid N+1 queries."""
+    from lab.models import CrossIdentifier, Individual
+    from django.db.models import F, Value
+    from django.db.models.functions import Replace
+
+    rows = (
+        CrossIdentifier.objects
+        .annotate(
+            norm=Replace(
+                Replace(
+                    Replace(F('id_value'), Value('_'), Value('.')),
+                    Value('-'), Value('.'),
+                ),
+                Value('..'), Value('.'),
+            )
+        )
+        .select_related('individual', 'id_type')
+        .values_list('norm', 'individual_id', 'id_type__name')
+    )
+    individual_ids = {ind_id for _, ind_id, _ in rows}
+    individuals = {i.id: i for i in Individual.objects.filter(id__in=individual_ids)}
+    mapping: dict = {}
+    for norm, ind_id, id_type_name in rows:
+        if ind_id in individuals:
+            individual = individuals[ind_id]
+            mapping[norm] = individual
+            if id_type_name == "RareBoost":
+                for alias in rareboost_lookup_variants(norm):
+                    mapping.setdefault(alias, individual)
+    return mapping
+
+
+# ---------------------------------------------------------------------------
+# User / lookup helpers
+# ---------------------------------------------------------------------------
+
+def ascii_email_local_part(value):
+    """Return an ASCII-safe email local-part for generated placeholder emails."""
+    slug = slugify(str(value or ""), allow_unicode=False).replace("-", "_")
+    slug = re.sub(r"[^a-zA-Z0-9._+-]+", "_", slug).strip("._+-")
+    return slug.lower() or "user"
+
+
+def get_or_create_user(name, admin_user):
+    """Normalise *name* to a username and get-or-create the User row."""
+    if not name:
+        return admin_user
+    username = str(name).strip().lower().replace(' ', '_')
+    generated_email = f"{ascii_email_local_part(username)}@example.com"
+    user = User.objects.filter(username=username).first()
+    if user:
+        if user.email and user.email.endswith("@example.com") and not user.email.isascii():
+            user.email = generated_email
+            user.save(update_fields=["email"])
+        return user
+    parts = str(name).strip().split()
+    try:
+        user = User.objects.create_user(
+            username=username,
+            email=generated_email,
+            password='changeme123',
+            first_name=parts[0] if parts else name,
+            last_name=parts[1] if len(parts) > 1 else '',
+        )
+    except Exception:
+        user = User.objects.filter(username=username).first() or admin_user
+    return user
+
+
+def get_or_create_contact(full_name, admin_user, linked_user=None):
+    """Get or create a Contact by normalized full name, optionally linking a User."""
+    from lab.models import Contact
+
+    if not full_name:
+        return None
+
+    normalized_name = " ".join(str(full_name).split())
+    if not normalized_name:
+        return None
+
+    contact = Contact.objects.filter(full_name=normalized_name).first()
+    if not contact:
+        contact = Contact.objects.create(
+            full_name=normalized_name,
+            user=linked_user,
+            created_by=admin_user,
+        )
+        return contact
+
+    changed = False
+    if linked_user and contact.user_id is None:
+        contact.user = linked_user
+        changed = True
+    if contact.created_by_id is None and admin_user is not None:
+        contact.created_by = admin_user
+        changed = True
+    if changed:
+        contact.save(update_fields=[field for field, value in (
+            ("user", linked_user and contact.user_id is not None),
+            ("created_by", contact.created_by_id is not None),
+        )])
+        # The helper above only touches fields if they were missing.
+        # Re-read to keep the return value in sync with what was saved.
+        contact.refresh_from_db()
+    return contact
+
+
+def get_or_create_contact_for_user(user, admin_user=None):
+    """Get or create a Contact using the user's display name and optional linkage."""
+    if user is None:
+        return None
+
+    contact_name = (user.get_full_name() or user.username or "").strip()
+    if not contact_name:
+        return None
+    return get_or_create_contact(contact_name, admin_user or user, linked_user=user)
+
+
+def get_or_create_sample_type(name, admin_user):
+    """Get or create a SampleType by name."""
+    from lab.models import SampleType
+    if not name:
+        return None
+    st, _ = SampleType.objects.get_or_create(name=name, defaults={'created_by': admin_user})
+    return st
+
+
+def get_or_create_test_type(name, admin_user):
+    """Get or create a TestType by name."""
+    from lab.models import TestType
+    if not name:
+        return None
+    tt, _ = TestType.objects.get_or_create(name=name, defaults={'created_by': admin_user})
+    return tt
+
+
+def get_or_create_pipeline_type(name, admin_user, description='', version=''):
+    """Get or create a PipelineType, optionally scoped by version."""
+    from lab.models import PipelineType
+    if not name:
+        return None
+    lookup = {'name': name}
+    if version:
+        lookup['version'] = version
+    pt, _ = PipelineType.objects.get_or_create(
+        **lookup,
+        defaults={'description': description, 'created_by': admin_user},
+    )
+    return pt
+
+
+def get_or_create_analysis_type(name, admin_user):
+    """Get or create an AnalysisType by name."""
+    from lab.models import AnalysisType
+    if not name:
+        return None
+    at, _ = AnalysisType.objects.get_or_create(name=name, defaults={'created_by': admin_user})
+    return at
+
+
+def get_or_create_status_group(name, content_type=None):
+    """Get or create a StatusGroup by name/scope."""
+    from lab.models import StatusGroup
+    if not name:
+        return None
+    group, _ = StatusGroup.objects.get_or_create(
+        name=name,
+        content_type=content_type,
+    )
+    return group
+
+
+def get_or_create_status(
+    name,
+    description,
+    color,
+    admin_user,
+    content_type=None,
+    icon=None,
+    short_name="",
+    group=None,
+    connected_classes=None,
+):
+    """Get or create a Status and keep it aligned with the seeded definition."""
+    from lab.models import Status
+    if not name:
+        return None
+    status, created = Status.objects.get_or_create(
+        name=name,
+        content_type=content_type,
+        defaults={
+            'description': description or '',
+            'color': color or '#000000',
+            'created_by': admin_user,
+            'icon': icon,
+            'short_name': short_name or '',
+            'group': group,
+        },
+    )
+    changed = False
+    for attr, value in (
+        ("description", description or ""),
+        ("color", color or "#000000"),
+        ("short_name", short_name or ""),
+        ("group", group),
+        ("content_type", content_type),
+    ):
+        if getattr(status, attr) != value:
+            setattr(status, attr, value)
+            changed = True
+    if icon != status.icon:
+        status.icon = icon
+        changed = True
+    if changed:
+        status.save()
+    if connected_classes is not None:
+        current_ids = set(status.connected_classes.values_list("id", flat=True))
+        desired_ids = {ct.id for ct in connected_classes if ct}
+        if current_ids != desired_ids:
+            status.connected_classes.set(connected_classes)
+    return status
+
+
+# ---------------------------------------------------------------------------
+# HPO / notes
+# ---------------------------------------------------------------------------
+
+def get_hpo_terms(hpo_codes_str, stdout=None):
+    """Parse newline-separated 'Description HP:NNNNN' strings and return matching Term objects."""
+    from ontologies.models import Term, Ontology
+    if not hpo_codes_str:
+        return []
+    hp_ontology = Ontology.objects.filter(type=1).first()
+    if not hp_ontology:
+        if stdout:
+            stdout.write('HP ontology not found')
+        return []
+    terms = []
+    for line in str(hpo_codes_str).split('\n'):
+        line = line.strip()
+        if not line or line == '+':
+            continue
+        hp_match = re.search(r'HP:(\d+)', line)
+        if not hp_match:
+            continue
+        code = hp_match.group(1)
+        description = line[:hp_match.start()].strip()
+        term = Term.objects.filter(ontology=hp_ontology, identifier=code).first()
+        if not term:
+            term = Term.objects.filter(ontology=hp_ontology, label__icontains=description).first()
+        if term:
+            terms.append(term)
+    return terms
+
+
+def parse_and_add_notes(note_text, target_obj, admin_user):
+    """Create one Note per non-empty line in *note_text*, optionally back-dating history."""
+    from lab.models import Note
+    if not note_text:
+        return
+    try:
+        ct = ContentType.objects.get_for_model(target_obj)
+    except Exception:
+        return
+    for raw_line in str(note_text).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            note = Note.objects.create(
+                content=line,
+                user=admin_user,
+                content_type=ct,
+                object_id=getattr(target_obj, 'pk', None),
+            )
+        except Exception:
+            continue
+        m = re.match(r'^(\d{2}\.\d{2}\.\d{4})', line)
+        if m:
+            try:
+                dt = datetime.strptime(m.group(1), '%d.%m.%Y')
+                if timezone.is_naive(dt):
+                    dt = timezone.make_aware(dt, timezone.get_current_timezone())
+                first_hist = note.history.earliest()
+                if first_hist:
+                    first_hist.history_date = dt
+                    first_hist.save()
+            except Exception:
+                pass
+
+
+# ---------------------------------------------------------------------------
+# Variant utilities
+# ---------------------------------------------------------------------------
+
+def get_initials(full_name):
+    """Return uppercase initials string from a full name."""
+    parts = [p for p in (full_name or '').split() if p]
+    return ''.join(part[0].upper() for part in parts)
+
+
+def parse_variant_string(variant_str):
+    """Parse 'chrX-12345 A>G' and return (chromosome, start_str, reference, alternate) or None."""
+    if not variant_str:
+        return None
+    match = re.match(r'(chr[\w]+)-(\d+)\s+([ACGT]+)>([ACGT]+)', str(variant_str).strip())
+    return match.groups() if match else None
+
+
+def map_zygosity(zygosity_str):
+    """Map free-text zygosity to a valid ZYGOSITY_CHOICES key. Defaults to 'het'."""
+    if not zygosity_str:
+        return 'het'
+    z = re.sub(r"\s+", " ", str(zygosity_str).lower().strip())
+    if z in {'na', 'n/a', 'unknown'}:
+        return 'unknown'
+    if 'homoplaz' in z:
+        return 'homoplasmy'
+    if 'heteroplaz' in z:
+        return 'hetpl'
+    if 'hom' in z:
+        return 'hom'
+    if 'hemi' in z:
+        return 'hemi'
+    if 'het' in z:
+        return 'het'
+    return 'het'
+
+
+def map_classification(value):
+    """Map an ACMG classification label to the internal choice key, or None if unrecognised."""
+    if not value:
+        return None
+    v = str(value).strip().lower().replace(' ', '_').replace('-', '_')
+    table = {
+        'pathogenic': 'pathogenic',
+        'p': 'pathogenic',
+        'likely_pathogenic': 'likely_pathogenic',
+        'lp': 'likely_pathogenic',
+        'vus': 'vus',
+        'variant_of_uncertain_significance': 'vus',
+        'likely_benign': 'likely_benign',
+        'lb': 'likely_benign',
+        'benign': 'benign',
+        'b': 'benign',
+    }
+    return table.get(v)
+
+
+def map_inheritance(value):
+    """Map an inheritance pattern label to the internal choice key. Defaults to 'unknown'."""
+    if not value:
+        return 'unknown'
+    v = str(value).strip().lower()
+    if v in {'ad', 'autosomal dominant', 'autosomal_dominant'}:
+        return 'ad'
+    if v in {'ar', 'autosomal recessive', 'autosomal_recessive'}:
+        return 'ar'
+    if v in {'x_linked', 'x-linked', 'x linked', 'xl'}:
+        return 'x_linked'
+    if v in {'mitochondrial', 'mt', 'mito'}:
+        return 'mitochondrial'
+    if v in {'de_novo', 'de novo', 'denovo'}:
+        return 'de_novo'
+    return 'unknown'
+
+
+# ---------------------------------------------------------------------------
+# Person / demographic helpers
+# ---------------------------------------------------------------------------
+
+def normalize_sex(value):
+    """Map Turkish/English sex labels to 'male', 'female', or 'other'. Returns None if unknown."""
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {'m', 'male', 'erkek'}:
+        return 'male'
+    if text in {'f', 'female', 'kadin', 'kadın'}:
+        return 'female'
+    if text in {'other', 'o', 'diğer'}:
+        return 'other'
+    return None
+
+
+def to_bool(value):
+    """Convert common truthy/falsy representations to bool. Returns None for ambiguous inputs."""
+    if value in (1, True, '1', 'True', 'true', 'Evet', 'evet', 'Yes', 'yes', 'E', 'e'):
+        return True
+    if value in (0, False, '0', 'False', 'false', 'Hayır', 'hayır', 'No', 'no', 'H', 'h'):
+        return False
+    return None

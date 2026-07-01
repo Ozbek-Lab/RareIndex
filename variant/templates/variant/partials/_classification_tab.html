@@ -4,6 +4,8 @@
         <!-- TODO: Add button to create new classification -->
     </div>
 
+    {% include "variant/partials/_genebe_classification.html" with variant=item %}
+
     {% if item.classifications.exists %}
     <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg">
         <table class="min-w-full divide-y divide-gray-300 dark:divide-gray-700">

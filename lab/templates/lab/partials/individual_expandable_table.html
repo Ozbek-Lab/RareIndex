@@ -1,0 +1,14 @@
+{% extends "django_tables2/bootstrap5.html" %}
+{% load django_tables2 %}
+{% load i18n %}
+{% load static %}
+
+{% block table.tbody %}
+    <tbody {{ table.attrs.tbody.as_html }} x-data="{ expandedId: null }" class="border-b border-base-200">
+        {% include "lab/partials/individual_rows.html" %}
+    </tbody>
+{% endblock table.tbody %}
+
+{% block pagination %}
+    {# Remove default pagination #}
+{% endblock pagination %}

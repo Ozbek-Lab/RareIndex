@@ -1,0 +1,944 @@
+{% load lab_tags %}
+<div class="grid grid-cols-2 gap-6">
+    <div class="card bg-base-100 border border-base-200 shadow-sm" id="projects-card-{{ individual.pk }}">
+        <div class="card-body p-4">
+            {% partial projects_display %}
+        </div>
+    </div>
+
+    <!-- Request Forms -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm" id="request-forms-card-{{ individual.pk }}">
+        <div class="card-body p-4">
+            {% partial request_forms_display %}
+        </div>
+    </div>
+
+    <!-- Basic Info -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm" id="identification-card-{{ individual.pk }}">
+        <div class="card-body p-4">
+            {% partial identification_content %}
+        </div>
+    </div>
+
+    <!-- Demographics -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm" id="demographics-card-{{ individual.pk }}">
+        <div class="card-body p-4">
+            {% partial demographics_content %}
+        </div>
+    </div>
+
+    <!-- Contact Information -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm col-span-2" id="contact-information-card-{{ individual.pk }}">
+        <div class="card-body p-4">
+            {% partial contact_information_content %}
+        </div>
+    </div>
+
+</div>
+
+<div class="mt-6"
+     id="family-section-{{ individual.pk }}"
+     hx-get="{% url 'lab:individual_family_section' individual.pk %}"
+     hx-trigger="familyUpdated from:body"
+     hx-swap="innerHTML">
+    {% include "lab/partials/tabs/_family.html" %}
+</div>
+
+{% partialdef identification_content %}
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="card-title text-sm uppercase text-base-content/50">Identification</h3>
+        {% if not edit_mode %}
+        <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
+                data-tip="Edit Identification"
+                hx-get="{% url 'lab:individual_identification_edit' individual.pk %}"
+                hx-target="#identification-card-{{ individual.pk }} .card-body"
+                hx-swap="innerHTML">
+            <i class="fa-solid fa-pencil"></i>
+        </button>
+        {% endif %}
+    </div>
+
+    {% if edit_mode %}
+            <form hx-post="{% url 'lab:individual_identification_save' individual.pk %}" 
+                hx-target="#identification-card-{{ individual.pk }} .card-body" 
+                hx-swap="innerHTML"
+                class="grid grid-cols-1 gap-y-3">
+            {% csrf_token %}
+            
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Full Name</label>
+                    <input type="text" name="{{ form.full_name.html_name }}" value="{{ form.full_name.value|default:'' }}"
+                           class="input input-bordered w-full input-sm">
+                    {% if form.full_name.errors %}
+                        <span class="text-error text-xs">{{ form.full_name.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">TC Identity</label>
+                    <input type="text" name="{{ form.tc_identity.html_name }}" value="{{ form.tc_identity.value|default:'' }}"
+                           class="input input-bordered w-full input-sm">
+                </div>
+
+                <div class="bg-base-200 rounded p-2 border border-base-300"
+                     x-data="{
+                        identifierTypes: [
+                            {% for type in identifier_types %}
+                                {id: '{{ type.id }}', name: '{{ type.name|escapejs }}'},
+                            {% endfor %}
+                        ],
+                        defaultCrossIdTypeId: '',
+                        crossIds: [
+                            {% for xid in individual.cross_ids.all %}
+                                {% if xid.id_type.use_priority != 1 and xid.id_type.use_priority != 2 %}
+                                    {type_id: '{{ xid.id_type.id }}', value: '{{ xid.id_value|escapejs }}'},
+                                {% endif %}
+                            {% endfor %}
+                        ],
+                        init() {
+                            const rareboost = this.identifierTypes.find((type) => type.name === 'RareBoost');
+                            this.defaultCrossIdTypeId = (rareboost || this.identifierTypes[0] || {}).id || '';
+                            this.updateJson();
+                        },
+                        updateJson() {
+                            this.$refs.jsonInput.value = JSON.stringify(this.crossIds);
+                        },
+                        addCrossId() {
+                            this.crossIds.push({type_id: this.defaultCrossIdTypeId, value: ''});
+                            this.updateJson();
+                        },
+                        removeCrossId(index) {
+                            this.crossIds.splice(index, 1);
+                            this.updateJson();
+                        }
+                     }"
+                     x-init="init()">
+                    
+                    <input type="hidden" name="{{ form.cross_identifiers_json.html_name }}" x-ref="jsonInput">
+
+                    <div class="flex justify-between items-center mb-1">
+                         <h4 class="text-[10px] font-bold text-base-content/60 uppercase tracking-wider">Cross IDs</h4>
+                         <button type="button" @click="addCrossId()" class="text-[10px] text-blue-600 hover:text-blue-800 hover:underline">+ ADD</button>
+                    </div>
+                    <div class="space-y-1.5">
+                        <!-- Static Fields (Primary/Secondary) -->
+                        <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
+                             <span class="text-[10px] font-medium text-base-content/70 w-28 px-1">
+                                 Primary{% if primary_id_type %} ({{ primary_id_type.name }}){% else %} (not set){% endif %}
+                             </span>
+                             <input type="text" name="{{ form.primary_id.html_name }}" value="{{ form.primary_id.value|default:'' }}" 
+                                    class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
+                        </div>
+                        <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
+                             <span class="text-[10px] font-medium text-base-content/70 w-28 px-1">
+                                 Secondary{% if secondary_id_type %} ({{ secondary_id_type.name }}){% else %} (not set){% endif %}
+                             </span>
+                             <input type="text" name="{{ form.secondary_id.html_name }}" value="{{ form.secondary_id.value|default:'' }}" 
+                                    class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
+                        </div>
+
+                        <!-- Dynamic Fields -->
+                        <template x-for="(id, idx) in crossIds" :key="idx">
+                            <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
+                                <select x-model="id.type_id" @change="updateJson()" class="select select-bordered select-xs w-28 shrink-0 px-1 text-[10px] h-6 min-h-0">
+                                    <option value="">-- Type --</option>
+                                    {% for type in identifier_types %}
+                                        <option value="{{ type.id }}">{{ type.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="text" x-model="id.value" @input="updateJson()" class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
+                                <button type="button"
+                                        @click="removeCrossId(idx)"
+                                        class="btn btn-ghost btn-xs shrink-0 text-error min-h-0 h-6 w-6 p-0 rounded-full flex items-center justify-center"
+                                        title="Remove cross ID"
+                                        aria-label="Remove cross ID">
+                                    <i class="fa-solid fa-xmark text-[10px]"></i>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+            <div class="flex justify-end gap-2 mt-2">
+                <button type="button" class="btn btn-sm btn-ghost"
+                        hx-get="{% url 'lab:individual_identification_display' individual.pk %}" 
+                        hx-target="#identification-card-{{ individual.pk }} .card-body"
+                        hx-swap="innerHTML">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+            </div>
+        </form>
+    {% else %}
+
+        <dl class="grid grid-cols-1 gap-y-4">
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Full Name</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                    {% if perms.lab.view_sensitive_data %}
+                        <span id="name-reveal-{{ individual.pk }}" class="reveal-wrapper">
+                            ***** 
+                            <button class="btn btn-xs btn-ghost text-primary" 
+                                    hx-get="{% url 'lab:reveal_sensitive_field' 'Individual' individual.pk 'full_name' %}"
+                                    hx-target="closest .reveal-wrapper"
+                                    hx-swap="outerHTML">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </span>
+                    {% else %}
+                        <span>*****</span>
+                    {% endif %}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">TC Identity</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                    {% if perms.lab.view_sensitive_data %}
+                        <span id="tcid-reveal-{{ individual.pk }}">
+                            *********** 
+                            <button class="btn btn-xs btn-ghost text-primary" 
+                                    hx-get="{% url 'lab:reveal_sensitive_field' 'Individual' individual.pk 'tc_identity' %}"
+                                    hx-target="#tcid-reveal-{{ individual.pk }}"
+                                    hx-swap="outerHTML">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </span>
+                    {% else %}
+                        <span>***********</span>
+                    {% endif %}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">{% id_type_label 1 %}</dt>
+                <dd class="text-sm text-base-content col-span-2 font-mono bg-base-200 px-2 py-0.5 rounded w-fit select-all text-xs">
+                    {{ individual.primary_id }}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">{% id_type_label 2 %}</dt>
+                <dd class="text-sm text-base-content col-span-2 font-mono bg-base-200 px-2 py-0.5 rounded w-fit select-all text-xs">
+                    {{ individual.secondary_id }}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Cross IDs</dt>
+                <dd class="text-sm text-base-content col-span-2 flex flex-wrap gap-2">
+                    {% for xid in individual.cross_ids.all %}
+                        {% if xid.id_type.use_priority != 1 and xid.id_type.use_priority != 2 %}
+                        <div class="badge badge-outline gap-2 text-xs">
+                            <span class="font-bold border-r border-base-content/20 pr-2">{{ xid.id_type.name }}</span>
+                            <span class="font-mono">{{ xid.id_value }}</span>
+                        </div>
+                        {% endif %}
+                    {% empty %}
+                        <span class="text-base-content/40 italic text-xs">No other IDs</span>
+                    {% endfor %}
+                </dd>
+            </div>
+        </dl>
+    {% endif %}
+{% endpartialdef %}
+
+{% partialdef contact_information_content %}
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="card-title text-sm uppercase text-base-content/50">Contact Information</h3>
+        {% if not edit_mode %}
+        <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
+                data-tip="Edit Contact Information"
+                hx-get="{% url 'lab:individual_contact_information_edit' individual.pk %}"
+                hx-target="#contact-information-card-{{ individual.pk }} .card-body"
+                hx-swap="innerHTML">
+            <i class="fa-solid fa-pencil"></i>
+        </button>
+        {% endif %}
+    </div>
+
+    {% if edit_mode %}
+        <form hx-post="{% url 'lab:individual_contact_information_save' individual.pk %}"
+              hx-target="#contact-information-card-{{ individual.pk }} .card-body"
+              hx-swap="innerHTML"
+              class="space-y-4"
+              x-data="{
+                institutionSearch: '',
+                institutionOpen: false,
+                contactSearch: '',
+                contactOpen: false,
+                selectedInstitutions: [],
+                selectedContacts: [],
+                institutions: JSON.parse('{{ institutions_json|escapejs }}'),
+                contacts: JSON.parse('{{ contacts_json|escapejs }}'),
+                init() {
+                    this.selectedInstitutions = this.selectedFromSelect(this.$refs.institutionSelect);
+                    this.selectedContacts = this.selectedFromSelect(this.$refs.contactSelect);
+                    this.pruneSelectedContacts();
+                },
+                fieldSelect(ref) {
+                    return ref && ref.tagName === 'SELECT' ? ref : ref?.querySelector('select');
+                },
+                selectedFromSelect(ref) {
+                    const select = this.fieldSelect(ref);
+                    if (!select) return [];
+                    return Array.from(select.selectedOptions).map((option) => ({
+                        id: option.value,
+                        name: option.textContent.trim(),
+                    }));
+                },
+                sync(ref, selected) {
+                    const select = this.fieldSelect(ref);
+                    if (!select) return;
+                    Array.from(select.options).forEach((option) => {
+                        option.selected = selected.some((item) => String(item.id) === option.value);
+                    });
+                },
+                addInstitution(inst) {
+                    if (this.selectedInstitutions.some((item) => String(item.id) === String(inst.id))) return;
+                    this.selectedInstitutions.push(inst);
+                    this.sync(this.$refs.institutionSelect, this.selectedInstitutions);
+                    this.pruneSelectedContacts();
+                    this.institutionSearch = '';
+                    this.institutionOpen = false;
+                },
+                removeInstitution(id) {
+                    this.selectedInstitutions = this.selectedInstitutions.filter((item) => String(item.id) !== String(id));
+                    this.sync(this.$refs.institutionSelect, this.selectedInstitutions);
+                    this.pruneSelectedContacts();
+                },
+                addContact(contact) {
+                    if (this.selectedContacts.some((item) => String(item.id) === String(contact.id))) return;
+                    this.selectedContacts.push(contact);
+                    this.sync(this.$refs.contactSelect, this.selectedContacts);
+                    this.contactSearch = '';
+                    this.contactOpen = false;
+                },
+                removeContact(id) {
+                    this.selectedContacts = this.selectedContacts.filter((item) => String(item.id) !== String(id));
+                    this.sync(this.$refs.contactSelect, this.selectedContacts);
+                },
+                get eligibleContactIds() {
+                    const ids = new Set();
+                    this.selectedInstitutions.forEach((selectedInstitution) => {
+                        const institution = this.institutions.find((item) => String(item.id) === String(selectedInstitution.id));
+                        (institution?.staffIds || []).forEach((id) => ids.add(String(id)));
+                    });
+                    return ids;
+                },
+                pruneSelectedContacts() {
+                    const eligibleIds = this.eligibleContactIds;
+                    this.selectedContacts = this.selectedContacts.filter((contact) => eligibleIds.has(String(contact.id)));
+                    this.sync(this.$refs.contactSelect, this.selectedContacts);
+                },
+                get filteredInstitutions() {
+                    const search = this.institutionSearch.toLowerCase();
+                    return this.institutions.filter((inst) => {
+                        const selected = this.selectedInstitutions.some((item) => String(item.id) === String(inst.id));
+                        return !selected && (!search || inst.name.toLowerCase().includes(search));
+                    });
+                },
+                get filteredContacts() {
+                    const search = this.contactSearch.toLowerCase();
+                    const eligibleIds = this.eligibleContactIds;
+                    return this.contacts.filter((contact) => {
+                        const selected = this.selectedContacts.some((item) => String(item.id) === String(contact.id));
+                        return eligibleIds.has(String(contact.id))
+                            && !selected
+                            && (!search || contact.name.toLowerCase().includes(search));
+                    });
+                }
+              }"
+              x-init="init()">
+            {% csrf_token %}
+            <div class="hidden">
+                <div x-ref="institutionSelect">{{ form.institution }}</div>
+                <div x-ref="contactSelect">{{ form.physicians }}</div>
+            </div>
+
+            <div>
+                <label class="block mb-1.5 text-xs font-medium text-base-content/80">Institutions</label>
+                <div class="relative">
+                    <input type="text"
+                           x-model="institutionSearch"
+                           @focus="institutionOpen = true"
+                           @click.away="institutionOpen = false"
+                           placeholder="Search and add institutions..."
+                           class="input input-bordered input-sm w-full {% if form.institution.errors %}input-error{% endif %}"
+                           :class="{'input-primary': institutionOpen}">
+                    <div x-show="institutionOpen"
+                         class="absolute z-20 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-56 overflow-y-auto"
+                         x-transition>
+                        <template x-for="inst in filteredInstitutions" :key="inst.id">
+                            <div @click="addInstitution(inst)"
+                                 class="px-3 py-2 text-sm cursor-pointer hover:bg-base-200 text-base-content"
+                                 x-text="inst.name"></div>
+                        </template>
+                        <div x-show="filteredInstitutions.length === 0" class="px-3 py-2 text-sm text-base-content/50">No matches.</div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mt-2 min-h-[1.75rem]">
+                    <template x-for="inst in selectedInstitutions" :key="inst.id">
+                        <span class="badge badge-primary gap-1.5 p-3 text-xs">
+                            <span x-text="inst.name"></span>
+                            <button type="button" @click="removeInstitution(inst.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                        </span>
+                    </template>
+                    <span x-show="selectedInstitutions.length === 0" class="text-sm text-base-content/50 italic py-1">No institutions selected.</span>
+                </div>
+                {% if form.institution.errors %}<p class="mt-1 text-xs text-error">{{ form.institution.errors.0 }}</p>{% endif %}
+            </div>
+
+            <div>
+                <label class="block mb-1.5 text-xs font-medium text-base-content/80">Clinicians</label>
+                <div class="relative">
+                    <input type="text"
+                           x-model="contactSearch"
+                           @focus="contactOpen = true"
+                           @click.away="contactOpen = false"
+                           placeholder="Search and add clinicians..."
+                           class="input input-bordered input-sm w-full {% if form.physicians.errors %}input-error{% endif %}"
+                           :class="{'input-primary': contactOpen}">
+                    <div x-show="contactOpen"
+                         class="absolute z-20 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-56 overflow-y-auto"
+                         x-transition>
+                        <template x-for="contact in filteredContacts" :key="contact.id">
+                            <div @click="addContact(contact)"
+                                 class="px-3 py-2 text-sm cursor-pointer hover:bg-base-200 text-base-content"
+                                 x-text="contact.name"></div>
+                        </template>
+                        <div x-show="selectedInstitutions.length === 0" class="px-3 py-2 text-sm text-base-content/50">Select an institution first.</div>
+                        <div x-show="selectedInstitutions.length > 0 && filteredContacts.length === 0" class="px-3 py-2 text-sm text-base-content/50">No matching clinicians for the selected institution(s).</div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mt-2 min-h-[1.75rem]">
+                    <template x-for="contact in selectedContacts" :key="contact.id">
+                        <span class="badge badge-secondary gap-1.5 p-3 text-xs">
+                            <span x-text="contact.name"></span>
+                            <button type="button" @click="removeContact(contact.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                        </span>
+                    </template>
+                    <span x-show="selectedContacts.length === 0" class="text-sm text-base-content/50 italic py-1">No clinicians selected.</span>
+                </div>
+                {% if form.physicians.errors %}<p class="mt-1 text-xs text-error">{{ form.physicians.errors.0 }}</p>{% endif %}
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" class="btn btn-sm btn-ghost"
+                        hx-get="{% url 'lab:individual_contact_information_display' individual.pk %}"
+                        hx-target="#contact-information-card-{{ individual.pk }} .card-body"
+                        hx-swap="innerHTML">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+            </div>
+        </form>
+    {% else %}
+        <div class="grid gap-8 md:grid-cols-2" style="grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));">
+            <div>
+                <h4 class="text-xs font-bold uppercase tracking-wide text-base-content/50 mb-2">Institutions</h4>
+                <div class="space-y-2">
+                    {% for institution in individual.institution.all %}
+                        <div class="rounded border border-base-200 bg-base-100 p-3">
+                            <div class="flex items-start gap-2">
+                                <div class="font-medium text-sm text-base-content flex-1">{{ institution.name }}</div>
+                                {% if institution.contact %}
+                                    <div class="relative shrink-0"
+                                         x-data="{ open: false }"
+                                         @mouseenter="open = true"
+                                         @mouseleave="open = false"
+                                         @click.outside="open = false">
+                                        <button type="button"
+                                                class="btn btn-ghost btn-xs btn-circle h-5 min-h-0 w-5 text-base-content/45 hover:text-primary"
+                                                aria-label="Institution contact details"
+                                                @click.stop="open = !open"
+                                                @focus="open = true"
+                                                @blur="open = false">
+                                            <i class="fa-solid fa-circle-info text-[10px]"></i>
+                                        </button>
+                                        <div x-show="open"
+                                             style="display: none; position: absolute; right: 0; top: 100%; z-index: 20; margin-top: 0.25rem; max-width: 16rem; min-width: 12rem; white-space: pre-line;"
+                                             class="rounded border border-base-200 bg-base-100 px-2 py-1.5 text-xs text-base-content/75 shadow-lg">{{ institution.contact }}</div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-base-content/65">
+                                {% if institution.official_name %}<div><span class="font-medium">Official:</span> {{ institution.official_name }}</div>{% endif %}
+                                {% if institution.center_name %}<div><span class="font-medium">Center:</span> {{ institution.center_name }}</div>{% endif %}
+                                {% if institution.city %}<div><span class="font-medium">City:</span> {{ institution.city }}</div>{% endif %}
+                                {% if institution.speciality %}<div><span class="font-medium">Speciality:</span> {{ institution.speciality }}</div>{% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="text-sm text-base-content/40 italic">No institutions selected.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-xs font-bold uppercase tracking-wide text-base-content/50 mb-2">Clinicians</h4>
+                <div class="space-y-2">
+                    {% for contact in individual.physicians.all %}
+                        <div class="rounded border border-base-200 bg-base-100 p-3">
+                            <div class="font-medium text-sm text-base-content">{{ contact.full_name }}</div>
+                            <div class="mt-1 space-y-1 text-xs text-base-content/65">
+                                {% if contact.emails %}
+                                    <div><span class="font-medium">Email:</span> {{ contact.emails|join:", " }}</div>
+                                {% endif %}
+                                {% if contact.phones %}
+                                    <div><span class="font-medium">Phone:</span> {{ contact.phones|join:", " }}</div>
+                                {% endif %}
+                                {% if contact.notes %}
+                                    <div class="text-base-content/70 whitespace-pre-line">{{ contact.notes }}</div>
+                                {% endif %}
+                                {% if not contact.emails and not contact.phones and not contact.notes %}
+                                    <div class="text-base-content/40 italic">No contact details stored.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="text-sm text-base-content/40 italic">No clinicians selected.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endpartialdef %}
+
+{% partialdef demographics_content %}
+    <div class="flex justify-between items-center mb-4">
+            <h3 class="card-title text-sm uppercase text-base-content/50">Demographics</h3>
+            {% if not edit_mode %}
+            <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
+                data-tip="Edit Demographics"
+                hx-get="{% url 'lab:individual_demographics_edit' individual.pk %}"
+                hx-target="#demographics-card-{{ individual.pk }} .card-body"
+                hx-swap="innerHTML">
+            <i class="fa-solid fa-pencil"></i>
+        </button>
+        {% endif %}
+    </div>
+
+    {% if edit_mode %}
+        <form hx-post="{% url 'lab:individual_demographics_save' individual.pk %}" 
+                hx-target="#demographics-card-{{ individual.pk }} .card-body" 
+                hx-swap="innerHTML"
+                class="grid grid-cols-1 gap-y-3">
+            {% csrf_token %}
+            <!-- Form Fields -->
+            <!-- Form Fields -->
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Sex</label>
+                    <select name="{{ form.sex.html_name }}" class="select select-bordered w-full select-sm">
+                        {% for value, label in form.fields.sex.choices %}
+                            <option value="{{ value }}" {% if form.sex.value == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                     {% if form.sex.errors %}
+                        <span class="text-error text-xs">{{ form.sex.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Birth Date</label>
+                    <input type="date" name="{{ form.birth_date.html_name }}" 
+                           value="{{ form.birth_date.value|date:'Y-m-d'|default:'' }}"
+                           class="input input-bordered w-full input-sm">
+                    {% if form.birth_date.errors %}
+                        <span class="text-error text-xs">{{ form.birth_date.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Vital Status</label>
+                    <select name="{{ form.vital_status.html_name }}" class="select select-bordered w-full select-sm">
+                        {% for value, label in form.fields.vital_status.choices %}
+                            <option value="{{ value }}" {% if form.vital_status.value == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                     {% if form.vital_status.errors %}
+                        <span class="text-error text-xs">{{ form.vital_status.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Family</label>
+                
+                <div x-data="{
+                        open: false,
+                        startVal: '{{ individual.family.id|default:"" }}',
+                        startText: '{{ individual.family.family_id|default:"" }}',
+                        selected: {
+                            id: '{{ individual.family.id|default:"" }}', 
+                            text: '{{ individual.family.family_id|default:"" }}'
+                        },
+                        search: '',
+                        init() {
+                            // If form has value but our startVal is empty (e.g. error re-render), use form value
+                            // But usually template re-renders with instance values. 
+                            // Let's trust the instance for now or the form initial.
+                            // The hidden input will carry the value.
+                        },
+                        select(id, text) {
+                            this.selected = {id: id, text: text};
+                            this.open = false;
+                            this.$refs.hiddenInput.value = id;
+                        },
+                        toggle() {
+                            if (this.open) {
+                                this.open = false;
+                            } else {
+                                this.open = true;
+                                this.search = '';
+                                this.$nextTick(() => this.$refs.searchInput.focus());
+                                // Trigger initial load
+                                htmx.trigger(this.$refs.searchInput, 'keyup');
+                            }
+                        }
+                     }"
+                     class="relative">
+                    
+                    <input type="hidden" name="{{ form.family.html_name }}" x-ref="hiddenInput" :value="selected.id">
+                    
+                    <!-- Display Input (Read-onlyish, click to open) -->
+                    <div @click="toggle()" class="input input-bordered w-full input-sm flex items-center justify-between cursor-pointer" :class="{'input-primary': open}">
+                        <span x-text="selected.text || 'Select Family...'" :class="{'text-base-content/50': !selected.text}"></span>
+                        <i class="fa-solid fa-chevron-down text-xs text-base-content/50"></i>
+                    </div>
+
+                    <!-- Dropdown -->
+                    <div x-show="open" 
+                         @click.away="open = false"
+                         class="absolute z-10 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-60 flex flex-col"
+                         x-transition>
+                        
+                        <div class="p-2 border-b border-base-200">
+                            <input type="text" 
+                                   x-ref="searchInput"
+                                   x-model="search"
+                                   class="input input-bordered input-sm w-full" 
+                                   placeholder="Search..."
+                                   hx-get="{% url 'lab:family_search' %}"
+                                   hx-trigger="keyup changed delay:200ms, focus"
+                                   hx-target="#family-results-{{ individual.pk }}"
+                                   name="q">
+                        </div>
+                        
+                        <div id="family-results-{{ individual.pk }}" class="overflow-y-auto flex-1">
+                            <!-- Results loaded here -->
+                        </div>
+                    </div>
+                </div>
+                </div>
+
+            <div class="flex justify-end gap-2 mt-4">
+                <button type="button" class="btn btn-sm btn-ghost"
+                        hx-get="{% url 'lab:individual_demographics_display' individual.pk %}" 
+                        hx-target="#demographics-card-{{ individual.pk }} .card-body"
+                        hx-swap="innerHTML">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+            </div>
+        </form>
+    {% else %}
+            <dl class="grid grid-cols-1 gap-y-4">
+                <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Sex</dt>
+                <dd class="text-sm text-base-content col-span-2 capitalize">
+                    {% if individual.sex == "male" %}
+                        <i class="fa-solid fa-mars text-blue-500 mr-1"></i> Male
+                    {% elif individual.sex == "female" %}
+                            <i class="fa-solid fa-venus text-pink-500 mr-1"></i> Female
+                    {% else %}
+                            {{ individual.sex|default:"Unknown" }}
+                    {% endif %}
+                </dd>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Birth Date</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                        {% if perms.lab.view_sensitive_data %}
+                        <span id="dob-reveal-{{ individual.pk }}" class="reveal-wrapper">
+                            **-**-****
+                            <button class="btn btn-xs btn-ghost text-primary" 
+                                    hx-get="{% url 'lab:reveal_sensitive_field' 'Individual' individual.pk 'birth_date' %}"
+                                    hx-target="closest .reveal-wrapper"
+                                    hx-swap="outerHTML">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </span>
+                    {% else %}
+                        <span>**-**-****</span>
+                    {% endif %}
+                </dd>
+            </div>
+                
+                <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Vital Status</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                    {% if individual.is_alive %}
+                        <span class="badge badge-success badge-sm badge-outline gap-1">
+                            <span class="size-1.5 rounded-full bg-success"></span> Alive
+                        </span>
+                    {% else %}
+                            <span class="badge badge-neutral badge-sm badge-outline">Deceased</span>
+                    {% endif %}
+                </dd>
+            </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-base-content/70">Family</dt>
+                <dd class="text-sm text-base-content col-span-2">
+                    {% if individual.family %}
+                        <span class="font-mono font-semibold">{{ individual.family.family_id }}</span>
+                        {% if individual.family.is_consanguineous %}
+                            <span class="badge badge-warning badge-sm ml-2 gap-1">
+                                <i class="fa-solid fa-circle-nodes text-[10px]"></i> Consanguineous
+                            </span>
+                        {% elif individual.family.is_consanguineous is False %}
+                            <span class="badge badge-ghost badge-sm ml-2 text-base-content/40">Non-consanguineous</span>
+                        {% else %}
+                            <span class="badge badge-ghost badge-sm ml-2 text-base-content/40">Unknown consanguinity</span>
+                        {% endif %}
+                        {% if individual.is_index %}
+                            <div class="badge badge-primary badge-sm ml-2">Index Case</div>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-base-content/40 italic">--</span>
+                    {% endif %}
+                </dd>
+            </div>
+        </dl>
+    {% endif %}
+{% endpartialdef %}
+
+{% partialdef projects_display %}
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="card-title text-sm uppercase text-base-content/50">Projects</h3>
+        <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
+                data-tip="Edit Project Assignments"
+                hx-get="{% url 'lab:individual_projects_edit' individual.pk %}"
+                hx-target="#projects-card-{{ individual.pk }} .card-body"
+                hx-swap="innerHTML">
+            <i class="fa-solid fa-pencil"></i>
+        </button>
+    </div>
+    {% if individual.projects.exists %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {% for project in individual.projects.all %}
+            <div class="p-3 bg-base-200/50 rounded-lg space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <div class="font-bold text-sm">{{ project.name }}</div>
+                        <div class="text-xs text-base-content/60">{{ project.description|truncatechars:50 }}</div>
+                    </div>
+                    {% get_object_statuses project as proj_active_statuses %}
+                    {% for s in proj_active_statuses %}
+                    <span class="badge badge-sm whitespace-nowrap shrink-0"
+                          style="background-color: {{ s.color }}; color: {{ s.color|contrast_color }};">
+                        {{ s.display_name }}
+                    </span>
+                    {% endfor %}
+                </div>
+                <div class="flex items-center justify-between gap-2 text-[11px] text-base-content/60">
+                    <div class="flex items-center gap-1">
+                        <i class="fa-solid fa-list-check text-[10px]"></i>
+                        {% with total=project.tasks.count %}
+                            <span>{{ total }} task{{ total|pluralize }}</span>
+                        {% endwith %}
+                    </div>
+                    {% get_content_type_id project as project_ct %}
+                    <button
+                        class="btn btn-ghost btn-[22px] min-h-0 px-2 text-[10px] gap-1"
+                        hx-get="{% url 'lab:task_create_modal' project_ct project.id %}"
+                        hx-target="#generic-modal-content"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('generic-modal').showModal()">
+                        <i class="fa-solid fa-plus text-[9px]"></i>
+                        Add Task
+                    </button>
+                </div>
+                {% if project.tasks.exists %}
+                    <div class="mt-1 space-y-1">
+                        {% for task in project.tasks.all|slice:":3" %}
+                            <div class="flex items-center justify-between text-[11px] bg-base-100/70 px-2 py-1 rounded">
+                                <span class="truncate mr-2">{{ task.title }}</span>
+                                <span class="text-[10px] text-base-content/50">
+                                    {{ task.due_date|date:"d/m/Y H:i"|default:"--" }}
+                                </span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center py-4 text-base-content/40 italic text-xs">
+            Not assigned to any projects.
+        </div>
+    {% endif %}
+{% endpartialdef %}
+
+
+{% partialdef projects_edit %}
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="card-title text-sm uppercase text-base-content/50">Manage Projects</h3>
+    </div>
+    
+    <div x-data="{
+            selectedProjects: [
+                {% for project in individual.projects.all %}
+                {id: '{{ project.id }}', name: '{{ project.name|escapejs }}'},
+                {% endfor %}
+            ],
+            open: false,
+            search: '',
+            addProject(id, name) {
+                if (!this.selectedProjects.find(p => p.id === id)) {
+                    this.selectedProjects.push({id: id, name: name});
+                }
+                this.open = false;
+            },
+            removeProject(index) {
+                this.selectedProjects.splice(index, 1);
+            }
+         }">
+        
+        <form hx-post="{% url 'lab:individual_projects_save' individual.pk %}"
+              hx-target="#projects-card-{{ individual.pk }} .card-body"
+              hx-swap="innerHTML">
+            {% csrf_token %}
+            
+            <div class="space-y-4">
+                <!-- Selected Projects -->
+                <div class="flex flex-wrap gap-2">
+                    <template x-for="(project, index) in selectedProjects" :key="project.id">
+                        <div class="badge badge-lg py-4 badge-primary gap-2">
+                            <span x-text="project.name"></span>
+                            <button type="button" @click="removeProject(index)" class="btn btn-ghost btn-xs btn-circle bg-white/20 hover:bg-white/40 h-5 w-5 min-h-0">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                            <input type="hidden" name="projects" :value="project.id">
+                        </div>
+                    </template>
+                    <div x-show="selectedProjects.length === 0" class="text-xs text-base-content/40 italic py-2">
+                        No projects selected.
+                    </div>
+                </div>
+
+                <!-- Project Search Picker -->
+                <div class="relative">
+                    <button type="button" 
+                            @click="open = !open; if(open) { search = ''; $nextTick(() => $refs.projectSearch.focus()); }"
+                            class="btn btn-outline btn-sm gap-2">
+                        <i class="fa-solid fa-plus"></i> Add Project
+                    </button>
+                    
+                    <div x-show="open" 
+                         @click.away="open = false"
+                         class="absolute z-[100] w-full md:w-80 mt-2 rounded-lg border-2 border-primary/30 bg-base-100 shadow-xl ring-1 ring-base-content/10 overflow-hidden"
+                         x-transition>
+                        <div class="p-2 bg-base-200/70 border-b border-base-300">
+                            <input type="text" 
+                                   x-ref="projectSearch"
+                                   x-model="search"
+                                   placeholder="Search projects..."
+                                   class="input input-bordered input-sm w-full"
+                                   hx-get="{% url 'lab:project_search' %}"
+                                   hx-trigger="keyup changed delay:200ms"
+                                   hx-target="#project-results-{{ individual.pk }}"
+                                   name="q">
+                        </div>
+                        <div id="project-results-{{ individual.pk }}"
+                             class="max-h-60 overflow-y-auto bg-base-100 p-1"
+                             hx-get="{% url 'lab:project_search' %}"
+                             hx-trigger="intersect once"
+                             hx-target="this"
+                             hx-swap="innerHTML">
+                            <!-- Results loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 mt-6 pt-4 border-t border-base-200">
+                <button type="button" class="btn btn-sm btn-ghost"
+                        hx-get="{% url 'lab:individual_projects_edit' individual.pk %}?display=1"
+                        hx-target="#projects-card-{{ individual.pk }} .card-body"
+                        hx-swap="innerHTML">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary">Save Assignments</button>
+            </div>
+        </form>
+    </div>
+{% endpartialdef %}
+
+
+{% partialdef request_forms_display %}
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="card-title text-sm uppercase text-base-content/50">Request Forms</h3>
+        <div class="flex items-center gap-2">
+            <span class="badge badge-sm badge-neutral">{{ individual.analysis_request_forms.count }}</span>
+            <button class="btn btn-primary btn-xs gap-1 font-normal tooltip tooltip-left"
+                    data-tip="Upload Request Form"
+                    hx-get="{% url 'lab:request_form_create_modal' individual.pk %}"
+                    hx-target="#generic-modal-content"
+                    onclick="document.getElementById('generic-modal').showModal()">
+                <i class="fa-solid fa-upload text-[10px]"></i>
+            </button>
+        </div>
+    </div>
+
+    {% if individual.analysis_request_forms.exists %}
+        <div class="space-y-2">
+            {% for form in individual.analysis_request_forms.all|dictsortreversed:"created_at" %}
+            <div class="flex items-center justify-between p-3 bg-base-200/50 rounded-lg group hover:bg-base-200 transition-colors">
+                <div class="flex items-center gap-3">
+                    <div class="h-10 w-10 rounded bg-white flex items-center justify-center border border-base-200 shrink-0">
+                         {% if form.file.name|lower|slice:"-4:" == ".pdf" %}
+                            <i class="fa-solid fa-file-pdf text-red-500 text-lg"></i>
+                        {% elif form.file.name|lower|slice:"-5:" == ".docx" %}
+                            <i class="fa-solid fa-file-word text-blue-500 text-lg"></i>
+                        {% else %}
+                            <i class="fa-solid fa-file text-base-content/40 text-lg"></i>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="font-medium text-sm flex items-center gap-2">
+                            {% if perms.lab.view_sensitive_data %}
+                            <a href="{% url 'lab:document_download' 'AnalysisRequestForm' form.pk %}" download hx-boost="false" class="hover:underline hover:text-primary">
+                                {{ form.file.name|basename|truncatechars:30 }}
+                            </a>
+                            {% else %}
+                            <span>
+                                {{ form.file.name|basename|truncatechars:30 }}
+                            </span>
+                            {% endif %}
+                             {% if form.preview_file and perms.lab.view_analysisrequestform %}
+                                <button hx-get="{% url 'lab:document_preview' 'AnalysisRequestForm' form.pk %}"
+                                        hx-target="#preview-drawer-content"
+                                        hx-on::after-request="window.dispatchEvent(new CustomEvent('open-preview'))"
+                                        class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary tooltip tooltip-right" 
+                                        data-tip="View Preview">
+                                    <i class="fa-solid fa-eye"></i>
+                                </button>
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-base-content/60">
+                            {{ form.created_at|date:"M d, Y" }} · {{ form.created_by.first_name }}
+                        </div>
+                    </div>
+                </div>
+                {% if perms.lab.view_sensitive_data %}
+                <a href="{% url 'lab:document_download' 'AnalysisRequestForm' form.pk %}" download hx-boost="false" class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary">
+                    <i class="fa-solid fa-download"></i>
+                </a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center py-8 text-base-content/40 italic text-xs border-2 border-dashed border-base-200 rounded-lg">
+            No request forms available.
+        </div>
+    {% endif %}
+{% endpartialdef %}

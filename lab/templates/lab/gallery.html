@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load lab_tags %}
+
+{% block content %}
+<div class="p-6 max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold">Plot Gallery</h1>
+        <a href="{% url 'lab:dashboard' %}" class="btn btn-ghost btn-sm">
+            <i class="fa-solid fa-arrow-left mr-2"></i> Back to Dashboard
+        </a>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for tp in templates %}
+        <div class="card bg-base-100 shadow-sm border border-base-200 hover:shadow-md transition-shadow">
+            <div class="card-body">
+                <h2 class="card-title text-lg">{{ tp.name }}</h2>
+                <div class="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Model: {{ tp.target_model }}</div>
+                <p class="text-sm text-base-content/70 flex-grow">{{ tp.description }}</p>
+                <div class="text-xs text-base-content/50 mt-4 border-t border-base-200 pt-3">
+                    <p><i class="fa-solid fa-user mr-1"></i> Created by: {{ tp.created_by.get_full_name|default:tp.created_by.username }}</p>
+                </div>
+                <div class="card-actions justify-end mt-4 flex-wrap gap-2">
+                    <button class="btn btn-primary btn-sm"
+                            hx-post="{% url 'lab:add_widget' tp.pk %}"
+                            hx-swap="outerHTML">
+                        Add to Dashboard
+                    </button>
+                    {% if user.is_authenticated %}
+                    <a class="btn btn-ghost btn-sm"
+                       href="{% url 'lab:marimo_run_proxy' %}?file={{ tp.notebook_filename|urlencode }}&show_download_menu={{ tp.show_download_menu|yesno:'1,0' }}"
+                       target="_blank" rel="noopener noreferrer"
+                       title="Marimo run server with Django plot JWT in the URL">Open run app</a>
+                    {% endif %}
+                    {% if user.is_staff %}
+                    <a class="btn btn-ghost btn-sm"
+                       href="{% url 'lab:marimo_proxy' %}?file={{ tp.notebook_filename|urlencode }}&show_download_menu={{ tp.show_download_menu|yesno:'1,0' }}"
+                       target="_blank" rel="noopener noreferrer">Edit in Marimo</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full border-2 border-dashed border-base-300 rounded-xl p-12 text-center opacity-70">
+            <i class="fa-solid fa-chart-pie text-4xl mb-4 text-base-content/30"></i>
+            <h3 class="text-lg font-medium">No plots available</h3>
+            <p>There are currently no published plots available in the gallery.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

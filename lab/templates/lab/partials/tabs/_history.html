@@ -1,0 +1,40 @@
+<div class="relative pl-6 border-l-2 border-base-200 space-y-6">
+    {% for record in history_records %}
+    <div class="relative">
+        <span class="absolute -left-[29px] top-1 bg-base-100 border-2 border-primary rounded-full w-4 h-4"></span>
+        
+        <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mb-1">
+            <span class="font-bold text-sm">
+                {% if record.history_type == "+" %}
+                    Created
+                {% elif record.history_type == "-" %}
+                    Deleted
+                {% else %}
+                    Updated
+                {% endif %}
+            </span>
+            <span class="text-xs text-base-content/50 font-mono">{{ record.history_date|date:"Y-m-d H:i:s" }}</span>
+            <span class="badge badge-ghost badge-xs">{{ record.history_user.username|default:"System" }}</span>
+        </div>
+        
+        
+        {% if record.history_type == "~" and record.diff_display %}
+            <div class="text-xs text-base-content/70 bg-base-200/50 p-2 rounded space-y-1">
+                {% for field, change in record.diff_display.items %}
+                    <div><strong class="text-primary">{{ field }}:</strong> {{ change }}</div>
+                {% endfor %}
+            </div>
+        {% elif record.history_type == "+" %}
+            <div class="text-xs text-base-content/70 bg-base-200/50 p-2 rounded w-fit">
+                Record created
+            </div>
+        {% elif record.history_type == "-" %}
+            <div class="text-xs text-base-content/70 bg-base-200/50 p-2 rounded w-fit">
+                Record deleted
+            </div>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div class="text-base-content/40 italic text-sm">No history available</div>
+    {% endfor %}
+</div>

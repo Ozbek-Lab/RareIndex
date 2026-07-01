@@ -1,0 +1,125 @@
+<div class="card bg-base-100 shadow-xl h-full">
+    <div class="card-body p-4">
+        <h2 class="card-title text-lg flex justify-between items-center">
+            <span>
+                <i class="fas fa-tasks mr-2 text-primary"></i>My Tasks
+            </span>
+            <span class="badge badge-primary">{{ my_tasks.count }}</span>
+        </h2>
+        
+        <div class="overflow-x-auto mt-2">
+            <table class="table table-sm w-full">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Related Object</th>
+                        <th>Project</th>
+                        <th>Priority</th>
+                        <th>Due</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for task in my_tasks %}
+                    <tr class="hover">
+                        <td class="font-medium truncate max-w-xs" title="{{ task.title }}">
+                            {{ task.title }}
+                        </td>
+                        <td>
+                            {% if task.content_object %}
+                                <a href="{{ task.content_object.get_absolute_url|default:'#' }}" class="link link-hover text-sm">
+                                    {{ task.content_object }}
+                                </a>
+                                <div class="text-xs text-base-content/50">{{ task.content_type.name|title }}</div>
+                            {% else %}
+                                <span class="text-xs text-base-content/40">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if task.project %}
+                                <a href="#" class="badge badge-ghost badge-sm">{{ task.project.name }}</a>
+                            {% else %}
+                                <span class="text-xs text-base-content/40">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if task.priority == 'high' or task.priority == 'urgent' %}
+                                <span class="badge badge-error badge-xs font-semibold">{{ task.get_priority_display }}</span>
+                            {% elif task.priority == 'medium' %}
+                                <span class="badge badge-warning badge-xs">{{ task.get_priority_display }}</span>
+                            {% else %}
+                                <span class="badge badge-info badge-ghost badge-xs">{{ task.get_priority_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-xs">
+                            {% if task.due_date %}
+                                <span class="{% if task.due_date < now %}text-error font-bold{% endif %}">
+                                    {{ task.due_date|date:"M d" }}
+                                </span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <!-- Button to complete task -->
+                            <button class="btn btn-ghost btn-xs text-success" 
+                                    hx-post="{% url 'lab:complete_task' task.id %}"
+                                    hx-swap="outerHTML"
+                                    hx-target="closest tr"
+                                    title="Mark Complete">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-6 text-base-content/50">
+                            <i class="fas fa-check-circle text-4xl mb-2 text-success/20 block"></i>
+                            No pending tasks. Great job!
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if completed_tasks %}
+        <div class="collapse bg-base-200 mt-4 rounded-lg" x-data="{ open: false }">
+            <input type="checkbox" @change="open = !open" /> 
+            <div class="collapse-title text-sm font-semibold py-2 min-h-0 flex items-center justify-between pr-4">
+                <span>
+                    <i class="fas fa-check-double mr-2 text-success"></i>
+                    Finished Recently ({{ completed_tasks|length }})
+                </span>
+                <i class="fa-solid fa-chevron-down transition-transform duration-200 text-xs opacity-50" :class="{ 'rotate-180': open }"></i>
+            </div>
+            <div class="collapse-content"> 
+                <div class="overflow-x-auto">
+                    <table class="table table-xs w-full">
+                        <tbody>
+                            {% for task in completed_tasks %}
+                            <tr class="opacity-60 grayscale-[50%] border-t border-base-300/30">
+                                <td class="line-through">{{ task.title }}</td>
+                                <td class="text-xs">
+                                     {% if task.content_object %}
+                                        <span class="text-xs opacity-70">{{ task.content_object }}</span>
+                                     {% endif %}
+                                </td>
+                                <td class="text-right">
+                                    <button class="btn btn-ghost btn-xs text-info hover:text-info-content" 
+                                            hx-post="{% url 'lab:reopen_task' task.id %}"
+                                            hx-swap="none"
+                                            title="Undo / Reopen">
+                                        <i class="fas fa-arrow-rotate-left"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>

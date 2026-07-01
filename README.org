@@ -12,9 +12,7 @@ python manage.py makemigrations
 python manage.py migrate --run-syncdb
 python manage.py generate_sample_data (will also create superuser admin)
 #python manage.py createsuperuser
-python manage.py clear_database (will remove class objects of lab app)
-python manage.py import_ozbek_lab path/to/file --admin-user admin
-python manage.py import_analiz_takip path/to/file --admin-user admin
+python manage.py clear_database (will remove all data except for static imports and superusers)
 #+end_src
 
 ** sync ontologies
@@ -22,10 +20,14 @@ python manage.py import_analiz_takip path/to/file --admin-user admin
 python manage.py sync_ontology --ontology HP
 #+end_src
 
-** import from excel
+** Import Data
 #+begin_src shell
-python manage.py import_ids '..\..\RareIndex_Real_Sample_Data\OZBEK_Lab. Örnek Takip Çizelgesi - OZBEK LAB.tsv' --admin-username emre
-python manage.py import_biobank '..\..\RareIndex_Real_Sample_Data\OZBEK_Lab. Örnek Takip Çizelgesi - Biyobankada kayıtlı RB örnekler.tsv' --admin-username emre
-python manage.py import_ozbek_lab '..\..\RareIndex_Real_Sample_Data\OZBEK_Lab. Örnek Takip Çizelgesi - OZBEK LAB.tsv' --admin-user emre
-python manage.py import_analiz_takip '..\..\RareIndex_Real_Sample_Data\OZBEK_Lab. Örnek Takip Çizelgesi - Analiz Takip.tsv' --admin-user emre
+python manage.py migrate
+python manage.py import_all OzbekLab.xlsx --yayin-ici YayınIçi.xlsx --admin-username admin --forms-dir FormsDirectory --reports-dir ReportsDirectory
+#+end_src
+
+** Create Dummy Data
+#+begin_src shell
+python manage.py migrate
+python manage.py generate_sample_data
 #+end_src
