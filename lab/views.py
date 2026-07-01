@@ -446,6 +446,285 @@ def _project_filter_counts():
     from .models import TaggedStatus
     project_ct = ContentType.objects.get_for_model(Project)
 
+    # Pagination
+    page = request.GET.get("page")
+    paginator = Paginator(filtered_items, 12)
+    paged_items = paginator.get_page(page)
+
+    card_partial = request.GET.get("card", "card")
+    view_mode = request.GET.get("view_mode", "cards")
+    # Combobox render mode (for Select2-like behavior)
+    render_mode = request.GET.get("render")
+    if render_mode == "combobox":
+        # Exclude already selected ids
+        exclude_ids_raw = request.GET.get("exclude_ids", "")
+        exclude_ids = []
+        if exclude_ids_raw:
+            try:
+                exclude_ids = json.loads(exclude_ids_raw)
+            except Exception:
+                try:
+                    exclude_ids = [
+                        int(x) for x in exclude_ids_raw.split(",") if x.strip()
+                    ]
+                except Exception:
+                    exclude_ids = []
+
+        if exclude_ids:
+            try:
+                paged_items.object_list = paged_items.object_list.exclude(
+                    pk__in=exclude_ids
+                )
+                paginator = Paginator(paged_items.object_list, 12)
+                paged_items = paginator.get_page(page)
+            except Exception:
+                pass
+
+        value_field = request.GET.get("value_field", "pk")
+        label_field = request.GET.get("label_field")
+
+        # Build option dicts for template rendering
+        options = []
+        try:
+            for obj in paged_items.object_list:
+                try:
+                    value = (
+                        getattr(obj, value_field)
+                        if value_field and value_field != "pk"
+                        else getattr(obj, "pk")
+                    )
+                except Exception:
+                    value = getattr(obj, "pk")
+                try:
+                    # Special display for ontology Terms (e.g. HPO): show code + label
+                    if target_app_label == "ontologies" and target_model_name == "Term":
+                        label = f"{getattr(obj, 'term', str(obj))} {getattr(obj, 'label', '')}".strip()
+                    else:
+                        label = getattr(obj, label_field) if label_field else str(obj)
+                except Exception:
+                    label = str(obj)
+                options.append({"value": value, "label": str(label)})
+        except Exception:
+            # Fallback: simple string labels
+            options = [
+                {"value": getattr(obj, "pk"), "label": str(obj)}
+                for obj in paged_items.object_list
+            ]
+
+        context = {
+            "items": paged_items,
+            "model_name": target_model_name,
+            "app_label": target_app_label,
+            "value_field": value_field,
+            "label_field": label_field,
+            "options": options,
+        }
+        try:
+            return render(
+                request,
+                f"{target_app_label}/{target_model_name.lower()}.html#combobox-options",
+                context,
+            )
+        except TemplateDoesNotExist:
+            return render(request, "lab/partials/partials.html#combobox-options", context)
+
+    context = {
+        "items": paged_items,
+        "model_name": target_model_name,
+        "app_label": target_app_label,
+        "all_filters": {
+            k: v for k, v in request.GET.items() if k.startswith("filter_")
+        },
+        "view_mode": view_mode,
+        "card": card_partial,
+    }
+    
+    # Add model-specific statuses to context for status badge dropdowns
+    try:
+        model_class = apps.get_model(app_label=target_app_label, model_name=target_model_name)
+        if hasattr(model_class, 'status'):
+            model_ct = ContentType.objects.get_for_model(model_class)
+            statuses_var_name = f"{target_model_name.lower()}_statuses"
+            context[statuses_var_name] = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+    except Exception:
+        pass  # If model doesn't have status field, skip
+    
+    return render(request, "lab/partials/_infinite_scroll_items.html", context)
+
+
+@login_required
+@vary_on_headers("HX-Request")
+def generic_detail(request):
+    target_app_label = request.GET.get("app_label", "lab").strip()
+    target_model_name = request.GET.get("model_name", "").strip()
+    pk = request.GET.get("pk")
+    if not target_model_name or not pk:
+        return HttpResponseBadRequest("Model or pk not specified.")
+
+    target_model = apps.get_model(
+        app_label=target_app_label, model_name=target_model_name
+    )
+
+    obj = get_object_or_404(target_model, pk=pk)
+
+    if target_app_label == "variant":
+        template_base = "variant/variant.html"
+    else:
+        template_base = f"{target_app_label}/{target_model_name.lower()}.html"
+    context = {
+        "item": obj,
+        "model_name": target_model_name,
+        "app_label": target_app_label,
+        "user": request.user,
+    }
+
+    requested_tab = request.GET.get("activeTab")
+    normalized_tab = None
+    if requested_tab:
+        normalized_tab = "history" if requested_tab == "status" else requested_tab
+        context["activeTab"] = normalized_tab
+
+    history_prefetched = normalized_tab == "history"
+    context["history_prefetched"] = history_prefetched
+
+    def _add_statuses_for_models(context, model_classes):
+        """Attach status querysets for each provided model class if not already present."""
+        for model_class in model_classes:
+            try:
+                key = f"{model_class.__name__.lower()}_statuses"
+                if key in context:
+                    continue
+                model_ct = ContentType.objects.get_for_model(model_class)
+                context[key] = Status.objects.filter(
+                    Q(content_type=model_ct) | Q(content_type__isnull=True)
+                ).order_by("name")
+            except Exception:
+                # If a model lacks a status relationship, skip silently.
+                continue
+
+    if target_model_name == "Individual":
+        context["tests"] = [
+            test for sample in obj.samples.all() for test in sample.tests.all()
+        ]
+        context["analyses"] = [
+            analysis for test in context["tests"] for analysis in test.analyses.all()
+        ]
+        # Build initial JSON for HPO terms combobox
+        try:
+            hpo_initial = [
+                {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+                for t in getattr(obj, "hpo_terms", []).all()
+            ]
+            context["hpo_initial_json"] = json.dumps(hpo_initial)
+        except Exception:
+            context["hpo_initial_json"] = "[]"
+        # Get all available Individual statuses for status dropdown
+        individual_ct = ContentType.objects.get_for_model(Individual)
+        context["individual_statuses"] = Status.objects.filter(
+            Q(content_type=individual_ct) | Q(content_type__isnull=True)
+        ).order_by("name")
+        _add_statuses_for_models(
+            context, [Sample, Test, Analysis, Project, Task]
+        )
+    elif target_model_name == "Sample":
+        context["analyses"] = [
+            analysis for test in obj.tests.all() for analysis in test.analyses.all()
+        ]
+        # Get all available Sample statuses for status dropdown
+        sample_ct = ContentType.objects.get_for_model(Sample)
+        context["sample_statuses"] = Status.objects.filter(
+            Q(content_type=sample_ct) | Q(content_type__isnull=True)
+        ).order_by("name")
+        _add_statuses_for_models(context, [Test, Analysis, Task])
+    
+    # Add statuses for any model that has a status field
+    if hasattr(target_model, 'status'):
+        model_ct = ContentType.objects.get_for_model(target_model)
+        statuses_var_name = f"{target_model_name.lower()}_statuses"
+        if statuses_var_name not in context:  # Only add if not already added above
+            context[statuses_var_name] = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+
+    # Ensure related cards rendered in detail views have status choices available
+    related_status_models = []
+    if target_model_name == "Test":
+        related_status_models = [Analysis, Task]
+    elif target_model_name == "Analysis":
+        related_status_models = [Task]
+    elif target_model_name == "Project":
+        related_status_models = [Individual, Task]
+
+    if related_status_models:
+        _add_statuses_for_models(context, related_status_models)
+
+    if request.htmx:
+        # For HTMX requests, return only the detail partial
+        return render(request, f"{template_base}#detail", context)
+    else:
+        # For direct loads, render the main index page and inject the detail content
+        detail_html = render_to_string(
+            f"{template_base}#detail", context=context, request=request
+        )
+        return render(
+            request,
+            "lab/index.html",
+            {
+                "initial_detail_html": detail_html,
+                "item": obj,
+                "model_name": target_model_name,
+                "app_label": target_app_label,
+            },
+        )
+
+@login_required
+@vary_on_headers("HX-Request")
+def generic_detail(request):
+    target_app_label = request.GET.get("app_label", "lab").strip()
+    target_model_name = request.GET.get("model_name", "").strip()
+    pk = request.GET.get("pk")
+    if not target_model_name or not pk:
+        return HttpResponseBadRequest("Model or pk not specified.")
+
+    target_model = apps.get_model(
+        app_label=target_app_label, model_name=target_model_name
+    )
+
+    obj = get_object_or_404(target_model, pk=pk)
+
+    if target_app_label == "variant":
+        template_base = "variant/variant.html"
+    else:
+        template_base = f"{target_app_label}/{target_model_name.lower()}.html"
+    context = {
+        "item": obj,
+        "model_name": target_model_name,
+        "app_label": target_app_label,
+        "user": request.user,
+    }
+
+    requested_tab = request.GET.get("activeTab")
+    normalized_tab = None
+    if requested_tab:
+        normalized_tab = "history" if requested_tab == "status" else requested_tab
+        context["activeTab"] = normalized_tab
+
+    history_prefetched = normalized_tab == "history"
+    context["history_prefetched"] = history_prefetched
+
+    def _add_statuses_for_models(context, model_classes):
+        """Attach status querysets for each provided model class if not already present."""
+        for model_class in model_classes:
+            try:
+                key = f"{model_class.__name__.lower()}_statuses"
+                if key in context:
+                    continue
+                model_ct = ContentType.objects.get_for_model(model_class)
+                context[key] = Status.objects.filter(
+                    Q(content_type=model_ct) | Q(content_type__isnull=True)
+                ).order_by("name")
     # Status (keyed by status name)
     status_counts = {s: 0 for s in Status.objects.filter(content_type=project_ct).values_list('name', flat=True)}
     status_counts.update({
@@ -1566,6 +1845,297 @@ class IndividualExportView(LoginRequiredMixin, View):
         response.write(u'\ufeff'.encode('utf8'))
         writer.writerow(header)
 
+        # Get the object
+        obj = get_object_or_404(model_class, pk=pk)
+
+        # Get the appropriate form
+        form_class = FORMS_MAPPING.get(model_name)
+        if not form_class:
+            return HttpResponseBadRequest(f"No form available for {model_name}.")
+
+        # Capture original M2M values to prevent unintended clearing when fields are omitted
+        original_m2m_map = {}
+        try:
+            for m2m_field in obj._meta.many_to_many:
+                try:
+                    original_m2m_map[m2m_field.name] = list(
+                        getattr(obj, m2m_field.name).values_list("pk", flat=True)
+                    )
+                except Exception:
+                    original_m2m_map[m2m_field.name] = []
+        except Exception:
+            original_m2m_map = {}
+
+        m2m_payloads = {}
+
+        # Build a complete data dict by merging provided fields with instance defaults
+        try:
+            baseline_form = form_class(instance=obj)
+            data = request.POST.copy()
+            for field_name, field in getattr(baseline_form, "fields", {}).items():
+                if field_name in data:
+                    continue
+                # Skip M2M; handled separately
+                if isinstance(field, dj_forms.ModelMultipleChoiceField):
+                    continue
+                # Derive value from instance
+                value_to_use = None
+                try:
+                    if isinstance(field, dj_forms.ModelChoiceField):
+                        value_to_use = getattr(obj, f"{field_name}_id", None)
+                    else:
+                        value_to_use = getattr(obj, field_name, None)
+                except Exception:
+                    value_to_use = None
+                if value_to_use is None:
+                    # For unchecked booleans we explicitly send empty string to mean False
+                    if isinstance(field, dj_forms.BooleanField):
+                        data[field_name] = ""
+                    continue
+                # Normalize by field type
+                try:
+                    if isinstance(field, dj_forms.BooleanField):
+                        data[field_name] = "on" if bool(value_to_use) else ""
+                    else:
+                        # Dates/DateTimes stringify nicely, as do PKs and simple types
+                        data[field_name] = str(value_to_use)
+                except Exception:
+                    pass
+        except Exception:
+            data = request.POST
+
+        # Normalize M2M payloads coming from comboboxes (<field>_ids) into the form data
+        try:
+            for m2m_field in obj._meta.many_to_many:
+                field_name = m2m_field.name
+                candidate_params = [f"{field_name}_ids"]
+                if field_name.endswith("s"):
+                    candidate_params.append(f"{field_name[:-1]}_ids")
+                raw_val = None
+                for pname in candidate_params:
+                    raw_val = request.POST.get(pname)
+                    if raw_val:
+                        break
+                id_list = _parse_id_list(raw_val) if raw_val else []
+                if id_list:
+                    data.setlist(field_name, id_list)
+                    m2m_payloads[field_name] = id_list
+                elif field_name not in data and original_m2m_map.get(field_name) is not None:
+                    original_ids = [str(pk) for pk in original_m2m_map[field_name]]
+                    if original_ids:
+                        data.setlist(field_name, original_ids)
+        except Exception:
+            pass
+
+        form = form_class(data, instance=obj)
+        if form.is_valid():
+            # Save the object with updated_at handled by the form
+            obj = form.save()
+
+            # Special handling for Task: allow updating associated content_type/object_id
+            if model_name == "Task" and isinstance(obj, Task):
+                content_type_id = request.POST.get("content_type")
+                object_id = request.POST.get("object_id")
+                if content_type_id and object_id:
+                    try:
+                        ct = ContentType.objects.get(pk=content_type_id)
+                        obj.content_type = ct
+                        obj.object_id = int(object_id)
+                        obj.save()
+                    except (ContentType.DoesNotExist, ValueError, TypeError):
+                        # If anything goes wrong, keep the existing association
+                        pass
+
+            # Generic: handle any ManyToMany fields posted as JSON lists via <field_name>_ids
+            try:
+                for m2m_field in obj._meta.many_to_many:
+                    field_name = m2m_field.name
+                    payload_ids = m2m_payloads.get(field_name)
+                    if payload_ids:
+                        related_model = m2m_field.remote_field.model
+                        related_qs = related_model.objects.filter(pk__in=payload_ids)
+                        getattr(obj, field_name).set(related_qs)
+                        continue
+
+                    # If the field data was submitted normally, trust the form's handling
+                    if data.getlist(field_name):
+                        continue
+
+                    # No payload provided for this M2M; restore original values to avoid clearing
+                    try:
+                        original_ids = original_m2m_map.get(field_name, None)
+                        if original_ids is not None:
+                            related_model = m2m_field.remote_field.model
+                            related_qs = related_model.objects.filter(pk__in=original_ids)
+                            getattr(obj, field_name).set(related_qs)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Return success response for HTMX
+            if request.htmx:
+                return render(
+                    request,
+                    "lab/crud.html#edit-success",
+                    {
+                        "object": obj,
+                        "model_name": model_name,
+                        "app_label": app_label,
+                    },
+                )
+            else:
+                return redirect(
+                    "lab:generic_detail",
+                    app_label=app_label,
+                    model_name=model_name,
+                    pk=obj.pk,
+                )
+        else:
+            # Form validation failed
+            staff_initial_json = "[]"
+            institution_initial_json = "[]"
+            if model_name == "Institution":
+                staff_initial_json = _staff_initial_json_from_post(request.POST)
+            if model_name == "Individual":
+                institution_initial_json = _institution_initial_json_from_post(request.POST)
+            if request.htmx:
+                context = {
+                    "form": form,
+                    "object": obj,
+                    "model_name": model_name,
+                    "app_label": app_label,
+                    "staff_initial_json": staff_initial_json,
+                    "institution_initial_json": institution_initial_json,
+                }
+                try:
+                    if model_name == "Individual":
+                        initial = [
+                            {"value": str(t.pk), "label": getattr(t, "label", str(t))}
+                            for t in getattr(obj, "hpo_terms", []).all()
+                        ]
+                        context["hpo_initial_json"] = json.dumps(initial)
+                except Exception:
+                    context["hpo_initial_json"] = "[]"
+                return render(request, "lab/crud.html#edit-form", context)
+            else:
+                return render(
+                    request,
+                    "lab/index.html",
+                    {
+                        "edit_form": form,
+                        "object": obj,
+                        "model_name": model_name,
+                        "app_label": app_label,
+                        "staff_initial_json": staff_initial_json,
+                        "institution_initial_json": institution_initial_json,
+                    },
+                )
+
+    # GET request - show the form
+    model_name = request.GET.get("model_name")
+    app_label = request.GET.get("app_label", "lab")
+    pk = request.GET.get("pk")
+
+    if not all([model_name, pk]):
+        return HttpResponseBadRequest("Model name and pk not specified.")
+
+    # Get the model class
+    try:
+        model_class = apps.get_model(app_label=app_label, model_name=model_name)
+    except LookupError:
+        return HttpResponseBadRequest(f"Model {model_name} not found.")
+
+    # Get the object
+    obj = get_object_or_404(model_class, pk=pk)
+
+    # Get the appropriate form
+    form_class = FORMS_MAPPING.get(model_name)
+    if not form_class:
+        return HttpResponseBadRequest(f"No form available for {model_name}.")
+
+    form = form_class(instance=obj)
+
+    # Filter status field to only show statuses for this model class
+    if hasattr(form, "fields") and "status" in form.fields:
+        try:
+            model_ct = ContentType.objects.get_for_model(model_class)
+            # Filter statuses to only show those for this model type
+            filtered_statuses = Status.objects.filter(
+                Q(content_type=model_ct) | Q(content_type__isnull=True)
+            ).order_by("name")
+            
+            # If this is Sample, exclude Individual-specific statuses
+            if model_name == "Sample":
+                from lab.models import Individual
+                individual_ct = ContentType.objects.get_for_model(Individual)
+                filtered_statuses = filtered_statuses.exclude(content_type=individual_ct)
+            
+            form.fields["status"].queryset = filtered_statuses
+        except Exception as e:
+            # Fallback to all statuses if filtering fails
+            form.fields["status"].queryset = Status.objects.all().order_by("name")
+
+    staff_initial_json = "[]"
+    if model_name == "Institution":
+        staff_initial_json = _staff_initial_json_from_queryset(obj.staff.all())
+
+    if request.htmx:
+        context = {
+            "form": form,
+            "object": obj,
+            "model_name": model_name,
+            "app_label": app_label,
+            "staff_initial_json": staff_initial_json,
+                "institution_initial_json": "[]",
+        }
+        # For Task editing, provide info about the currently associated object
+        try:
+            if model_name == "Task" and getattr(obj, "content_object", None):
+                context["associated_object_label"] = str(obj.content_object)
+                ct = obj.content_type
+                if ct is not None:
+                    context["associated_app_label"] = ct.app_label
+                    # Use the concrete model class name for the combobox
+                    model_cls = ct.model_class()
+                    if model_cls is not None:
+                        context["associated_model_name"] = model_cls.__name__
+        except Exception:
+            # If anything goes wrong, we simply skip these optional hints
+            pass
+        # Provide initial JSON for HPO combobox in Individual edit form
+        try:
+            if model_name == "Individual":
+                initial = []
+                for t in getattr(obj, "hpo_terms", []).all():
+                    code = getattr(t, "identifier", None)
+                    base_label = getattr(t, "label", str(t))
+                    if code:
+                        display_label = f"HP:{code} {base_label}"
+                    else:
+                        display_label = base_label
+                    initial.append({"value": str(t.pk), "label": display_label})
+                context["hpo_initial_json"] = json.dumps(initial)
+                context["institution_initial_json"] = _institution_initial_json_from_queryset(
+                    getattr(obj, "institution", []).all()
+                )
+        except Exception:
+            context["hpo_initial_json"] = "[]"
+            context["institution_initial_json"] = "[]"
+
+        return render(request, "lab/crud.html#edit-form", context)
+    else:
+        return render(
+            request,
+            "lab/index.html",
+            {
+                "edit_form": form,
+                "object": obj,
+                "model_name": model_name,
+                "app_label": app_label,
+                "staff_initial_json": staff_initial_json,
+            },
+        )
         # 4. Write Rows — ONE row per individual, aggregated sample/test data
         for individual in filtered_qs:
             # Base Individual Data
