@@ -1520,7 +1520,15 @@ class Command(BaseCommand):
             parse_and_add_notes(row.get("Kurum Notları"), individual, self.admin_user)
             parse_and_add_notes(row.get("Takip Notları"), individual, self.admin_user)
             parse_and_add_notes(row.get("Genel Notlar/Sonuçlar"), individual, self.admin_user)
-            parse_and_add_notes(row.get("İleri tetkik / planlanan"), individual, self.admin_user)
+            planned_tests = row.get("İleri tetkik / planlanan")
+            parse_and_add_notes(planned_tests, individual, self.admin_user)
+            if planned_tests:
+                self._import_tests_from_field(
+                    individual,
+                    planned_tests,
+                    self.statuses["test"].get("planned"),
+                    notes=row.get("İleri tetkik / planlanan Notları"),
+                )
             tamamlanan = row.get("Tamamlanan Tetkik")
             if tamamlanan:
                 parse_and_add_notes(
@@ -1528,6 +1536,7 @@ class Command(BaseCommand):
                 self._import_completed_tests_from_field(
                     individual,
                     tamamlanan,
+                    notes=row.get("Tamamlanan Tetkik Notları"),
                     step="step3",
                     sheet="OZBEK LAB",
                     lab_id=lab_id,
@@ -1582,11 +1591,39 @@ class Command(BaseCommand):
                 individual=individual, id_type=id_type,
                 defaults={"id_value": id_value, "created_by": self.admin_user})
 
+    def _import_tests_from_field(
+        self,
+        individual,
+        raw,
+        status,
+        sample=None,
+        notes=None,
+    ) -> list[Test]:
+        if not raw:
+            return []
+
+        target_sample = sample or individual.samples.first() or self._get_placeholder_sample(individual)
+        imported_tests = []
+        for test_name in self._normalize_test_tokens(str(raw)):
+            test_type = get_or_create_test_type(test_name, self.admin_user)
+            self._backfill_testtype_report_fields(test_type)
+            test, _ = Test.objects.get_or_create(
+                sample=target_sample,
+                test_type=test_type,
+                defaults={"created_by": self.admin_user},
+            )
+            if status and not test.statuses.filter(pk=status.pk).exists():
+                test.statuses.add(status)
+            parse_and_add_notes(notes, test, self.admin_user)
+            imported_tests.append(test)
+        return imported_tests
+
     def _import_completed_tests_from_field(
         self,
         individual,
         raw,
         sample=None,
+        notes=None,
         step="",
         sheet="",
         lab_id=None,
@@ -1596,17 +1633,13 @@ class Command(BaseCommand):
         if not raw or not completed_status:
             return
 
-        target_sample = sample or individual.samples.first() or self._get_placeholder_sample(individual)
-        for test_name in self._normalize_test_tokens(str(raw)):
-            test_type = get_or_create_test_type(test_name, self.admin_user)
-            self._backfill_testtype_report_fields(test_type)
-            test, _ = Test.objects.get_or_create(
-                sample=target_sample,
-                test_type=test_type,
-                defaults={"created_by": self.admin_user},
-            )
-            if not test.statuses.filter(pk=completed_status.pk).exists():
-                test.statuses.add(completed_status)
+        self._import_tests_from_field(
+            individual,
+            raw,
+            completed_status,
+            sample=sample,
+            notes=notes,
+        )
 
     # ==================================================================
     # Step 4 — Samples
