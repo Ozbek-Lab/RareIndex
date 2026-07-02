@@ -48,7 +48,7 @@ MARIMO_SERVICE_URL = env("MARIMO_SERVICE_URL", default="http://127.0.0.1:8080")
 # Plot JWT lifetime for dashboard iframes (seconds). Keep > typical Marimo boot + cell run time.
 MARIMO_PLOT_TOKEN_MAX_AGE = env.int("MARIMO_PLOT_TOKEN_MAX_AGE", default=900)
 # `marimo edit` (staff opens via /authoring/marimo/ — receives a long-lived JWT in the redirect URL)
-MARIMO_EDITOR_URL = env("MARIMO_EDITOR_URL", default="http://127.0.0.1:8081")
+MARIMO_EDITOR_URL = env("MARIMO_EDITOR_URL", default="http://127.0.0.1:8082")
 MARIMO_EDITOR_TOKEN_MAX_AGE = env.int("MARIMO_EDITOR_TOKEN_MAX_AGE", default=28800)
 
 

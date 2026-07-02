@@ -2076,11 +2076,11 @@ def marimo_proxy(request, path=""):
     Send staff to the local Marimo *edit* server with a long-lived JWT on the query string.
 
     Use GET params Marimo understands (e.g. file=status_bar.py). Cross-origin cookies do not
-    reach :8081, so the token is carried in the URL; notebooks read it via mo.query_params().
+    reach the Marimo editor port, so the token is carried in the URL; notebooks read it via mo.query_params().
     """
     from .jwt_utils import issue_editor_plot_token
 
-    marimo_base = getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8081").rstrip("/")
+    marimo_base = getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8082").rstrip("/")
     params = request.GET.copy()
     params["token"] = issue_editor_plot_token(request.user)
     return redirect(f"{marimo_base}/?{params.urlencode()}")
