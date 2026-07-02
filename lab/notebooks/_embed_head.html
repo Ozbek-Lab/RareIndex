@@ -1,0 +1,113 @@
+<style>
+/* RareIndex dashboard: hide Marimo multi-notebook “Back to gallery” bar (shown when ?file= is used). */
+.flex.items-center.px-6.pt-4:has(a[aria-label="Back to gallery"]) {
+  display: none !important;
+}
+
+/* Fill the iframe vertically so Marimo layout doesn’t leave a dead band under the chart. */
+html {
+  height: auto;
+}
+body {
+  margin: 0;
+  min-height: 0;
+  height: auto;
+  display: block;
+}
+/* Marimo root: let content define the iframe height. */
+body > div:first-of-type {
+  margin: 0 !important;
+  max-width: none !important;
+  width: 100% !important;
+}
+body > div:first-of-type {
+  gap: 0 !important;
+  padding-top: 0 !important;
+}
+body > div:first-of-type > div {
+  min-height: 0;
+}
+body > div:first-of-type > div {
+  width: 100%;
+}
+/* Plotly: outer div matches iframe; inner tree fills it (avoids “tall box, short graph”). */
+.plotly-graph-div {
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 28rem !important;
+}
+.plotly-graph-div .plotly,
+.plotly-graph-div .js-plotly-plot,
+.plotly-graph-div .plot-container {
+  height: 100% !important;
+  width: 100% !important;
+}
+.plotly-graph-div .svg-container {
+  height: 100% !important;
+}
+</style>
+<script>
+(function () {
+  var qp = new URLSearchParams(window.location.search);
+  var showDownloadMenu = qp.get("show_download_menu");
+  if (showDownloadMenu !== null) {
+    var normalized = String(showDownloadMenu).trim().toLowerCase();
+    if (["0", "false", "no", "off"].indexOf(normalized) !== -1) {
+      var style = document.createElement("style");
+      style.textContent = '[data-testid="notebook-actions-dropdown"] { display: none !important; }';
+      document.head.appendChild(style);
+    }
+  }
+
+  function reportHeight() {
+    var height = Math.max(
+      document.body ? document.body.scrollHeight : 0,
+      document.documentElement ? document.documentElement.scrollHeight : 0,
+      document.documentElement ? document.documentElement.offsetHeight : 0
+    );
+    if (window.parent && height > 0) {
+      window.parent.postMessage(
+        {
+          type: "marimo-embed-height",
+          height: height,
+          file: new URLSearchParams(window.location.search).get("file") || "",
+        },
+        "*"
+      );
+    }
+  }
+
+  function resizePlots() {
+    if (typeof Plotly === "undefined") return;
+    document.querySelectorAll(".plotly-graph-div").forEach(function (gd) {
+      try {
+        Plotly.Plots.resize(gd);
+      } catch (e) {}
+    });
+  }
+  function scheduleResize() {
+    resizePlots();
+    reportHeight();
+    requestAnimationFrame(resizePlots);
+    requestAnimationFrame(reportHeight);
+    [0, 50, 150, 400, 1000].forEach(function (ms) {
+      setTimeout(resizePlots, ms);
+      setTimeout(reportHeight, ms);
+    });
+  }
+  function onReady() {
+    scheduleResize();
+    if (typeof ResizeObserver !== "undefined") {
+      var ro = new ResizeObserver(function () {
+        resizePlots();
+        reportHeight();
+      });
+      ro.observe(document.documentElement);
+    }
+  }
+  if (document.readyState === "complete") onReady();
+  else window.addEventListener("load", onReady);
+  window.addEventListener("resize", resizePlots);
+  window.addEventListener("resize", reportHeight);
+})();
+</script>

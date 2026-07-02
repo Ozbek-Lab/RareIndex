@@ -39,6 +39,18 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
+# Marimo configuration
+PLOT_ALLOWED_MODELS = ['Individual', 'Sample', 'Test', 'Analysis', 'Pipeline', 'Project', 'Variant']
+MARIMO_NOTEBOOKS_DIR = BASE_DIR / 'lab/notebooks'
+# URL the *browser* uses to load `marimo run` (iframes, links). Use a host/port reachable from
+# the user’s machine — not an internal Docker service name unless the browser can resolve it.
+MARIMO_SERVICE_URL = env("MARIMO_SERVICE_URL", default="http://127.0.0.1:8080")
+# Plot JWT lifetime for dashboard iframes (seconds). Keep > typical Marimo boot + cell run time.
+MARIMO_PLOT_TOKEN_MAX_AGE = env.int("MARIMO_PLOT_TOKEN_MAX_AGE", default=900)
+# `marimo edit` (staff opens via /authoring/marimo/ — receives a long-lived JWT in the redirect URL)
+MARIMO_EDITOR_URL = env("MARIMO_EDITOR_URL", default="http://127.0.0.1:8081")
+MARIMO_EDITOR_TOKEN_MAX_AGE = env.int("MARIMO_EDITOR_TOKEN_MAX_AGE", default=28800)
+
 
 # Application definition
 
@@ -62,6 +74,10 @@ INSTALLED_APPS = [
     "openpyxl",
     "plotly_express",
     "variant",
+    "django_tables2",
+    "django_filters",
+    "widget_tweaks",
+    "taggit",
 ]
 
 MIDDLEWARE = [
@@ -101,6 +117,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "lab.context_processors.user_profile",
             ],
         },
     },
@@ -112,6 +129,10 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+
+# Media files (Uploads)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # HTMX settings
 DJANGO_HTMX_REFRESH_TEMPLATES = True
@@ -154,11 +175,21 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Europe/Istanbul"
 
 USE_I18N = True
 
 USE_TZ = True
+
+# Global date / datetime display formats
+# Use day-month-year with slashes, matching Turkish conventions.
+DATE_FORMAT = "d/m/Y"
+DATETIME_FORMAT = "d/m/Y H:i"
+SHORT_DATE_FORMAT = "d/m/Y"
+SHORT_DATETIME_FORMAT = "d/m/Y H:i"
+
+# Use custom format module so localization uses our formats
+FORMAT_MODULE_PATH = "rareindex.formats"
 
 
 # Static files (CSS, JavaScript, Images)
@@ -194,12 +225,18 @@ SESSION_SAVE_EVERY_REQUEST = True
 ACCOUNT_ALLOW_REGISTRATION = True
 
 # Email settings
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")
-EMAIL_PORT = env.int("EMAIL_PORT", default=587)
-EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+# Use the live SMTP backend only when credentials are actually configured.
+# Without them (typical in dev), fall back to the console backend so that
+# notification emails are printed to stdout instead of crashing.
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")
+    EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+    EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Security setting for HTTPS (applied in production)
 if not DEBUG:
@@ -217,3 +254,8 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+X_FRAME_OPTIONS = "SAMEORIGIN"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"

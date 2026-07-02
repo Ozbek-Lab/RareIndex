@@ -1,0 +1,16 @@
+{% load render_table from django_tables2 %}
+
+<div id="variant-table-container"
+     hx-boost="true"
+     hx-target="#variant-table-container"
+     hx-swap="outerHTML"
+     hx-on::after-request="if(event.detail.failed) event.preventDefault()"
+     class="overflow-x-auto">
+    {% render_table table %}
+</div>
+
+{% if request.htmx %}
+<div id="table-counts" hx-swap-oob="true" class="badge badge-lg badge-ghost">
+    {{ table.page.paginator.count }} Variants
+</div>
+{% endif %}

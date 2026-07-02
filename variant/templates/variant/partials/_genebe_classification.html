@@ -1,0 +1,68 @@
+{% load variant_filters %}
+{% with genebe=variant|get_annotation_by_source:'genebe' %}
+<div id="genebe-classification-{{ variant.pk }}" class="space-y-4">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h4 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">GeneBe</h4>
+      <p class="text-sm text-base-content/60">
+        GeneBe classifications for the current variant.
+      </p>
+    </div>
+
+    {% if perms.variant.change_variant %}
+    <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+      <button
+        hx-get="{% url 'lab:variant_genebe_fetch' variant.pk %}"
+        hx-target="#genebe-classification-{{ variant.pk }}"
+        hx-swap="outerHTML"
+        class="btn btn-sm btn-primary gap-2"
+        type="button"
+      >
+        <i class="fa-solid fa-wand-magic-sparkles"></i>
+        Get Classification from GeneBe
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if genebe_data %}
+    {% with data=genebe_data %}
+      {% include "variant/partials/annotations.html#genebe" %}
+    {% endwith %}
+    <div class="text-xs text-base-content/40">
+      Updated just now
+    </div>
+  {% elif genebe %}
+    {% with data=genebe.data %}
+      {% include "variant/partials/annotations.html#genebe" %}
+    {% endwith %}
+    <div class="text-xs text-base-content/40">
+      Updated: {{ genebe.updated_at|date:"Y-m-d H:i" }}
+    </div>
+  {% else %}
+    <div class="rounded-box border border-base-200 bg-base-100 p-4 text-sm text-base-content/60">
+      No GeneBe classification has been fetched yet.
+    </div>
+  {% endif %}
+
+  {% if manual_acmg_overrides %}
+  <div class="rounded-box border border-base-200 bg-base-200/20 p-4 space-y-3">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <h5 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Manual overrides</h5>
+        <p class="text-xs text-base-content/50">These are stored separately from the GeneBe import.</p>
+      </div>
+      <span class="badge badge-xs badge-outline gap-1"><i class="fa-solid fa-star text-warning"></i> Manual</span>
+    </div>
+    <div class="flex flex-wrap gap-1.5">
+      {% for override in manual_acmg_overrides %}
+      <span class="badge badge-sm whitespace-nowrap {% if override.included %}badge-primary badge-outline font-semibold{% else %}badge-ghost badge-outline opacity-60 line-through{% endif %}">
+        <i class="fa-solid fa-star text-warning mr-1"></i>{% if override.gene_symbol %}{{ override.gene_symbol }}:{% endif %}{{ override.criterion }}
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endwith %}

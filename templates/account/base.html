@@ -1,23 +1,12 @@
-{% load static %}
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/x-icon" href="{% static 'img/fav.ico' %}" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RareIndex - Sign In</title>
-    <script src="{% static 'lab/js/htmx.min.js' %}"></script>
-    <script src="{% static 'lab/js/tailwind.min.js' %}"></script>
-    <script>
-      tailwind.config = { darkMode: "class" };
-    </script>
-    <script defer src="{% static 'lab/js/plotly.min.js' %}"></script>
-    <script defer src="{% static 'lab/js/alpine.min.js' %}"></script>
-    <link rel="stylesheet" href="{% static 'lab/css/fontawesome.min.css' %}" />
-  </head>
-  <body x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }" :class="{ 'dark': darkMode }" class="bg-gray-100">
-    {% block inner %}{% endblock %}
-  </body>
-</html>
+{% extends "base.html" %}
+{% load i18n %}
 
-
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-base-200 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="card w-full max-w-md bg-base-100 shadow-xl">
+    <div class="card-body">
+      {% block account_content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}

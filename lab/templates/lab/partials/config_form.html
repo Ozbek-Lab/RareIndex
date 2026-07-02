@@ -1,0 +1,262 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-4">
+    <h3 class="font-bold text-lg text-primary flex items-center gap-2">
+        <i class="fa-solid {% if pk %}fa-pen-to-square{% else %}fa-plus-circle{% endif %}"></i>
+        {% if pk %}Edit{% else %}Add{% endif %} {{ label|title }}
+    </h3>
+</div>
+
+<form hx-post="{{ action_url }}"
+      hx-target="#config-section-{{ model_name }}"
+      hx-swap="outerHTML"
+      class="space-y-4">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="alert alert-error py-2 text-sm">
+        {% for error in form.non_field_errors %}
+            <span>{{ error }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if model_name == "testtype" %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for field in form %}
+            {% if field.name == "name" or field.name == "description" %}
+            <div class="form-control w-full {% if field.is_hidden %}hidden{% endif %} {% if field.field.widget.input_type == 'textarea' or field.name == 'description' or field.name == 'contact' %}md:col-span-2{% endif %}">
+                <label class="label py-1">
+                    <span class="label-text font-semibold text-xs opacity-70">
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-error ml-0.5">*</span>{% endif %}
+                    </span>
+                    {% if field.help_text %}
+                    <span class="label-text-alt opacity-50 text-xs">{{ field.help_text }}</span>
+                    {% endif %}
+                </label>
+                {% if model_name == "status" and field.name == "group" %}
+                <div class="mb-2 flex items-center justify-between gap-2 rounded-lg border border-base-200 bg-base-200/30 px-3 py-2">
+                    <p class="text-xs text-base-content/60">
+                        Need a new group first? Create it here, then come back and attach this status to it.
+                    </p>
+                    <button type="button"
+                            class="btn btn-ghost btn-xs shrink-0"
+                            hx-get="{% url 'lab:config_form_add' 'statusgroup' %}"
+                            hx-target="#generic-modal-content"
+                            hx-swap="innerHTML">
+                        <i class="fa-solid fa-layer-group text-[10px]"></i>
+                        Create Group
+                    </button>
+                </div>
+                {% endif %}
+                {% if field.name == "color" %}
+                <div class="flex items-center gap-3">
+                    {{ field }}
+                    <span class="text-xs font-mono opacity-60" id="color-preview-text">{{ field.value|default:"#6b7280" }}</span>
+                </div>
+                {% else %}
+                {{ field }}
+                {% endif %}
+                {% if field.errors %}
+                <label class="label py-0">
+                    <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                </label>
+                {% endif %}
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="rounded-xl border border-base-200 bg-base-200/20 p-4 space-y-4">
+        <div>
+            <h4 class="text-sm font-semibold text-base-content">Report Defaults</h4>
+            <p class="text-xs text-base-content/60 mt-1">Configure report templates and the default text used to prefill report creation for this test type. These values can still be edited per report.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for field in form %}
+                {% if field.name != "name" and field.name != "description" %}
+                <div class="form-control w-full {% if field.is_hidden %}hidden{% endif %} {% if field.field.widget.input_type == 'textarea' or field.name == 'description' or field.name == 'contact' %}md:col-span-2{% endif %}">
+                    <label class="label py-1">
+                        <span class="label-text font-semibold text-xs opacity-70">
+                            {{ field.label }}
+                            {% if field.field.required %}<span class="text-error ml-0.5">*</span>{% endif %}
+                        </span>
+                        {% if field.help_text %}
+                        <span class="label-text-alt opacity-50 text-xs">{{ field.help_text }}</span>
+                        {% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.errors %}
+                    <label class="label py-0">
+                        <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                    </label>
+                    {% endif %}
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% elif model_name == "contact" %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4"
+         x-data="{
+            institutionSearch: '',
+            institutionOpen: false,
+            selectedInstitutions: [],
+            institutions: [
+                {% for option in form.institutions.field.queryset %}
+                    {id: '{{ option.pk }}', name: '{{ option.name|escapejs }}'},
+                {% endfor %}
+            ],
+            init() {
+                this.loadSelectedInstitutions();
+            },
+            institutionSelect() {
+                return this.$refs.institutionSelect?.querySelector('select');
+            },
+            loadSelectedInstitutions() {
+                const select = this.institutionSelect();
+                if (!select) return;
+                this.selectedInstitutions = Array.from(select.selectedOptions).map((option) => ({
+                    id: option.value,
+                    name: option.textContent.trim(),
+                }));
+            },
+            syncInstitutions() {
+                const select = this.institutionSelect();
+                if (!select) return;
+                Array.from(select.options).forEach((option) => {
+                    option.selected = this.selectedInstitutions.some((inst) => String(inst.id) === option.value);
+                });
+            },
+            addInstitution(inst) {
+                if (this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id))) return;
+                this.selectedInstitutions.push(inst);
+                this.syncInstitutions();
+                this.institutionSearch = '';
+                this.institutionOpen = false;
+            },
+            removeInstitution(id) {
+                this.selectedInstitutions = this.selectedInstitutions.filter((inst) => String(inst.id) !== String(id));
+                this.syncInstitutions();
+            },
+            get filteredInstitutions() {
+                const search = this.institutionSearch.toLowerCase();
+                return this.institutions.filter((inst) => {
+                    const alreadySelected = this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id));
+                    return !alreadySelected && (!search || inst.name.toLowerCase().includes(search));
+                });
+            }
+         }"
+         x-init="init()">
+        {% for field in form %}
+            {% if field.name == "institutions" %}
+            <div class="form-control w-full md:col-span-2">
+                <label class="label py-1">
+                    <span class="label-text font-semibold text-xs opacity-70">
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-error ml-0.5">*</span>{% endif %}
+                    </span>
+                    {% if field.help_text %}
+                    <span class="label-text-alt opacity-50 text-xs">{{ field.help_text }}</span>
+                    {% endif %}
+                </label>
+                <div class="hidden" x-ref="institutionSelect">{{ field }}</div>
+                <div class="relative">
+                    <input type="text"
+                           x-model="institutionSearch"
+                           @focus="institutionOpen = true"
+                           @click.away="institutionOpen = false"
+                           placeholder="Search and add institutions..."
+                           class="input input-bordered w-full {% if field.errors %}input-error{% endif %}"
+                           :class="{'input-primary': institutionOpen}">
+                    <div x-show="institutionOpen"
+                         class="absolute z-20 w-full mt-1 bg-base-100 border border-base-200 rounded-md shadow-lg max-h-56 overflow-y-auto"
+                         x-transition>
+                        <template x-for="inst in filteredInstitutions" :key="inst.id">
+                            <div @click="addInstitution(inst)"
+                                 class="px-3 py-2 text-sm cursor-pointer hover:bg-base-200 text-base-content"
+                                 x-text="inst.name"></div>
+                        </template>
+                        <div x-show="filteredInstitutions.length === 0" class="px-3 py-2 text-sm text-base-content/50">No matches.</div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mt-2 min-h-[1.75rem]">
+                    <template x-for="inst in selectedInstitutions" :key="inst.id">
+                        <span class="badge badge-primary gap-1.5 p-3 text-xs">
+                            <span x-text="inst.name"></span>
+                            <button type="button" @click="removeInstitution(inst.id)" class="btn btn-ghost btn-xs btn-circle text-white h-4 w-4 min-h-0">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                        </span>
+                    </template>
+                    <span x-show="selectedInstitutions.length === 0" class="text-sm text-base-content/50 italic py-1">No institutions selected.</span>
+                </div>
+                {% if field.errors %}
+                <label class="label py-0">
+                    <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                </label>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="form-control w-full {% if field.is_hidden %}hidden{% endif %} {% if field.field.widget.input_type == 'textarea' or field.name == 'description' or field.name == 'contact' or field.name == 'notes' %}md:col-span-2{% endif %}">
+                <label class="label py-1">
+                    <span class="label-text font-semibold text-xs opacity-70">
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-error ml-0.5">*</span>{% endif %}
+                    </span>
+                    {% if field.help_text %}
+                    <span class="label-text-alt opacity-50 text-xs">{{ field.help_text }}</span>
+                    {% endif %}
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                <label class="label py-0">
+                    <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                </label>
+                {% endif %}
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for field in form %}
+            <div class="form-control w-full {% if field.is_hidden %}hidden{% endif %} {% if field.field.widget.input_type == 'textarea' or field.name == 'description' or field.name == 'contact' %}md:col-span-2{% endif %}">
+                <label class="label py-1">
+                    <span class="label-text font-semibold text-xs opacity-70">
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-error ml-0.5">*</span>{% endif %}
+                    </span>
+                    {% if field.help_text %}
+                    <span class="label-text-alt opacity-50 text-xs">{{ field.help_text }}</span>
+                    {% endif %}
+                </label>
+                {% if field.name == "color" %}
+                <div class="flex items-center gap-3">
+                    {{ field }}
+                    <span class="text-xs font-mono opacity-60" id="color-preview-text">{{ field.value|default:"#6b7280" }}</span>
+                </div>
+                {% else %}
+                {{ field }}
+                {% endif %}
+                {% if field.errors %}
+                <label class="label py-0">
+                    <span class="label-text-alt text-error text-[10px]">{{ field.errors.0 }}</span>
+                </label>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="modal-action mt-8 pt-4 border-t border-base-200 flex justify-between">
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('generic-modal').close()">
+            Cancel
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm px-8">
+            <i class="fa-solid fa-floppy-disk mr-1"></i>
+            Save
+        </button>
+    </div>
+</form>

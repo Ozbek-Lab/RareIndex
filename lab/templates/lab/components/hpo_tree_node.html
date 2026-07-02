@@ -1,0 +1,60 @@
+{% load lab_tags %}
+<!-- Recursive HPO Tree Node -->
+<li x-data="{ 
+        expanded: false,
+        toggleChildren(checked) {
+            // Visually check/uncheck all descendant checkboxes
+            // We use $el (the li) to find nested inputs
+            const inputs = this.$el.querySelectorAll('ul input[type=checkbox]');
+            inputs.forEach(input => {
+                input.checked = checked;
+            });
+        }
+    }"
+    class="ml-2 hpo-node whitespace-nowrap"
+    data-search-term="{{ node.label|lower }} {{ node.identifier|lower }}"
+>
+    <div class="flex items-start gap-2 py-1">
+        <!-- Expand/Collapse Button -->
+        {% if node.children %}
+            <button type="button" 
+                    @click="expanded = !expanded" 
+                    class="mt-1 w-4 h-4 flex items-center justify-center text-base-content/50 hover:text-base-content"
+                    :class="{'rotate-90': expanded}">
+                <i class="fa-solid fa-caret-right transition-transform"></i>
+            </button>
+        {% else %}
+            <span class="w-4"></span>
+        {% endif %}
+
+        <!-- Checkbox -->
+        <label class="flex items-start gap-2 cursor-pointer select-none text-sm group">
+            <input type="checkbox" 
+                   name="hpo_terms" 
+                   value="{{ node.id }}"
+                   {% if node.id|stringformat:"s" in current_values or node.is_used and node.identifier in current_values %}checked{% endif %}
+                   class="checkbox checkbox-xs checkbox-primary mt-0.5 rounded-sm"
+                   @change="toggleChildren($event.target.checked); $el.form.dispatchEvent(new Event('change', {bubbles: true}))">
+                   
+            <div class="flex flex-col leading-tight">
+                <span class="font-medium group-hover:text-primary transition-colors hpo-label {% if not node.is_used %}text-base-content/70{% endif %}">
+                    {{ node.label }}
+                </span>
+                <span class="text-xs text-base-content/50 font-mono">
+                    {{ node.identifier }}
+                </span>
+            </div>
+        </label>
+    </div>
+
+    <!-- Children -->
+    {% if node.children %}
+        <ul x-show="expanded" 
+            x-collapse 
+            class="pl-4 border-l border-base-200 ml-2 space-y-1 hpo-children">
+            {% for child in node.children %}
+                {% include "lab/components/hpo_tree_node.html" with node=child current_values=current_values %}
+            {% endfor %}
+        </ul>
+    {% endif %}
+</li>

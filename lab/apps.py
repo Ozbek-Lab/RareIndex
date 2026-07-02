@@ -7,3 +7,4 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         import lab.history_notifications
+        import lab.signals

@@ -15,8 +15,7 @@ def annotate_and_link_genes(sender, instance, created, **kwargs):
         # Note: These are synchronous calls and might slow down the request
         service.fetch_vep(instance)
         service.fetch_myvariant_info(instance)
-        # Genebe is also available but maybe optional?
-        # service.fetch_genebe(instance)
+        service.fetch_genebe(instance)
         
         # Link genes
         service.link_genes(instance)

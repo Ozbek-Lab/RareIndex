@@ -1,0 +1,44 @@
+<div
+  class="shrink-0 rounded-md border border-base-300 bg-base-200/40 text-[10px] font-medium shadow-inner"
+  style="display: grid; grid-template-columns: {% if allow_together %}1fr 1.55fr 1fr{% else %}1fr 1fr{% endif %}; align-items: center; gap: 2px; padding: 2px; width: {% if allow_together %}128px{% else %}76px{% endif %}; max-width: 100%;"
+  x-data="{
+    fieldName: '{{ name }}',
+    allowTogether: {{ allow_together|yesno:'true,false' }},
+    mode: 'any',
+    init() {
+      const key = `rareindex.filterMode.${this.fieldName}`;
+      const params = new URLSearchParams(window.location.search);
+      const urlMode = params.get(`${this.fieldName}__mode`);
+      const storedMode = localStorage.getItem(key);
+      this.mode = urlMode || storedMode || 'any';
+      if (!this.allowTogether && this.mode === 'together') {
+        this.mode = 'any';
+      }
+      this.$watch('mode', value => {
+        localStorage.setItem(key, value);
+        this.$nextTick(() => {
+          this.$el.closest('form')?.dispatchEvent(new Event('filter-changed', { bubbles: true }));
+        });
+      });
+      const fieldIsActive = params.has(this.fieldName) || params.has(`${this.fieldName}__exclude`);
+      if (!urlMode && storedMode && storedMode !== 'any' && fieldIsActive) {
+        this.$nextTick(() => {
+          this.$el.closest('form')?.dispatchEvent(new Event('filter-changed', { bubbles: true }));
+        });
+      }
+    },
+    buttonClass(value) {
+      return this.mode === value
+        ? 'bg-base-content text-base-100 shadow-sm'
+        : 'text-base-content/60 hover:text-base-content';
+    }
+  }"
+  x-init="init()"
+>
+  <input type="hidden" :name="`${fieldName}__mode`" :value="mode">
+  <button type="button" class="min-w-0 rounded text-center leading-tight" style="padding: 2px 3px;" :class="buttonClass('any')" @click="mode = 'any'">Any</button>
+  {% if allow_together %}
+    <button type="button" class="min-w-0 rounded text-center leading-tight" style="padding: 2px 3px;" :class="buttonClass('together')" @click="mode = 'together'">Together</button>
+  {% endif %}
+  <button type="button" class="min-w-0 rounded text-center leading-tight" style="padding: 2px 3px;" :class="buttonClass('all')" @click="mode = 'all'">All</button>
+</div>

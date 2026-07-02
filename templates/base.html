@@ -1,0 +1,459 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" style="font-size: {{ user_font_size_css|default:'100%' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}RareIndex{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}">
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}">
+    
+    <!-- DaisyUI & Tailwind (Local) -->
+    <link rel="preload" href="{% static 'vendor/css/daisyui.min.css' %}" as="style">
+    <link href="{% static 'vendor/css/daisyui.min.css' %}" rel="stylesheet" type="text/css" />
+    
+    <link rel="preload" href="{% static 'css/output.css' %}" as="style">
+    <link href="{% static 'css/output.css' %}" rel="stylesheet" type="text/css" />
+
+    <style>
+        .font-sans { font-family: 'Inter', sans-serif !important; }
+        :root { --font-sans: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; }
+
+        /* Soften the most saturated action buttons inside workflow views only. */
+        .workflow-tab .btn-primary,
+        .workflow-tab .btn-success,
+        .workflow-tab .btn-error,
+        .workflow-tab .btn-warning,
+        .workflow-tab .btn-info {
+            box-shadow: none !important;
+        }
+
+        .workflow-tab .btn-primary {
+            background-color: color-mix(in oklab, oklch(var(--p)) 58%, oklch(var(--b1)) 42%) !important;
+            border-color: color-mix(in oklab, oklch(var(--p)) 46%, oklch(var(--b3)) 54%) !important;
+            color: oklch(var(--pc)) !important;
+        }
+
+        .workflow-tab .btn-primary:hover {
+            background-color: color-mix(in oklab, oklch(var(--p)) 64%, oklch(var(--b1)) 36%) !important;
+        }
+
+        .workflow-tab .btn-success {
+            background-color: color-mix(in oklab, oklch(var(--su)) 56%, oklch(var(--b1)) 44%) !important;
+            border-color: color-mix(in oklab, oklch(var(--su)) 44%, oklch(var(--b3)) 56%) !important;
+            color: oklch(var(--suc)) !important;
+        }
+
+        .workflow-tab .btn-success:hover {
+            background-color: color-mix(in oklab, oklch(var(--su)) 62%, oklch(var(--b1)) 38%) !important;
+        }
+
+        .workflow-tab .btn-error {
+            background-color: color-mix(in oklab, oklch(var(--er)) 54%, oklch(var(--b1)) 46%) !important;
+            border-color: color-mix(in oklab, oklch(var(--er)) 42%, oklch(var(--b3)) 58%) !important;
+            color: oklch(var(--erc)) !important;
+        }
+
+        .workflow-tab .btn-error:hover {
+            background-color: color-mix(in oklab, oklch(var(--er)) 60%, oklch(var(--b1)) 40%) !important;
+        }
+
+        .workflow-tab .btn-warning {
+            background-color: color-mix(in oklab, oklch(var(--wa)) 54%, oklch(var(--b1)) 46%) !important;
+            border-color: color-mix(in oklab, oklch(var(--wa)) 42%, oklch(var(--b3)) 58%) !important;
+            color: oklch(var(--wac)) !important;
+        }
+
+        .workflow-tab .btn-warning:hover {
+            background-color: color-mix(in oklab, oklch(var(--wa)) 60%, oklch(var(--b1)) 40%) !important;
+        }
+
+        .workflow-tab .btn-info {
+            background-color: color-mix(in oklab, oklch(var(--in)) 54%, oklch(var(--b1)) 46%) !important;
+            border-color: color-mix(in oklab, oklch(var(--in)) 42%, oklch(var(--b3)) 58%) !important;
+            color: oklch(var(--inc)) !important;
+        }
+
+        .workflow-tab .btn-info:hover {
+            background-color: color-mix(in oklab, oklch(var(--in)) 60%, oklch(var(--b1)) 40%) !important;
+        }
+    </style>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="{% static 'vendor/fontawesome/css/all.min.css' %}">
+    <link rel="stylesheet" href="{% static 'lab/css/family_pedigree.css' %}">
+
+    <!-- Pedigree rendering (local vendor assets) -->
+    <script defer src="{% static 'vendor/js/jquery-3.7.1.min.js' %}"></script>
+    <script defer src="{% static 'vendor/js/d3.v7.9.0.min.js' %}"></script>
+    <script defer src="{% static 'vendor/js/pedigreejs.v5.0.0.min.js' %}"></script>
+    <script defer src="{% static 'lab/js/family_pedigree.js' %}"></script>
+    
+    <!-- HTMX -->
+    <script defer src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/intersect@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style>
+        /* Chrome, Edge, Safari (Webkit) */
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar,
+        *::-webkit-scrollbar {
+            width: 8px !important;
+            height: 8px !important;
+            display: block !important;
+        }
+
+        html::-webkit-scrollbar-track,
+        body::-webkit-scrollbar-track,
+        *::-webkit-scrollbar-track {
+            background: transparent !important;
+        }
+
+        html::-webkit-scrollbar-thumb,
+        body::-webkit-scrollbar-thumb,
+        *::-webkit-scrollbar-thumb {
+            background-color: #666666 !important; /* Fallback */
+            background-color: oklch(var(--b3)) !important;
+            border-radius: 20px !important;
+            border: 2px solid transparent !important; /* Forces some browsers to respect color */
+            background-clip: content-box !important;
+        }
+
+        html::-webkit-scrollbar-thumb:hover,
+        body::-webkit-scrollbar-thumb:hover,
+        *::-webkit-scrollbar-thumb:hover {
+            background-color: #333333 !important; /* Fallback */
+            background-color: oklch(var(--bc) / 0.5) !important;
+        }
+
+        /* Firefox */
+        @supports (-moz-appearance: none) {
+            html, body, * {
+                scrollbar-width: thin !important;
+                scrollbar-color: #666666 transparent !important; /* Fallback */
+                scrollbar-color: oklch(var(--b3)) transparent !important;
+            }
+        }
+
+        /* Wider hover cards for ACMG criteria so the manuscript summaries fit. */
+        .criteria-tooltip.tooltip::before {
+            max-width: min(44rem, calc(100vw - 2rem));
+            width: max-content;
+            white-space: normal;
+            text-align: left;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+
+        .criteria-tooltip.tooltip::after {
+            max-width: min(44rem, calc(100vw - 2rem));
+        }
+
+        body.tooltip-portal-enabled .tooltip::before,
+        body.tooltip-portal-enabled .tooltip::after {
+            display: none !important;
+        }
+
+        .global-tooltip-portal {
+            position: fixed;
+            z-index: 2147483647;
+            max-width: min(24rem, calc(100vw - 1rem));
+            padding: 0.375rem 0.625rem;
+            border-radius: 0.375rem;
+            background: oklch(var(--bc));
+            color: oklch(var(--b1));
+            box-shadow: 0 10px 24px rgb(0 0 0 / 0.18);
+            font-size: 0.75rem;
+            line-height: 1.25;
+            white-space: normal;
+            text-align: left;
+            pointer-events: none;
+            opacity: 0;
+            transform: translate3d(0, 2px, 0);
+            transition: opacity 120ms ease, transform 120ms ease;
+        }
+
+        .global-tooltip-portal.is-visible {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+        }
+    </style>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            document.body.classList.add("tooltip-portal-enabled");
+
+            let tooltipTarget = null;
+            let tooltipPortal = null;
+            const margin = 8;
+
+            const getPlacement = (element) => {
+                const classes = element.classList;
+                const side = classes.contains("tooltip-right")
+                    ? "right"
+                    : classes.contains("tooltip-left")
+                        ? "left"
+                        : classes.contains("tooltip-bottom")
+                            ? "bottom"
+                            : "top";
+                const align = classes.contains("tooltip-start")
+                    ? "start"
+                    : classes.contains("tooltip-end")
+                        ? "end"
+                        : "center";
+                return { side, align };
+            };
+
+            const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+            const positionTooltip = () => {
+                if (!tooltipTarget || !tooltipPortal) return;
+
+                const rect = tooltipTarget.getBoundingClientRect();
+                const tipRect = tooltipPortal.getBoundingClientRect();
+                const { side, align } = getPlacement(tooltipTarget);
+
+                let top;
+                let left;
+
+                if (side === "right" || side === "left") {
+                    left = side === "right"
+                        ? rect.right + margin
+                        : rect.left - tipRect.width - margin;
+
+                    if (align === "start") {
+                        top = rect.top;
+                    } else if (align === "end") {
+                        top = rect.bottom - tipRect.height;
+                    } else {
+                        top = rect.top + (rect.height - tipRect.height) / 2;
+                    }
+                } else {
+                    top = side === "bottom"
+                        ? rect.bottom + margin
+                        : rect.top - tipRect.height - margin;
+
+                    if (align === "start") {
+                        left = rect.left;
+                    } else if (align === "end") {
+                        left = rect.right - tipRect.width;
+                    } else {
+                        left = rect.left + (rect.width - tipRect.width) / 2;
+                    }
+                }
+
+                tooltipPortal.style.left = `${clamp(left, margin, window.innerWidth - tipRect.width - margin)}px`;
+                tooltipPortal.style.top = `${clamp(top, margin, window.innerHeight - tipRect.height - margin)}px`;
+            };
+
+            const showTooltip = (target) => {
+                const text = target?.getAttribute("data-tip");
+                if (!text) return;
+
+                tooltipTarget = target;
+                if (!tooltipPortal) {
+                    tooltipPortal = document.createElement("div");
+                    tooltipPortal.className = "global-tooltip-portal";
+                    tooltipPortal.setAttribute("role", "tooltip");
+                    document.body.appendChild(tooltipPortal);
+                }
+
+                tooltipPortal.textContent = text;
+                tooltipPortal.classList.remove("is-visible");
+                tooltipPortal.style.left = "0px";
+                tooltipPortal.style.top = "0px";
+                requestAnimationFrame(() => {
+                    positionTooltip();
+                    tooltipPortal.classList.add("is-visible");
+                });
+            };
+
+            const hideTooltip = () => {
+                tooltipTarget = null;
+                if (tooltipPortal) {
+                    tooltipPortal.classList.remove("is-visible");
+                }
+            };
+
+            document.addEventListener("mouseover", (event) => {
+                const target = event.target.closest(".tooltip[data-tip]");
+                if (target && !target.contains(event.relatedTarget)) {
+                    showTooltip(target);
+                }
+            });
+
+            document.addEventListener("mouseout", (event) => {
+                const target = event.target.closest(".tooltip[data-tip]");
+                if (target && !target.contains(event.relatedTarget)) {
+                    hideTooltip();
+                }
+            });
+
+            document.addEventListener("focusin", (event) => {
+                const target = event.target.closest(".tooltip[data-tip]");
+                if (target) showTooltip(target);
+            });
+
+            document.addEventListener("focusout", (event) => {
+                if (event.target.closest(".tooltip[data-tip]")) hideTooltip();
+            });
+
+            window.addEventListener("scroll", positionTooltip, true);
+            window.addEventListener("resize", positionTooltip);
+        });
+    </script>
+</head>
+<body class="bg-base-100 min-h-screen flex flex-col" 
+      @resize.window="if (window.innerWidth < 1024) sidebarOpen = false"
+      x-data="{ 
+    sidebarOpen: window.innerWidth < 1024 ? false : localStorage.getItem('sidebarOpen') === 'true',
+    theme: '{{ user_theme|default:"light"|escapejs }}',
+    fontSize: '{{ user_font_size|default:"small"|escapejs }}',
+    institutionDisplay: '{{ user_institution_display|default:"name"|escapejs }}',
+    fontSizeMap: { small: '100%', medium: '112.5%', large: '125%' },
+    init() {
+        document.documentElement.setAttribute('data-theme', this.theme);
+        document.documentElement.style.fontSize = this.fontSizeMap[this.fontSize] || this.fontSizeMap.small;
+        this.$watch('theme', val => {
+            document.documentElement.setAttribute('data-theme', val);
+            // Local storage for quick flash prevention on load
+            localStorage.setItem('theme', val);
+        });
+        this.$watch('fontSize', val => {
+            document.documentElement.style.fontSize = this.fontSizeMap[val] || this.fontSizeMap.small;
+            localStorage.setItem('fontSize', val);
+        });
+        this.$watch('sidebarOpen', val => {
+            localStorage.setItem('sidebarOpen', val);
+        });
+    }
+}" x-init="init()">
+    
+
+    <div class="drawer flex-1" :class="{ 'lg:drawer-open': sidebarOpen }">
+        <input id="my-drawer-2" type="checkbox" class="drawer-toggle" x-model="sidebarOpen" />
+        <div class="drawer-content flex flex-col">
+            {% if user.is_authenticated %}
+            <!-- Desktop Sidebar Expander (Thin band on left) -->
+            <div 
+                @click="sidebarOpen = true" 
+                class="fixed inset-y-0 left-0 w-6 bg-base-200 hover:bg-base-300 cursor-pointer flex items-center justify-center z-10 transition-colors hidden lg:flex"
+                :class="{ 'hidden': sidebarOpen }"
+                title="Expand Sidebar"
+            >
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-4 h-4 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </div>
+            {% endif %}
+            
+            <!-- Page content here -->
+            {% block content %}
+            {% endblock %}
+        </div> 
+        <div class="drawer-side z-20">
+            <label for="my-drawer-2" aria-label="close sidebar" class="drawer-overlay"></label> 
+            <!-- Sidebar -->
+            {% if user.is_authenticated %}
+                {% include "lab/partials/sidebar.html" %}
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Notes Modal -->
+    <dialog id="notes-modal" class="modal" x-data @close="$refs.content.innerHTML = '<div class=\'flex justify-center items-center h-full\'><span class=\'loading loading-spinner loading-md\'></span></div>'">
+      <div class="modal-box w-11/12 max-w-3xl h-[80vh] flex flex-col p-4 bg-white dark:bg-gray-800">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="font-bold text-lg mb-4 text-gray-900 dark:text-gray-100">Notes</h3>
+        <div id="notes-modal-content" x-ref="content" class="flex-1 overflow-y-auto">
+            <!-- Content loaded via HTMX -->
+            <div class="flex justify-center items-center h-full">
+                <span class="loading loading-spinner loading-md"></span>
+            </div>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
+    
+    <!-- Generic Modal for Samples, Tests, etc. -->
+    <dialog id="generic-modal" class="modal" x-data @close="$refs.content.innerHTML = '<div class=\'flex justify-center p-8\'><span class=\'loading loading-spinner loading-md\'></span></div>'" @closeModal.window="$el.close()" @close-modal.window="$el.close()">
+      <div class="modal-box bg-base-100" style="width: min(96vw, 96rem); max-width: 96rem;">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <div id="generic-modal-content" x-ref="content">
+            <div class="flex justify-center p-8">
+                <span class="loading loading-spinner loading-md"></span>
+            </div>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
+
+    <!-- Document Preview Drawer (Right Side) -->
+    <div x-data="{ open: false }" 
+         @keydown.escape.window="open = false"
+         @open-preview.window="open = true"
+         class="relative z-[100]">
+        
+        <!-- Backdrop -->
+        <div x-show="open" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 bg-black/20 backdrop-blur-[2px] pointer-events-auto"
+             @click="open = false"></div>
+
+        <!-- Panel -->
+        <div x-show="open"
+             x-transition:enter="transition ease-out duration-300 transform"
+             x-transition:enter-start="translate-x-full"
+             x-transition:enter-end="translate-x-0"
+             x-transition:leave="transition ease-in duration-200 transform"
+             x-transition:leave-start="translate-x-0"
+             x-transition:leave-end="translate-x-full"
+             class="fixed inset-y-0 right-0 w-[90vw] md:w-[600px] lg:w-[800px] bg-base-100 shadow-2xl pointer-events-auto flex flex-col border-l border-base-200 z-[101]">
+            
+            <div id="preview-drawer-content" class="flex-1 flex flex-col h-full overflow-hidden">
+                <!-- Content loaded via HTMX -->
+                <div class="flex justify-center items-center h-full">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden Input to integrate with existing trigger (if needed) -->
+        <input id="preview-drawer" type="checkbox" class="hidden" x-model="open">
+    </div>
+
+    <script>
+        document.body.addEventListener('htmx:configRequest', (event) => {
+            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+        });
+        // HTMX swaps inject new DOM; Alpine does not scan it automatically — re-init so dashboard plot widgets run x-init / iframes.
+        document.body.addEventListener('htmx:afterSwap', (event) => {
+            if (window.Alpine && typeof Alpine.initTree === 'function' && event.detail && event.detail.target) {
+                Alpine.initTree(event.detail.target);
+            }
+        });
+    </script>
+</body>
+</html>

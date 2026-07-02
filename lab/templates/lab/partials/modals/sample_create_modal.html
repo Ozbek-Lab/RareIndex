@@ -1,0 +1,160 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-5">
+    <div class="flex items-start justify-between gap-4 pr-8">
+        <div>
+            <h3 class="font-bold text-lg text-primary flex items-center gap-2">
+                <i class="fa-solid fa-vial-circle-check"></i>
+                Add Sample
+            </h3>
+            <p class="text-xs text-base-content/60 mt-1">
+                {{ individual.primary_id }} #{{ individual.id }}
+            </p>
+        </div>
+    </div>
+</div>
+
+<form hx-post="{{ action_url }}"
+      hx-target="#generic-modal-content"
+      hx-swap="innerHTML"
+      class="space-y-5">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="rounded-lg border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+        <div class="font-semibold mb-1">Please fix the highlighted fields below.</div>
+        {% if form.non_field_errors %}
+        <div class="text-xs">{{ form.non_field_errors.0 }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="form-control w-full lg:col-span-2">
+            <label class="label py-1" for="{{ form.sample_type.id_for_label }}">
+                <span class="label-text font-semibold text-xs opacity-70">{{ form.sample_type.label }}</span>
+            </label>
+            {{ form.sample_type }}
+            {% if form.sample_type.errors %}
+            <label class="label py-0">
+                <span class="label-text-alt text-error text-[10px]">{{ form.sample_type.errors.0 }}</span>
+            </label>
+            {% endif %}
+        </div>
+
+        <div class="rounded-lg border border-base-200 bg-base-200/30 px-3 py-2">
+            <div class="text-[10px] uppercase font-semibold text-base-content/50">Individual</div>
+            <div class="text-sm font-medium mt-1">{{ individual.primary_id }}</div>
+            <div class="text-xs text-base-content/50">{{ individual.samples.count }} existing sample{{ individual.samples.count|pluralize }}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control w-full">
+            <label class="label py-1" for="{{ form.receipt_date.id_for_label }}">
+                <span class="label-text font-semibold text-xs opacity-70">{{ form.receipt_date.label }}</span>
+            </label>
+            {{ form.receipt_date }}
+            {% if form.receipt_date.errors %}
+            <label class="label py-0">
+                <span class="label-text-alt text-error text-[10px]">{{ form.receipt_date.errors.0 }}</span>
+            </label>
+            {% endif %}
+        </div>
+
+        <div class="form-control w-full">
+            <label class="label py-1" for="{{ form.processing_date.id_for_label }}">
+                <span class="label-text font-semibold text-xs opacity-70">{{ form.processing_date.label }}</span>
+            </label>
+            {{ form.processing_date }}
+            {% if form.processing_date.errors %}
+            <label class="label py-0">
+                <span class="label-text-alt text-error text-[10px]">{{ form.processing_date.errors.0 }}</span>
+            </label>
+            {% endif %}
+        </div>
+
+        <div class="form-control w-full">
+            <label class="label py-1" for="{{ form.isolation_by.id_for_label }}">
+                <span class="label-text font-semibold text-xs opacity-70">{{ form.isolation_by.label }}</span>
+            </label>
+            {{ form.isolation_by }}
+            {% if form.isolation_by.errors %}
+            <label class="label py-0">
+                <span class="label-text-alt text-error text-[10px]">{{ form.isolation_by.errors.0 }}</span>
+            </label>
+            {% endif %}
+        </div>
+
+        <div class="form-control w-full">
+            <label class="label py-1" for="{{ form.sample_measurements.id_for_label }}">
+                <span class="label-text font-semibold text-xs opacity-70">{{ form.sample_measurements.label }}</span>
+            </label>
+            {{ form.sample_measurements }}
+            {% if form.sample_measurements.errors %}
+            <label class="label py-0">
+                <span class="label-text-alt text-error text-[10px]">{{ form.sample_measurements.errors.0 }}</span>
+            </label>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="form-control w-full">
+        <label class="label py-1">
+            <span class="label-text font-semibold text-xs opacity-70">{{ form.statuses.label }}</span>
+            {% if form.statuses.help_text %}
+            <span class="label-text-alt text-[10px] text-base-content/50">{{ form.statuses.help_text }}</span>
+            {% endif %}
+        </label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+            {% for option in status_options %}
+            <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-base-200 bg-base-100 px-3 py-2 transition hover:border-primary/50 hover:bg-primary/5">
+                <input type="checkbox"
+                       name="statuses"
+                       value="{{ option.id }}"
+                       class="checkbox checkbox-primary checkbox-sm"
+                       {% if option.selected %}checked{% endif %}>
+                <span class="size-2.5 rounded-full ring-1 ring-base-content/10"
+                      style="background-color: {{ option.status.color|default:'currentColor' }};"></span>
+                <span class="min-w-0 flex-1">
+                    <span class="block truncate text-sm font-medium">{{ option.status.display_name|default:option.status.name }}</span>
+                    {% if option.group_name %}
+                    <span class="block truncate text-[10px] text-base-content/50">{{ option.group_name }}</span>
+                    {% endif %}
+                </span>
+            </label>
+            {% empty %}
+            <div class="rounded-lg border border-dashed border-base-300 px-3 py-2 text-xs text-base-content/50">
+                No sample statuses are configured.
+            </div>
+            {% endfor %}
+        </div>
+        {% if form.statuses.errors %}
+        <label class="label py-0">
+            <span class="label-text-alt text-error text-[10px]">{{ form.statuses.errors.0 }}</span>
+        </label>
+        {% endif %}
+    </div>
+
+    <div class="form-control w-full">
+        <label class="label py-1" for="{{ form.note_content.id_for_label }}">
+            <span class="label-text font-semibold text-xs opacity-70">{{ form.note_content.label }}</span>
+        </label>
+        {{ form.note_content }}
+        {% if form.note_content.errors %}
+        <label class="label py-0">
+            <span class="label-text-alt text-error text-[10px]">{{ form.note_content.errors.0 }}</span>
+        </label>
+        {% endif %}
+    </div>
+
+    <div class="modal-action mt-8 pt-4 border-t border-base-200 flex justify-between">
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('generic-modal').close()">
+            Cancel
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm px-8">
+            <i class="fa-solid fa-plus text-[10px]"></i>
+            Add Sample
+        </button>
+    </div>
+</form>

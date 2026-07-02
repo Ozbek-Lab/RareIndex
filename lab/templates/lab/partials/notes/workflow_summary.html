@@ -1,0 +1,10 @@
+{% load lab_tags %}
+{# Workflow Summary - Wrapper with HTMX trigger #}
+<div id="note-count-{{ content_type }}-{{ object.id }}-wrapper"
+     hx-get="{% url 'lab:note_count' %}"
+     hx-vals='{"object_id": "{{ object.id }}", "content_type": "{{ content_type }}", "template": "lab/partials/notes/workflow_summary_content.html"}'
+     hx-trigger="noteCountUpdate-{{ content_type }}-{{ object.id }} from:body"
+     hx-target="this"
+     hx-swap="innerHTML">
+    {% include "lab/partials/notes/workflow_summary_content.html" with note_count=object.notes|visible_to:user|length object=object content_type=content_type %}
+</div>

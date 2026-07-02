@@ -1,0 +1,16 @@
+{% if results %}
+<ul class="flex flex-col bg-base-100 w-full rounded-md shadow-lg border border-base-300 max-h-60 overflow-y-auto overflow-x-hidden list-none p-0">
+    {% for term in results %}
+    <li>
+        <button type="button" 
+                @click="addHpoTerm('{{ term.id }}', '{{ term.label|escapejs }}')"
+                class="flex flex-col items-start gap-1 py-2 text-left hover:bg-base-200 w-full whitespace-normal">
+            <span class="font-bold text-sm text-base-content break-words w-full">{{ term.label }}</span>
+            <span class="text-xs font-mono opacity-50 text-base-content/70 break-all">{{ term.identifier }}</span>
+        </button>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="p-3 text-sm text-base-content/50 text-center bg-base-100 rounded-md border border-base-300">No matches found.</div>
+{% endif %}

@@ -1,0 +1,147 @@
+{% load variant_filters %}
+<style>
+  .acmg-evidence-checkbox:checked + .acmg-evidence-box-benign {
+    border-color: oklch(var(--in)) !important;
+    border-width: 3px !important;
+    box-shadow: 0 0 0 3px color-mix(in oklab, oklch(var(--in)) 62%, transparent);
+  }
+
+  .acmg-evidence-checkbox:checked + .acmg-evidence-box-pathogenic {
+    border-color: oklch(var(--er)) !important;
+    border-width: 3px !important;
+    box-shadow: 0 0 0 3px color-mix(in oklab, oklch(var(--er)) 62%, transparent);
+  }
+
+  .acmg-strength-radio:checked + .acmg-strength-chip {
+    font-weight: 700;
+    background-color: color-mix(in oklab, oklch(var(--b2)) 72%, oklch(var(--b1)) 28%);
+    border-color: color-mix(in oklab, oklch(var(--bc)) 24%, transparent);
+    color: oklch(var(--bc) / 0.72);
+  }
+
+  .acmg-strength-chip-default {
+    font-weight: 700;
+    background-color: color-mix(in oklab, oklch(var(--b2)) 72%, oklch(var(--b1)) 28%);
+    border-color: color-mix(in oklab, oklch(var(--bc)) 24%, transparent);
+    color: oklch(var(--bc) / 0.72);
+  }
+
+  .acmg-evidence-control:has(.acmg-evidence-checkbox:checked) .acmg-strength-radio:checked + .acmg-strength-chip-default.acmg-strength-chip-benign {
+    background-color: color-mix(in oklab, oklch(var(--in)) 28%, oklch(var(--b1)) 72%);
+    border-color: color-mix(in oklab, oklch(var(--in)) 58%, transparent);
+    color: oklch(var(--in));
+  }
+
+  .acmg-evidence-control:has(.acmg-evidence-checkbox:checked) .acmg-strength-radio:checked + .acmg-strength-chip-default.acmg-strength-chip-pathogenic {
+    background-color: color-mix(in oklab, oklch(var(--er)) 28%, oklch(var(--b1)) 72%);
+    border-color: color-mix(in oklab, oklch(var(--er)) 58%, transparent);
+    color: oklch(var(--er));
+  }
+
+  .acmg-evidence-control:has(.acmg-evidence-checkbox:checked) .acmg-strength-radio:checked + .acmg-strength-chip-modified.acmg-strength-chip-benign {
+    background-color: oklch(var(--in));
+    border-color: oklch(var(--in));
+    color: oklch(var(--inc));
+  }
+
+  .acmg-evidence-control:has(.acmg-evidence-checkbox:checked) .acmg-strength-radio:checked + .acmg-strength-chip-modified.acmg-strength-chip-pathogenic {
+    background-color: oklch(var(--er));
+    border-color: oklch(var(--er));
+    color: oklch(var(--erc));
+  }
+</style>
+<div class="overflow-x-auto pb-1">
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(17rem, 1fr)); gap: 0.75rem; min-width: 72rem; align-items: start;">
+    {% with evidence_columns=gene_item|acmg_evidence_matrix_for_gene:variant %}
+      {% for column in evidence_columns %}
+      <div class="rounded-box border border-base-200 bg-base-200/20 p-3">
+      <div class="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <h6 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">{{ column.title }}</h6>
+          <p class="text-[11px] font-medium uppercase tracking-wider {% if column.accent == 'error' %}text-error/70{% else %}text-info/70{% endif %}">{{ column.subtitle }}</p>
+        </div>
+        <span class="badge badge-xs badge-ghost">{{ column.count }}</span>
+      </div>
+      <div class="space-y-1.5">
+        {% for crit in column.items %}
+        <div class="acmg-evidence-control grid gap-1" style="grid-template-columns: minmax(0, 1fr) 2.2rem;">
+          <label class="block h-full w-full cursor-pointer">
+            <input
+              type="checkbox"
+              name="included_criteria"
+              value="{{ crit.code }}"
+              class="peer sr-only acmg-evidence-checkbox"
+              {% if crit.is_active %}checked{% endif %}
+              @change="
+                const radio = $el.closest('.acmg-evidence-control').querySelector('input[name=strength_{{ crit.code }}][value={{ crit.default_strength }}]');
+                if (radio) radio.checked = true;
+              "
+            >
+            <span class="acmg-evidence-box-{{ crit.category }} flex h-full min-h-20 flex-col justify-center rounded-box border border-base-200 bg-base-100 px-3 py-2 text-sm text-base-content/70 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40
+                         {% if crit.category == 'pathogenic' %}
+                         peer-checked:text-error peer-checked:font-semibold
+                         {% elif crit.category == 'benign' %}
+                         peer-checked:text-info peer-checked:font-semibold
+                         {% endif %}"
+                  {% if crit.manual_state == 'manual-include' %}
+                    {% if crit.category == 'pathogenic' %}
+                    style="background-color: color-mix(in oklab, oklch(var(--er)) 42%, oklch(var(--b1)) 58%); color: oklch(var(--erc));"
+                    {% else %}
+                    style="background-color: color-mix(in oklab, oklch(var(--in)) 42%, oklch(var(--b1)) 58%); color: oklch(var(--inc));"
+                    {% endif %}
+                  {% elif crit.is_imported and not crit.manual_state %}
+                    {% if crit.category == 'pathogenic' %}
+                    style="background-color: color-mix(in oklab, oklch(var(--er)) 18%, oklch(var(--b1)) 82%);"
+                    {% else %}
+                    style="background-color: color-mix(in oklab, oklch(var(--in)) 18%, oklch(var(--b1)) 82%);"
+                    {% endif %}
+                  {% endif %}>
+              <span class="flex items-start justify-between gap-2">
+                <span class="font-mono text-sm font-semibold xl:text-base">{{ crit.code }}</span>
+                <span class="flex flex-wrap justify-end gap-1">
+                  {% if crit.is_imported %}
+                  <span class="badge badge-xs badge-info whitespace-nowrap">Imported</span>
+                  {% endif %}
+                  {% if crit.manual_state %}
+                  <span class="badge badge-xs whitespace-nowrap {% if crit.manual_state == 'manual-include' %}{% if crit.category == 'pathogenic' %}badge-error{% else %}badge-info{% endif %}{% else %}badge-error badge-outline{% endif %}">
+                    {{ crit.manual_state_label }}
+                  </span>
+                  {% endif %}
+                  {% if not crit.is_imported and not crit.manual_state %}
+                  <span class="badge badge-xs badge-ghost whitespace-nowrap">Not included</span>
+                  {% endif %}
+                </span>
+              </span>
+              <span class="mt-1 text-[11px] leading-snug opacity-80">{{ crit.description }}</span>
+            </span>
+          </label>
+          <div class="grid h-full min-h-20 gap-0.5" style="grid-template-rows: repeat(5, minmax(0, 1fr));">
+            {% for strength in crit.strength_options %}
+            <label class="tooltip tooltip-left cursor-pointer" data-tip="{{ strength.title }}">
+              <input
+                type="radio"
+                name="strength_{{ crit.code }}"
+                value="{{ strength.value }}"
+                class="sr-only acmg-strength-radio"
+                {% if strength.selected %}checked{% endif %}
+                @change="
+                  const checkbox = $el.closest('.acmg-evidence-control').querySelector('input[name=included_criteria]');
+                  if (checkbox) checkbox.checked = $event.target.value !== 'indeterminate';
+                "
+              >
+              <span class="acmg-strength-chip acmg-strength-chip-{{ crit.category }} {% if strength.is_default %}acmg-strength-chip-default{% else %}acmg-strength-chip-modified{% endif %} flex h-full min-h-0 items-center justify-center rounded border border-base-200 bg-base-100 text-[9px] leading-none text-base-content/60 transition-colors">
+                {{ strength.short_label }}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="rounded-box border border-dashed border-base-200 bg-base-100/40 px-3 py-2 text-[11px] text-base-content/30">No criteria</div>
+        {% endfor %}
+      </div>
+      </div>
+      {% endfor %}
+    {% endwith %}
+  </div>
+</div>

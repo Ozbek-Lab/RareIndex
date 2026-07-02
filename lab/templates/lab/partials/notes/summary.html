@@ -1,0 +1,21 @@
+<div
+  class="flex items-center space-x-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
+  hx-get="{% url 'lab:note_list' %}"
+  hx-vals='{"object_id": "{{ object.id }}", "content_type": "{{ content_type }}"}'
+  hx-target="#notes-modal-content"
+  hx-swap="innerHTML"
+  @click="document.getElementById('notes-modal').showModal()"
+>
+  {% include "lab/partials/notes/summary_content.html" %}
+</div>
+
+<!-- Hidden trigger for updates -->
+<div 
+    class="hidden"
+    hx-get="{% url 'lab:note_count' %}"
+    hx-trigger="noteCountUpdate-{{ content_type }}-{{ object.id }} from:body"
+    hx-vals='{"object_id": "{{ object.id }}", "content_type": "{{ content_type }}"}'
+    hx-target="previous .flex"
+    hx-swap="innerHTML"
+>
+</div>

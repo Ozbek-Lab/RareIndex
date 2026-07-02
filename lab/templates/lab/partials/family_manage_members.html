@@ -1,0 +1,177 @@
+{% load lab_tags %}
+<div class="space-y-5" id="manage-members-modal-{{ family.pk }}">
+
+    <!-- Header -->
+    <div>
+        <h2 class="text-lg font-bold text-base-content">Manage Members</h2>
+        <p class="text-sm text-base-content/50 mt-0.5">Family <span class="font-mono font-semibold text-base-content">{{ family.family_id }}</span></p>
+    </div>
+
+    {% if success_msg %}
+    <div class="alert alert-success py-2 text-sm">
+        <i class="fa-solid fa-circle-check"></i>
+        <span>{{ success_msg }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Existing Members -->
+    <div>
+        <h3 class="text-[10px] font-bold uppercase tracking-wider text-base-content/40 mb-2">
+            Current Members
+            <span class="ml-1 badge badge-ghost badge-xs font-normal normal-case">{{ members.count }}</span>
+        </h3>
+        <div class="space-y-1.5" id="existing-members-{{ family.pk }}">
+            {% for member in members %}
+            <div id="manage-member-{{ member.pk }}"
+                 class="flex items-center gap-3 py-2 px-3 rounded-lg border border-base-200 bg-base-100 group"
+                 x-data="{ confirming: false }">
+
+                <!-- Member info (read-only) -->
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <a href="{% url 'lab:individual_detail' member.pk %}"
+                       target="_blank" rel="noopener noreferrer"
+                       class="font-mono text-sm text-primary font-semibold hover:underline shrink-0">
+                        {{ member.primary_id }}
+                    </a>
+                    {% if member.secondary_id %}
+                    <span class="font-mono text-xs text-base-content/40 shrink-0">{{ member.secondary_id }}</span>
+                    {% endif %}
+                    {% if member.sex == "male" %}
+                        <span class="badge badge-ghost badge-xs text-sky-600">Male</span>
+                    {% elif member.sex == "female" %}
+                        <span class="badge badge-ghost badge-xs text-pink-500">Female</span>
+                    {% endif %}
+                    {% if member.is_index %}
+                        <span class="badge badge-primary badge-xs">Index</span>
+                    {% endif %}
+                    {% if member.is_affected %}
+                        <span class="badge badge-warning badge-xs">Affected</span>
+                    {% endif %}
+                    {% get_object_statuses member as mstatuses %}
+                    {% for s in mstatuses %}
+                        <span class="badge badge-ghost badge-xs gap-1 font-normal hidden sm:inline-flex">
+                            {% if s.icon %}<i class="fa-solid {{ s.icon }} text-[8px]" style="color:{{ s.color }};"></i>{% else %}<span class="size-1.5 rounded-full" style="background-color:{{ s.color }};"></span>{% endif %}
+                            {{ s.display_name }}
+                        </span>
+                    {% endfor %}
+                </div>
+
+                <!-- Remove button + confirm -->
+                {% if perms.lab.change_individual %}
+                <div class="shrink-0 flex items-center gap-1.5">
+                    <button @click="confirming = true"
+                            x-show="!confirming"
+                            type="button"
+                            class="btn btn-ghost btn-xs text-error/40 hover:text-error hover:bg-error/10 gap-1">
+                        <i class="fa-solid fa-user-minus text-xs"></i>
+                        Remove
+                    </button>
+                    <div x-show="confirming" x-cloak class="flex items-center gap-1.5">
+                        <span class="text-xs text-error font-medium">Remove from family?</span>
+                        <button hx-post="{% url 'lab:family_remove_member' member.pk %}"
+                                hx-target="#manage-member-{{ member.pk }}"
+                                hx-swap="outerHTML"
+                                type="button"
+                                class="btn btn-error btn-xs">
+                            Yes, remove
+                        </button>
+                        <button @click="confirming = false" type="button" class="btn btn-ghost btn-xs">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+            {% empty %}
+            <div class="text-xs text-base-content/40 italic py-3 text-center border border-dashed border-base-300 rounded-lg">
+                No members yet.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Add New Member Form -->
+    {% if perms.lab.add_individual %}
+    <div class="border-t border-base-200 pt-4">
+        <h3 class="text-[10px] font-bold uppercase tracking-wider text-base-content/40 mb-3">Add a New Member</h3>
+
+        <form hx-post="{% url 'lab:family_add_member' family.pk %}"
+              hx-target="#manage-members-modal-{{ family.pk }}"
+              hx-swap="outerHTML"
+              class="space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="individual_pk" value="{{ individual_pk }}">
+
+            <!-- Name + Sex row -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-base-content/70 mb-1">
+                        Full Name <span class="text-error">*</span>
+                    </label>
+                    {{ form.full_name }}
+                    {% if form.full_name.errors %}
+                        <p class="text-error text-xs mt-0.5">{{ form.full_name.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-base-content/70 mb-1">Sex</label>
+                    {{ form.sex }}
+                </div>
+            </div>
+
+            <!-- Primary + Secondary ID row -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-base-content/70 mb-1">{{ form.primary_id.label }}</label>
+                    {{ form.primary_id }}
+                    {% if form.primary_id.errors %}
+                        <p class="text-error text-xs mt-0.5">{{ form.primary_id.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-base-content/70 mb-1">{{ form.secondary_id.label }}</label>
+                    {{ form.secondary_id }}
+                    {% if form.secondary_id.errors %}
+                        <p class="text-error text-xs mt-0.5">{{ form.secondary_id.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Flags + Status row -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="flex items-center gap-4 px-3 py-2 bg-base-200 rounded-lg border border-base-300">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_index }}
+                        <span class="text-xs font-medium text-base-content/70">Index Case</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_affected }}
+                        <span class="text-xs font-medium text-base-content/70">Affected</span>
+                    </label>
+                </div>
+                {% if form.statuses.field.queryset.exists %}
+                <div>
+                    <label class="block text-xs font-medium text-base-content/70 mb-1">Statuses</label>
+                    {{ form.statuses }}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Note about editing more details -->
+            <p class="text-[11px] text-base-content/40 italic">
+                <i class="fa-solid fa-circle-info mr-1"></i>
+                Additional details (IDs, HPO terms, institution, etc.) can be edited on the individual's detail page after creation.
+            </p>
+
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary btn-sm gap-2">
+                    <i class="fa-solid fa-user-plus text-xs"></i>
+                    Add Member
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+</div>

@@ -1,8 +1,10 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation
+from django.core.validators import RegexValidator
 from simple_history.models import HistoricalRecords
-from lab.models import Analysis, Individual, HistoryMixin
+from taggit.managers import TaggableManager
+from lab.models import Analysis, Individual, HistoryMixin, TaggedStatus
 
 class Variant(HistoryMixin, models.Model):
     """Base class for all variant types"""
@@ -12,8 +14,18 @@ class Variant(HistoryMixin, models.Model):
     end = models.IntegerField()
     
     # Linkage
-    individual = models.ForeignKey(Individual, on_delete=models.PROTECT, related_name="variants")
-    analysis = models.ForeignKey(Analysis, on_delete=models.PROTECT, related_name="found_variants", null=True, blank=True)
+    individual = models.ForeignKey(
+        Individual,
+        on_delete=models.PROTECT,
+        related_name="variants",
+    )
+    analysis = models.ForeignKey(
+        Analysis,
+        on_delete=models.PROTECT,
+        related_name="found_variants",
+        null=True,
+        blank=True,
+    )
     
     # Metadata
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
@@ -29,12 +41,15 @@ class Variant(HistoryMixin, models.Model):
     def __str__(self):
         return f"{self.chromosome}:{self.start}-{self.end}"
 
-    status = models.ForeignKey("lab.Status", on_delete=models.PROTECT, null=True, blank=True)
+    statuses = TaggableManager(through=TaggedStatus, blank=True, verbose_name="Statuses")
 
     ZYGOSITY_CHOICES = [
         ("het", "Heterozygous"),
         ("hom", "Homozygous"),
         ("hemi", "Hemizygous"),
+        ("hetpl", "Heteroplasmy"), #Check if chromosome is "MT"
+        ("homoplasmy", "Homoplasmy"), #Check if chromosome is "MT"
+        ("unknown", "Unknown"),
     ]
     zygosity = models.CharField(max_length=20, choices=ZYGOSITY_CHOICES)
 
@@ -61,13 +76,40 @@ class Variant(HistoryMixin, models.Model):
             return "Repeat"
         return "Variant"
 
+allele_validator = RegexValidator(
+    regex=r"^[ATGC]+$",
+    message="Alleles must consist only of the uppercase characters A, T, G, or C.",
+    code="invalid_allele",
+)
+
 class SNV(Variant):
     """Single Nucleotide Variant"""
-    reference = models.CharField(max_length=255)
-    alternate = models.CharField(max_length=255)
+    reference = models.CharField(max_length=255, validators=[allele_validator])
+    alternate = models.CharField(max_length=255, validators=[allele_validator])
     
     def __str__(self):
         return f"{self.chromosome}:{self.start} {self.reference}>{self.alternate}"
+
+    def save(self, *args, **kwargs):
+        # For SNVs we always normalize to end == start so the interval API
+        # stays consistent across all Variant subclasses.
+        if self.start is not None:
+            self.end = self.start
+        super().save(*args, **kwargs)
+
+class delins(Variant):
+    """Simple deletion/insertion anchored at a single position."""
+    reference = models.CharField(max_length=255, validators=[allele_validator])
+    alternate = models.CharField(max_length=255, validators=[allele_validator])
+    
+    def __str__(self):
+        return f"{self.chromosome}:{self.start} {self.reference}>{self.alternate}"
+
+    def save(self, *args, **kwargs):
+        # For basic delins we also keep end == start.
+        if self.start is not None:
+            self.end = self.start
+        super().save(*args, **kwargs)
 
 class CNV(Variant):
     """Copy Number Variant"""
@@ -121,6 +163,55 @@ class Annotation(models.Model):
         return f"{self.source} for {self.variant}"
 
     history = HistoricalRecords()
+
+
+class ACMGEvidenceOverride(models.Model):
+    """Imported GeneBe evidence plus manual overrides for a variant gene row."""
+
+    SOURCE_CHOICES = [
+        ("genebe", "GeneBe Import"),
+        ("manual", "Manual Override"),
+    ]
+
+    variant = models.ForeignKey(
+        Variant,
+        on_delete=models.CASCADE,
+        related_name="acmg_evidence_overrides",
+    )
+    gene_symbol = models.CharField(max_length=100, blank=True, db_index=True)
+    transcript = models.CharField(max_length=100, blank=True)
+    criterion = models.CharField(max_length=20, db_index=True)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, db_index=True)
+    included = models.BooleanField(default=True)
+    strength = models.CharField(max_length=20, blank=True, default="")
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["gene_symbol", "transcript", "criterion", "source"]
+        unique_together = ["variant", "gene_symbol", "transcript", "criterion", "source"]
+
+    def save(self, *args, **kwargs):
+        self.gene_symbol = (self.gene_symbol or "").strip()
+        self.transcript = (self.transcript or "").strip()
+        if self.criterion:
+            self.criterion = self.criterion.strip().replace(" ", "_").upper()
+        if self.strength:
+            self.strength = self.strength.strip().replace(" ", "_").lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        state = "included" if self.included else "excluded"
+        scope = self.gene_symbol or "variant"
+        return f"{self.variant} {scope} {self.criterion} ({self.source}, {state})"
 
 class Classification(HistoryMixin, models.Model):
     """ACMG Classification for a Variant"""
@@ -178,4 +269,3 @@ class Gene(models.Model):
     
     def __str__(self):
         return self.symbol
-

@@ -1,0 +1,36 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-4">
+    <h3 class="font-bold text-lg text-error flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        Remove Project
+    </h3>
+</div>
+
+<form method="post"
+      action="{{ action_url }}"
+      hx-post="{{ action_url }}"
+      hx-target="#generic-modal-content"
+      hx-swap="innerHTML"
+      class="space-y-4">
+    {% csrf_token %}
+
+    <p class="text-sm text-base-content/80">
+        Are you sure you want to remove the project
+        <span class="font-semibold">"{{ project.name }}"</span>?
+    </p>
+    <p class="text-xs text-base-content/60">
+        This will remove the project and its links to individuals and tasks,
+        but it will not delete any individuals or other objects.
+    </p>
+
+    <div class="modal-action mt-6 pt-4 border-t border-base-200 flex justify-between">
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('generic-modal').close()">
+            Cancel
+        </button>
+        <button type="submit" class="btn btn-error btn-sm px-6">
+            <i class="fa-solid fa-trash-can mr-1"></i>
+            Remove Project
+        </button>
+    </div>
+</form>

@@ -1,0 +1,55 @@
+{% load lab_tags %}
+
+{% if individuals %}
+<div class="bg-base-100 rounded-box shadow-xl border border-base-300 p-2 max-h-72 overflow-y-auto overflow-x-hidden">
+    <div class="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-base-content/40">
+        Matching CrossIDs
+    </div>
+    <div class="space-y-1">
+        {% for individual in individuals %}
+        <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="min-w-0">
+                    <span class="font-mono text-sm font-medium text-primary truncate block">{{ individual.primary_id }}</span>
+                    {% if individual.secondary_id %}
+                    <span class="text-xs text-base-content/50 font-mono truncate block">{{ individual.secondary_id }}</span>
+                    {% endif %}
+                </div>
+                {% get_object_statuses individual as indiv_active_statuses %}
+                {% for s in indiv_active_statuses %}
+                <span class="badge badge-xs gap-1 font-normal">
+                    {% if s.icon %}
+                        <i class="fa-solid {{ s.icon }}" style="color: {{ s.color }};"></i>
+                    {% else %}
+                        <span class="size-1.5 rounded-full" style="background-color: {{ s.color }};"></span>
+                    {% endif %}
+                    {{ s.display_name }}
+                </span>
+                {% endfor %}
+            </div>
+            {% if individual.pk in already_in_project %}
+            <span class="badge badge-sm badge-ghost text-base-content/40 gap-1 whitespace-nowrap">
+                <i class="fa-solid fa-check text-xs"></i> Already added
+            </span>
+            {% else %}
+            <button class="btn btn-primary btn-xs gap-1 font-normal whitespace-nowrap"
+                    hx-post="{% url 'lab:project_individual_add' project.pk individual.pk %}"
+                    hx-swap="none"
+                    hx-on::after-request="if(!event.detail.failed){this.outerHTML='<span class=&quot;badge badge-sm badge-ghost text-base-content/40 gap-1 whitespace-nowrap&quot;><i class=&quot;fa-solid fa-check text-xs&quot;></i> Already added</span>';}"
+            >
+                <i class="fa-solid fa-plus text-[10px]"></i> Add
+            </button>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% elif query %}
+<div class="bg-base-100 rounded-box shadow-xl border border-base-300 p-4 text-center text-xs text-base-content/40 italic">
+    No individuals found for "{{ query }}"
+</div>
+{% else %}
+<div class="bg-base-100 rounded-box shadow-xl border border-base-300 p-4 text-center text-xs text-base-content/40 italic">
+    Start typing a CrossID to search…
+</div>
+{% endif %}

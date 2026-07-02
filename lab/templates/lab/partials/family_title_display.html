@@ -1,0 +1,37 @@
+{% load lab_tags %}
+<div class="flex items-center justify-between mb-3" id="family-title-{{ family.pk }}">
+    <div class="flex items-center gap-2">
+        <h3 class="card-title text-sm uppercase text-base-content/50">
+            Family {{ family.family_id }}
+            {% if family.is_consanguineous %}
+                <span class="badge badge-sm badge-warning gap-1 normal-case font-normal">
+                    <i class="fa-solid fa-circle-nodes text-[10px]"></i> Consanguineous
+                </span>
+            {% elif family.is_consanguineous is False %}
+                <span class="badge badge-sm badge-ghost text-base-content/40 normal-case font-normal">Non-consanguineous</span>
+            {% endif %}
+        </h3>
+        {% if perms.lab.change_family %}
+        <button hx-get="{% url 'lab:family_id_edit' family.pk %}?individual_pk={{ individual.pk }}"
+                hx-target="#family-title-{{ family.pk }}"
+                hx-swap="outerHTML"
+                class="btn btn-ghost btn-xs btn-square text-base-content/40 hover:text-primary"
+                title="Edit family name">
+            <i class="fa-solid fa-pencil text-[10px]"></i>
+        </button>
+        {% endif %}
+        {% if perms.lab.add_individual or perms.lab.change_individual %}
+        <button hx-get="{% url 'lab:family_manage_members' family.pk %}?individual_pk={{ individual.pk }}"
+                hx-target="#generic-modal-content"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('generic-modal').showModal()"
+                class="btn btn-ghost btn-xs btn-square text-base-content/40 hover:text-success"
+                title="Manage family members">
+            <i class="fa-solid fa-user-plus text-[10px]"></i>
+        </button>
+        {% endif %}
+    </div>
+    <span class="badge badge-ghost badge-sm text-base-content/50">
+        {{ family.individuals.count }} member{{ family.individuals.count|pluralize }}
+    </span>
+</div>
