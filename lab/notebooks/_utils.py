@@ -97,7 +97,7 @@ def auth_prompt_mo(mo):
         f"This notebook calls Django’s `/api/plot-data/` API. "
         f"You need a JWT in the page URL (`token=…`) or in the environment.\n\n"
         f"{run_hint}"
-        f"**Edit in Marimo (e.g. port 8081):** [Open with editor token via Django]({auth_url}) — "
+        f"**Edit in Marimo (e.g. port 8082):** [Open with editor token via Django]({auth_url}) — "
         f"log in if asked, then you’ll return here with `token` set.{mode}\n\n"
         f"**Local dev:** export a JWT and re-run cells:\n"
         f"```bash\n"
