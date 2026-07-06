@@ -18,7 +18,7 @@ python manage.py collectstatic --no-input
 
 gunicorn \
     rareindex.wsgi:application \
-    --bind 0.0.0.0:8000 \
+    --bind 0.0.0.0:8090 \
     --log-level debug \
     --access-logfile '-' \
     --error-logfile '-' \

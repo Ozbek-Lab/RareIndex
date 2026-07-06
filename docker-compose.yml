@@ -5,42 +5,42 @@ services:
     volumes:
       - .:/app:z
     ports:
-      - "8000:8000"
+      - "8090:8090"
     env_file:
       - ./.env
     environment:
-      MARIMO_SERVICE_URL: ${MARIMO_SERVICE_URL:-http://127.0.0.1:8080}
-      MARIMO_EDITOR_URL: ${MARIMO_EDITOR_URL:-http://127.0.0.1:8082}
+      MARIMO_SERVICE_URL: ${MARIMO_SERVICE_URL:-http://127.0.0.1:8091}
+      MARIMO_EDITOR_URL: ${MARIMO_EDITOR_URL:-http://127.0.0.1:8092}
     depends_on:
       - db
 
   marimo-run:
     build: .
-    command: marimo run lab/notebooks --host 0.0.0.0 --port 8080 --headless --no-token
+    command: marimo run lab/notebooks --host 0.0.0.0 --port 8091 --headless --no-token
     volumes:
       - .:/app:z
     ports:
-      - "8080:8080"
+      - "8091:8091"
     env_file:
       - ./.env
     environment:
       DJANGO_SECRET_KEY: ${SECRET_KEY}
-      DJANGO_API_URL: ${DJANGO_API_URL:-http://web:8000}
+      DJANGO_API_URL: ${DJANGO_API_URL:-http://web:8090}
     depends_on:
       - web
 
   marimo-edit:
     build: .
-    command: marimo edit lab/notebooks --host 0.0.0.0 --port 8082 --headless --no-token
+    command: marimo edit lab/notebooks --host 0.0.0.0 --port 8092 --headless --no-token
     volumes:
       - .:/app:z
     ports:
-      - "8082:8082"
+      - "8092:8092"
     env_file:
       - ./.env
     environment:
       DJANGO_SECRET_KEY: ${SECRET_KEY}
-      DJANGO_API_URL: ${DJANGO_API_URL:-http://web:8000}
+      DJANGO_API_URL: ${DJANGO_API_URL:-http://web:8090}
     depends_on:
       - web
 
@@ -50,7 +50,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - .:/app:z
     ports:
-      - "8083:80"
+      - "8093:80"
       - "8443:443"
     depends_on:
       - web

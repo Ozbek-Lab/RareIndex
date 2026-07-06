@@ -8,7 +8,7 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 
 def _normalize_api_url(raw_url: str | None) -> str:
-    url = (raw_url or "http://127.0.0.1:8000").strip()
+    url = (raw_url or "http://127.0.0.1:8090").strip()
     parts = urllib.parse.urlsplit(url)
     if parts.hostname == "localhost":
         netloc = "127.0.0.1"
@@ -85,7 +85,7 @@ def auth_prompt_mo(mo):
         pass
 
     run_hint = (
-        f"**Run server (e.g. port 8080):** [Open this app with `token` via Django]({run_with_token_url}) "
+        f"**Run server (e.g. port 8091):** [Open this app with `token` via Django]({run_with_token_url}) "
         f"— `marimo run` does not know your session; the URL must include `token=` or you must set "
         f"`MARIMO_PLOT_JWT` for the Marimo process.\n\n"
         if file_part
@@ -97,7 +97,7 @@ def auth_prompt_mo(mo):
         f"This notebook calls Django’s `/api/plot-data/` API. "
         f"You need a JWT in the page URL (`token=…`) or in the environment.\n\n"
         f"{run_hint}"
-        f"**Edit in Marimo (e.g. port 8082):** [Open with editor token via Django]({auth_url}) — "
+        f"**Edit in Marimo (e.g. port 8092):** [Open with editor token via Django]({auth_url}) — "
         f"log in if asked, then you’ll return here with `token` set.{mode}\n\n"
         f"**Local dev:** export a JWT and re-run cells:\n"
         f"```bash\n"
