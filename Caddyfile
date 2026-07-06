@@ -7,7 +7,7 @@
     file_server
 
     # Reverse proxy Django app
-    reverse_proxy web:8000 {
+    reverse_proxy web:8090 {
         header_up X-Forwarded-Proto {scheme}
         header_up Host rare
     }

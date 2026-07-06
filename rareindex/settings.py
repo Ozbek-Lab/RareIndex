@@ -44,11 +44,11 @@ PLOT_ALLOWED_MODELS = ['Individual', 'Sample', 'Test', 'Analysis', 'Pipeline', '
 MARIMO_NOTEBOOKS_DIR = BASE_DIR / 'lab/notebooks'
 # URL the *browser* uses to load `marimo run` (iframes, links). Use a host/port reachable from
 # the user’s machine — not an internal Docker service name unless the browser can resolve it.
-MARIMO_SERVICE_URL = env("MARIMO_SERVICE_URL", default="http://127.0.0.1:8080")
+MARIMO_SERVICE_URL = env("MARIMO_SERVICE_URL", default="http://127.0.0.1:8091")
 # Plot JWT lifetime for dashboard iframes (seconds). Keep > typical Marimo boot + cell run time.
 MARIMO_PLOT_TOKEN_MAX_AGE = env.int("MARIMO_PLOT_TOKEN_MAX_AGE", default=900)
 # `marimo edit` (staff opens via /authoring/marimo/ — receives a long-lived JWT in the redirect URL)
-MARIMO_EDITOR_URL = env("MARIMO_EDITOR_URL", default="http://127.0.0.1:8082")
+MARIMO_EDITOR_URL = env("MARIMO_EDITOR_URL", default="http://127.0.0.1:8092")
 MARIMO_EDITOR_TOKEN_MAX_AGE = env.int("MARIMO_EDITOR_TOKEN_MAX_AGE", default=28800)
 
 

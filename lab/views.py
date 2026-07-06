@@ -688,7 +688,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             self.request.user.dashboard_widgets.select_related("template").order_by("order")
         )
         context["marimo_service_url"] = getattr(
-            settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8080"
+            settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091"
         ).rstrip("/")
 
         # 2. News Feed - Aggregated History
@@ -2080,7 +2080,7 @@ def marimo_proxy(request, path=""):
     """
     from .jwt_utils import issue_editor_plot_token
 
-    marimo_base = getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8082").rstrip("/")
+    marimo_base = getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8092").rstrip("/")
     params = request.GET.copy()
     params["token"] = issue_editor_plot_token(request.user)
     return redirect(f"{marimo_base}/?{params.urlencode()}")
@@ -2091,7 +2091,7 @@ def marimo_run_proxy(request):
     """
     Send the user to the Marimo *run* server (dashboard / read-only app) with a plot JWT.
 
-    Opening http://localhost:8080/?file=… alone does not include a Django JWT, so plot cells
+    Opening the Marimo run server directly without Django does not include a Django JWT, so plot cells
     stop with auth. This view adds token= for mo.query_params() (Marimo does not strip it).
     """
     from pathlib import Path
@@ -2108,7 +2108,7 @@ def marimo_run_proxy(request):
     if nb_dir is not None and not (Path(nb_dir) / safe_name).is_file():
         return HttpResponseBadRequest("Notebook file not found in MARIMO_NOTEBOOKS_DIR")
 
-    marimo_base = getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8080").rstrip("/")
+    marimo_base = getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091").rstrip("/")
     token = issue_plot_token(request.user)
     params = request.GET.copy()
     params["file"] = safe_name
