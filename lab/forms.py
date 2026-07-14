@@ -1173,6 +1173,10 @@ class IndividualIdentificationForm(BaseForm):
         cleaned_data = super().clean()
         import json
 
+        if not self.can_edit_sensitive and self.instance and self.instance.pk:
+            cleaned_data["full_name"] = self.instance.full_name
+            cleaned_data["tc_identity"] = self.instance.tc_identity
+
         primary_id_val = cleaned_data.get("primary_id") or ""
         secondary_id_val = cleaned_data.get("secondary_id") or ""
 
@@ -1216,7 +1220,14 @@ class IndividualIdentificationForm(BaseForm):
         return cleaned_data
 
     def __init__(self, *args, **kwargs):
+        self.can_edit_sensitive = kwargs.pop("can_edit_sensitive", True)
         super().__init__(*args, **kwargs)
+        if not self.can_edit_sensitive:
+            self.fields["full_name"].required = False
+            self.fields["tc_identity"].required = False
+            self.fields["primary_id"].required = False
+            self.fields["secondary_id"].required = False
+            self.fields["cross_identifiers_json"].required = False
         primary_label, secondary_label = self._get_id_labels()
         self.fields["primary_id"].label = primary_label
         self.fields["secondary_id"].label = secondary_label
@@ -1234,6 +1245,10 @@ class IndividualIdentificationForm(BaseForm):
     def save(self, commit=True, **kwargs):
         user = kwargs.get("user")
         instance = super().save(commit=False, **kwargs)
+        if not self.can_edit_sensitive:
+            instance.full_name = self.instance.full_name
+            instance.tc_identity = self.instance.tc_identity
+
         if commit:
             instance.save()
             from .models import IdentifierType, CrossIdentifier
@@ -1345,17 +1360,28 @@ class IndividualDemographicsForm(BaseForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.can_edit_sensitive = kwargs.pop("can_edit_sensitive", True)
         super().__init__(*args, **kwargs)
+        if not self.can_edit_sensitive:
+            self.fields["birth_date"].required = False
         if self.instance and self.instance.pk:
             self.fields["vital_status"].initial = "alive" if self.instance.is_alive else "deceased"
         
         # Family field - use standard select but filter slightly? 
         # Or just allow all. BaseForm styles it.
 
+    def clean(self):
+        cleaned_data = super().clean()
+        if not self.can_edit_sensitive and self.instance and self.instance.pk:
+            cleaned_data["birth_date"] = self.instance.birth_date
+        return cleaned_data
+
     def save(self, commit=True, **kwargs):
         # Consume user if passed, as views pass it
         user = kwargs.get("user")
         instance = super().save(commit=False)
+        if not self.can_edit_sensitive:
+            instance.birth_date = self.instance.birth_date
         instance.is_alive = (self.cleaned_data.get("vital_status") == "alive")
         if commit:
             instance.save()

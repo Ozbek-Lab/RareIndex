@@ -1,5 +1,6 @@
 import os
 import urllib.request
+import hashlib
 import fastobo
 import networkx as nx
 from django.conf import settings
@@ -11,6 +12,8 @@ from .models import Term
 HBO_URL = "https://purl.obolibrary.org/obo/hp.obo"
 ONTOLOGY_DIR = os.path.join(settings.MEDIA_ROOT, 'ontologies')
 OBO_PATH = os.path.join(ONTOLOGY_DIR, 'hp.obo')
+HPO_DESCENDANT_CACHE_VERSION_KEY = "hpo_descendant_cache_version"
+HPO_DESCENDANT_CACHE_TTL = 60 * 60 * 24
 
 # get_global_hpo_tree removed as part of HPO optimization
 
@@ -213,11 +216,25 @@ def get_descendants(term_ids):
     """
     if not term_ids:
         return set()
-        
+
+    normalized_ids = set()
+    for term_id in term_ids:
+        try:
+            normalized_ids.add(int(term_id))
+        except (TypeError, ValueError):
+            continue
+    if not normalized_ids:
+        return set()
+
+    normalized_term_ids = tuple(sorted(normalized_ids))
+    cached = cache.get(_descendant_cache_key("db", normalized_term_ids))
+    if cached is not None:
+        return set(cached)
+
     graph = load_hpo_graph()
     
     # Convert DB PKs to OBO IDs
-    terms = Term.objects.filter(id__in=term_ids)
+    terms = Term.objects.filter(id__in=normalized_term_ids)
     obo_ids = [t.term for t in terms]
     
     all_descendants_obo = set(obo_ids)
@@ -228,7 +245,16 @@ def get_descendants(term_ids):
     # Convert back to DB PKs
     # Extract identifiers
     identifiers = [oid.split(':')[1] for oid in all_descendants_obo if ':' in oid]
-    return Term.objects.filter(identifier__in=identifiers, ontology__type=1).values_list('id', flat=True)
+    descendant_ids = set(
+        Term.objects.filter(identifier__in=identifiers, ontology__type=1)
+        .values_list('id', flat=True)
+    )
+    cache.set(
+        _descendant_cache_key("db", normalized_term_ids),
+        list(descendant_ids),
+        HPO_DESCENDANT_CACHE_TTL,
+    )
+    return descendant_ids
 
 def get_descendants_from_obo(obo_ids):
     """
@@ -236,14 +262,53 @@ def get_descendants_from_obo(obo_ids):
     """
     if not obo_ids:
         return set()
-        
+
+    normalized_obo_ids = tuple(sorted({_normalize_obo_id(obo_id) for obo_id in obo_ids if obo_id}))
+    cached = cache.get(_descendant_cache_key("obo", normalized_obo_ids))
+    if cached is not None:
+        return set(cached)
+
     graph = load_hpo_graph()
     
-    all_descendants_obo = set(obo_ids)
-    for oid in obo_ids:
+    all_descendants_obo = set(normalized_obo_ids)
+    for oid in normalized_obo_ids:
         if oid in graph:
             all_descendants_obo.update(nx.descendants(graph, oid))
             
     # Convert back to DB PKs
     identifiers = [oid.split(':')[1] for oid in all_descendants_obo if ':' in oid]
-    return Term.objects.filter(identifier__in=identifiers, ontology__type=1).values_list('id', flat=True)
+    descendant_ids = set(
+        Term.objects.filter(identifier__in=identifiers, ontology__type=1)
+        .values_list('id', flat=True)
+    )
+    cache.set(
+        _descendant_cache_key("obo", normalized_obo_ids),
+        list(descendant_ids),
+        HPO_DESCENDANT_CACHE_TTL,
+    )
+    return descendant_ids
+
+
+def bump_hpo_descendant_cache_version():
+    cache.set(
+        HPO_DESCENDANT_CACHE_VERSION_KEY,
+        cache.get(HPO_DESCENDANT_CACHE_VERSION_KEY, 1) + 1,
+        None,
+    )
+
+
+def _descendant_cache_key(source, values):
+    version = cache.get(HPO_DESCENDANT_CACHE_VERSION_KEY, 1)
+    raw_values = "|".join(str(value) for value in values)
+    digest = hashlib.md5(raw_values.encode("utf-8")).hexdigest()
+    return f"hpo_descendants:v{version}:{source}:{digest}"
+
+
+def _normalize_obo_id(obo_id):
+    value = str(obo_id).strip()
+    if not value:
+        return value
+    if ":" in value:
+        prefix, identifier = value.split(":", 1)
+        return f"{prefix.upper()}:{identifier}"
+    return f"HP:{value}"

@@ -540,9 +540,24 @@ class Individual(HistoryMixin, models.Model):
             for id_temp in self.cross_ids.all()
         ]
 
+    def _prefetched_cross_ids(self):
+        prefetched = getattr(self, "_prefetched_objects_cache", {})
+        if "cross_ids" in prefetched:
+            return list(prefetched["cross_ids"])
+        return None
+
     @property
     def other_table_ids(self):
         """All non-primary/secondary IDs that are marked as visible for tables."""
+        prefetched_cross_ids = self._prefetched_cross_ids()
+        if prefetched_cross_ids is not None:
+            ids = [
+                f"{x.id_type.name}: {x.id_value}"
+                for x in prefetched_cross_ids
+                if x.id_type.use_priority not in (1, 2) and x.id_type.is_shown_in_table
+            ]
+            return ", ".join(ids) if ids else ""
+
         ids = [
             f"{x.id_type.name}: {x.id_value}"
             for x in self.cross_ids.select_related("id_type").all()
@@ -552,36 +567,58 @@ class Individual(HistoryMixin, models.Model):
 
     @property
     def primary_id(self):
-        primary_types = IdentifierType.objects.filter(use_priority=1).order_by("id")
-        if not primary_types.exists():
+        prefetched_cross_ids = self._prefetched_cross_ids()
+        if prefetched_cross_ids is not None:
+            matches = [
+                x for x in prefetched_cross_ids
+                if x.id_type.use_priority == 1
+            ]
+            if matches:
+                matches.sort(key=lambda x: x.id_type.id)
+                return matches[0].id_value
+
+        primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+        if not primary_type:
             return "NO PRIMARY ID SET"
 
+        if prefetched_cross_ids is not None:
+            return f"No {primary_type.name} ID"
+
         xid = (
-            self.cross_ids.filter(id_type__in=primary_types)
+            self.cross_ids.filter(id_type=primary_type)
             .order_by("id_type__id")
             .first()
         )
         if xid:
             return xid.id_value
-        # No matching ID, but we still have at least one primary IdentifierType
-        primary_type = primary_types.first()
         return f"No {primary_type.name} ID"
 
     @property
     def secondary_id(self):
-        secondary_types = IdentifierType.objects.filter(use_priority=2).order_by("id")
-        if not secondary_types.exists():
+        prefetched_cross_ids = self._prefetched_cross_ids()
+        if prefetched_cross_ids is not None:
+            matches = [
+                x for x in prefetched_cross_ids
+                if x.id_type.use_priority == 2
+            ]
+            if matches:
+                matches.sort(key=lambda x: x.id_type.id)
+                return matches[0].id_value
+
+        secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+        if not secondary_type:
             return "NO SECONDARY ID SET"
 
+        if prefetched_cross_ids is not None:
+            return f"No {secondary_type.name} ID"
+
         xid = (
-            self.cross_ids.filter(id_type__in=secondary_types)
+            self.cross_ids.filter(id_type=secondary_type)
             .order_by("id_type__id")
             .first()
         )
         if xid:
             return xid.id_value
-        # No matching ID, but we still have at least one secondary IdentifierType
-        secondary_type = secondary_types.first()
         return f"No {secondary_type.name} ID"
 
     # Backwards-compatible aliases (deprecated): prefer primary_id/secondary_id

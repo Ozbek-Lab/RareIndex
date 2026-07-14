@@ -19,6 +19,15 @@
                 </a>
             </td>
             <td class="font-mono text-xs text-base-content/60">{{ individual.secondary_id|default:"—" }}</td>
+            <td class="font-mono text-xs text-base-content/60">
+                {% if individual.other_table_ids %}
+                    <span class="block max-w-xs truncate" title="{{ individual.other_table_ids }}">
+                        {{ individual.other_table_ids }}
+                    </span>
+                {% else %}
+                    —
+                {% endif %}
+            </td>
             <td>
                 {% get_object_statuses individual as indiv_active_statuses %}
                 {% if indiv_active_statuses %}
@@ -47,6 +56,7 @@
             </td>
             <td class="text-xs text-base-content/60 capitalize">{{ individual.sex|default:"—" }}</td>
             <td class="text-xs text-base-content/50">{{ individual.created_at|date:"d/m/Y H:i" }}</td>
+            {% if perms.lab.change_project %}
             <td class="text-right">
                 <button class="btn btn-ghost btn-xs text-error hover:bg-error/10"
                         hx-delete="{% url 'lab:project_individual_remove' project.pk individual.pk %}"
@@ -56,11 +66,12 @@
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </td>
+            {% endif %}
         </tr>
     {% endfor %}
     {% if not individual_page.has_next %}
     <tr class="end-of-list-indicator">
-        <td colspan="7" class="text-center text-xs text-base-content/40 py-3">
+        <td colspan="{% if perms.lab.change_project %}8{% else %}7{% endif %}" class="text-center text-xs text-base-content/40 py-3">
             <i class="fa-solid fa-check-circle mr-1"></i>
             End of individuals
         </td>

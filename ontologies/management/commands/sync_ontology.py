@@ -239,6 +239,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'Successfully imported {options["ontology"]} version {version}'
         ))
+
+        if options["ontology"] == "HP":
+            from ontologies.utils import bump_hpo_descendant_cache_version
+            bump_hpo_descendant_cache_version()
         
         # Print some statistics
         self.stdout.write(f"Terms created: {Term.objects.filter(ontology=ontology).count()}")

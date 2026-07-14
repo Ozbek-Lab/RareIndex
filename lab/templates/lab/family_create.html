@@ -250,10 +250,11 @@
             },
 
             get filteredFamilyInstitutions() {
-                const search = this.familyInstitutionSearch.toLowerCase();
+                const normalizeSearch = (value) => String(value || '').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const search = normalizeSearch(this.familyInstitutionSearch);
                 return INSTITUTIONS.filter((inst) => {
                     const alreadySelected = this.selectedFamilyInstitutions.some((selected) => String(selected.id) === String(inst.id));
-                    return !alreadySelected && (!search || inst.name.toLowerCase().includes(search));
+                    return !alreadySelected && (!search || normalizeSearch(inst.name).includes(search));
                 });
             },
 

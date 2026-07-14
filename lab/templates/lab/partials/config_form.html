@@ -139,10 +139,11 @@
                 this.syncInstitutions();
             },
             get filteredInstitutions() {
-                const search = this.institutionSearch.toLowerCase();
+                const normalizeSearch = (value) => String(value || '').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const search = normalizeSearch(this.institutionSearch);
                 return this.institutions.filter((inst) => {
                     const alreadySelected = this.selectedInstitutions.some((selected) => String(selected.id) === String(inst.id));
-                    return !alreadySelected && (!search || inst.name.toLowerCase().includes(search));
+                    return !alreadySelected && (!search || normalizeSearch(inst.name).includes(search));
                 });
             }
          }"
