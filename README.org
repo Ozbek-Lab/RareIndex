@@ -1,33 +1,229 @@
-#+title: Readme
+#+title: RareIndex
 
-* Quickstart
+RareIndex is a Django application for tracking rare disease families,
+individuals, samples, tests, analyses, reports, variants, ontology terms, and
+project workflow.
+
+This README documents the normal setup and deployment commands. It only refers
+to Django built-in commands or project management commands that are present in
+the committed repository.
+
+* Requirements
+
+- Python with =virtualenv= or =venv=
+- Python packages from =requirements.txt=
+- A configured =.env= file; start from =.env.example=
+- Database configured by =DATABASE_URL= or the database settings in =.env=
+- Optional network access for commands that download external ontology or HGNC
+  data
+
+Important environment variables:
+
+#+begin_src text
+SECRET_KEY
+FIELD_ENCRYPTION_KEY
+DEBUG
+ALLOWED_HOSTS
+DATABASE_URL
+MARIMO_SERVICE_URL
+MARIMO_EDITOR_URL
+DJANGO_API_URL
+#+end_src
+
+* First-Time Local Setup
 
 #+begin_src shell
 git clone https://github.com/Ozbek-Lab/RareIndex
 cd RareIndex
-virtualenv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-python manage.py makemigrations
-python manage.py migrate --run-syncdb
-python manage.py generate_sample_data (will also create superuser admin)
-#python manage.py createsuperuser
-python manage.py clear_database (will remove all data except for static imports and superusers)
+cp .env.example .env
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver 0.0.0.0:8090
 #+end_src
 
-** sync ontologies
+Edit =.env= before running the application in a shared or production-like
+environment. In particular, set real values for =SECRET_KEY=,
+=FIELD_ENCRYPTION_KEY=, =ALLOWED_HOSTS=, and the database settings.
+
+* Updating an Existing Deployment
+
+After pulling new code, run the normal deployment steps:
+
+#+begin_src shell
+source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py collectstatic --noinput
+python manage.py check
+#+end_src
+
+Then restart the application process so Python code, templates, and static-file
+references are reloaded.
+
+For the current filtering and permissions work, there is no separate committed
+management command to run. The changes are enabled by deploying the code and
+running the normal =migrate= / =collectstatic= / restart cycle.
+
+Notes for recent filtering changes:
+
+- HPO descendant filtering is cached lazily by =ontologies/utils.py=.
+- No cache warm-up command is required.
+- =python manage.py sync_ontology --ontology HP= refreshes HP ontology data and,
+  in the updated code, invalidates the HPO descendant cache.
+- Empty filter URL cleanup is a template/script change in =templates/base.html=.
+- Variant annotation denormalization was not implemented, so there is no
+  annotation backfill to run.
+
+* Loading Ontologies
+
+The ontology sync command is committed at
+=ontologies/management/commands/sync_ontology.py=.
+
 #+begin_src shell
 python manage.py sync_ontology --ontology HP
+python manage.py sync_ontology --ontology MONDO
+python manage.py sync_ontology --ontology ONCOTREE
 #+end_src
 
-** Import Data
-#+begin_src shell
-python manage.py migrate
-python manage.py import_all OzbekLab.xlsx --yayin-ici YayınIçi.xlsx --admin-username admin --forms-dir FormsDirectory --reports-dir ReportsDirectory
-#+end_src
+Run these when setting up ontology data for the first time or intentionally
+refreshing ontology versions. The command downloads ontology files from external
+sources, so it needs network access.
 
-** Create Dummy Data
+* Development Data
+
+To generate local sample data:
+
 #+begin_src shell
 python manage.py migrate
 python manage.py generate_sample_data
+#+end_src
+
+The command is committed at
+=lab/management/commands/generate_sample_data.py=. It also performs prerequisite
+setup used by the sample dataset, such as loading bundled ontology fixtures when
+needed and preparing default visualization templates.
+
+To clear development data, use the committed
+=lab/management/commands/clear_database.py= command:
+
+#+begin_src shell
+python manage.py clear_database
+#+end_src
+
+Useful flags:
+
+#+begin_src shell
+python manage.py clear_database --include-history
+python manage.py clear_database --delete-genes
+python manage.py clear_database --delete-ontologies
+python manage.py clear_database --yes
+#+end_src
+
+This is destructive. Use it only on development or intentionally reset
+environments.
+
+* Variant Gene Data
+
+The committed HGNC import command is:
+
+#+begin_src shell
+python manage.py import_hgnc_data
+#+end_src
+
+It downloads HGNC data from an external URL and updates =variant.Gene= records.
+
+After HGNC data or variant annotations change, link genes to existing variants:
+
+#+begin_src shell
+python manage.py link_imported_genes
+#+end_src
+
+These commands are defined in:
+
+- =variant/management/commands/import_hgnc_data.py=
+- =variant/management/commands/link_imported_genes.py=
+
+* Visualization Templates
+
+Published Marimo plot templates can be seeded with:
+
+#+begin_src shell
+python manage.py seed_plot_templates
+#+end_src
+
+This command is committed at
+=lab/management/commands/seed_plot_templates.py=. It requires at least one staff
+user to exist, because templates need an owner.
+
+* Identifier Priorities
+
+ID priorities will need to be set ( check ozbek_set_id_priorities lab management command for an example):
+
+#+begin_src shell
+python manage.py ozbek_set_id_priorities
+#+end_src
+
+This command is committed at
+=lab/management/commands/ozbek_set_id_priorities.py=. It updates known
+=IdentifierType= records such as RareBoost, Biobank, ERDERA, and Mavigen when
+they exist.
+
+* Project Membership Helper
+
+To add individuals to an existing project by identifier:
+
+#+begin_src shell
+python manage.py add_individuals_to_project "Project Name" RB_2025_01.1 RB_2025_02.1
+python manage.py add_individuals_to_project "Project Name" RD3.F12.1 --id-type Biobank
+#+end_src
+
+This command is committed at
+=lab/management/commands/add_individuals_to_project.py=.
+
+* Static Files
+
+For deployments that serve collected static files:
+
+#+begin_src shell
+python manage.py collectstatic --noinput
+#+end_src
+
+Run this after pulling frontend/template/static changes and before restarting
+the deployed service.
+
+* Docker Notes
+
+The repository includes:
+
+- =Dockerfile=
+- =docker-compose.yml=
+- =docker-compose.prod.yml=
+- =Caddyfile=
+
+Use the compose file that matches the environment. After pulling code in a
+Docker deployment, rebuild/restart the relevant services and run the deployment
+commands inside the Django container if the entrypoint does not already do so.
+
+* Committed Project Management Commands
+
+The following app-specific commands are present in the committed tree:
+
+#+begin_src text
+lab:
+  add_individuals_to_project
+  clear_database
+  generate_sample_data
+  import_all
+  ozbek_set_id_priorities
+  seed_plot_templates
+
+ontologies:
+  sync_ontology
+
+variant:
+  import_hgnc_data
+  link_imported_genes
 #+end_src

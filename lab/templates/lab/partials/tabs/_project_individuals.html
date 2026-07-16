@@ -9,6 +9,7 @@
                 <i class="fa-solid fa-users"></i>
                 {{ project.individuals.count }} Individual{{ project.individuals.count|pluralize }}
             </h4>
+            {% if perms.lab.change_project %}
             <div class="flex items-center gap-2 w-full md:w-auto" x-data>
                 <div class="relative flex-1 min-w-0">
                     <form method="get" class="w-full">
@@ -25,7 +26,7 @@
                                    name="search"
                                    value="{{ project_individuals_search|default:'' }}"
                                    class="grow min-w-0"
-                                   placeholder="Search CrossID to add…"
+                                   placeholder="Search any ID to add…"
                                    autocomplete="off"
                                    x-ref="projectSearch"
                                    hx-get="{% url 'lab:project_individual_search' project.pk %}"
@@ -55,6 +56,7 @@
                     Add Individual
                 </button>
             </div>
+            {% endif %}
         </div>
     </div>
 
@@ -82,6 +84,9 @@
                                 {% id_type_label 2 %}
                             </a>
                         </th>
+                        <th class="text-xs font-semibold text-base-content/60">
+                            Other IDs
+                        </th>
                         <th class="text-xs font-semibold">
                             <a href="?sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if project_individuals_search %}&search={{ project_individuals_search|urlencode }}{% endif %}"
                                class="flex items-center gap-1 {% if sort == 'status' %}text-primary{% else %}text-base-content/60{% endif %}">
@@ -106,7 +111,9 @@
                                 Added
                             </a>
                         </th>
+                        {% if perms.lab.change_project %}
                         <th></th>
+                        {% endif %}
                     </tr>
                     {% endwith %}
                 </thead>
@@ -119,7 +126,9 @@
         <div class="flex flex-col items-center justify-center py-10 border-2 border-dashed border-base-200 rounded-box text-base-content/40">
             <i class="fa-solid fa-users text-3xl mb-2 opacity-30"></i>
             <span class="font-medium text-sm">No individuals in this project yet</span>
-            <span class="text-xs mt-1">Use the "Add Individual" button to get started</span>
+            {% if perms.lab.change_project %}
+                <span class="text-xs mt-1">Use the "Add Individual" button to get started</span>
+            {% endif %}
         </div>
         {% endif %}
     {% endpartialdef %}

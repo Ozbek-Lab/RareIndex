@@ -32,15 +32,17 @@
                             {{ s.display_name }}
                         </div>
                         {% endfor %}
-                        <button
-                            class="btn btn-ghost btn-xs text-error border-error/30 hover:border-error hover:bg-error/10"
-                            hx-get="{% url 'lab:project_delete_modal' project.pk %}"
-                            hx-target="#generic-modal-content"
-                            hx-swap="innerHTML"
-                            onclick="document.getElementById('generic-modal').showModal()">
-                            <i class="fa-solid fa-trash-can mr-1"></i>
-                            Remove
-                        </button>
+                        {% if perms.lab.delete_project %}
+                            <button
+                                class="btn btn-ghost btn-xs text-error border-error/30 hover:border-error hover:bg-error/10"
+                                hx-get="{% url 'lab:project_delete_modal' project.pk %}"
+                                hx-target="#generic-modal-content"
+                                hx-swap="innerHTML"
+                                onclick="document.getElementById('generic-modal').showModal()">
+                                <i class="fa-solid fa-trash-can mr-1"></i>
+                                Remove
+                            </button>
+                        {% endif %}
                     </div>
                 </div>
             </div>

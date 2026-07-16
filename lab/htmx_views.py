@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.apps import apps
 from pathlib import Path
 from .models import Family, Individual, Project, Task
+from .search_utils import filter_normalized_contains
 
 
 def _get_status_for_model(model, *names):
@@ -363,9 +364,15 @@ def note_count(request):
 @login_required
 def individual_identification_edit(request, pk):
     individual = get_object_or_404(Individual, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualIdentificationForm
     from .models import IdentifierType
-    form = IndividualIdentificationForm(instance=individual)
+    can_edit_sensitive = request.user.has_perm("lab.view_sensitive_data")
+    form = IndividualIdentificationForm(
+        instance=individual,
+        can_edit_sensitive=can_edit_sensitive,
+    )
     
     # Exclude primary/secondary identifier types from the "other IDs" dropdown
     identifier_types = IdentifierType.objects.exclude(use_priority__in=[1, 2])
@@ -376,6 +383,7 @@ def individual_identification_edit(request, pk):
         "individual": individual, 
         "form": form, 
         "edit_mode": True,
+        "can_edit_sensitive": can_edit_sensitive,
         "identifier_types": identifier_types,
         "primary_id_type": primary_id_type,
         "secondary_id_type": secondary_id_type,
@@ -386,8 +394,15 @@ def individual_identification_edit(request, pk):
 @require_POST
 def individual_identification_save(request, pk):
     individual = get_object_or_404(Individual, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualIdentificationForm
-    form = IndividualIdentificationForm(request.POST, instance=individual)
+    can_edit_sensitive = request.user.has_perm("lab.view_sensitive_data")
+    form = IndividualIdentificationForm(
+        request.POST,
+        instance=individual,
+        can_edit_sensitive=can_edit_sensitive,
+    )
     
     if form.is_valid():
         form.save(user=request.user)
@@ -404,6 +419,7 @@ def individual_identification_save(request, pk):
         "individual": individual,
         "form": form,
         "edit_mode": True,
+        "can_edit_sensitive": can_edit_sensitive,
         "identifier_types": identifier_types,
         "primary_id_type": primary_id_type,
         "secondary_id_type": secondary_id_type,
@@ -413,17 +429,35 @@ def individual_identification_save(request, pk):
 @login_required
 def individual_demographics_edit(request, pk):
     individual = get_object_or_404(Individual, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualDemographicsForm
-    form = IndividualDemographicsForm(instance=individual)
-    context = {"individual": individual, "form": form, "edit_mode": True}
+    can_edit_sensitive = request.user.has_perm("lab.view_sensitive_data")
+    form = IndividualDemographicsForm(
+        instance=individual,
+        can_edit_sensitive=can_edit_sensitive,
+    )
+    context = {
+        "individual": individual,
+        "form": form,
+        "edit_mode": True,
+        "can_edit_sensitive": can_edit_sensitive,
+    }
     return render(request, "lab/partials/tabs/_info.html#demographics_content", context)
 
 @login_required
 @require_POST
 def individual_demographics_save(request, pk):
     individual = get_object_or_404(Individual, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualDemographicsForm
-    form = IndividualDemographicsForm(request.POST, instance=individual)
+    can_edit_sensitive = request.user.has_perm("lab.view_sensitive_data")
+    form = IndividualDemographicsForm(
+        request.POST,
+        instance=individual,
+        can_edit_sensitive=can_edit_sensitive,
+    )
     
     if form.is_valid():
         form.save(user=request.user)
@@ -432,7 +466,12 @@ def individual_demographics_save(request, pk):
         return render(request, "lab/partials/tabs/_info.html#demographics_content", context)
     
     # Render edit mode with errors
-    context = {"individual": individual, "form": form, "edit_mode": True}
+    context = {
+        "individual": individual,
+        "form": form,
+        "edit_mode": True,
+        "can_edit_sensitive": can_edit_sensitive,
+    }
     return render(request, "lab/partials/tabs/_info.html#demographics_content", context)
 
 
@@ -555,9 +594,7 @@ def family_search(request):
     
     families = Family.objects.all()
     if query:
-        families = families.filter(
-            Q(family_id__icontains=query) | Q(description__icontains=query)
-        )
+        families = filter_normalized_contains(families, ["family_id", "description"], query)
     
     # Simple pagination
     paginator = Paginator(families.order_by("-id"), 10)
@@ -569,6 +606,8 @@ def family_search(request):
 
 @login_required
 def individual_parents_edit(request, pk):
+    if not request.user.has_perm("lab.change_family"):
+        return HttpResponseForbidden("You do not have permission to edit family relationships.")
     member = get_object_or_404(Individual, pk=pk)
     individual_pk = request.GET.get("individual_pk")
     individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
@@ -788,6 +827,8 @@ def individual_parents_display(request, pk):
 @login_required
 @require_POST
 def individual_parents_save(request, pk):
+    if not request.user.has_perm("lab.change_family"):
+        return HttpResponseForbidden("You do not have permission to edit family relationships.")
     member = get_object_or_404(Individual, pk=pk)
     individual_pk = request.POST.get("individual_pk")
     individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
@@ -797,8 +838,9 @@ def individual_parents_save(request, pk):
 
     member.father_id = int(father_id) if father_id else None
     member.mother_id = int(mother_id) if mother_id else None
-    member.is_index = request.POST.get("is_index") == "1"
-    member.is_affected = request.POST.get("is_affected") == "1"
+    if request.user.has_perm("lab.change_individual"):
+        member.is_index = request.POST.get("is_index") == "1"
+        member.is_affected = request.POST.get("is_affected") == "1"
     member.save()
     member.refresh_from_db()
 
@@ -894,8 +936,10 @@ def update_status(request, content_type_id, object_id, status_id):
     obj = get_object_or_404(Model, pk=object_id)
     toggle_status = get_object_or_404(Status, pk=status_id)
 
-    perm = f"{ct.app_label}.change_{ct.model}"
-    if not request.user.has_perm(perm):
+    change_perms = [f"{ct.app_label}.change_{ct.model}"]
+    if ct.app_label == "variant" and ct.model == "variant":
+        change_perms.append("variant.change_annotation")
+    if not any(request.user.has_perm(perm) for perm in change_perms):
         return HttpResponseForbidden("You do not have permission to change this status.")
 
     # Toggle: remove if already present, add if not
@@ -919,8 +963,20 @@ def update_status(request, content_type_id, object_id, status_id):
         "individual": individual,
     }
 
-    partial_name = f"{ct.model}_status_badge"
-    response = render(request, f"lab/partials/tabs/_workflow.html#{partial_name}", context)
+    if ct.app_label == "variant" and ct.model == "variant":
+        response = render(request, "lab/partials/variant_detail.html#variant_status_controls", context)
+
+        from lab.tables import _render_status_badges
+        from django.utils.html import format_html
+        badges_html = _render_status_badges(list(obj.statuses.all()))
+        response.content += format_html(
+            '<span id="variant-row-status-{}" hx-swap-oob="true">{}</span>',
+            obj.pk,
+            badges_html,
+        ).encode("utf-8")
+    else:
+        partial_name = f"{ct.model}_status_badge"
+        response = render(request, f"lab/partials/tabs/_workflow.html#{partial_name}", context)
 
     # If we can resolve the owning Individual, also send an OOB swap for the
     # table row badge so connected statuses stay in sync.
@@ -1031,6 +1087,9 @@ def test_create_modal(request, sample_id):
     from .forms import TestForm
     from .models import Sample, Test
     from django.template.loader import render_to_string
+
+    if not request.user.has_perm("lab.add_test"):
+        return HttpResponseForbidden("You do not have permission to add tests.")
     
     sample = get_object_or_404(Sample, pk=sample_id)
     individual = sample.individual
@@ -1130,6 +1189,9 @@ def pipeline_create_modal(request, test_id):
     from .forms import PipelineForm
     from .models import Pipeline, Test
     from django.template.loader import render_to_string
+
+    if not request.user.has_perm("lab.add_pipeline"):
+        return HttpResponseForbidden("You do not have permission to add pipelines.")
     
     test = get_object_or_404(Test, pk=test_id)
     individual = test.sample.individual
@@ -1222,6 +1284,9 @@ def analysis_create_modal(request, pipeline_id):
     from .forms import AnalysisForm
     from .models import Analysis, Pipeline
     from django.template.loader import render_to_string
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to add analyses.")
     
     pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
     individual = pipeline.test.sample.individual
@@ -1527,25 +1592,23 @@ def project_search(request):
     query = request.GET.get("q", "")
     projects = Project.objects.all()
     if query:
-        projects = projects.filter(name__icontains=query)
+        projects = filter_normalized_contains(projects, ["name"], query)
     return render(request, "lab/partials/project_picker_results.html", {"projects": projects[:10]})
 
 
 @login_required
 def project_individual_search(request, pk):
     project = get_object_or_404(Project, pk=pk)
+    if not request.user.has_perm("lab.change_project"):
+        return HttpResponseForbidden("You do not have permission to change projects.")
     query = (request.GET.get("search") or request.GET.get("q") or "").strip()
     individuals = Individual.objects.none()
     if query:
-        individuals = (
-            Individual.objects
-            .prefetch_related("cross_ids__id_type", "statuses")
-            .filter(
-                Q(cross_ids__id_value__icontains=query)
-                | Q(cross_ids__id_type__name__icontains=query)
-            )
-            .distinct()[:15]
-        )
+        individuals = filter_normalized_contains(
+            Individual.objects.prefetch_related("cross_ids__id_type", "statuses"),
+            ["cross_ids__id_value", "cross_ids__id_type__name"],
+            query,
+        ).distinct()[:15]
     already_in_project = set(project.individuals.values_list("pk", flat=True))
     return render(request, "lab/partials/project_individual_search_results.html", {
         "individuals": individuals,
@@ -1561,14 +1624,15 @@ def _project_individuals_page_context(request, project, per_page: int = 25):
 
     individuals_qs = (
         project.individuals.all()
-        .prefetch_related("statuses", "institution")
+        .prefetch_related("statuses", "institution", "cross_ids__id_type")
     ).annotate(first_institution_name=Min("institution__name"))
 
     search = request.GET.get("search", "").strip()
     if search:
-        individuals_qs = individuals_qs.filter(
-            Q(cross_ids__id_value__icontains=search)
-            | Q(institution__name__icontains=search)
+        individuals_qs = filter_normalized_contains(
+            individuals_qs,
+            ["cross_ids__id_value", "institution__name"],
+            search,
         ).distinct()
 
     sort = request.GET.get("sort") or "added"
@@ -1670,6 +1734,8 @@ def project_tasks_page(request, pk):
 @login_required
 @require_POST
 def project_individual_add(request, project_pk, individual_pk):
+    if not request.user.has_perm("lab.change_project"):
+        return HttpResponseForbidden("You do not have permission to change projects.")
     project = get_object_or_404(Project, pk=project_pk)
     individual = get_object_or_404(Individual, pk=individual_pk)
     project.individuals.add(individual)
@@ -1692,6 +1758,8 @@ def project_individual_remove(request, project_pk, individual_pk):
     if request.method not in ("DELETE", "POST"):
         from django.http import HttpResponseNotAllowed
         return HttpResponseNotAllowed(["DELETE", "POST"])
+    if not request.user.has_perm("lab.change_project"):
+        return HttpResponseForbidden("You do not have permission to change projects.")
     project = get_object_or_404(Project, pk=project_pk)
     individual = get_object_or_404(Individual, pk=individual_pk)
     project.individuals.remove(individual)
@@ -2797,6 +2865,7 @@ def variant_detail_partial(request, pk):
             "analysis__pipeline__test__sample__sample_type",
         ).prefetch_related(
             "genes",
+            "statuses",
             "classifications__user",
             "annotations",
             "acmg_evidence_overrides",

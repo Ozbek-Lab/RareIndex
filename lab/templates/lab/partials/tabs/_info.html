@@ -47,7 +47,7 @@
 {% partialdef identification_content %}
     <div class="flex justify-between items-center mb-4">
         <h3 class="card-title text-sm uppercase text-base-content/50">Identification</h3>
-        {% if not edit_mode %}
+        {% if not edit_mode and perms.lab.change_individual %}
         <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
                 data-tip="Edit Identification"
                 hx-get="{% url 'lab:individual_identification_edit' individual.pk %}"
@@ -59,28 +59,40 @@
     </div>
 
     {% if edit_mode %}
-            <form hx-post="{% url 'lab:individual_identification_save' individual.pk %}" 
-                hx-target="#identification-card-{{ individual.pk }} .card-body" 
-                hx-swap="innerHTML"
-                class="grid grid-cols-1 gap-y-3">
+        <form hx-post="{% url 'lab:individual_identification_save' individual.pk %}"
+              hx-target="#identification-card-{{ individual.pk }} .card-body"
+              hx-swap="innerHTML"
+              class="grid grid-cols-1 gap-y-3">
             {% csrf_token %}
             
-                <div>
-                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Full Name</label>
-                    <input type="text" name="{{ form.full_name.html_name }}" value="{{ form.full_name.value|default:'' }}"
-                           class="input input-bordered w-full input-sm">
-                    {% if form.full_name.errors %}
-                        <span class="text-error text-xs">{{ form.full_name.errors.0 }}</span>
-                    {% endif %}
-                </div>
+            <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Full Name</label>
+                {% if can_edit_sensitive %}
+                <input type="text" name="{{ form.full_name.html_name }}" value="{{ form.full_name.value|default:'' }}"
+                       class="input input-bordered w-full input-sm">
+                {% else %}
+                <input type="text" value="*****"
+                       class="input input-bordered w-full input-sm"
+                       disabled aria-disabled="true">
+                {% endif %}
+                {% if form.full_name.errors %}
+                    <span class="text-error text-xs">{{ form.full_name.errors.0 }}</span>
+                {% endif %}
+            </div>
 
-                <div>
-                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">TC Identity</label>
-                    <input type="text" name="{{ form.tc_identity.html_name }}" value="{{ form.tc_identity.value|default:'' }}"
-                           class="input input-bordered w-full input-sm">
-                </div>
+            <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">TC Identity</label>
+                {% if can_edit_sensitive %}
+                <input type="text" name="{{ form.tc_identity.html_name }}" value="{{ form.tc_identity.value|default:'' }}"
+                       class="input input-bordered w-full input-sm">
+                {% else %}
+                <input type="text" value="***********"
+                       class="input input-bordered w-full input-sm"
+                       disabled aria-disabled="true">
+                {% endif %}
+            </div>
 
-                <div class="bg-base-200 rounded p-2 border border-base-300"
+            <div class="bg-base-200 rounded p-2 border border-base-300"
                      x-data="{
                         identifierTypes: [
                             {% for type in identifier_types %}
@@ -114,32 +126,32 @@
                      }"
                      x-init="init()">
                     
-                    <input type="hidden" name="{{ form.cross_identifiers_json.html_name }}" x-ref="jsonInput">
+                <input type="hidden" name="{{ form.cross_identifiers_json.html_name }}" x-ref="jsonInput">
 
-                    <div class="flex justify-between items-center mb-1">
-                         <h4 class="text-[10px] font-bold text-base-content/60 uppercase tracking-wider">Cross IDs</h4>
-                         <button type="button" @click="addCrossId()" class="text-[10px] text-blue-600 hover:text-blue-800 hover:underline">+ ADD</button>
+                <div class="flex justify-between items-center mb-1">
+                     <h4 class="text-[10px] font-bold text-base-content/60 uppercase tracking-wider">Cross IDs</h4>
+                     <button type="button" @click="addCrossId()" class="text-[10px] text-blue-600 hover:text-blue-800 hover:underline">+ ADD</button>
+                </div>
+                <div class="space-y-1.5">
+                    <!-- Static Fields (Primary/Secondary) -->
+                    <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
+                         <span class="text-[10px] font-medium text-base-content/70 w-28 px-1">
+                             Primary{% if primary_id_type %} ({{ primary_id_type.name }}){% else %} (not set){% endif %}
+                         </span>
+                         <input type="text" name="{{ form.primary_id.html_name }}" value="{{ form.primary_id.value|default:'' }}"
+                                class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
                     </div>
-                    <div class="space-y-1.5">
-                        <!-- Static Fields (Primary/Secondary) -->
-                        <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
-                             <span class="text-[10px] font-medium text-base-content/70 w-28 px-1">
-                                 Primary{% if primary_id_type %} ({{ primary_id_type.name }}){% else %} (not set){% endif %}
-                             </span>
-                             <input type="text" name="{{ form.primary_id.html_name }}" value="{{ form.primary_id.value|default:'' }}" 
-                                    class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
-                        </div>
-                        <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
-                             <span class="text-[10px] font-medium text-base-content/70 w-28 px-1">
-                                 Secondary{% if secondary_id_type %} ({{ secondary_id_type.name }}){% else %} (not set){% endif %}
-                             </span>
-                             <input type="text" name="{{ form.secondary_id.html_name }}" value="{{ form.secondary_id.value|default:'' }}" 
-                                    class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
-                        </div>
+                    <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
+                         <span class="text-[10px] font-medium text-base-content/70 w-28 px-1">
+                             Secondary{% if secondary_id_type %} ({{ secondary_id_type.name }}){% else %} (not set){% endif %}
+                         </span>
+                         <input type="text" name="{{ form.secondary_id.html_name }}" value="{{ form.secondary_id.value|default:'' }}"
+                                class="input input-bordered input-xs flex-1 w-full min-w-0 h-6 px-1 text-[10px]" placeholder="Val">
+                    </div>
 
-                        <!-- Dynamic Fields -->
-                        <template x-for="(id, idx) in crossIds" :key="idx">
-                            <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
+                    <!-- Dynamic Fields -->
+                    <template x-for="(id, idx) in crossIds" :key="idx">
+                        <div class="flex gap-1 items-center bg-base-100 p-1 rounded border border-base-300">
                                 <select x-model="id.type_id" @change="updateJson()" class="select select-bordered select-xs w-28 shrink-0 px-1 text-[10px] h-6 min-h-0">
                                     <option value="">-- Type --</option>
                                     {% for type in identifier_types %}
@@ -330,20 +342,22 @@
                     this.sync(this.$refs.contactSelect, this.selectedContacts);
                 },
                 get filteredInstitutions() {
-                    const search = this.institutionSearch.toLowerCase();
+                    const normalizeSearch = (value) => String(value || '').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const search = normalizeSearch(this.institutionSearch);
                     return this.institutions.filter((inst) => {
                         const selected = this.selectedInstitutions.some((item) => String(item.id) === String(inst.id));
-                        return !selected && (!search || inst.name.toLowerCase().includes(search));
+                        return !selected && (!search || normalizeSearch(inst.name).includes(search));
                     });
                 },
                 get filteredContacts() {
-                    const search = this.contactSearch.toLowerCase();
+                    const normalizeSearch = (value) => String(value || '').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const search = normalizeSearch(this.contactSearch);
                     const eligibleIds = this.eligibleContactIds;
                     return this.contacts.filter((contact) => {
                         const selected = this.selectedContacts.some((item) => String(item.id) === String(contact.id));
                         return eligibleIds.has(String(contact.id))
                             && !selected
-                            && (!search || contact.name.toLowerCase().includes(search));
+                            && (!search || normalizeSearch(contact.name).includes(search));
                     });
                 }
               }"
@@ -507,9 +521,9 @@
 
 {% partialdef demographics_content %}
     <div class="flex justify-between items-center mb-4">
-            <h3 class="card-title text-sm uppercase text-base-content/50">Demographics</h3>
-            {% if not edit_mode %}
-            <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
+        <h3 class="card-title text-sm uppercase text-base-content/50">Demographics</h3>
+        {% if not edit_mode and perms.lab.change_individual %}
+        <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
                 data-tip="Edit Demographics"
                 hx-get="{% url 'lab:individual_demographics_edit' individual.pk %}"
                 hx-target="#demographics-card-{{ individual.pk }} .card-body"
@@ -520,34 +534,40 @@
     </div>
 
     {% if edit_mode %}
-        <form hx-post="{% url 'lab:individual_demographics_save' individual.pk %}" 
-                hx-target="#demographics-card-{{ individual.pk }} .card-body" 
-                hx-swap="innerHTML"
-                class="grid grid-cols-1 gap-y-3">
+        <form hx-post="{% url 'lab:individual_demographics_save' individual.pk %}"
+              hx-target="#demographics-card-{{ individual.pk }} .card-body"
+              hx-swap="innerHTML"
+              class="grid grid-cols-1 gap-y-3">
             {% csrf_token %}
             <!-- Form Fields -->
             <!-- Form Fields -->
-                <div>
-                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Sex</label>
-                    <select name="{{ form.sex.html_name }}" class="select select-bordered w-full select-sm">
-                        {% for value, label in form.fields.sex.choices %}
-                            <option value="{{ value }}" {% if form.sex.value == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                     {% if form.sex.errors %}
-                        <span class="text-error text-xs">{{ form.sex.errors.0 }}</span>
-                    {% endif %}
-                </div>
+            <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Sex</label>
+                <select name="{{ form.sex.html_name }}" class="select select-bordered w-full select-sm">
+                    {% for value, label in form.fields.sex.choices %}
+                        <option value="{{ value }}" {% if form.sex.value == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                 {% if form.sex.errors %}
+                    <span class="text-error text-xs">{{ form.sex.errors.0 }}</span>
+                {% endif %}
+            </div>
 
-                <div>
-                    <label class="block mb-0.5 text-xs font-medium text-base-content/80">Birth Date</label>
-                    <input type="date" name="{{ form.birth_date.html_name }}" 
-                           value="{{ form.birth_date.value|date:'Y-m-d'|default:'' }}"
-                           class="input input-bordered w-full input-sm">
-                    {% if form.birth_date.errors %}
-                        <span class="text-error text-xs">{{ form.birth_date.errors.0 }}</span>
-                    {% endif %}
-                </div>
+            <div>
+                <label class="block mb-0.5 text-xs font-medium text-base-content/80">Birth Date</label>
+                {% if can_edit_sensitive %}
+                <input type="date" name="{{ form.birth_date.html_name }}"
+                       value="{{ form.birth_date.value|date:'Y-m-d'|default:'' }}"
+                       class="input input-bordered w-full input-sm">
+                {% else %}
+                <input type="text" value="**-**-****"
+                       class="input input-bordered w-full input-sm"
+                       disabled aria-disabled="true">
+                {% endif %}
+                {% if form.birth_date.errors %}
+                    <span class="text-error text-xs">{{ form.birth_date.errors.0 }}</span>
+                {% endif %}
+            </div>
 
                 <div>
                     <label class="block mb-0.5 text-xs font-medium text-base-content/80">Vital Status</label>
@@ -632,7 +652,7 @@
 
             <div class="flex justify-end gap-2 mt-4">
                 <button type="button" class="btn btn-sm btn-ghost"
-                        hx-get="{% url 'lab:individual_demographics_display' individual.pk %}" 
+                        hx-get="{% url 'lab:individual_demographics_display' individual.pk %}"
                         hx-target="#demographics-card-{{ individual.pk }} .card-body"
                         hx-swap="innerHTML">Cancel</button>
                 <button type="submit" class="btn btn-sm btn-primary">Save</button>

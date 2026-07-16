@@ -1,28 +1,44 @@
-<div x-data="{ currentTab: $persist('info') }" class="bg-base-100 rounded-box">
+<div
+    x-data="{
+        currentTab: $persist('info'),
+        setTab(tab) {
+            const scroller = document.getElementById('main-content') || document.scrollingElement;
+            const scrollTop = scroller ? scroller.scrollTop : null;
+            this.currentTab = tab;
+            this.$nextTick(() => {
+                if (scroller && scrollTop !== null) {
+                    scroller.scrollTop = scrollTop;
+                    requestAnimationFrame(() => { scroller.scrollTop = scrollTop; });
+                }
+            });
+        }
+    }"
+    class="bg-base-100 rounded-box"
+>
     <!-- Tab Headers -->
     <div role="tablist" class="tabs tabs-boxed bg-base-200/50 p-1 gap-1 mb-4">
         <a role="tab" 
            class="tab transition-all duration-200" 
            :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'info' }" 
-           @click="currentTab = 'info'">
+           @click="setTab('info')">
            <i class="fa-solid fa-circle-info mr-2"></i>Info
         </a>
         <a role="tab" 
            class="tab transition-all duration-200" 
            :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'phenotype' }" 
-           @click="currentTab = 'phenotype'">
+           @click="setTab('phenotype')">
            <i class="fa-solid fa-notes-medical mr-2"></i>Phenotype
         </a>
         <a role="tab" 
            class="tab transition-all duration-200" 
            :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'workflow' }" 
-           @click="currentTab = 'workflow'">
+           @click="setTab('workflow')">
            <i class="fa-solid fa-diagram-project mr-2"></i>Workflow
         </a>
         <a role="tab" 
            class="tab transition-all duration-200" 
            :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'history' }" 
-           @click="currentTab = 'history'">
+           @click="setTab('history')">
            <i class="fa-solid fa-clock-rotate-left mr-2"></i>History
         </a>
     </div>

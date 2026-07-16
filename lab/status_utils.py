@@ -40,11 +40,17 @@ def collect_individual_row_statuses(individual):
     statuses = []
     seen = set()
 
+    def status_connects_to_individual(status):
+        prefetched = getattr(status, "_prefetched_objects_cache", {})
+        if "connected_classes" in prefetched:
+            return any(ct.pk == individual_ct.pk for ct in prefetched["connected_classes"])
+        return status.connected_classes.filter(pk=individual_ct.pk).exists()
+
     def add_statuses(source_statuses):
         for status in source_statuses:
             if status.pk in seen:
                 continue
-            if not status.connected_classes.filter(pk=individual_ct.pk).exists():
+            if not status_connects_to_individual(status):
                 continue
             statuses.append(status)
             seen.add(status.pk)

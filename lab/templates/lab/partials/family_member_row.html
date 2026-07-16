@@ -27,7 +27,7 @@
         {% endif %}
     </td>
 
-    {% if edit_mode %}
+    {% if edit_mode and perms.lab.change_family %}
         <td>
             <select name="father_id" class="select select-bordered select-xs font-mono text-xs w-full max-w-[160px]">
                 <option value="">—</option>
@@ -111,7 +111,7 @@
         {% endif %}
     </td>
     <td>
-        {% if edit_mode %}
+        {% if edit_mode and perms.lab.change_family %}
             {% csrf_token %}
             <input type="hidden" name="individual_pk" value="{{ individual.pk }}">
             <div class="flex gap-1">
@@ -129,7 +129,7 @@
                     Cancel
                 </button>
             </div>
-        {% else %}
+        {% elif perms.lab.change_family %}
             <button hx-get="{% url 'lab:individual_parents_edit' member.pk %}?individual_pk={{ individual.pk }}"
                     hx-target="#member-row-{{ member.pk }}"
                     hx-swap="outerHTML"

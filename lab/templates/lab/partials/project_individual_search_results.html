@@ -3,7 +3,7 @@
 {% if individuals %}
 <div class="bg-base-100 rounded-box shadow-xl border border-base-300 p-2 max-h-72 overflow-y-auto overflow-x-hidden">
     <div class="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-base-content/40">
-        Matching CrossIDs
+        Matching IDs
     </div>
     <div class="space-y-1">
         {% for individual in individuals %}
@@ -13,6 +13,11 @@
                     <span class="font-mono text-sm font-medium text-primary truncate block">{{ individual.primary_id }}</span>
                     {% if individual.secondary_id %}
                     <span class="text-xs text-base-content/50 font-mono truncate block">{{ individual.secondary_id }}</span>
+                    {% endif %}
+                    {% if individual.other_table_ids %}
+                    <span class="text-[11px] text-base-content/45 font-mono truncate block">
+                        {{ individual.other_table_ids }}
+                    </span>
                     {% endif %}
                 </div>
                 {% get_object_statuses individual as indiv_active_statuses %}
@@ -31,7 +36,7 @@
             <span class="badge badge-sm badge-ghost text-base-content/40 gap-1 whitespace-nowrap">
                 <i class="fa-solid fa-check text-xs"></i> Already added
             </span>
-            {% else %}
+            {% elif perms.lab.change_project %}
             <button class="btn btn-primary btn-xs gap-1 font-normal whitespace-nowrap"
                     hx-post="{% url 'lab:project_individual_add' project.pk individual.pk %}"
                     hx-swap="none"

@@ -28,9 +28,9 @@ def _render_status_badges(statuses):
 class IndividualTable(tables.Table):
     """Static column set: Primary ID, Secondary ID, Other IDs, Institution, Name, Sex, Status."""
 
-    primary_id = tables.Column(verbose_name="Primary ID", order_by=("id",))
-    secondary_id = tables.Column(verbose_name="Secondary ID", order_by=("id",))
-    other_table_ids = tables.Column(verbose_name="Other IDs", orderable=False)
+    primary_id = tables.Column(verbose_name="Primary ID", order_by=("id",), empty_values=())
+    secondary_id = tables.Column(verbose_name="Secondary ID", order_by=("id",), empty_values=())
+    other_table_ids = tables.Column(verbose_name="Other IDs", orderable=False, empty_values=())
     institution = tables.Column(verbose_name="Institution", order_by=("first_institution_name",))
     full_name = tables.Column(verbose_name="Name")
     sex = tables.Column(verbose_name="Sex")
@@ -58,12 +58,50 @@ class IndividualTable(tables.Table):
         self.verbose_name_plural = Individual._meta.verbose_name_plural
 
         from .models import IdentifierType
-        primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
-        secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
-        if primary_type:
-            self.columns["primary_id"].column.verbose_name = f"{primary_type.name} ID"
-        if secondary_type:
-            self.columns["secondary_id"].column.verbose_name = f"{secondary_type.name} ID"
+        self.primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+        self.secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+        if self.primary_type:
+            self.columns["primary_id"].column.verbose_name = f"{self.primary_type.name} ID"
+        if self.secondary_type:
+            self.columns["secondary_id"].column.verbose_name = f"{self.secondary_type.name} ID"
+
+    def _table_ids(self, record):
+        return list(record.cross_ids.all())
+
+    def render_primary_id(self, value, record):
+        primary_type = getattr(self, "primary_type", None)
+        if not primary_type:
+            return "NO PRIMARY ID SET"
+        matches = [
+            cross_id for cross_id in self._table_ids(record)
+            if cross_id.id_type.use_priority == 1
+        ]
+        if matches:
+            matches.sort(key=lambda cross_id: cross_id.id_type.id)
+            return matches[0].id_value
+        return f"No {primary_type.name} ID"
+
+    def render_secondary_id(self, value, record):
+        secondary_type = getattr(self, "secondary_type", None)
+        if not secondary_type:
+            return "NO SECONDARY ID SET"
+        matches = [
+            cross_id for cross_id in self._table_ids(record)
+            if cross_id.id_type.use_priority == 2
+        ]
+        if matches:
+            matches.sort(key=lambda cross_id: cross_id.id_type.id)
+            return matches[0].id_value
+        return f"No {secondary_type.name} ID"
+
+    def render_other_table_ids(self, value, record):
+        ids = [
+            f"{cross_id.id_type.name}: {cross_id.id_value}"
+            for cross_id in self._table_ids(record)
+            if cross_id.id_type.use_priority not in (1, 2)
+            and cross_id.id_type.is_shown_in_table
+        ]
+        return ", ".join(ids) if ids else ""
 
     def render_institution(self, value, record):
         user = getattr(self.request, "user", None) if hasattr(self, "request") else None

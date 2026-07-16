@@ -12,9 +12,10 @@ from django_tables2 import SingleTableMixin
 from django_filters.views import FilterView
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Count, Min, Max, Sum, Avg, DateTimeField
+from django.db.models import Count, Min, Max, Sum, Avg, DateTimeField, Q
 from django.db.models.functions import Cast, Coalesce
 from django.contrib.contenttypes.models import ContentType
+from django_tables2.rows import BoundRows
 from .display_preferences import DEFAULT_INSTITUTION_DISPLAY, institution_display_name, normalize_institution_display
 from .models import (
     Individual,
@@ -37,11 +38,59 @@ from .models import (
     Family,
 )
 from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
-from .filters import IndividualFilter, ProjectFilter, VariantFilter
+from .filters import (
+    IndividualFilter,
+    ProjectFilter,
+    VariantFilter,
+)
+from .search_utils import (
+    filter_normalized_contains,
+    normalize_search_text,
+    order_by_normalized_relevance,
+)
+from .history_display import format_history_diff, historical_model_name
 from .status_utils import build_status_metadata_by_model
-from variant.models import Variant, Annotation as VariantAnnotation, Classification as VariantClassification
+from variant.models import (
+    ACMGEvidenceOverride,
+    Variant,
+    Annotation as VariantAnnotation,
+    Classification as VariantClassification,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class HydratedPagePaginator(Paginator):
+    """Paginate a light table queryset, then hydrate only the current page rows."""
+
+    def __init__(self, object_list, per_page, *args, hydrated_queryset=None, **kwargs):
+        self.hydrated_queryset = hydrated_queryset
+        super().__init__(object_list, per_page, *args, **kwargs)
+
+    def _get_page(self, object_list, number, paginator):
+        if self.hydrated_queryset is not None and isinstance(object_list, BoundRows):
+            object_list = BoundRows(
+                data=self._hydrate_records(object_list),
+                table=object_list.table,
+                pinned_data=object_list.pinned_data,
+            )
+        return super()._get_page(object_list, number, paginator)
+
+    def _hydrate_records(self, bound_rows):
+        table_data = getattr(bound_rows, "data", None)
+        page_queryset = getattr(table_data, "data", table_data)
+        if not hasattr(page_queryset, "values_list"):
+            return list(table_data or [])
+
+        page_ids = list(page_queryset.values_list("pk", flat=True))
+        if not page_ids:
+            return []
+
+        hydrated_by_id = {
+            record.pk: record
+            for record in self.hydrated_queryset.filter(pk__in=page_ids)
+        }
+        return [hydrated_by_id[pk] for pk in page_ids if pk in hydrated_by_id]
 
 
 def _plot_config_filters(config):
@@ -169,6 +218,8 @@ def _variant_filter_counts():
         for row in VariantAnnotation.objects.values('source')
         .annotate(c=Count('variant_id', distinct=True))
     }
+    annotation_acmg_classification_counts = _annotation_acmg_classification_counts("variant_id")
+    acmg_evidence_counts = _acmg_evidence_counts("variant_id")
 
     counts = {
         "variant_type":      type_counts,
@@ -177,8 +228,47 @@ def _variant_filter_counts():
         "status":            status_counts,
         "assembly_version":  assembly_counts,
         "annotation_source": annotation_source_counts,
+        "annotation_acmg_classification": annotation_acmg_classification_counts,
+        "acmg_evidence":     acmg_evidence_counts,
     }
     cache.set(CACHE_KEY, counts, CACHE_TTL)
+    return counts
+
+
+def _acmg_evidence_counts(count_field):
+    return {
+        row["criterion"]: row["c"]
+        for row in ACMGEvidenceOverride.objects.filter(included=True)
+        .exclude(criterion="")
+        .values("criterion")
+        .annotate(c=Count(count_field, distinct=True))
+        if row["criterion"]
+    }
+
+
+def _annotation_acmg_classification_counts(count_field):
+    lookups = ("data__variants__0__acmg_classification", "data__acmg_classification")
+    values = set()
+    for lookup in lookups:
+        values.update(
+            value
+            for value in VariantAnnotation.objects.filter(source__icontains="genebe")
+            .exclude(**{f"{lookup}__isnull": True})
+            .exclude(**{lookup: ""})
+            .values_list(lookup, flat=True)
+            if value
+        )
+
+    counts = {}
+    for value in values:
+        counts[value] = (
+            VariantAnnotation.objects.filter(source__icontains="genebe")
+            .filter(
+                Q(data__variants__0__acmg_classification=value)
+                | Q(data__acmg_classification=value)
+            )
+            .aggregate(c=Count(count_field, distinct=True))["c"]
+        )
     return counts
 
 def _individual_filter_counts():
@@ -374,6 +464,10 @@ def _individual_filter_counts():
         .annotate(c=Count('variant__individual_id', distinct=True))
         if row['classification']
     })
+    annotation_acmg_classification_counts = _annotation_acmg_classification_counts(
+        "variant__individual_id"
+    )
+    acmg_evidence_counts = _acmg_evidence_counts("variant__individual_id")
 
 
     # --- Lab App Setup/Installation Checks ---
@@ -424,6 +518,8 @@ def _individual_filter_counts():
         "variant_type":             variant_type_counts,
         "variant_status":           variant_status_counts,
         "classification":           classif_counts,
+        "variants__annotation_acmg_classification": annotation_acmg_classification_counts,
+        "variants__acmg_evidence":  acmg_evidence_counts,
         "institution_city":         institution_city_counts,
         "institution_speciality":   institution_speciality_counts,
         "institution_center":       institution_center_counts,
@@ -699,28 +795,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         def get_history(model):
             return model.history.all().order_by('-history_date')[:10]
         
-        # Helper to get field diff
-        def get_field_diff(new_hist, old_hist):
-            if not old_hist:
-                return {}
-            changes = {}
-            ignore_fields = {"history_id", "history_date", "history_type", "history_user", "history_change_reason"}
-            for field in new_hist._meta.fields:
-                name = field.name
-                if name in ignore_fields:
-                    continue
-                # Use raw FK id (e.g. family_id) to avoid DoesNotExist when related object was deleted
-                if getattr(field, "remote_field", None) and getattr(field, "attname", None):
-                    new_val = getattr(new_hist, field.attname, None)
-                    old_val = getattr(old_hist, field.attname, None)
-                else:
-                    new_val = getattr(new_hist, name, None)
-                    old_val = getattr(old_hist, name, None)
-                if new_val != old_val:
-                    # Simple string representation for now
-                    changes[name] = f"'{old_val}' → '{new_val}'"
-            return changes
-
         individual_history = get_history(Individual)
         sample_history = get_history(Sample)
         note_history = get_history(Note)
@@ -737,14 +811,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         
         feed_items = combined_history[:20]
         
-        # Model name from history class (e.g. HistoricalTest -> Test) so template never touches instance FKs
-        def _history_model_name(hist_record):
-            name = type(hist_record).__name__
-            return name.replace("Historical", "", 1) if name.startswith("Historical") else name
-
         # Calculate diffs and safe display for each item (avoid DoesNotExist when related objects were deleted)
         for item in feed_items:
-            item.safe_model_name = _history_model_name(item)
+            item.safe_model_name = historical_model_name(item)
             try:
                 item.safe_instance_repr = str(item.instance)
             except Exception:
@@ -757,7 +826,18 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             if item.history_type == '~':  # Update
                 prev = item.prev_record
                 if prev:
-                    item.diff_display = get_field_diff(item, prev)
+                    item.diff_display = format_history_diff(
+                        item,
+                        prev,
+                        self.request.user,
+                        ignore_fields={
+                            "history_id",
+                            "history_date",
+                            "history_type",
+                            "history_user",
+                            "history_change_reason",
+                        },
+                    )
         
         context['news_feed'] = feed_items
         
@@ -770,44 +850,58 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     template_name = "lab/individual_list.html"
     paginate_by = 25
     
-    
     def get_queryset(self):
+        return self._individual_queryset(prefetch_for_table=False)
+
+    def get_table_pagination(self, table):
+        paginate = super().get_table_pagination(table)
+        if paginate is False:
+            return False
+        if paginate is True:
+            paginate = {}
+        paginate["paginator_class"] = HydratedPagePaginator
+        paginate["hydrated_queryset"] = self._individual_queryset(prefetch_for_table=True)
+        return paginate
+
+    def _individual_queryset(self, prefetch_for_table):
         """
-        Base queryset for the individual table & filters.
+        Base queryset for individual filtering and table hydration.
         Annotates first_institution_name so the Institution column can be sorted.
         """
         qs = super().get_queryset()
-        qs = qs.prefetch_related(
-            "institution",
-            "statuses",
-            "statuses__connected_classes",
-            "projects__statuses",
-            "projects__statuses__connected_classes",
-            "projects__tasks__statuses",
-            "projects__tasks__statuses__connected_classes",
-            "tasks__statuses",
-            "tasks__statuses__connected_classes",
-            "samples__statuses",
-            "samples__statuses__connected_classes",
-            "samples__tasks__statuses",
-            "samples__tasks__statuses__connected_classes",
-            "samples__tests__statuses",
-            "samples__tests__statuses__connected_classes",
-            "samples__tests__tasks__statuses",
-            "samples__tests__tasks__statuses__connected_classes",
-            "samples__tests__pipelines__statuses",
-            "samples__tests__pipelines__statuses__connected_classes",
-            "samples__tests__pipelines__tasks__statuses",
-            "samples__tests__pipelines__tasks__statuses__connected_classes",
-            "samples__tests__pipelines__analyses__statuses",
-            "samples__tests__pipelines__analyses__statuses__connected_classes",
-            "samples__tests__pipelines__analyses__tasks__statuses",
-            "samples__tests__pipelines__analyses__tasks__statuses__connected_classes",
-            "samples__tests__pipelines__analyses__reports__statuses",
-            "samples__tests__pipelines__analyses__reports__statuses__connected_classes",
-            "variants__statuses",
-            "variants__statuses__connected_classes",
-        )
+        if prefetch_for_table:
+            qs = qs.prefetch_related(
+                "cross_ids__id_type",
+                "institution",
+                "statuses",
+                "statuses__connected_classes",
+                "projects__statuses",
+                "projects__statuses__connected_classes",
+                "projects__tasks__statuses",
+                "projects__tasks__statuses__connected_classes",
+                "tasks__statuses",
+                "tasks__statuses__connected_classes",
+                "samples__statuses",
+                "samples__statuses__connected_classes",
+                "samples__tasks__statuses",
+                "samples__tasks__statuses__connected_classes",
+                "samples__tests__statuses",
+                "samples__tests__statuses__connected_classes",
+                "samples__tests__tasks__statuses",
+                "samples__tests__tasks__statuses__connected_classes",
+                "samples__tests__pipelines__statuses",
+                "samples__tests__pipelines__statuses__connected_classes",
+                "samples__tests__pipelines__tasks__statuses",
+                "samples__tests__pipelines__tasks__statuses__connected_classes",
+                "samples__tests__pipelines__analyses__statuses",
+                "samples__tests__pipelines__analyses__statuses__connected_classes",
+                "samples__tests__pipelines__analyses__tasks__statuses",
+                "samples__tests__pipelines__analyses__tasks__statuses__connected_classes",
+                "samples__tests__pipelines__analyses__reports__statuses",
+                "samples__tests__pipelines__analyses__reports__statuses__connected_classes",
+                "variants__statuses",
+                "variants__statuses__connected_classes",
+            )
 
         # Per-individual aggregate timestamps for related objects that belong
         # exclusively to a single Individual (no shared multi-individual models).
@@ -1097,35 +1191,13 @@ def _best_hpo_match(query):
     text_query = re.sub(r"\s+", " ", text_query)
     identifier_query = _normalize_hpo_identifier(query)
 
-    search_filter = Q()
-    if text_query:
-        search_filter |= Q(label__icontains=text_query)
-    if identifier_query:
-        search_filter |= Q(identifier__icontains=identifier_query)
-    if not search_filter:
-        search_filter = Q(label__icontains=query)
-
-    from django.db.models import Case, When, Value, IntegerField
-    from django.db.models.functions import Length
-
-    qs = Term.objects.filter(ontology__type=1).filter(search_filter)
-    return (
-        qs.annotate(
-            is_exact=Case(
-                When(label__iexact=text_query or query, then=Value(0)),
-                default=Value(1),
-                output_field=IntegerField(),
-            ),
-            starts_with=Case(
-                When(label__istartswith=text_query or query, then=Value(0)),
-                default=Value(1),
-                output_field=IntegerField(),
-            ),
-            label_len=Length("label"),
-        )
-        .order_by("is_exact", "starts_with", "label_len", "label")
-        .first()
-    )
+    qs = Term.objects.filter(ontology__type=1)
+    search_fields = ["label", "identifier"] if identifier_query else ["label"]
+    return order_by_normalized_relevance(
+        filter_normalized_contains(qs, search_fields, text_query or query),
+        search_fields,
+        text_query or query,
+    ).first()
 
 
 @login_required
@@ -1178,15 +1250,22 @@ class HPOTermSearchView(LoginRequiredMixin, ListView):
         if not query:
             return Term.objects.none()
 
-        identifier_query = re.sub(r'(?i)^HP\s*:?\s*', '', query).strip()
-        search_filter = Q(label__icontains=query) | Q(identifier__icontains=query)
-        if identifier_query and identifier_query != query:
-            search_filter |= Q(identifier__icontains=identifier_query)
-            
         # Base filter
-        qs = Term.objects.filter(search_filter).filter(ontology__type=1) # HPO Only
+        identifier_query = re.sub(r'(?i)^HP\s*:?\s*', '', query).strip()
+        qs = Term.objects.filter(ontology__type=1) # HPO Only
+        qs = filter_normalized_contains(qs, ["label", "identifier"], query)
+        if identifier_query and normalize_search_text(identifier_query) != normalize_search_text(query):
+            qs = qs | filter_normalized_contains(
+                Term.objects.filter(ontology__type=1),
+                ["identifier"],
+                identifier_query,
+            )
         
         # Exclude already selected terms
+        selected_term_ids = self.request.GET.getlist("hpo_terms")
+        if selected_term_ids:
+            qs = qs.exclude(pk__in=selected_term_ids)
+
         individual_id = self.request.GET.get('individual_id')
         if individual_id:
             try:
@@ -1195,25 +1274,7 @@ class HPOTermSearchView(LoginRequiredMixin, ListView):
             except Individual.DoesNotExist:
                 pass
 
-        # Annotate for ordering relevance
-        from django.db.models import Case, When, Value, IntegerField
-        from django.db.models.functions import Length
-        
-        qs = qs.annotate(
-            is_exact=Case(
-                When(label__iexact=query, then=Value(0)),
-                default=Value(1),
-                output_field=IntegerField(),
-            ),
-            starts_with=Case(
-                When(label__istartswith=query, then=Value(0)),
-                default=Value(1),
-                output_field=IntegerField(),
-            ),
-            label_len=Length('label')
-        ).order_by('is_exact', 'starts_with', 'label_len', 'label')
-        
-        return qs
+        return order_by_normalized_relevance(qs.distinct(), ["label", "identifier"], query)
 
 
 class RenderSelectedHPOTermView(LoginRequiredMixin, DetailView):
@@ -1261,15 +1322,16 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
         request = self.request
         individuals_qs = (
             self.object.individuals.all()
-            .prefetch_related("statuses", "institution")
+            .prefetch_related("statuses", "institution", "cross_ids__id_type")
         ).annotate(first_institution_name=Min("institution__name"))
 
         # Search by any ID value or institution name
         search = request.GET.get("search", "").strip()
         if search:
-            individuals_qs = individuals_qs.filter(
-                Q(cross_ids__id_value__icontains=search)
-                | Q(institution__name__icontains=search)
+            individuals_qs = filter_normalized_contains(
+                individuals_qs,
+                ["cross_ids__id_value", "institution__name"],
+                search,
             ).distinct()
 
         # Sorting
@@ -1343,10 +1405,7 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
             if record.history_type == '~':  # Update
                 # Get the previous record
                 prev = history_list[i + 1] if i + 1 < len(history_list) else None
-                if prev:
-                    record.diff_display = self._get_field_diff(record, prev)
-                else:
-                    record.diff_display = {}
+                record.diff_display = self._get_field_diff(record, prev) if prev else {}
             else:
                 record.diff_display = {}
         
@@ -1355,24 +1414,20 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
     
     def _get_field_diff(self, new_hist, old_hist):
         """Calculate field-level differences between two history records."""
-        if not old_hist:
-            return {}
-        changes = {}
-        ignore_fields = {"history_id", "history_date", "history_type", "history_user", "history_change_reason", "id"}
-        for field in new_hist._meta.fields:
-            name = field.name
-            if name in ignore_fields:
-                continue
-            new_val = getattr(new_hist, name, None)
-            old_val = getattr(old_hist, name, None)
-            if new_val != old_val:
-                # Format field name nicely
-                field_label = name.replace('_', ' ').title()
-                # Handle None values
-                old_display = old_val if old_val is not None else "(empty)"
-                new_display = new_val if new_val is not None else "(empty)"
-                changes[field_label] = f"'{old_display}' → '{new_display}'"
-        return changes
+        return format_history_diff(
+            new_hist,
+            old_hist,
+            self.request.user,
+            title_case_labels=True,
+            ignore_fields={
+                "history_id",
+                "history_date",
+                "history_type",
+                "history_user",
+                "history_change_reason",
+                "id",
+            },
+        )
 
     def render_to_response(self, context, **response_kwargs):
         if self.request.htmx and "partial" in self.request.GET:

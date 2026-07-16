@@ -447,7 +447,77 @@
     <script>
         document.body.addEventListener('htmx:configRequest', (event) => {
             event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+            cleanFilterRequestParameters(event);
         });
+
+        function cleanFilterRequestParameters(event) {
+            const parameters = event.detail && event.detail.parameters;
+            if (!parameters || typeof parameters !== 'object') return;
+
+            const requestElement = (event.detail && event.detail.elt) || event.target;
+            if (!requestComesFromFilterControls(requestElement)) return;
+
+            for (const name of Object.keys(parameters)) {
+                const compacted = compactParameterValue(parameters[name]);
+                if (!compacted.length) {
+                    delete parameters[name];
+                } else {
+                    parameters[name] = Array.isArray(parameters[name]) ? compacted : compacted[0];
+                }
+            }
+
+            for (const name of Object.keys(parameters)) {
+                if (!name.endsWith('__mode')) continue;
+                const fieldName = name.slice(0, -'__mode'.length);
+                if (!hasParameterValue(parameters, fieldName) && !hasParameterValue(parameters, `${fieldName}__exclude`)) {
+                    delete parameters[name];
+                }
+            }
+
+            if (parameterEquals(parameters, 'page', '1')) {
+                delete parameters.page;
+            }
+
+            if (parameterEquals(parameters, 'filter_group_mode', 'all') && !hasActiveFilterParameter(parameters)) {
+                delete parameters.filter_group_mode;
+            }
+        }
+
+        function requestComesFromFilterControls(element) {
+            if (!element || typeof element.matches !== 'function') return false;
+            if (element.matches('#filter-form, #variant-filter-form')) return true;
+            if (element.closest('#filter-form, #variant-filter-form')) return true;
+
+            const formId = element.getAttribute('form');
+            if (formId === 'filter-form' || formId === 'variant-filter-form') return true;
+
+            const hxInclude = element.getAttribute('hx-include') || element.getAttribute('data-hx-include') || '';
+            return hxInclude.includes('#filter-form') || hxInclude.includes('#variant-filter-form');
+        }
+
+        function compactParameterValue(value) {
+            const values = Array.isArray(value) ? value : [value];
+            return values.filter(item => item !== null && item !== undefined && String(item).trim() !== '');
+        }
+
+        function hasParameterValue(parameters, name) {
+            if (!(name in parameters)) return false;
+            return compactParameterValue(parameters[name]).length > 0;
+        }
+
+        function parameterEquals(parameters, name, expectedValue) {
+            if (!(name in parameters)) return false;
+            const values = compactParameterValue(parameters[name]);
+            return values.length === 1 && values[0] === expectedValue;
+        }
+
+        function hasActiveFilterParameter(parameters) {
+            return Object.keys(parameters).some(name => {
+                if (name === 'filter_group_mode' || name === 'page' || name.endsWith('__mode')) return false;
+                return hasParameterValue(parameters, name);
+            });
+        }
+
         // HTMX swaps inject new DOM; Alpine does not scan it automatically — re-init so dashboard plot widgets run x-init / iframes.
         document.body.addEventListener('htmx:afterSwap', (event) => {
             if (window.Alpine && typeof Alpine.initTree === 'function' && event.detail && event.detail.target) {

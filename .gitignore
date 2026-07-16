@@ -53,8 +53,6 @@ Teknik Raporlar/
 report_text_field_reference.md
 
 # User-specific files
-create_ozbek_users.py
-create_groups.py
 lab/management/commands/backfill_status_icons.py
 lab/management/commands/create_samplesheet.py
 lab/management/commands/link_parents.py
