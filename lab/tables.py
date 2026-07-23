@@ -2,7 +2,7 @@ import django_tables2 as tables
 from django.utils.html import format_html, mark_safe
 from django.urls import reverse
 
-from .models import Individual, Sample, Project
+from .models import IdentifierType, Individual, Sample, Project
 from .display_preferences import DEFAULT_INSTITUTION_DISPLAY, institution_display_name, normalize_institution_display
 from .status_utils import collect_individual_row_statuses
 from variant.models import Variant
@@ -52,14 +52,20 @@ class IndividualTable(tables.Table):
         short=False,
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._set_identifier_types()
+
+    def _set_identifier_types(self):
+        self.primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
+        self.secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+
     def before_render(self, request):
         self.total_count = Individual.objects.count()
         self.verbose_name = Individual._meta.verbose_name
         self.verbose_name_plural = Individual._meta.verbose_name_plural
 
-        from .models import IdentifierType
-        self.primary_type = IdentifierType.objects.filter(use_priority=1).order_by("id").first()
-        self.secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
+        self._set_identifier_types()
         if self.primary_type:
             self.columns["primary_id"].column.verbose_name = f"{self.primary_type.name} ID"
         if self.secondary_type:

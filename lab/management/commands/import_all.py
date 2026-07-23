@@ -4,7 +4,7 @@ Sheets processed from the master XLSX
 ---------------------------------------
   OZBEK LAB          – Families, Institutions, Individuals, Samples
   Analiz Takip        – Test + Analysis per row (pipeline linked later by Gennext sheet)
-  Variant List        – SNV variants
+  Variant List        – SNV, delins, CNV, and SV variants
   Kurumlar            – Institution coordinate / metadata lookup (replaces Gönderen Kurum Harita)
   Sanger Konfirmasyonları – Sanger tests
   WGS_TÜSEB          – WGS tests from TÜSEB
@@ -47,7 +47,7 @@ Processing order
  19  Yayın_İçi (--yayin-ici)
 
 REMINDERS (ask after implementation):
-  • CNV / SV / Repeat variant format in Variant List (Q5)
+  • Repeat variant format in Variant List (Q5)
   • RarePipe Analiz Listesi: confirm whether Matching Sample ID / ID should also be preserved as notes
   • Yayın_İçi Variant column format (Q12)
 """
@@ -110,7 +110,6 @@ from lab.management.commands._import_helpers import (
     parse_and_add_notes,
     parse_date,
     parse_date_from_filename,
-    parse_variant_string,
     to_bool,
 )
 
@@ -404,7 +403,11 @@ def _extract_variant_records(token: str) -> list[dict]:
     extra_text = extra_text.strip() if sep else ""
 
     # Gene-level HGVS-like strings without genomic coordinates are preserved as notes.
-    if "chr" not in variant_text.lower() and not re.search(r"\(\s*[\d,._]+\s*[_-]\s*[\d,._]+\s*\)\s*x\d+", variant_text, re.I):
+    if (
+        "chr" not in variant_text.lower()
+        and not re.search(r"\(\s*[\d,._]+\s*[_-]\s*[\d,._]+\s*\)\s*x\d+", variant_text, re.I)
+        and not re.search(r"\b[0-9XYM]+[:\-][\d.,]+\s*[\-_]\s*[\d.,]+", variant_text, re.I)
+    ):
         return []
 
     # Explicit "chr5-12345 A>G" or "chr5:12345 A>G"
@@ -431,15 +434,20 @@ def _extract_variant_records(token: str) -> list[dict]:
 
     # Structural/CNV style variants with a coordinate range.
     coord_range_match = re.search(
-        r"(?P<chrom>chr[\w]+|[0-9XYM]+[pq][^(\s]*)[:\-](?P<start>[\d.,]+)[\-_](?P<end>[\d.,]+)",
+        r"(?P<chrom>chr[\w]+|[0-9XYM]+(?:[pq][^(\s:]*)?)[:\-](?P<start>[\d.,]+)[\-_](?P<end>[\d.,]+)",
         variant_text,
         re.I,
     )
     if coord_range_match:
         copy_match = re.search(r"x(?P<copy>\d+)", variant_text, re.I)
-        has_dup = re.search(r"\bdup(lication)?\b|\bgain\b|\bamplification\b", variant_text, re.I)
+        has_gain = re.search(r"\bgain\b|\bamplification\b", variant_text, re.I)
+        has_loss = re.search(r"\bloss\b", variant_text, re.I)
+        has_dup = re.search(r"\bdup(lication)?\b|\bduplikasyon\b", variant_text, re.I)
         has_del = re.search(r"\bdel(etion)?\b|\bdelesyon\b", variant_text, re.I)
-        if not (copy_match or has_dup or has_del):
+        has_inv = re.search(r"\binv(ersion)?\b|\binversiyon\b", variant_text, re.I)
+        has_ins = re.search(r"\bins(ertion)?\b|\binsersiyon\b", variant_text, re.I)
+        has_trans = re.search(r"\btranslocation\b|\btranslokasyon\b|\bt\(", variant_text, re.I)
+        if not (copy_match or has_gain or has_loss or has_dup or has_del or has_inv or has_ins or has_trans):
             return []
 
         chrom = _normalize_variant_chromosome(coord_range_match.group("chrom"))
@@ -452,14 +460,15 @@ def _extract_variant_records(token: str) -> list[dict]:
                 "start": min(start, end),
                 "end": max(start, end),
                 "kind": "cnv",
-                "cnv_type": "loss" if copy == 0 else "gain",
+                "cnv_type": "loss" if copy < 2 else "gain",
                 "copy_number": copy,
                 "source_text": text,
                 **({"note": extra_text} if extra_text else {}),
             }]
-        variant_type = "sv"
-        if has_dup:
+        if has_gain or has_loss or has_dup:
             variant_type = "cnv"
+        else:
+            variant_type = "sv"
 
         record = {
             "chromosome": chrom,
@@ -471,10 +480,19 @@ def _extract_variant_records(token: str) -> list[dict]:
         if extra_text:
             record["note"] = extra_text
         if variant_type == "cnv":
-            record["cnv_type"] = "gain"
+            record["cnv_type"] = "loss" if has_loss else "gain"
             record["copy_number"] = None
         elif variant_type == "sv":
-            record["sv_type"] = "deletion" if has_del else "structural_variant"
+            if has_inv:
+                record["sv_type"] = "inversion"
+            elif has_ins:
+                record["sv_type"] = "insertion"
+            elif has_trans:
+                record["sv_type"] = "translocation"
+            elif has_dup:
+                record["sv_type"] = "duplication"
+            else:
+                record["sv_type"] = "deletion" if has_del else "deletion"
         return [record]
 
     # Cytoband / deletion notation with coordinates in parentheses:
@@ -494,13 +512,66 @@ def _extract_variant_records(token: str) -> list[dict]:
             "start": min(start, end),
             "end": max(start, end),
             "kind": "cnv",
-            "cnv_type": "loss" if copy == 0 else "gain",
+            "cnv_type": "loss" if copy < 2 else "gain",
             "copy_number": copy,
             "source_text": text,
             **({"note": extra_text} if extra_text else {}),
         }]
 
     return []
+
+
+def _variant_model_for_kind(kind):
+    return {
+        "snv": SNV,
+        "delins": delins,
+        "cnv": CNV,
+        "sv": SV,
+    }.get(kind)
+
+
+def _variant_lookup_and_defaults(record, individual, zygosity, admin_user, analysis=None):
+    model_cls = _variant_model_for_kind(record.get("kind"))
+    if model_cls is None:
+        return None, None, None
+
+    defaults = {
+        "zygosity": zygosity,
+        "created_by": admin_user,
+    }
+    if analysis is not None:
+        defaults["analysis"] = analysis
+
+    if model_cls in (SNV, delins):
+        lookup = {
+            "individual": individual,
+            "chromosome": record["chromosome"],
+            "start": record["start"],
+            "reference": record["reference"],
+            "alternate": record["alternate"],
+        }
+        defaults["end"] = record.get("end", record["start"])
+    elif model_cls is CNV:
+        lookup = {
+            "individual": individual,
+            "chromosome": record["chromosome"],
+            "start": record["start"],
+            "end": record["end"],
+            "cnv_type": record.get("cnv_type", "gain"),
+            "copy_number": record.get("copy_number"),
+        }
+    else:
+        lookup = {
+            "individual": individual,
+            "chromosome": record["chromosome"],
+            "start": record["start"],
+            "end": record["end"],
+            "sv_type": record.get("sv_type", "deletion"),
+        }
+        if record.get("breakpoints"):
+            defaults["breakpoints"] = record["breakpoints"]
+
+    return model_cls, lookup, defaults
 
 
 def _variant_text_summary(token: str) -> str:
@@ -2952,26 +3023,25 @@ class Command(BaseCommand):
                 )
                 errors += 1; continue
 
-            parsed = parse_variant_string(d.get("Chromosomal Position"))
-            if not parsed:
-                # ⚠ CNV/SV/Repeat formats not yet implemented (Q5 — ask after implementation)
+            records = []
+            for variant_line in _split_yayin_variant_text(d.get("Chromosomal Position")):
+                records.extend(_extract_variant_records(variant_line))
+            if not records:
                 self.stdout.write(self.style.WARNING(
                     f"  Cannot parse '{d.get('Chromosomal Position')}' for {lab_id} "
-                    f"— CNV/SV/Repeat formats not yet implemented."))
+                    f"— no supported SNV, delins, CNV, or SV format recognized."))
                 self._record_issue(
                     step="step16",
                     sheet="Variant List",
                     severity="warning",
-                    reason="Chromosomal Position could not be parsed; CNV/SV/Repeat formats not implemented.",
+                    reason="Chromosomal Position could not be parsed as a supported SNV, delins, CNV, or SV.",
                     lab_id=lab_id,
                     row=d,
                 )
                 errors += 1; continue
 
-            chrom, start_str, ref, alt = parsed
-
             if self.dry_run:
-                imported += 1; continue
+                imported += len(records); continue
 
             # First analysis for this individual (no Veri Kaynağı mapping available)
             analysis = Analysis.objects.filter(
@@ -2983,34 +3053,51 @@ class Command(BaseCommand):
                         analysis = a; break
 
             try:
-                snv, created_snv = SNV.objects.get_or_create(
-                    individual=individual,
-                    chromosome=chrom,
-                    start=int(start_str),
-                    reference=ref,
-                    alternate=alt,
-                    defaults={
-                        "end": int(start_str),
-                        "zygosity": zyg,
-                        "analysis": analysis,
-                        "created_by": self.admin_user,
-                    })
-                if not created_snv and analysis and snv.analysis_id != analysis.id:
-                    snv.analysis = analysis; snv.save()
-
-                # Statuses are seeded in step 1 and matched by name here.
-                varyant_durumu = str(d.get("Statuses") or "").strip()
-                if varyant_durumu and created_snv:
-                    v_st = Status.objects.filter(
-                        content_type=variant_ct,
-                        name__iexact=varyant_durumu,
-                    ).first() or get_or_create_status(
-                        varyant_durumu, "", "gray", self.admin_user, variant_ct
+                for record in records:
+                    model_cls, lookup, defaults = _variant_lookup_and_defaults(
+                        record,
+                        individual,
+                        zyg,
+                        self.admin_user,
+                        analysis=analysis,
                     )
-                    if v_st:
-                        snv.statuses.set([v_st])
+                    if model_cls is None:
+                        self._record_issue(
+                            step="step16",
+                            sheet="Variant List",
+                            severity="warning",
+                            reason="Variant record had an unsupported model kind.",
+                            lab_id=lab_id,
+                            row=d,
+                            context={"record": record},
+                        )
+                        errors += 1
+                        continue
 
-                imported += 1
+                    variant_obj, created_variant = model_cls.objects.get_or_create(
+                        **lookup,
+                        defaults=defaults,
+                    )
+                    if not created_variant and analysis and variant_obj.analysis_id != analysis.id:
+                        variant_obj.analysis = analysis
+                        variant_obj.save(update_fields=["analysis"])
+
+                    # Statuses are seeded in step 1 and matched by name here.
+                    varyant_durumu = str(d.get("Statuses") or "").strip()
+                    if varyant_durumu and created_variant:
+                        v_st = Status.objects.filter(
+                            content_type=variant_ct,
+                            name__iexact=varyant_durumu,
+                        ).first() or get_or_create_status(
+                            varyant_durumu, "", "gray", self.admin_user, variant_ct
+                        )
+                        if v_st:
+                            variant_obj.statuses.set([v_st])
+
+                    if record.get("note"):
+                        parse_and_add_notes(record["note"], variant_obj, self.admin_user)
+
+                    imported += 1
             except Exception as exc:
                 self.stdout.write(self.style.ERROR(f"  Variant error {lab_id}: {exc}"))
                 self._record_issue(
@@ -3427,13 +3514,12 @@ class Command(BaseCommand):
 
                     for record in records:
                         zyg = _normalize_yayin_zygosity(d.get("Zygosity"))
-                        model_kind = record["kind"]
-                        model_cls = {
-                            "snv": SNV,
-                            "delins": delins,
-                            "cnv": CNV,
-                            "sv": SV,
-                        }.get(model_kind)
+                        model_cls, lookup, defaults = _variant_lookup_and_defaults(
+                            record,
+                            individual,
+                            zyg,
+                            self.admin_user,
+                        )
                         if not model_cls:
                             variant_skipped += 1
                             self._record_issue(
@@ -3448,45 +3534,6 @@ class Command(BaseCommand):
                             continue
 
                         try:
-                            if model_cls in (SNV, delins):
-                                lookup = {
-                                    "individual": individual,
-                                    "chromosome": record["chromosome"],
-                                    "start": record["start"],
-                                    "reference": record["reference"],
-                                    "alternate": record["alternate"],
-                                }
-                                defaults = {
-                                    "end": record["end"],
-                                    "zygosity": zyg,
-                                    "created_by": self.admin_user,
-                                }
-                            elif model_cls is CNV:
-                                lookup = {
-                                    "individual": individual,
-                                    "chromosome": record["chromosome"],
-                                    "start": record["start"],
-                                    "end": record["end"],
-                                    "cnv_type": record.get("cnv_type", "gain"),
-                                    "copy_number": record.get("copy_number"),
-                                }
-                                defaults = {
-                                    "zygosity": zyg,
-                                    "created_by": self.admin_user,
-                                }
-                            else:  # SV
-                                lookup = {
-                                    "individual": individual,
-                                    "chromosome": record["chromosome"],
-                                    "start": record["start"],
-                                    "end": record["end"],
-                                    "sv_type": record.get("sv_type", "deletion"),
-                                }
-                                defaults = {
-                                    "zygosity": zyg,
-                                    "created_by": self.admin_user,
-                            }
-
                             variant_obj, created_variant = model_cls.objects.get_or_create(
                                 **lookup, defaults=defaults)
 

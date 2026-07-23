@@ -2,7 +2,7 @@ import requests
 import json
 from django.utils import timezone
 from django.db.models import Count, Q
-from .models import Annotation, ACMGEvidenceOverride
+from .models import Annotation, ACMGEvidenceOverride, CNV, SNV, SV, delins
 from lab.models import Pipeline, Status, Individual
 
 class DiagnosticService:
@@ -46,11 +46,16 @@ class AnnotationService:
         # Construct HGVS ID or similar
         # For SNV: chr1:g.123A>G
         # Assuming hg38
-        if not hasattr(variant, 'snv'):
+        snv = None
+        if isinstance(variant, (SNV, delins)):
+            snv = variant
+        elif hasattr(variant, 'snv'):
+            snv = variant.snv
+        if snv is None:
             return None # MyVariant mostly for SNVs/indels
         
-        snv = variant.snv
-        hgvs_id = f"chr{snv.chromosome}:g.{snv.start}{snv.reference}>{snv.alternate}"
+        chrom = snv.chromosome.replace("chr", "")
+        hgvs_id = f"chr{chrom}:g.{snv.start}{snv.reference}>{snv.alternate}"
         
         url = f"https://myvariant.info/v1/variant/{hgvs_id}"
         params = {'assembly': 'hg38'}
@@ -78,8 +83,8 @@ class AnnotationService:
         # Helper to strip 'chr' prefix if present, as Ensembl expects just the number/letter
         chrom = variant.chromosome.replace("chr", "")
         
-        if hasattr(variant, 'snv'):
-            snv = variant.snv
+        if isinstance(variant, (SNV, delins)) or hasattr(variant, 'snv'):
+            snv = variant if isinstance(variant, (SNV, delins)) else variant.snv
             # Check for insertion (start > end)
             if snv.start > snv.end:
                 # Insertion: 9:22125503-22125502:1/C
@@ -90,8 +95,8 @@ class AnnotationService:
                 # Format: {chr}:{start}:{end}/{alt}
                 region_str = f"{chrom}:{snv.start}:{snv.end}/{snv.alternate}"
                 
-        elif hasattr(variant, 'sv'):
-            sv = variant.sv
+        elif isinstance(variant, SV) or hasattr(variant, 'sv'):
+            sv = variant if isinstance(variant, SV) else variant.sv
             # SV: 7:100318423-100321323:1/DUP
             # Map types
             type_map = {
@@ -103,6 +108,17 @@ class AnnotationService:
             vep_type = type_map.get(sv.sv_type, sv.sv_type.upper())
             # Format: {chr}:{start}-{end}:1/{type}
             region_str = f"{chrom}:{sv.start}-{sv.end}:1/{vep_type}"
+
+        elif isinstance(variant, CNV) or hasattr(variant, 'cnv'):
+            cnv = variant if isinstance(variant, CNV) else variant.cnv
+            type_map = {
+                "loss": "DEL",
+                "gain": "DUP",
+            }
+            vep_type = type_map.get(cnv.cnv_type)
+            if vep_type:
+                # CNVs use the same Ensembl region notation as structural deletions/duplications.
+                region_str = f"{chrom}:{cnv.start}-{cnv.end}:1/{vep_type}"
             
         if not region_str:
             return None
