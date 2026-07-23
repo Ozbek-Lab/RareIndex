@@ -88,7 +88,19 @@ class PIIRevealTest(TestCase):
         rendered = table.render_full_name("John Doe", self.individual)
         self.assertIn("fa-eye", rendered)
         self.assertIn("hx-get", rendered)
-        
+
+    def test_table_identifier_cells_render_before_before_render(self):
+        table = IndividualTable([self.individual])
+
+        self.assertEqual(
+            table.render_primary_id(None, self.individual),
+            "RB_SECRET",
+        )
+        self.assertEqual(
+            table.render_secondary_id(None, self.individual),
+            "BIO_SECRET",
+        )
+
     def test_reveal_view_permission_denied(self):
         factory = RequestFactory()
         request = factory.get("/")
