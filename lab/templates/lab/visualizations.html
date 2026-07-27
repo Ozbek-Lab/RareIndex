@@ -2,51 +2,234 @@
 
 {% block content %}
 {% url 'lab:map_visualization' as map_filter_url %}
-<div x-data="{ currentTab: 'turkey-choropleth' }" class="min-h-[calc(100vh-64px)] bg-white">
-  <div class="border-b border-base-200 bg-white px-6 pt-4">
+<div
+  x-data="{
+    currentTab: localStorage.getItem('visualizationCurrentTab') || 'turkey-choropleth',
+    filtersOpen: JSON.parse(localStorage.getItem('visualizationFiltersOpen') ?? 'false')
+  }"
+  x-init="$watch('currentTab', val => localStorage.setItem('visualizationCurrentTab', val)); $watch('filtersOpen', val => localStorage.setItem('visualizationFiltersOpen', JSON.stringify(val)))"
+  class="flex h-[calc(100vh-64px)] flex-col overflow-hidden bg-white"
+>
+  <div class="shrink-0 border-b border-base-200 bg-white px-6 pt-4">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 class="text-2xl font-bold text-base-content">Visualizations</h1>
         <p class="text-xs text-base-content/60">
-          Example choropleth map of Turkey rendered with D3 / Observable.
+          Maps and interactive notebook plots for cohort exploration.
         </p>
       </div>
-      <div role="tablist" class="tabs tabs-boxed bg-base-200/50 p-1 gap-1">
+      <div class="flex max-w-full items-center gap-2 overflow-hidden pb-1">
         <button
           type="button"
-          role="tab"
-          class="tab transition-all duration-200"
-          :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'turkey-choropleth' }"
-          @click="currentTab = 'turkey-choropleth'"
+          class="btn btn-sm btn-outline btn-square shrink-0"
+          :class="{ 'btn-primary': filtersOpen }"
+          @click="filtersOpen = !filtersOpen"
+          :aria-expanded="filtersOpen.toString()"
+          title="Show filters"
         >
-          Turkey Choropleth
+          <i class="fa-solid fa-filter"></i>
         </button>
-        <button
-          type="button"
-          role="tab"
-          class="tab transition-all duration-200 opacity-70"
-          disabled
-          title="Coming soon"
-        >
-          More visualizations
-        </button>
+        <div class="min-w-0 overflow-x-auto">
+        <div role="tablist" class="tabs tabs-boxed flex-nowrap bg-base-200/50 p-1 gap-1 w-max max-w-none">
+          <button
+            type="button"
+            role="tab"
+            class="tab whitespace-nowrap transition-all duration-200"
+            :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'turkey-choropleth' }"
+            @click="currentTab = 'turkey-choropleth'"
+          >
+            Turkey Choropleth
+          </button>
+          {% for template in plot_templates %}
+          <button
+            type="button"
+            role="tab"
+            class="tab whitespace-nowrap transition-all duration-200"
+            :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === '{{ template.slug|escapejs }}' }"
+            @click="currentTab = '{{ template.slug|escapejs }}'"
+          >
+            {{ template.name }}
+          </button>
+          {% endfor %}
+        </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="p-6 space-y-4">
-    <div x-show="currentTab === 'turkey-choropleth'" x-cloak class="flex gap-4 min-h-[calc(100vh-180px)]">
-      <aside class="w-80 flex-shrink-0">
+  <div class="flex min-h-0 flex-1 gap-4 overflow-hidden p-6">
+    <aside x-show="filtersOpen" x-collapse.horizontal x-cloak class="min-h-0 w-80 flex-shrink-0">
         {% include "lab/partials/filter_sidebar.html" with filter_url=map_filter_url filter_target="body" filter_reset_url=map_filter_url filter_reset_target="body" %}
-      </aside>
-      <main class="flex-1 min-w-0">
+    </aside>
+
+    <main class="min-h-0 min-w-0 flex-1">
+    <div x-show="currentTab === 'turkey-choropleth'" x-cloak class="h-full overflow-auto">
         {% include "lab/partials/visualizations/map.html" %}
-      </main>
     </div>
 
+    {% for template in plot_templates %}
+    <section
+      x-show="currentTab === '{{ template.slug|escapejs }}'"
+      x-cloak
+      class="visualization-plot-panel flex h-full min-h-0 flex-col rounded-box border border-base-200 bg-base-100 shadow-sm"
+      data-visualization-plot
+    >
+      <div class="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-base-200 px-4 py-3">
+        <div class="min-w-0">
+          <h2 class="text-base font-bold text-base-content">{{ template.name }}</h2>
+          <p class="mt-1 text-xs text-base-content/60">{{ template.description }}</p>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+            data-visualization-fullscreen-toggle
+            title="Fullscreen"
+          >
+            <i class="fa-solid fa-expand text-[11px]" data-visualization-fullscreen-icon></i>
+          </button>
+          {% if user.is_staff %}
+          <a
+            class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+            href="{% url 'lab:marimo_proxy' %}?file={{ template.notebook_filename|urlencode }}&show_download_menu={{ template.show_download_menu|yesno:'1,0' }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Edit notebook in Marimo"
+          >
+            <i class="fa-solid fa-pen-to-square text-[11px]"></i>
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      <div class="min-h-0 flex-1 overflow-hidden p-1">
+        <iframe
+          {% if template.slug == "hpo-term-network" %}
+          src="{% url 'lab:marimo_run_proxy' %}?file={{ template.notebook_filename|urlencode }}&layout=Circular&theme=Icefire&threshold=12&show_download_menu={{ template.show_download_menu|yesno:'1,0' }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}"
+          data-visualization-base-src="{% url 'lab:marimo_run_proxy' %}?file={{ template.notebook_filename|urlencode }}&layout=Circular&theme=Icefire&threshold=12&show_download_menu={{ template.show_download_menu|yesno:'1,0' }}"
+          {% else %}
+          src="{% url 'lab:marimo_run_proxy' %}?file={{ template.notebook_filename|urlencode }}&show_download_menu={{ template.show_download_menu|yesno:'1,0' }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}"
+          data-visualization-base-src="{% url 'lab:marimo_run_proxy' %}?file={{ template.notebook_filename|urlencode }}&show_download_menu={{ template.show_download_menu|yesno:'1,0' }}"
+          {% endif %}
+          allow="fullscreen"
+          allowfullscreen
+          class="block h-full w-full border-0 bg-transparent"
+          style="height: 100%; min-height: 0; overflow: auto;"
+          data-visualization-frame
+          title="{{ template.name }}"
+          loading="lazy"
+        ></iframe>
+      </div>
+    </section>
+    {% empty %}
     <div x-show="currentTab !== 'turkey-choropleth'" x-cloak class="rounded-box border border-base-200 bg-base-100 p-6 text-sm text-base-content/60">
-      Additional visualizations will appear here.
+      No published notebook plots are available yet.
     </div>
+    {% endfor %}
+    </main>
   </div>
 </div>
+<script>
+(function () {
+  var NON_FILTER_QUERY_KEYS = new Set([
+    'file',
+    'notebook',
+    'token',
+    'show_download_menu',
+    'fullscreen',
+    'layout',
+    'theme',
+    'threshold',
+    'model',
+    'layer1',
+    'layer2',
+    'layer3',
+    'x_axis',
+    'unit',
+    'color',
+    'include_negative',
+    'page'
+  ]);
+
+  function syncVisualizationFrameFilters() {
+    var pageParams = new URLSearchParams(window.location.search);
+    document.querySelectorAll('iframe[data-visualization-frame]').forEach(function (frame) {
+      var baseSrc = frame.getAttribute('data-visualization-base-src') || frame.getAttribute('src');
+      if (!baseSrc) return;
+      var nextUrl = new URL(baseSrc, window.location.origin);
+      pageParams.forEach(function (value, key) {
+        if (NON_FILTER_QUERY_KEYS.has(key) || key.startsWith('_')) return;
+        nextUrl.searchParams.append(key, value);
+      });
+      var nextSrc = nextUrl.toString();
+      if (frame.src !== nextSrc) {
+        frame.src = nextSrc;
+      }
+    });
+  }
+
+  function initVisualizationFullscreen() {
+    syncVisualizationFrameFilters();
+    document.querySelectorAll('[data-visualization-fullscreen-toggle]').forEach(function (button) {
+      var panel = button.closest('[data-visualization-plot]');
+      if (!panel) return;
+      var frame = panel.querySelector('iframe[data-visualization-frame]');
+      var icon = button.querySelector('[data-visualization-fullscreen-icon]');
+
+      function applyState(isFullscreen) {
+        panel.setAttribute('data-visualization-fullscreen', isFullscreen ? '1' : '0');
+        panel.style.position = isFullscreen ? 'fixed' : '';
+        panel.style.inset = isFullscreen ? '0' : '';
+        panel.style.zIndex = isFullscreen ? '9999' : '';
+        panel.style.width = isFullscreen ? '100vw' : '';
+        panel.style.height = isFullscreen ? '100vh' : '';
+        panel.style.margin = isFullscreen ? '0' : '';
+        panel.style.borderRadius = isFullscreen ? '0' : '';
+        panel.style.display = isFullscreen ? 'flex' : '';
+        panel.style.flexDirection = isFullscreen ? 'column' : '';
+        document.body.style.overflow = isFullscreen ? 'hidden' : '';
+        if (frame) {
+          frame.style.height = '100%';
+          frame.style.minHeight = isFullscreen ? '0' : '';
+          frame.parentElement.style.flex = isFullscreen ? '1 1 auto' : '';
+          frame.parentElement.style.minHeight = isFullscreen ? '0' : '';
+        }
+      }
+
+      function syncButton() {
+        var isFullscreen = panel.getAttribute('data-visualization-fullscreen') === '1';
+        if (icon) {
+          icon.className = 'fa-solid ' + (isFullscreen ? 'fa-compress' : 'fa-expand') + ' text-[11px]';
+        }
+        button.setAttribute('title', isFullscreen ? 'Exit fullscreen' : 'Fullscreen');
+      }
+
+      button.addEventListener('click', function () {
+        var isFullscreen = panel.getAttribute('data-visualization-fullscreen') === '1';
+        applyState(!isFullscreen);
+        syncButton();
+        if (frame) {
+          var url = new URL(frame.src, window.location.origin);
+          if (!isFullscreen) {
+            url.searchParams.set('fullscreen', '1');
+          } else {
+            url.searchParams.delete('fullscreen');
+          }
+          frame.src = url.toString();
+        }
+      });
+
+      panel.setAttribute('data-visualization-fullscreen', '0');
+      syncButton();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initVisualizationFullscreen);
+  } else {
+    initVisualizationFullscreen();
+  }
+  document.addEventListener('htmx:afterSettle', syncVisualizationFrameFilters);
+  window.addEventListener('popstate', syncVisualizationFrameFilters);
+})();
+</script>
 {% endblock %}

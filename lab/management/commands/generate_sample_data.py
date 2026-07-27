@@ -69,6 +69,10 @@ REQUIRED_PLOT_TEMPLATE_SPECS = {
         "default_col_span": 2,
         "show_download_menu": False,
     },
+    "diagnosis-delay-scatter": {
+        "default_col_span": 2,
+        "show_download_menu": False,
+    },
 }
 
 REQUIRED_PLOT_TEMPLATE_SLUGS = set(REQUIRED_PLOT_TEMPLATE_SPECS)

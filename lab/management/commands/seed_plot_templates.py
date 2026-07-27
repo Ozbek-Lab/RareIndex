@@ -68,6 +68,29 @@ class Command(BaseCommand):
                     "annotate": {"count": {"count": "id"}}
                 },
                 "is_published": True
+            },
+            {
+                "name": "Diagnosis Delay Scatter",
+                "slug": "diagnosis-delay-scatter",
+                "description": "Scatterplot of the time from estimated symptom onset to diagnosis for individuals.",
+                "target_model": "Individual",
+                "default_col_span": 2,
+                "show_download_menu": False,
+                "notebook_filename": "diagnosis_delay_scatter.py",
+                "query_config": {
+                    "values": [
+                        "id",
+                        "birth_date",
+                        "diagnosis_date",
+                        "age_of_onset",
+                        "age_of_onset_in_months",
+                        "sex",
+                        "is_index",
+                        "is_affected",
+                        "diagnosis"
+                    ]
+                },
+                "is_published": True
             }
         ]
 

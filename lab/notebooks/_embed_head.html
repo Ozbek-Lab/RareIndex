@@ -7,12 +7,14 @@
 /* Fill the iframe vertically so Marimo layout doesn’t leave a dead band under the chart. */
 html {
   height: auto;
+  overflow: auto;
 }
 body {
   margin: 0;
   min-height: 0;
   height: auto;
   display: block;
+  overflow: auto;
 }
 /* Marimo root: let content define the iframe height. */
 body > div:first-of-type {
@@ -34,7 +36,7 @@ body > div:first-of-type > div {
 .plotly-graph-div {
   width: 100% !important;
   max-width: none !important;
-  min-height: 28rem !important;
+  min-height: 44rem !important;
 }
 .plotly-graph-div .plotly,
 .plotly-graph-div .js-plotly-plot,
@@ -59,24 +61,6 @@ body > div:first-of-type > div {
     }
   }
 
-  function reportHeight() {
-    var height = Math.max(
-      document.body ? document.body.scrollHeight : 0,
-      document.documentElement ? document.documentElement.scrollHeight : 0,
-      document.documentElement ? document.documentElement.offsetHeight : 0
-    );
-    if (window.parent && height > 0) {
-      window.parent.postMessage(
-        {
-          type: "marimo-embed-height",
-          height: height,
-          file: new URLSearchParams(window.location.search).get("file") || "",
-        },
-        "*"
-      );
-    }
-  }
-
   function resizePlots() {
     if (typeof Plotly === "undefined") return;
     document.querySelectorAll(".plotly-graph-div").forEach(function (gd) {
@@ -87,27 +71,16 @@ body > div:first-of-type > div {
   }
   function scheduleResize() {
     resizePlots();
-    reportHeight();
     requestAnimationFrame(resizePlots);
-    requestAnimationFrame(reportHeight);
     [0, 50, 150, 400, 1000].forEach(function (ms) {
       setTimeout(resizePlots, ms);
-      setTimeout(reportHeight, ms);
     });
   }
   function onReady() {
     scheduleResize();
-    if (typeof ResizeObserver !== "undefined") {
-      var ro = new ResizeObserver(function () {
-        resizePlots();
-        reportHeight();
-      });
-      ro.observe(document.documentElement);
-    }
   }
   if (document.readyState === "complete") onReady();
   else window.addEventListener("load", onReady);
   window.addEventListener("resize", resizePlots);
-  window.addEventListener("resize", reportHeight);
 })();
 </script>

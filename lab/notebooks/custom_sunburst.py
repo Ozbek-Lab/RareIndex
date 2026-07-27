@@ -121,21 +121,7 @@ def _():
             return true_label if lowered == "true" else false_label
         return text.replace("/", "\u2215")
 
-    def build_filter_options(api_rows, fields):
-        from collections import Counter
-
-        options = {}
-        for field in fields:
-            counts = Counter(
-                _normalize_sunburst_value(api_row.get(field), field)
-                for api_row in api_rows
-            )
-            ordered = sorted(counts, key=lambda value: (-counts[value], value))
-            options[field] = ordered or ["(empty)"]
-        return options
-
-    def build_plot_rows(api_rows, fields, include_values_by_field=None):
-        include_values_by_field = include_values_by_field or {}
+    def build_plot_rows(api_rows, fields):
         built = []
         for api_row in api_rows:
             out = dict(api_row)
@@ -143,12 +129,6 @@ def _():
                 field: _normalize_sunburst_value(out.get(field), field)
                 for field in fields
             }
-            if any(
-                field in include_values_by_field
-                and normalized_values.get(field) not in include_values_by_field[field]
-                for field in fields
-            ):
-                continue
             out["tree_path"] = "/".join(normalized_values[field] for field in fields)
             built.append(out)
         return built
@@ -231,7 +211,7 @@ def _():
         )
         fig.update_layout(
             autosize=True,
-            height=1000 if fullscreen else 460,
+            height=1100 if fullscreen else 820,
             margin=dict(t=0, l=0, r=0, b=0),
         )
         return fig
@@ -240,7 +220,6 @@ def _():
         FIELD_OPTIONS,
         MODEL_DEFAULT_FIELDS,
         build_plot_rows,
-        build_filter_options,
         sunburst_figure,
     )
 
@@ -348,57 +327,11 @@ def _(initial_layer_values, mo):
 
 @app.cell
 def _(mo):
-    filter_rows_state, set_filter_rows_state = mo.state([], allow_self_loops=True)
-    next_filter_id_state, set_next_filter_id_state = mo.state(1, allow_self_loops=True)
     active_model_state, set_active_model_state = mo.state(None, allow_self_loops=True)
     return (
-        filter_rows_state,
-        set_filter_rows_state,
-        next_filter_id_state,
-        set_next_filter_id_state,
         active_model_state,
         set_active_model_state,
     )
-
-
-@app.cell
-def _(field_options, filter_rows_state, next_filter_id_state, set_filter_rows_state, set_next_filter_id_state):
-    def add_filter_row(_=None):
-        current_rows = filter_rows_state()
-        existing_fields = {
-            row.get("field")
-            for row in current_rows
-            if row.get("field")
-        }
-        available_fields = [
-            value
-            for value in field_options.values()
-            if value not in existing_fields
-        ]
-        default_field = available_fields[0] if available_fields else None
-        default_values = None
-        row_id = next_filter_id_state()
-        set_next_filter_id_state(row_id + 1)
-        set_filter_rows_state(
-            current_rows
-            + [{"id": row_id, "field": default_field, "values": default_values}]
-        )
-
-    def update_filter_row(row_id, **updates):
-        updated = []
-        for row in filter_rows_state():
-            if row["id"] == row_id:
-                new_row = dict(row)
-                new_row.update(updates)
-                updated.append(new_row)
-            else:
-                updated.append(row)
-        set_filter_rows_state(updated)
-
-    def remove_filter_row(row_id):
-        set_filter_rows_state([row for row in filter_rows_state() if row["id"] != row_id])
-
-    return add_filter_row, remove_filter_row, update_filter_row
 
 
 @app.cell
@@ -445,16 +378,12 @@ def _(field_options, layer_rows_state, next_layer_id_state, set_layer_rows_state
 @app.cell
 def _(
     active_model_state,
-    filter_rows_state,
     initial_layer_values,
     layer_rows_state,
     model_selector,
-    next_filter_id_state,
     next_layer_id_state,
     set_active_model_state,
-    set_filter_rows_state,
     set_layer_rows_state,
-    set_next_filter_id_state,
     set_next_layer_id_state,
 ):
     current_model = model_selector.value
@@ -466,51 +395,52 @@ def _(
             ]
         )
         set_next_layer_id_state(len(initial_layer_values) + 1)
-        set_filter_rows_state([])
-        set_next_filter_id_state(1)
         set_active_model_state(current_model)
 
 
 @app.cell
-def _(
-    field_options,
-    model_selector,
-    token,
-):
+def _(layer_rows_state):
+    layer_fields = [
+        row["field"]
+        for row in layer_rows_state()
+        if row.get("field")
+    ]
+    return (layer_fields,)
+
+
+@app.cell
+def _(layer_fields, model_selector, token):
     import _utils
 
-    all_fields = list(dict.fromkeys(field_options.values()))
-    rows = _utils.fetch_plot_data(
-        token,
-        model_selector.value,
-        {
-            "values": all_fields,
-            "annotate": {"count": {"count": "id"}},
-        },
-    )
-    return all_fields, rows
+    rows = []
+    if layer_fields:
+        rows = _utils.fetch_plot_data(
+            token,
+            model_selector.value,
+            {
+                "values": layer_fields,
+                "annotate": {"count": {"count_distinct": "id"}},
+            },
+        )
+    return (rows,)
 
 
 @app.cell
 def _(
-    build_filter_options,
     build_plot_rows,
     field_options,
-    filter_rows_state,
     layer_rows_state,
     fullscreen,
     mo,
     model_selector,
     remove_layer_row,
-    remove_filter_row,
     rows,
     sunburst_figure,
     update_layer_row,
-    update_filter_row,
-    add_filter_row,
     add_layer_row,
     show_counts_checkbox,
     show_percentages_checkbox,
+    layer_fields,
 ):
     field_value_to_label = {value: label for label, value in field_options.items()}
 
@@ -569,87 +499,7 @@ def _(
 
         layer_rows_ui.append(mo.hstack(row_widgets))
 
-    filter_rows_for_ui = filter_rows_state()
-    filter_value_options = build_filter_options(rows, list(field_options.values()))
-    rows_ui = []
-
-    for idx, row in enumerate(filter_rows_for_ui, start=1):
-        row_id = row["id"]
-        current_field = row.get("field")
-        other_filter_fields = {
-            existing.get("field")
-            for existing in filter_rows_for_ui
-            if existing["id"] != row_id and existing.get("field")
-        }
-
-        allowed_fields = {
-            label: value
-            for label, value in field_options.items()
-            if value not in other_filter_fields
-        }
-        if current_field in field_value_to_label:
-            allowed_fields.setdefault(field_value_to_label[current_field], current_field)
-        if not allowed_fields:
-            rows_ui.append(
-                mo.md(
-                    "_No additional fields available for this filter row. Remove another filter or change the selected layers._"
-                )
-            )
-            continue
-
-        current_field_label = (
-            field_value_to_label.get(current_field)
-            if current_field in field_value_to_label
-            else next(iter(allowed_fields.keys()))
-        )
-
-        field_selector = mo.ui.dropdown(
-            options=allowed_fields,
-            value=current_field_label,
-            label=f"Filter {idx} field",
-            searchable=True,
-            on_change=lambda value, row_id=row_id: update_filter_row(
-                row_id,
-                field=value,
-                values=filter_value_options.get(value, []),
-            ),
-        )
-
-        row_widgets = [
-            field_selector,
-            mo.ui.button(
-                label="Remove",
-                kind="warn",
-                on_click=lambda _=None, row_id=row_id: remove_filter_row(row_id),
-            ),
-        ]
-
-        current_options = filter_value_options.get(current_field, [])
-        stored_values = row.get("values")
-        current_values = stored_values if stored_values is not None else current_options
-        current_values = [value for value in current_values if value in current_options]
-        if stored_values is None:
-            current_values = current_options
-
-        if current_field:
-            value_selector = mo.ui.multiselect(
-                options=current_options,
-                value=current_values,
-                label="Include / exclude values",
-                full_width=True,
-                on_change=lambda value, row_id=row_id: update_filter_row(
-                    row_id,
-                    values=value,
-                ),
-            )
-            row_widgets.append(value_selector)
-        else:
-            row_widgets.append(mo.md("_Choose a filter field to show values._"))
-
-        rows_ui.append(mo.vstack([mo.hstack(row_widgets)]))
-
     layer_add_button = mo.ui.button(label="Add layer", on_click=add_layer_row)
-    add_filter_button = mo.ui.button(label="Add Filter", on_click=add_filter_row)
     left_panel = mo.vstack(
         [
             model_selector,
@@ -657,31 +507,15 @@ def _(
             mo.md("**Layers**"),
             layer_add_button,
             *(layer_rows_ui or [mo.md("_No layers added yet._")]),
-            mo.md("**Filters**"),
-            add_filter_button,
-            *(rows_ui or [mo.md("_No filters added yet._")]),
         ]
     )
-    filter_rows_for_plot = filter_rows_state()
-    layer_rows_for_plot = layer_rows_state()
-    layer_fields = [
-        row["field"]
-        for row in layer_rows_for_plot
-        if row.get("field")
-    ]
     mo.stop(
         not layer_fields,
         mo.md("_No layers selected._"),
     )
-    include_values_by_field = {
-        row["field"]: set(row.get("values") or [])
-        for row in filter_rows_for_plot
-        if row.get("field")
-    }
     plot_rows = build_plot_rows(
         rows,
         layer_fields,
-        include_values_by_field=include_values_by_field,
     )
     if not rows:
         plot_view = mo.md("_No rows returned for the selected class and layers._")
