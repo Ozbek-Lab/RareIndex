@@ -2,7 +2,7 @@ import logging
 import re
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse, QueryDict
 from django.utils import timezone
 from django.views.decorators.vary import vary_on_headers
 from django.contrib.auth.decorators import login_required
@@ -110,6 +110,8 @@ def _plot_build_annotations(annotate_spec):
                 agg_type_l = str(agg_type).lower()
                 if agg_type_l == "count":
                     annotations[alias] = Count(field)
+                elif agg_type_l in {"count_distinct", "distinct_count"}:
+                    annotations[alias] = Count(field, distinct=True)
                 elif agg_type_l == "sum":
                     annotations[alias] = Sum(field)
                 elif agg_type_l == "avg":
@@ -1151,6 +1153,9 @@ class MapVisualizationView(LoginRequiredMixin, TemplateView):
         context["filter"] = filterset
         context["status_metadata"] = build_status_metadata_by_model()
         context["filter_counts"] = _individual_filter_counts()
+        context["plot_templates"] = PlotTemplate.objects.filter(
+            is_published=True
+        ).order_by("name")
         hpo_term_ids = self.request.GET.getlist("hpo_terms")
         if hpo_term_ids:
             from ontologies.models import Term
@@ -1900,7 +1905,49 @@ def configurations_view(request):
 from django.apps import apps
 from django.views import generic
 from django.views.decorators.http import require_http_methods, require_POST
-from .jwt_utils import issue_plot_token, verify_plot_token
+from .jwt_utils import issue_plot_token, verify_plot_token, verify_plot_token_payload
+
+_VISUALIZATION_NON_FILTER_QUERY_KEYS = {
+    "file",
+    "notebook",
+    "token",
+    "show_download_menu",
+    "fullscreen",
+    "layout",
+    "theme",
+    "threshold",
+    "model",
+    "layer1",
+    "layer2",
+    "layer3",
+    "x_axis",
+    "unit",
+    "color",
+    "include_negative",
+    "page",
+}
+
+
+def _visualization_filter_payload_from_query_data(query_data):
+    payload = {}
+    if not query_data:
+        return payload
+    for key in query_data.keys():
+        if key in _VISUALIZATION_NON_FILTER_QUERY_KEYS or key.startswith("_"):
+            continue
+        if hasattr(query_data, "getlist"):
+            values = query_data.getlist(key)
+        else:
+            raw_value = query_data.get(key)
+            values = raw_value if isinstance(raw_value, list) else [raw_value]
+        clean_values = [
+            str(value)
+            for value in values
+            if value not in (None, "")
+        ]
+        if clean_values:
+            payload[str(key)] = clean_values
+    return payload
 
 @login_required
 def issue_plot_token_view(request):
@@ -1916,20 +1963,87 @@ def _user_for_plot_request(request):
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ", 1)[1].strip()
         try:
-            return verify_plot_token(token)
+            user, payload = verify_plot_token_payload(token)
+            request.plot_visualization_filters = payload.get("visualization_filters")
+            return user
         except Exception as e:
             logger.warning("plot-auth: bearer token verification failed (%s)", e)
 
     token = request.GET.get("token")
     if token:
         try:
-            return verify_plot_token(token)
+            user, payload = verify_plot_token_payload(token)
+            request.plot_visualization_filters = payload.get("visualization_filters")
+            return user
         except Exception as e:
             logger.warning("plot-auth: query token verification failed (%s)", e)
 
     return None
 
-def _plot_data_for_model(model_name, config):
+def _plot_visualization_filter_data(request):
+    raw_filters = request.GET.get("visualization_filters") if request else None
+    if raw_filters:
+        try:
+            parsed = json.loads(raw_filters)
+        except json.JSONDecodeError:
+            raise ValueError("Invalid visualization filters")
+    else:
+        parsed = getattr(request, "plot_visualization_filters", None) if request else None
+    if not parsed:
+        return None
+    if not isinstance(parsed, dict):
+        raise ValueError("Visualization filters must be an object")
+
+    boolean_filter_keys = {"is_alive", "is_affected", "is_index"}
+    query_data = QueryDict("", mutable=True)
+    for key, values in parsed.items():
+        if not isinstance(key, str):
+            continue
+        if not isinstance(values, list):
+            values = [values]
+        base_key = key.removesuffix("__exclude")
+        for value in values:
+            if value not in (None, ""):
+                if base_key in boolean_filter_keys:
+                    lowered = str(value).strip().lower()
+                    if lowered == "true":
+                        value = "True"
+                    elif lowered == "false":
+                        value = "False"
+                query_data.appendlist(key, str(value))
+    return query_data
+
+
+def _apply_visualization_filters(qs, model_name, request):
+    filter_data = _plot_visualization_filter_data(request)
+    if not filter_data:
+        return qs
+
+    filterset = IndividualFilter(
+        filter_data,
+        queryset=Individual.objects.all(),
+        request=request,
+    )
+    if not filterset.form.is_valid():
+        raise ValueError(f"Invalid visualization filters: {filterset.form.errors.as_text()}")
+    filtered_individuals = filterset.qs
+
+    individual_lookup_by_model = {
+        "Individual": "pk__in",
+        "Sample": "individual__in",
+        "Test": "sample__individual__in",
+        "Pipeline": "test__sample__individual__in",
+        "Analysis": "pipeline__test__sample__individual__in",
+        "Project": "individuals__in",
+        "Variant": "individual__in",
+    }
+    lookup = individual_lookup_by_model.get(model_name)
+    if not lookup:
+        return qs
+    return qs.filter(**{lookup: filtered_individuals}).distinct()
+
+
+def _plot_data_for_model(model_name, config, request=None):
     try:
         model = apps.get_model("lab", model_name)
     except LookupError:
@@ -1939,6 +2053,7 @@ def _plot_data_for_model(model_name, config):
             raise LookupError(f"Model {model_name} not found")
 
     qs = model.objects.all()
+    qs = _apply_visualization_filters(qs, model_name, request)
 
     filters = _plot_config_filters(config)
     if filters:
@@ -1946,10 +2061,12 @@ def _plot_data_for_model(model_name, config):
 
     values = config.get("values") or []
     if values:
-        qs = qs.values(*values)
+        qs = qs.order_by().values(*values)
 
     annotate = config.get("annotate") or {}
     if annotate:
+        if not values:
+            qs = qs.order_by()
         annotations = _plot_build_annotations(annotate)
         qs = qs.annotate(**annotations)
 
@@ -1975,7 +2092,7 @@ def generic_plot_data(request):
         return JsonResponse({"error": "Invalid query config"}, status=400)
 
     try:
-        data = _plot_data_for_model(model_name, config)
+        data = _plot_data_for_model(model_name, config, request=request)
     except LookupError as e:
         return JsonResponse({"error": str(e)}, status=400)
     except ValueError as e:
@@ -2164,7 +2281,10 @@ def marimo_run_proxy(request):
         return HttpResponseBadRequest("Notebook file not found in MARIMO_NOTEBOOKS_DIR")
 
     marimo_base = getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091").rstrip("/")
-    token = issue_plot_token(request.user)
+    token = issue_plot_token(
+        request.user,
+        visualization_filters=_visualization_filter_payload_from_query_data(request.GET),
+    )
     params = request.GET.copy()
     params["file"] = safe_name
     params["token"] = token

@@ -135,7 +135,7 @@ def _(mo, plot_rows, fullscreen):
         )
         fig.update_layout(
             autosize=True,
-            height=1000 if fullscreen else 360,
+            height=1100 if fullscreen else 820,
             margin=dict(t=0, l=0, r=0, b=0),
         )
         return fig

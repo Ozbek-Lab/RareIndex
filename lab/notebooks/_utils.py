@@ -1,10 +1,33 @@
 import jwt
+import json
 import os
 import urllib.parse
 
 import requests
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+_LAST_QUERY_PARAMS = {}
+
+
+_NON_FILTER_QUERY_KEYS = {
+    "file",
+    "notebook",
+    "token",
+    "show_download_menu",
+    "fullscreen",
+    "layout",
+    "theme",
+    "threshold",
+    "model",
+    "layer1",
+    "layer2",
+    "layer3",
+    "x_axis",
+    "unit",
+    "color",
+    "include_negative",
+    "page",
+}
 
 
 def _normalize_api_url(raw_url: str | None) -> str:
@@ -48,7 +71,9 @@ def _qp_get(qp, key: str, default=None):
 
 def resolve_plot_token(mo) -> str | None:
     """Token from URL query, else optional env MARIMO_PLOT_JWT (local dev)."""
+    global _LAST_QUERY_PARAMS
     qp = mo.query_params()
+    _LAST_QUERY_PARAMS = _query_params_to_dict(qp)
     t = _qp_get(qp, "token")
     if _jwt_shape_ok(t):
         return str(t)
@@ -56,6 +81,34 @@ def resolve_plot_token(mo) -> str | None:
     if _jwt_shape_ok(env_t):
         return str(env_t)
     return None
+
+
+def _query_params_to_dict(qp) -> dict:
+    data = {}
+    if hasattr(qp, "items"):
+        iterator = qp.items()
+    else:
+        iterator = []
+    for key, value in iterator:
+        if isinstance(value, list):
+            values = [str(item) for item in value if item not in (None, "")]
+        elif value in (None, ""):
+            values = []
+        else:
+            values = [str(value)]
+        if values:
+            data[str(key)] = values
+    return data
+
+
+def visualization_filter_params() -> dict:
+    return {
+        key: values
+        for key, values in _LAST_QUERY_PARAMS.items()
+        if key not in _NON_FILTER_QUERY_KEYS
+        and not key.startswith("_")
+        and values
+    }
 
 
 def auth_prompt_mo(mo):
@@ -116,12 +169,14 @@ def verify_token(token: str) -> int:
     return payload["user_id"]
 
 def fetch_plot_data(token: str, model: str, config: dict) -> list:
-    import json
-
     if not _jwt_shape_ok(token):
         raise ValueError(f"Invalid token provided to fetch_plot_data: {token}")
 
-    qs = urllib.parse.urlencode({"model": model, "config": json.dumps(config)})
+    params = {"model": model, "config": json.dumps(config)}
+    filter_params = visualization_filter_params()
+    if filter_params:
+        params["visualization_filters"] = json.dumps(filter_params)
+    qs = urllib.parse.urlencode(params)
     r = requests.get(f"{DJANGO_API_URL}/api/plot-data/?{qs}",
                      headers={"Authorization": f"Bearer {token}"}, timeout=10)
     r.raise_for_status()
