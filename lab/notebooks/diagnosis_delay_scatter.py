@@ -188,6 +188,7 @@ def _(default_color, default_include_negative, default_unit, default_x_axis, mo)
         "Diagnosis date": "diagnosis_date",
         "Age at onset": "age_of_onset_months",
         "Age at diagnosis": "age_at_diagnosis_months",
+        "Delay distribution": "delay_distribution",
     }
     unit_options = {"Years": "years", "Months": "months"}
     color_options = {
@@ -284,6 +285,7 @@ def _(FIELD_LABELS, color_by, delay_rows, fullscreen, unit, unit_value, x_axis):
             "diagnosis_date": "Diagnosis date",
             "age_of_onset_months": f"Age at onset ({unit_label})",
             "age_at_diagnosis_months": f"Age at diagnosis ({unit_label})",
+            "delay_distribution": "Diagnosis delay distribution",
         }
 
         fig = go.Figure()
@@ -291,6 +293,8 @@ def _(FIELD_LABELS, color_by, delay_rows, fullscreen, unit, unit_value, x_axis):
             category_rows = [row for row in delay_rows if row[color_field] == category]
             if x_field == "diagnosis_date":
                 x_values = [row["diagnosis_date"] for row in category_rows]
+            elif x_field == "delay_distribution":
+                x_values = ["Diagnosis delay"] * len(category_rows)
             else:
                 x_values = [
                     unit_value(row[x_field], selected_unit)
