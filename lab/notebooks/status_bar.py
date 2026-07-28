@@ -81,7 +81,7 @@ def _(data, fullscreen, mo):
         )
         fig.update_layout(
             autosize=True,
-            height=1000 if fullscreen else 360,
+            height=1100 if fullscreen else 760,
             xaxis_title=None,
             yaxis_title="Count",
             margin=dict(t=8, l=48, r=24, b=100),
