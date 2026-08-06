@@ -15,6 +15,8 @@ from .views import (
     CompleteTaskView,
     ReopenTaskView,
     IndividualExportView,
+    IndividualFHIRExportView,
+    IndividualPhenopacketExportView,
     configurations_view,
     MapVisualizationView,
     issue_plot_token_view,
@@ -114,6 +116,8 @@ urlpatterns = [
     # Map visualization (current and default at /visualizations/)
     path("visualizations/", MapVisualizationView.as_view(), name="map_visualization"),
     path("individuals/export/", IndividualExportView.as_view(), name="individual_export"),
+    path("individuals/<int:pk>/export/fhir/", IndividualFHIRExportView.as_view(), name="individual_export_fhir"),
+    path("individuals/<int:pk>/export/phenopacket/", IndividualPhenopacketExportView.as_view(), name="individual_export_phenopacket"),
     path("individuals/create-family/", FamilyCreateView.as_view(), name="create_family"),
     path("samples/", SampleListView.as_view(), name="sample_list"),
     path("individuals/<int:pk>/detail/", IndividualDetailView.as_view(), name="individual_detail"),

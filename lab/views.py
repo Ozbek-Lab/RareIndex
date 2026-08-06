@@ -1,5 +1,7 @@
+import json
 import logging
 import re
+from urllib.parse import urlsplit
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse, QueryDict
@@ -50,6 +52,7 @@ from .search_utils import (
 )
 from .history_display import format_history_diff, historical_model_name
 from .status_utils import build_status_metadata_by_model
+from .export_formats import build_fhir_bundle, build_phenopacket
 from variant.models import (
     ACMGEvidenceOverride,
     Variant,
@@ -58,6 +61,42 @@ from variant.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_loopback_hostname(hostname):
+    if not hostname:
+        return False
+    hostname = hostname.strip("[]").lower()
+    return (
+        hostname == "localhost"
+        or hostname == "::1"
+        or hostname == "0.0.0.0"
+        or hostname.startswith("127.")
+    )
+
+
+def _request_uses_loopback_host(request):
+    return _is_loopback_hostname(urlsplit(f"//{request.get_host()}").hostname)
+
+
+def _browser_marimo_base_url(request, configured_url, proxy_path):
+    """
+    Return a browser-reachable Marimo base URL.
+
+    Docker deployments often configure Django with a loopback Marimo URL because
+    that works from the host or container, but a remote browser interprets
+    127.0.0.1 as the user's own machine.  In that case, fall back to the
+    same-origin Caddy proxy path.
+    """
+    base_url = str(configured_url or "").strip().rstrip("/")
+    if not base_url:
+        return proxy_path.rstrip("/")
+
+    parts = urlsplit(base_url)
+    if parts.scheme and _is_loopback_hostname(parts.hostname):
+        if not _request_uses_loopback_host(request):
+            return proxy_path.rstrip("/")
+    return base_url
 
 
 class HydratedPagePaginator(Paginator):
@@ -785,9 +824,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["widgets"] = (
             self.request.user.dashboard_widgets.select_related("template").order_by("order")
         )
-        context["marimo_service_url"] = getattr(
-            settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091"
-        ).rstrip("/")
+        context["marimo_service_url"] = _browser_marimo_base_url(
+            self.request,
+            getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091"),
+            "/marimo-run",
+        )
 
         # 2. News Feed - Aggregated History
         from itertools import chain
@@ -1711,6 +1752,57 @@ class ReopenTaskView(LoginRequiredMixin, TemplateView):
 import csv
 from django.views import View
 
+
+def _get_individual_for_json_export(pk):
+    return get_object_or_404(
+        Individual.objects.prefetch_related(
+            "cross_ids",
+            "cross_ids__id_type",
+            "hpo_terms",
+            "hpo_terms__ontology",
+            "samples",
+            "samples__sample_type",
+        ),
+        pk=pk,
+    )
+
+
+def _user_can_export_individual_json(user):
+    return (
+        user.has_perm("lab.view_individual")
+        and user.has_perm("lab.view_sensitive_data")
+    )
+
+
+def _json_download_response(payload, filename, content_type="application/json"):
+    response = HttpResponse(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        content_type=content_type,
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+class IndividualFHIRExportView(LoginRequiredMixin, View):
+    def get(self, request, pk, *args, **kwargs):
+        if not _user_can_export_individual_json(request.user):
+            return HttpResponseForbidden("You do not have permission to export this individual.")
+        individual = _get_individual_for_json_export(pk)
+        payload = build_fhir_bundle(individual, request.user)
+        filename = f"individual-{individual.pk}.fhir.json"
+        return _json_download_response(payload, filename, "application/fhir+json")
+
+
+class IndividualPhenopacketExportView(LoginRequiredMixin, View):
+    def get(self, request, pk, *args, **kwargs):
+        if not _user_can_export_individual_json(request.user):
+            return HttpResponseForbidden("You do not have permission to export this individual.")
+        individual = _get_individual_for_json_export(pk)
+        payload = build_phenopacket(individual, request.user)
+        filename = f"individual-{individual.pk}.phenopacket.json"
+        return _json_download_response(payload, filename)
+
+
 class IndividualExportView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         # 1. Apply Filters (Same as List View)
@@ -1719,7 +1811,7 @@ class IndividualExportView(LoginRequiredMixin, View):
             'institution', 'physicians', 'projects', 'family',
              'samples__isolation_by', 'samples__tests__test_type'
         )
-        filter = IndividualFilter(request.GET, queryset=qs)
+        filter = IndividualFilter(request.GET, queryset=qs, request=request)
         filtered_qs = filter.qs.distinct()
 
         # 2. Prepare Response
@@ -2252,7 +2344,11 @@ def marimo_proxy(request, path=""):
     """
     from .jwt_utils import issue_editor_plot_token
 
-    marimo_base = getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8092").rstrip("/")
+    marimo_base = _browser_marimo_base_url(
+        request,
+        getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8092"),
+        "/marimo-edit",
+    )
     params = request.GET.copy()
     params["token"] = issue_editor_plot_token(request.user)
     return redirect(f"{marimo_base}/?{params.urlencode()}")
@@ -2280,7 +2376,11 @@ def marimo_run_proxy(request):
     if nb_dir is not None and not (Path(nb_dir) / safe_name).is_file():
         return HttpResponseBadRequest("Notebook file not found in MARIMO_NOTEBOOKS_DIR")
 
-    marimo_base = getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091").rstrip("/")
+    marimo_base = _browser_marimo_base_url(
+        request,
+        getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091"),
+        "/marimo-run",
+    )
     token = issue_plot_token(
         request.user,
         visualization_filters=_visualization_filter_payload_from_query_data(request.GET),
