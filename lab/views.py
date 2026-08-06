@@ -1811,7 +1811,7 @@ class IndividualExportView(LoginRequiredMixin, View):
             'institution', 'physicians', 'projects', 'family',
              'samples__isolation_by', 'samples__tests__test_type'
         )
-        filter = IndividualFilter(request.GET, queryset=qs)
+        filter = IndividualFilter(request.GET, queryset=qs, request=request)
         filtered_qs = filter.qs.distinct()
 
         # 2. Prepare Response
