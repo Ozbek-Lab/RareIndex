@@ -45,7 +45,7 @@ class MarimoRunProxyTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         location = response["Location"]
-        self.assertTrue(location.startswith("http://10.100.12.79:8091/?"), location)
+        self.assertTrue(location.startswith("http://10.100.12.79:8091/marimo-run/?"), location)
 
         query = parse_qs(urlsplit(location).query)
         self.assertEqual(query["file"], ["status_bar.py"])
@@ -66,7 +66,7 @@ class MarimoRunProxyTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
-            response["Location"].startswith("http://10.100.12.79:8091/?"),
+            response["Location"].startswith("http://10.100.12.79:8091/marimo-run/?"),
             response["Location"],
         )
 
