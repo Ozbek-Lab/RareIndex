@@ -1,4 +1,26 @@
 {% load lab_tags %}
+<div class="mb-4 flex flex-wrap justify-end gap-2">
+    {% if perms.lab.view_individual and perms.lab.view_sensitive_data %}
+    <a href="{% url 'lab:individual_export_fhir' individual.pk %}" download hx-boost="false" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-file-export"></i>
+        Export as FHIR
+    </a>
+    <a href="{% url 'lab:individual_export_phenopacket' individual.pk %}" download hx-boost="false" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-file-code"></i>
+        Export as Phenopacket
+    </a>
+    {% else %}
+    <button type="button" class="btn btn-outline btn-sm" disabled aria-disabled="true">
+        <i class="fa-solid fa-file-export"></i>
+        Export as FHIR
+    </button>
+    <button type="button" class="btn btn-outline btn-sm" disabled aria-disabled="true">
+        <i class="fa-solid fa-file-code"></i>
+        Export as Phenopacket
+    </button>
+    {% endif %}
+</div>
+
 <div class="grid grid-cols-2 gap-6">
     <div class="card bg-base-100 border border-base-200 shadow-sm" id="projects-card-{{ individual.pk }}">
         <div class="card-body p-4">

@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from urllib.parse import urlsplit
@@ -51,6 +52,7 @@ from .search_utils import (
 )
 from .history_display import format_history_diff, historical_model_name
 from .status_utils import build_status_metadata_by_model
+from .export_formats import build_fhir_bundle, build_phenopacket
 from variant.models import (
     ACMGEvidenceOverride,
     Variant,
@@ -1749,6 +1751,57 @@ class ReopenTaskView(LoginRequiredMixin, TemplateView):
 
 import csv
 from django.views import View
+
+
+def _get_individual_for_json_export(pk):
+    return get_object_or_404(
+        Individual.objects.prefetch_related(
+            "cross_ids",
+            "cross_ids__id_type",
+            "hpo_terms",
+            "hpo_terms__ontology",
+            "samples",
+            "samples__sample_type",
+        ),
+        pk=pk,
+    )
+
+
+def _user_can_export_individual_json(user):
+    return (
+        user.has_perm("lab.view_individual")
+        and user.has_perm("lab.view_sensitive_data")
+    )
+
+
+def _json_download_response(payload, filename, content_type="application/json"):
+    response = HttpResponse(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        content_type=content_type,
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+class IndividualFHIRExportView(LoginRequiredMixin, View):
+    def get(self, request, pk, *args, **kwargs):
+        if not _user_can_export_individual_json(request.user):
+            return HttpResponseForbidden("You do not have permission to export this individual.")
+        individual = _get_individual_for_json_export(pk)
+        payload = build_fhir_bundle(individual, request.user)
+        filename = f"individual-{individual.pk}.fhir.json"
+        return _json_download_response(payload, filename, "application/fhir+json")
+
+
+class IndividualPhenopacketExportView(LoginRequiredMixin, View):
+    def get(self, request, pk, *args, **kwargs):
+        if not _user_can_export_individual_json(request.user):
+            return HttpResponseForbidden("You do not have permission to export this individual.")
+        individual = _get_individual_for_json_export(pk)
+        payload = build_phenopacket(individual, request.user)
+        filename = f"individual-{individual.pk}.phenopacket.json"
+        return _json_download_response(payload, filename)
+
 
 class IndividualExportView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
