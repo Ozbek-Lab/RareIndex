@@ -2,13 +2,26 @@
     # Local HTTPS using Caddy's internal
     tls internal
 
-    # Serve static files (must match STATIC_ROOT in settings.py)
-    root * /app/staticfiles
-    file_server
+    # Serve collected static files (STATIC_URL=/static/, STATIC_ROOT=/app/staticfiles)
+    handle_path /static/* {
+        root * /app/staticfiles
+        file_server
+    }
+
+    # Browser-facing Marimo apps. Marimo is started with matching --base-url values.
+    handle /marimo-run* {
+        reverse_proxy marimo-run:8091
+    }
+
+    handle /marimo-edit* {
+        reverse_proxy marimo-edit:8092
+    }
 
     # Reverse proxy Django app
-    reverse_proxy web:8090 {
-        header_up X-Forwarded-Proto {scheme}
-        header_up Host rare
+    handle {
+        reverse_proxy web:8090 {
+            header_up X-Forwarded-Proto {scheme}
+            header_up Host rare
+        }
     }
 }

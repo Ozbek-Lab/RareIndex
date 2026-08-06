@@ -5,7 +5,7 @@ import urllib.parse
 
 import requests
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or os.environ.get("SECRET_KEY")
 _LAST_QUERY_PARAMS = {}
 
 
@@ -162,7 +162,7 @@ def auth_prompt_mo(mo):
 def verify_token(token: str) -> int:
     if not SECRET_KEY:
         raise RuntimeError(
-            "DJANGO_SECRET_KEY must be set in the environment for the Marimo process "
+            "DJANGO_SECRET_KEY or SECRET_KEY must be set in the environment for the Marimo process "
             "(must match Django SECRET_KEY used to sign plot JWTs)."
         )
     payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])

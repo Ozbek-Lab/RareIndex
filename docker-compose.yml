@@ -9,14 +9,14 @@ services:
     env_file:
       - ./.env
     environment:
-      MARIMO_SERVICE_URL: ${MARIMO_SERVICE_URL:-http://127.0.0.1:8091}
-      MARIMO_EDITOR_URL: ${MARIMO_EDITOR_URL:-http://127.0.0.1:8092}
+      MARIMO_SERVICE_URL: ${MARIMO_SERVICE_URL:-/marimo-run}
+      MARIMO_EDITOR_URL: ${MARIMO_EDITOR_URL:-/marimo-edit}
     depends_on:
       - db
 
   marimo-run:
     build: .
-    command: marimo run lab/notebooks --host 0.0.0.0 --port 8091 --headless --no-token
+    command: marimo run lab/notebooks --host 0.0.0.0 --port 8091 --headless --no-token --base-url /marimo-run --allow-origins "*"
     volumes:
       - .:/app:z
     ports:
@@ -31,7 +31,7 @@ services:
 
   marimo-edit:
     build: .
-    command: marimo edit lab/notebooks --host 0.0.0.0 --port 8092 --headless --no-token
+    command: marimo edit lab/notebooks --host 0.0.0.0 --port 8092 --headless --no-token --base-url /marimo-edit --allow-origins "*"
     volumes:
       - .:/app:z
     ports:
@@ -54,6 +54,8 @@ services:
       - "8443:443"
     depends_on:
       - web
+      - marimo-run
+      - marimo-edit
 
   db:
     image: postgres:18

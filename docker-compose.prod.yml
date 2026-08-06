@@ -3,6 +3,9 @@ services:
     build: .
     env_file:
       - ./.env.prod
+    environment:
+      MARIMO_SERVICE_URL: ${MARIMO_SERVICE_URL:-/marimo-run}
+      MARIMO_EDITOR_URL: ${MARIMO_EDITOR_URL:-/marimo-edit}
     depends_on:
       - db
     volumes:
@@ -10,6 +13,26 @@ services:
     secrets:
       - email_host_user
       - email_host_password
+
+  marimo-run:
+    build: .
+    command: marimo run lab/notebooks --host 0.0.0.0 --port 8091 --headless --no-token --base-url /marimo-run --allow-origins "*"
+    env_file:
+      - ./.env.prod
+    environment:
+      DJANGO_API_URL: ${DJANGO_API_URL:-http://web:8090}
+    depends_on:
+      - web
+
+  marimo-edit:
+    build: .
+    command: marimo edit lab/notebooks --host 0.0.0.0 --port 8092 --headless --no-token --base-url /marimo-edit --allow-origins "*"
+    env_file:
+      - ./.env.prod
+    environment:
+      DJANGO_API_URL: ${DJANGO_API_URL:-http://web:8090}
+    depends_on:
+      - web
 
   db:
     image: postgres:14
@@ -33,6 +56,8 @@ services:
       - "443:443"
     depends_on:
       - web
+      - marimo-run
+      - marimo-edit
 
 volumes:
   postgres_data:
