@@ -79,6 +79,18 @@ def _request_uses_loopback_host(request):
     return _is_loopback_hostname(urlsplit(f"//{request.get_host()}").hostname)
 
 
+def _direct_docker_marimo_base_url(request, target_port):
+    request_parts = urlsplit(f"//{request.get_host()}")
+    if request_parts.port != 8090:
+        return None
+    if not request_parts.hostname:
+        return None
+    host = request_parts.hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"{request.scheme}://{host}:{target_port}"
+
+
 def _browser_marimo_base_url(request, configured_url, proxy_path):
     """
     Return a browser-reachable Marimo base URL.
@@ -89,12 +101,27 @@ def _browser_marimo_base_url(request, configured_url, proxy_path):
     same-origin Caddy proxy path.
     """
     base_url = str(configured_url or "").strip().rstrip("/")
+    proxy_target_port = 8092 if proxy_path == "/marimo-edit" else 8091
     if not base_url:
-        return proxy_path.rstrip("/")
+        return (
+            _direct_docker_marimo_base_url(request, proxy_target_port)
+            or proxy_path.rstrip("/")
+        )
 
     parts = urlsplit(base_url)
+    if not parts.scheme and base_url.startswith("/"):
+        return (
+            _direct_docker_marimo_base_url(request, proxy_target_port)
+            or base_url
+        )
     if parts.scheme and _is_loopback_hostname(parts.hostname):
         if not _request_uses_loopback_host(request):
+            direct_url = _direct_docker_marimo_base_url(
+                request,
+                parts.port or proxy_target_port,
+            )
+            if direct_url:
+                return direct_url
             return proxy_path.rstrip("/")
     return base_url
 
