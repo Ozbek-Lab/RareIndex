@@ -1,5 +1,6 @@
 import logging
 import re
+from urllib.parse import urlsplit
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse, QueryDict
@@ -58,6 +59,42 @@ from variant.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_loopback_hostname(hostname):
+    if not hostname:
+        return False
+    hostname = hostname.strip("[]").lower()
+    return (
+        hostname == "localhost"
+        or hostname == "::1"
+        or hostname == "0.0.0.0"
+        or hostname.startswith("127.")
+    )
+
+
+def _request_uses_loopback_host(request):
+    return _is_loopback_hostname(urlsplit(f"//{request.get_host()}").hostname)
+
+
+def _browser_marimo_base_url(request, configured_url, proxy_path):
+    """
+    Return a browser-reachable Marimo base URL.
+
+    Docker deployments often configure Django with a loopback Marimo URL because
+    that works from the host or container, but a remote browser interprets
+    127.0.0.1 as the user's own machine.  In that case, fall back to the
+    same-origin Caddy proxy path.
+    """
+    base_url = str(configured_url or "").strip().rstrip("/")
+    if not base_url:
+        return proxy_path.rstrip("/")
+
+    parts = urlsplit(base_url)
+    if parts.scheme and _is_loopback_hostname(parts.hostname):
+        if not _request_uses_loopback_host(request):
+            return proxy_path.rstrip("/")
+    return base_url
 
 
 class HydratedPagePaginator(Paginator):
@@ -785,9 +822,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["widgets"] = (
             self.request.user.dashboard_widgets.select_related("template").order_by("order")
         )
-        context["marimo_service_url"] = getattr(
-            settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091"
-        ).rstrip("/")
+        context["marimo_service_url"] = _browser_marimo_base_url(
+            self.request,
+            getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091"),
+            "/marimo-run",
+        )
 
         # 2. News Feed - Aggregated History
         from itertools import chain
@@ -2252,7 +2291,11 @@ def marimo_proxy(request, path=""):
     """
     from .jwt_utils import issue_editor_plot_token
 
-    marimo_base = getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8092").rstrip("/")
+    marimo_base = _browser_marimo_base_url(
+        request,
+        getattr(settings, "MARIMO_EDITOR_URL", "http://127.0.0.1:8092"),
+        "/marimo-edit",
+    )
     params = request.GET.copy()
     params["token"] = issue_editor_plot_token(request.user)
     return redirect(f"{marimo_base}/?{params.urlencode()}")
@@ -2280,7 +2323,11 @@ def marimo_run_proxy(request):
     if nb_dir is not None and not (Path(nb_dir) / safe_name).is_file():
         return HttpResponseBadRequest("Notebook file not found in MARIMO_NOTEBOOKS_DIR")
 
-    marimo_base = getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091").rstrip("/")
+    marimo_base = _browser_marimo_base_url(
+        request,
+        getattr(settings, "MARIMO_SERVICE_URL", "http://127.0.0.1:8091"),
+        "/marimo-run",
+    )
     token = issue_plot_token(
         request.user,
         visualization_filters=_visualization_filter_payload_from_query_data(request.GET),
