@@ -48,7 +48,7 @@
                     <label class="input input-bordered input-sm flex items-center w-full">
                         <input type="text"
                                name="search"
-                               form="variant-filter-form"
+                               form="filter-form"
                                value="{{ request.GET.search|default:'' }}"
                                class="grow min-w-0"
                                placeholder="Search chromosome, individual, gene..."
@@ -56,7 +56,7 @@
                                hx-target="#variant-table-container"
                                hx-trigger="keyup delay:500ms changed"
                                hx-push-url="true"
-                               hx-include="#variant-filter-form"
+                               hx-include="#filter-form"
                                hx-indicator="#table-indicator" />
 
                         <div id="table-indicator" class="htmx-indicator">

@@ -239,12 +239,28 @@ def _variant_filter_counts():
     automatically after TTL; for immediate refresh after bulk imports use
     cache.delete("variant_filter_counts").
     """
-    CACHE_KEY = "variant_filter_counts"
+    CACHE_KEY = "variant_filter_counts_v2"
     CACHE_TTL = 300  # seconds
 
     counts = cache.get(CACHE_KEY)
     if counts is not None:
         return counts
+
+    from .models import TaggedStatus
+
+    variant_ct = ContentType.objects.get_for_model(Variant)
+
+    def related_status_counts(model_class, variant_queryset_factory):
+        ct = ContentType.objects.get_for_model(model_class)
+        statuses = list(Status.objects.filter(content_type=ct).values_list("name", flat=True))
+        result = {name: 0 for name in statuses}
+        for status_name in statuses:
+            object_ids = TaggedStatus.objects.filter(
+                content_type=ct,
+                tag__name=status_name,
+            ).values_list("object_id", flat=True)
+            result[status_name] = variant_queryset_factory(object_ids).distinct().count()
+        return result
 
     type_counts = {
         'SNV':    Variant.objects.filter(snv__isnull=False).count(),
@@ -267,8 +283,6 @@ def _variant_filter_counts():
         if row['classification']
     })
 
-    from .models import TaggedStatus
-    variant_ct = ContentType.objects.get_for_model(Variant)
     status_counts = {s: 0 for s in Status.objects.filter(content_type=variant_ct).values_list('name', flat=True)}
     status_counts.update({
         row['tag__name']: row['c']
@@ -289,6 +303,146 @@ def _variant_filter_counts():
     annotation_acmg_classification_counts = _annotation_acmg_classification_counts("variant_id")
     acmg_evidence_counts = _acmg_evidence_counts("variant_id")
 
+    individual_status_counts = related_status_counts(
+        Individual,
+        lambda object_ids: Variant.objects.filter(individual_id__in=object_ids),
+    )
+    sex_counts = {'male': 0, 'female': 0, 'other': 0}
+    sex_counts.update({
+        row['individual__sex']: row['c']
+        for row in Variant.objects.filter(individual__sex__isnull=False)
+        .values('individual__sex')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__sex']
+    })
+    is_alive_counts = {True: 0, False: 0}
+    is_alive_counts.update({
+        row['individual__is_alive']: row['c']
+        for row in Variant.objects.values('individual__is_alive').annotate(c=Count('id', distinct=True))
+    })
+    is_affected_counts = {True: 0, False: 0}
+    is_affected_counts.update({
+        row['individual__is_affected']: row['c']
+        for row in Variant.objects.values('individual__is_affected').annotate(c=Count('id', distinct=True))
+    })
+    is_index_counts = {True: 0, False: 0}
+    is_index_counts.update({
+        row['individual__is_index']: row['c']
+        for row in Variant.objects.values('individual__is_index').annotate(c=Count('id', distinct=True))
+    })
+    family_consanguinity_counts = {
+        "false": 0,
+        "unknown": Variant.objects.filter(
+            Q(individual__family__isnull=True) |
+            Q(individual__family__is_consanguineous__isnull=True)
+        ).distinct().count(),
+        "true": 0,
+    }
+    family_consanguinity_counts.update({
+        str(row["individual__family__is_consanguineous"]).lower(): row["c"]
+        for row in Variant.objects.filter(
+            individual__family__is_consanguineous__isnull=False
+        )
+        .values("individual__family__is_consanguineous")
+        .annotate(c=Count("id", distinct=True))
+    })
+    has_report_counts = {
+        'true': Variant.objects.filter(
+            individual__samples__tests__pipelines__analyses__reports__isnull=False
+        ).distinct().count(),
+        'false': Variant.objects.exclude(
+            individual__samples__tests__pipelines__analyses__reports__isnull=False
+        ).distinct().count(),
+    }
+    has_request_form_counts = {
+        'true': Variant.objects.filter(
+            individual__analysis_request_forms__isnull=False
+        ).distinct().count(),
+        'false': Variant.objects.exclude(
+            individual__analysis_request_forms__isnull=False
+        ).distinct().count(),
+    }
+    projects_counts = {p: 0 for p in Project.objects.values_list('name', flat=True)}
+    projects_counts.update({
+        row['individual__projects__name']: row['c']
+        for row in Variant.objects.filter(individual__projects__isnull=False)
+        .values('individual__projects__name')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__projects__name']
+    })
+    sample_type_counts = {name: 0 for name in SampleType.objects.values_list('name', flat=True)}
+    sample_type_counts.update({
+        row['individual__samples__sample_type__name']: row['c']
+        for row in Variant.objects.filter(individual__samples__isnull=False)
+        .values('individual__samples__sample_type__name')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__samples__sample_type__name']
+    })
+    sample_status_counts = related_status_counts(
+        Sample,
+        lambda object_ids: Variant.objects.filter(individual__samples__in=object_ids),
+    )
+    test_type_counts = {name: 0 for name in TestType.objects.values_list('name', flat=True)}
+    test_type_counts.update({
+        row['individual__samples__tests__test_type__name']: row['c']
+        for row in Variant.objects.filter(individual__samples__tests__isnull=False)
+        .values('individual__samples__tests__test_type__name')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__samples__tests__test_type__name']
+    })
+    test_status_counts = related_status_counts(
+        Test,
+        lambda object_ids: Variant.objects.filter(individual__samples__tests__in=object_ids),
+    )
+    pipeline_type_counts = {name: 0 for name in PipelineType.objects.values_list('name', flat=True)}
+    pipeline_type_counts.update({
+        row['individual__samples__tests__pipelines__type__name']: row['c']
+        for row in Variant.objects.filter(individual__samples__tests__pipelines__isnull=False)
+        .values('individual__samples__tests__pipelines__type__name')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__samples__tests__pipelines__type__name']
+    })
+    pipeline_status_counts = related_status_counts(
+        Pipeline,
+        lambda object_ids: Variant.objects.filter(individual__samples__tests__pipelines__in=object_ids),
+    )
+    analysis_type_counts = {name: 0 for name in AnalysisType.objects.values_list('name', flat=True)}
+    analysis_type_counts.update({
+        row['individual__samples__tests__pipelines__analyses__type__name']: row['c']
+        for row in Variant.objects.filter(individual__samples__tests__pipelines__analyses__isnull=False)
+        .values('individual__samples__tests__pipelines__analyses__type__name')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__samples__tests__pipelines__analyses__type__name']
+    })
+    analysis_status_counts = related_status_counts(
+        Analysis,
+        lambda object_ids: Variant.objects.filter(individual__samples__tests__pipelines__analyses__in=object_ids),
+    )
+    institution_city_counts = {
+        row['individual__institution__city']: row['c']
+        for row in Variant.objects.filter(individual__institution__city__isnull=False)
+        .exclude(individual__institution__city='')
+        .values('individual__institution__city')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__institution__city']
+    }
+    institution_speciality_counts = {
+        row['individual__institution__speciality']: row['c']
+        for row in Variant.objects.filter(individual__institution__speciality__isnull=False)
+        .exclude(individual__institution__speciality='')
+        .values('individual__institution__speciality')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__institution__speciality']
+    }
+    institution_center_counts = {
+        row['individual__institution__center_name']: row['c']
+        for row in Variant.objects.filter(individual__institution__center_name__isnull=False)
+        .exclude(individual__institution__center_name='')
+        .values('individual__institution__center_name')
+        .annotate(c=Count('id', distinct=True))
+        if row['individual__institution__center_name']
+    }
+
     counts = {
         "variant_type":      type_counts,
         "zygosity":          zygosity_counts,
@@ -298,6 +452,26 @@ def _variant_filter_counts():
         "annotation_source": annotation_source_counts,
         "annotation_acmg_classification": annotation_acmg_classification_counts,
         "acmg_evidence":     acmg_evidence_counts,
+        "individual_status":  individual_status_counts,
+        "sex":                sex_counts,
+        "is_alive":           is_alive_counts,
+        "is_affected":        is_affected_counts,
+        "is_index":           is_index_counts,
+        "family_consanguinity": family_consanguinity_counts,
+        "has_report":         has_report_counts,
+        "has_request_form":   has_request_form_counts,
+        "projects":           projects_counts,
+        "sample_type":        sample_type_counts,
+        "sample_status":      sample_status_counts,
+        "test_type":          test_type_counts,
+        "test_status":        test_status_counts,
+        "pipeline_type":      pipeline_type_counts,
+        "pipeline_status":    pipeline_status_counts,
+        "analysis_type":      analysis_type_counts,
+        "analysis_status":    analysis_status_counts,
+        "institution_city":   institution_city_counts,
+        "institution_speciality": institution_speciality_counts,
+        "institution_center": institution_center_counts,
     }
     cache.set(CACHE_KEY, counts, CACHE_TTL)
     return counts
@@ -1133,6 +1307,17 @@ class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
             context["filter_counts"] = _variant_filter_counts()
         else:
             context["filter_counts"] = {}
+
+        hpo_term_ids = self.request.GET.getlist("hpo_terms")
+        if hpo_term_ids:
+            from ontologies.models import Term
+            clean_ids = []
+            for tid in hpo_term_ids:
+                try:
+                    clean_ids.append(int(tid))
+                except ValueError:
+                    continue
+            context["selected_hpo_terms"] = Term.objects.filter(pk__in=clean_ids)
 
         return context
 
