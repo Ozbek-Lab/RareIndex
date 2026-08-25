@@ -16,6 +16,7 @@ from .models import (
     SampleType,
     Status,
     Project,
+    ProjectMembership,
     Test,
     Analysis,
     Pipeline,
@@ -199,6 +200,42 @@ class ProjectCreateWithCopyForm(ProjectForm):
     )
 
 
+class ProjectMembershipForm(BaseForm):
+    class Meta:
+        model = ProjectMembership
+        fields = ["project", "user", "role"]
+
+    def __init__(self, *args, project=None, **kwargs):
+        self.fixed_project = project
+        super().__init__(*args, **kwargs)
+        self.fields["project"].queryset = Project.objects.order_by("name")
+        self.fields["user"].queryset = User.objects.order_by(
+            "last_name", "first_name", "username"
+        )
+        if self.fixed_project is not None:
+            self.initial.setdefault("project", self.fixed_project)
+            self.fields["project"].required = False
+            self.fields["project"].disabled = True
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.fixed_project is not None:
+            cleaned_data["project"] = self.fixed_project
+        return cleaned_data
+
+    def save(self, commit=True, **kwargs):
+        obj = super().save(commit=False)
+        if self.fixed_project is not None:
+            obj.project = self.fixed_project
+        user = kwargs.get("user")
+        if user and not getattr(obj, "created_by_id", None):
+            obj.created_by = user
+        if commit:
+            obj.save()
+            self.save_m2m()
+        return obj
+
+
 # Update the TaskForm to include project field
 class TaskForm(BaseForm):
     # Add fields for selecting the associated object
@@ -236,12 +273,16 @@ class TaskForm(BaseForm):
             "description": forms.Textarea(attrs={"rows": 3}),
         }
 
-    def __init__(self, *args, content_object=None, individual=None, project=None, **kwargs):
+    def __init__(self, *args, content_object=None, individual=None, project=None, user=None, **kwargs):
         instance = kwargs.get("instance")
         super().__init__(*args, **kwargs)
 
         # Limit available projects based on context
         project_qs = Project.objects.all()
+        if user is not None:
+            from .access import accessible_projects
+
+            project_qs = accessible_projects(user, project_qs)
         if project is not None:
             # Task explicitly attached to a single Project: fix and lock the field
             project_qs = project_qs.filter(pk=project.pk)

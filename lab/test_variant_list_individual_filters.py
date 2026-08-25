@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_save
 from django.test import Client, TestCase
@@ -12,6 +12,8 @@ from lab.models import (
     Individual,
     Pipeline,
     PipelineType,
+    Project,
+    ProjectMembership,
     Sample,
     SampleType,
     Status,
@@ -39,6 +41,12 @@ class VariantListIndividualFilterTests(TestCase):
             username="variant-list-filter-user",
             password="password",
         )
+        self.user.user_permissions.add(
+            Permission.objects.get(
+                content_type=ContentType.objects.get_for_model(Variant),
+                codename="view_variant",
+            )
+        )
         self.client.login(username="variant-list-filter-user", password="password")
 
         self.first_individual = Individual.objects.create(
@@ -51,6 +59,14 @@ class VariantListIndividualFilterTests(TestCase):
             full_name="Second",
             sex="male",
             is_affected=False,
+            created_by=self.user,
+        )
+        self.project = Project.objects.create(name="Variant Project", created_by=self.user)
+        self.project.individuals.add(self.first_individual, self.second_individual)
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=self.user,
+            role=ProjectMembership.Role.VIEWER,
             created_by=self.user,
         )
         self.first_variant = SNV.objects.create(

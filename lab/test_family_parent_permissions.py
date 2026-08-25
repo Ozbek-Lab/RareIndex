@@ -3,7 +3,7 @@ from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 
 from .htmx_views import individual_parents_edit, individual_parents_save
-from .models import CrossIdentifier, Family, IdentifierType, Individual
+from .models import CrossIdentifier, Family, IdentifierType, Individual, Project, ProjectMembership
 
 
 class FamilyParentPermissionTest(TestCase):
@@ -34,6 +34,15 @@ class FamilyParentPermissionTest(TestCase):
             family=self.family,
             created_by=self.viewer,
         )
+        self.project = Project.objects.create(name="Family Project", created_by=self.viewer)
+        self.project.individuals.add(self.child, self.father, self.mother)
+        for user in (self.viewer, self.family_editor):
+            ProjectMembership.objects.create(
+                project=self.project,
+                user=user,
+                role=ProjectMembership.Role.VIEWER,
+                created_by=self.viewer,
+            )
         self.primary_type = IdentifierType.objects.create(
             name="RareBoost",
             use_priority=1,

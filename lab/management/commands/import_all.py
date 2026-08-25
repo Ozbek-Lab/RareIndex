@@ -757,6 +757,8 @@ class Command(BaseCommand):
 
         admin_username = options["admin_username"]
         self.admin_user = self._resolve_admin_user(admin_username)
+        if not self.dry_run:
+            call_command("create_groups")
 
         file_path = options["xlsx_file"]
         if not os.path.exists(file_path):

@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .models import CrossIdentifier, IdentifierType, Individual
+from .models import CrossIdentifier, IdentifierType, Individual, Project, ProjectMembership
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"], SECURE_SSL_REDIRECT=False)
@@ -14,11 +14,15 @@ class IndividualExportTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user(username="individual-export-user")
-        permission = Permission.objects.get(
+        sensitive_permission = Permission.objects.get(
             content_type=ContentType.objects.get_for_model(Individual),
             codename="view_sensitive_data",
         )
-        cls.user.user_permissions.add(permission)
+        view_permission = Permission.objects.get(
+            content_type=ContentType.objects.get_for_model(Individual),
+            codename="view_individual",
+        )
+        cls.user.user_permissions.add(sensitive_permission, view_permission)
 
         primary_type = IdentifierType.objects.create(
             name="Primary",
@@ -33,6 +37,14 @@ class IndividualExportTests(TestCase):
         cls.other_individual = Individual.objects.create(
             full_name="Other Person",
             sex="female",
+            created_by=cls.user,
+        )
+        cls.project = Project.objects.create(name="Export Project", created_by=cls.user)
+        cls.project.individuals.add(cls.filtered_individual, cls.other_individual)
+        ProjectMembership.objects.create(
+            project=cls.project,
+            user=cls.user,
+            role=ProjectMembership.Role.VIEWER,
             created_by=cls.user,
         )
         CrossIdentifier.objects.create(

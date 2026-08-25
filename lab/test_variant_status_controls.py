@@ -4,7 +4,7 @@ from django.db.models.signals import post_save
 from django.test import RequestFactory, TestCase
 
 from lab.htmx_views import update_status, variant_detail_partial
-from lab.models import Individual, Status
+from lab.models import Individual, Project, ProjectMembership, Status
 from variant.models import Annotation, SNV, Variant
 from variant.signals import annotate_and_link_genes
 
@@ -25,6 +25,14 @@ class VariantStatusControlsTests(TestCase):
         self.user = User.objects.create_user(username="variant-status-editor")
         self.individual = Individual.objects.create(
             full_name="Variant Status Person",
+            created_by=self.user,
+        )
+        self.project = Project.objects.create(name="Variant Status Project", created_by=self.user)
+        self.project.individuals.add(self.individual)
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=self.user,
+            role=ProjectMembership.Role.VIEWER,
             created_by=self.user,
         )
         self.variant = SNV.objects.create(

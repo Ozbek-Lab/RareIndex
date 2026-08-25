@@ -61,7 +61,9 @@ class IndividualTable(tables.Table):
         self.secondary_type = IdentifierType.objects.filter(use_priority=2).order_by("id").first()
 
     def before_render(self, request):
-        self.total_count = Individual.objects.count()
+        from .access import accessible_individuals
+
+        self.total_count = accessible_individuals(request.user, Individual.objects.all()).count()
         self.verbose_name = Individual._meta.verbose_name
         self.verbose_name_plural = Individual._meta.verbose_name_plural
 
@@ -198,7 +200,11 @@ class SampleTable(tables.Table):
     statuses = tables.Column(verbose_name="Status", orderable=False, empty_values=())
 
     def before_render(self, request):
-        self.total_count = Sample.objects.count()
+        from .access import accessible_individuals
+
+        self.total_count = Sample.objects.filter(
+            individual__in=accessible_individuals(request.user, Individual.objects.all())
+        ).count()
         self.verbose_name = Sample._meta.verbose_name
         self.verbose_name_plural = Sample._meta.verbose_name_plural
 
@@ -233,7 +239,9 @@ class ProjectTable(tables.Table):
     )
 
     def before_render(self, request):
-        self.total_count = Project.objects.count()
+        from .access import accessible_projects
+
+        self.total_count = accessible_projects(request.user, Project.objects.all()).count()
         self.verbose_name = Project._meta.verbose_name
         self.verbose_name_plural = Project._meta.verbose_name_plural
 
@@ -343,7 +351,9 @@ class VariantTable(tables.Table):
     statuses = tables.Column(verbose_name="Status", orderable=False, empty_values=())
 
     def before_render(self, request):
-        self.total_count = Variant.objects.count()
+        from .access import accessible_variants
+
+        self.total_count = accessible_variants(request.user, Variant.objects.all()).count()
         self.verbose_name = Variant._meta.verbose_name
         self.verbose_name_plural = Variant._meta.verbose_name_plural
 
