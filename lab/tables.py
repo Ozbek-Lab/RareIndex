@@ -347,6 +347,15 @@ class VariantTable(tables.Table):
         self.verbose_name = Variant._meta.verbose_name
         self.verbose_name_plural = Variant._meta.verbose_name_plural
 
+    def render_variant(self, value, record):
+        return record.display_name
+
+    def render_type(self, value, record):
+        return record.type_label
+
+    def render_zygosity(self, value, record):
+        return record.get_zygosity_display()
+
     def render_genes(self, value, record):
         symbols = [g.symbol for g in value.all()]
         if not symbols:

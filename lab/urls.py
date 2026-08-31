@@ -103,6 +103,7 @@ from .htmx_views import (
     config_delete,
     config_section_partial,
 )
+from variant.views import variant_create, variant_update
 
 
 app_name = "lab"
@@ -113,6 +114,8 @@ urlpatterns = [
     path("projects/", ProjectListView.as_view(), name="project_list"),
     path("projects/<int:pk>/detail/", ProjectDetailView.as_view(), name="project_detail"),
     path("variants/", VariantListView.as_view(), name="variant_list"),
+    path("variants/create/", variant_create, name="variant_create"),
+    path("variants/<int:pk>/update/", variant_update, name="variant_update"),
     # Map visualization (current and default at /visualizations/)
     path("visualizations/", MapVisualizationView.as_view(), name="map_visualization"),
     path("individuals/export/", IndividualExportView.as_view(), name="individual_export"),

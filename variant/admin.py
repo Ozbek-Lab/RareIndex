@@ -16,7 +16,7 @@ class SNVAdmin(SimpleHistoryAdmin):
     autocomplete_fields = ("genes",)
 
 @admin.register(delins)
-class SNVAdmin(SimpleHistoryAdmin):
+class DelinsAdmin(SimpleHistoryAdmin):
     list_display = ("__str__", "individual", "chromosome", "start", "end", "reference", "alternate", "created_by")
     search_fields = ("chromosome", "reference", "alternate", "individual__full_name")
     list_filter = ("chromosome", "created_at")

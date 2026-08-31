@@ -2115,7 +2115,7 @@ def generate_analysis_report_docx(request, analysis_id):
         {
             "location": str(v),
             "zygosity": report_zygosity_labels.get(v.zygosity, v.get_zygosity_display()),
-            "type": v.type,
+            "type": v.type_label,
             "genes": ", ".join([str(g) for g in v.genes.all()]),
         }
         for v in selected_qs
@@ -2551,7 +2551,7 @@ def workflow_delete(request, model_name, pk):
 @login_required
 def variant_create_modal(request, individual_id=None, analysis_id=None):
     """Create a variant scoped to an individual or an analysis (type-switching modal)."""
-    from variant.forms import CNVForm, RepeatForm, SNVForm, SVForm, VariantTypeForm
+    from variant.forms import VARIANT_FORM_CLASSES, VariantTypeForm
     from lab.models import Individual, Analysis
 
     analysis = None
@@ -2576,13 +2576,9 @@ def variant_create_modal(request, individual_id=None, analysis_id=None):
 
     variant_type = request.GET.get("variant_type") or request.POST.get("variant_type") or "snv"
 
-    form_class_map = {
-        "snv": SNVForm,
-        "cnv": CNVForm,
-        "sv": SVForm,
-        "repeat": RepeatForm,
-    }
-    form_class = form_class_map.get(variant_type, SNVForm)
+    form_class = VARIANT_FORM_CLASSES.get(variant_type)
+    if form_class is None:
+        return HttpResponse("Unsupported variant type.", status=400)
 
     # Build the type selector form (always shown in full modal)
     type_form = VariantTypeForm(initial={"variant_type": variant_type})
@@ -2857,10 +2853,14 @@ def variant_detail_partial(request, pk):
         Variant.objects.select_related(
             "individual",
             "created_by",
+            "snv",
+            "delins",
+            "cnv",
+            "sv",
+            "repeat",
             # Variant is now linked to Analysis, which links to Pipeline.
             "analysis",
             "analysis__pipeline__type",
-            "analysis__pipeline__performed_by",
             "analysis__pipeline__test__test_type",
             "analysis__pipeline__test__sample__sample_type",
         ).prefetch_related(
@@ -2869,6 +2869,7 @@ def variant_detail_partial(request, pk):
             "classifications__user",
             "annotations",
             "acmg_evidence_overrides",
+            "analysis__pipeline__performed_by",
             "notes__user",
             "notes__private_owner",
             "tasks__assigned_to",
@@ -2899,6 +2900,11 @@ def variant_detail_partial(request, pk):
             Variant.objects.filter(genes=gene)
             .select_related(
                 "individual",
+                "snv",
+                "delins",
+                "cnv",
+                "sv",
+                "repeat",
                 "analysis",
                 "analysis__pipeline__type",
                 "analysis__pipeline__test__test_type",
@@ -2956,7 +2962,15 @@ def variant_genebe_fetch(request, pk):
         return HttpResponseForbidden("You do not have permission to fetch GeneBe classifications.")
 
     variant = get_object_or_404(
-        Variant.objects.select_related("individual", "analysis").prefetch_related("annotations"),
+        Variant.objects.select_related(
+            "individual",
+            "analysis",
+            "snv",
+            "delins",
+            "cnv",
+            "sv",
+            "repeat",
+        ).prefetch_related("annotations"),
         pk=pk,
     )
 
@@ -2964,7 +2978,13 @@ def variant_genebe_fetch(request, pk):
     genebe_data = service.fetch_genebe(variant)
     service.link_genes(variant)
 
-    variant = Variant.objects.prefetch_related("annotations", "acmg_evidence_overrides").get(pk=pk)
+    variant = Variant.objects.select_related(
+        "snv",
+        "delins",
+        "cnv",
+        "sv",
+        "repeat",
+    ).prefetch_related("annotations", "acmg_evidence_overrides").get(pk=pk)
 
     return render(request, "variant/partials/_genebe_classification.html", {
         "variant": variant,

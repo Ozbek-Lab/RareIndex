@@ -4,7 +4,7 @@ Sheets processed from the master XLSX
 ---------------------------------------
   OZBEK LAB          – Families, Institutions, Individuals, Samples
   Analiz Takip        – Test + Analysis per row (pipeline linked later by Gennext sheet)
-  Variant List        – SNV, delins, CNV, and SV variants
+  Variant List        – SNV, delins, CNV, SV, and Repeat variants
   Kurumlar            – Institution coordinate / metadata lookup (replaces Gönderen Kurum Harita)
   Sanger Konfirmasyonları – Sanger tests
   WGS_TÜSEB          – WGS tests from TÜSEB
@@ -47,7 +47,6 @@ Processing order
  19  Yayın_İçi (--yayin-ici)
 
 REMINDERS (ask after implementation):
-  • Repeat variant format in Variant List (Q5)
   • RarePipe Analiz Listesi: confirm whether Matching Sample ID / ID should also be preserved as notes
   • Yayın_İçi Variant column format (Q12)
 """
@@ -84,7 +83,7 @@ from lab.models import (
     Test,
 )
 from ontologies.models import Ontology
-from variant.models import Classification, CNV, Gene, SNV, SV, Variant, delins
+from variant.models import Classification, CNV, Gene, SNV, SV, Repeat, Variant, delins, normalize_chromosome
 
 from lab.management.commands._import_helpers import (
     build_id_map,
@@ -331,13 +330,13 @@ def _normalize_variant_chromosome(value) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
-    if text.lower().startswith("chr"):
-        return text if text.startswith("chr") else f"chr{text[3:]}"
-    m = re.match(r"^(?P<num>\d+|x|y|m)", text, re.I)
+
+    suffix = text[3:] if text.lower().startswith("chr") else text
+    m = re.match(r"^(?P<num>\d+|x|y|m)(?:[pq].*)?$", suffix, re.I)
     if m:
-        suffix = m.group("num")
-        return f"chr{suffix.upper() if len(suffix) == 1 else suffix}"
-    return text
+        return normalize_chromosome(m.group("num"))
+
+    return normalize_chromosome(text)
 
 
 def _normalize_yayin_zygosity(value) -> str:
@@ -404,6 +403,7 @@ def _extract_variant_records(token: str) -> list[dict]:
 
     variant_text, sep, extra_text = text.partition(";")
     variant_text = variant_text.strip()
+    variant_text = variant_text.replace("\\_", "_")
     extra_text = extra_text.strip() if sep else ""
 
     # Gene-level HGVS-like strings without genomic coordinates are preserved as notes.
@@ -411,6 +411,12 @@ def _extract_variant_records(token: str) -> list[dict]:
         "chr" not in variant_text.lower()
         and not re.search(r"\(\s*[\d,._]+\s*[_-]\s*[\d,._]+\s*\)\s*x\d+", variant_text, re.I)
         and not re.search(r"\b[0-9XYM]+[:\-][\d.,]+\s*[\-_]\s*[\d.,]+", variant_text, re.I)
+        and not re.search(
+            r"\b[0-9XYM]+[:\-][\d.,]+(?:\s*[-_]\s*[\d.,]+)?"
+            r"\s*(?:repeat|str|expansion|tekrar)?\s*\(?[ACGT]+\)?\s*(?:x\s*\d+|\[\s*\d+\s*\])",
+            variant_text,
+            re.I,
+        )
     ):
         return []
 
@@ -436,6 +442,31 @@ def _extract_variant_records(token: str) -> list[dict]:
         record["source_text"] = text
         return [record]
 
+    # Repeat style variants: "chr4:100-110 CAG[42]" or "chr4:100-110 (CAG)x42"
+    repeat_match = re.search(
+        r"(?P<chrom>chr[\w]+|[0-9XYM]+)[:\-](?P<start>[\d.,]+)"
+        r"(?:\s*[-_]\s*(?P<end>[\d.,]+))?"
+        r"\s*(?:repeat|str|expansion|tekrar)?\s*\(?(?P<repeat_unit>[ACGT]+)\)?\s*"
+        r"(?:x\s*(?P<count_x>\d+)|\[\s*(?P<count_bracket>\d+)\s*\])",
+        variant_text,
+        re.I,
+    )
+    if repeat_match:
+        start = int(_compact_variant_coord(repeat_match.group("start")))
+        end = int(_compact_variant_coord(repeat_match.group("end") or repeat_match.group("start")))
+        record = {
+            "chromosome": _normalize_variant_chromosome(repeat_match.group("chrom")),
+            "start": min(start, end),
+            "end": max(start, end),
+            "kind": "repeat",
+            "repeat_unit": repeat_match.group("repeat_unit").upper(),
+            "repeat_count": int(repeat_match.group("count_x") or repeat_match.group("count_bracket")),
+            "source_text": text,
+        }
+        if extra_text:
+            record["note"] = extra_text
+        return [record]
+
     # Structural/CNV style variants with a coordinate range.
     coord_range_match = re.search(
         r"(?P<chrom>chr[\w]+|[0-9XYM]+(?:[pq][^(\s:]*)?)[:\-](?P<start>[\d.,]+)[\-_](?P<end>[\d.,]+)",
@@ -447,7 +478,7 @@ def _extract_variant_records(token: str) -> list[dict]:
         has_gain = re.search(r"\bgain\b|\bamplification\b", variant_text, re.I)
         has_loss = re.search(r"\bloss\b", variant_text, re.I)
         has_dup = re.search(r"\bdup(lication)?\b|\bduplikasyon\b", variant_text, re.I)
-        has_del = re.search(r"\bdel(etion)?\b|\bdelesyon\b", variant_text, re.I)
+        has_del = re.search(r"(?<![A-Za-z])del(etion)?\b|\bdelesyon\b", variant_text, re.I)
         has_inv = re.search(r"\binv(ersion)?\b|\binversiyon\b", variant_text, re.I)
         has_ins = re.search(r"\bins(ertion)?\b|\binsersiyon\b", variant_text, re.I)
         has_trans = re.search(r"\btranslocation\b|\btranslokasyon\b|\bt\(", variant_text, re.I)
@@ -531,6 +562,7 @@ def _variant_model_for_kind(kind):
         "delins": delins,
         "cnv": CNV,
         "sv": SV,
+        "repeat": Repeat,
     }.get(kind)
 
 
@@ -563,6 +595,15 @@ def _variant_lookup_and_defaults(record, individual, zygosity, admin_user, analy
             "end": record["end"],
             "cnv_type": record.get("cnv_type", "gain"),
             "copy_number": record.get("copy_number"),
+        }
+    elif model_cls is Repeat:
+        lookup = {
+            "individual": individual,
+            "chromosome": record["chromosome"],
+            "start": record["start"],
+            "end": record["end"],
+            "repeat_unit": record["repeat_unit"],
+            "repeat_count": record["repeat_count"],
         }
     else:
         lookup = {
@@ -3033,12 +3074,12 @@ class Command(BaseCommand):
             if not records:
                 self.stdout.write(self.style.WARNING(
                     f"  Cannot parse '{d.get('Chromosomal Position')}' for {lab_id} "
-                    f"— no supported SNV, delins, CNV, or SV format recognized."))
+                    f"— no supported SNV, delins, CNV, SV, or Repeat format recognized."))
                 self._record_issue(
                     step="step16",
                     sheet="Variant List",
                     severity="warning",
-                    reason="Chromosomal Position could not be parsed as a supported SNV, delins, CNV, or SV.",
+                    reason="Chromosomal Position could not be parsed as a supported SNV, delins, CNV, SV, or Repeat.",
                     lab_id=lab_id,
                     row=d,
                 )

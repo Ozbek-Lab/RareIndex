@@ -14,7 +14,7 @@ from django_tables2 import SingleTableMixin
 from django_filters.views import FilterView
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Count, Min, Max, Sum, Avg, DateTimeField, Q
+from django.db.models import Count, Min, Max, Sum, Avg, DateTimeField, Prefetch, Q
 from django.db.models.functions import Cast, Coalesce
 from django.contrib.contenttypes.models import ContentType
 from django_tables2.rows import BoundRows
@@ -58,6 +58,7 @@ from variant.models import (
     Variant,
     Annotation as VariantAnnotation,
     Classification as VariantClassification,
+    VARIANT_TYPE_DEFINITIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -239,7 +240,7 @@ def _variant_filter_counts():
     automatically after TTL; for immediate refresh after bulk imports use
     cache.delete("variant_filter_counts").
     """
-    CACHE_KEY = "variant_filter_counts_v2"
+    CACHE_KEY = "variant_filter_counts_v3"
     CACHE_TTL = 300  # seconds
 
     counts = cache.get(CACHE_KEY)
@@ -263,10 +264,10 @@ def _variant_filter_counts():
         return result
 
     type_counts = {
-        'SNV':    Variant.objects.filter(snv__isnull=False).count(),
-        'CNV':    Variant.objects.filter(cnv__isnull=False).count(),
-        'SV':     Variant.objects.filter(sv__isnull=False).count(),
-        'Repeat': Variant.objects.filter(repeat__isnull=False).count(),
+        definition["value"]: Variant.objects.filter(
+            **{f"{definition['relation']}__isnull": False}
+        ).count()
+        for definition in VARIANT_TYPE_DEFINITIONS
     }
 
     zygosity_counts = {choice[0]: 0 for choice in Variant.ZYGOSITY_CHOICES}
@@ -519,7 +520,7 @@ def _individual_filter_counts():
     Each count represents the number of distinct individuals matching that option.
     Cached for 5 minutes.
     """
-    CACHE_KEY = "individual_filter_counts"
+    CACHE_KEY = "individual_filter_counts_v2"
     CACHE_TTL = 300
 
     counts = cache.get(CACHE_KEY)
@@ -683,10 +684,10 @@ def _individual_filter_counts():
 
     # Variant type (distinct individuals with that variant subtype)
     variant_type_counts = {
-        'SNV':    Individual.objects.filter(variants__snv__isnull=False).distinct().count(),
-        'CNV':    Individual.objects.filter(variants__cnv__isnull=False).distinct().count(),
-        'SV':     Individual.objects.filter(variants__sv__isnull=False).distinct().count(),
-        'Repeat': Individual.objects.filter(variants__repeat__isnull=False).distinct().count(),
+        definition["value"]: Individual.objects.filter(
+            **{f"variants__{definition['relation']}__isnull": False}
+        ).distinct().count()
+        for definition in VARIANT_TYPE_DEFINITIONS
     }
 
     # Variant status (distinct individuals)
@@ -1294,7 +1295,12 @@ class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     paginate_by = 25
 
     def get_queryset(self):
-        return super().get_queryset().select_related("individual").prefetch_related("statuses", "genes")
+        return (
+            super()
+            .get_queryset()
+            .select_related("individual", "snv", "delins", "cnv", "sv", "repeat")
+            .prefetch_related("statuses", "genes")
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1635,6 +1641,18 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
             'institution',
             'physicians',
             'projects',
+            Prefetch(
+                "variants",
+                queryset=Variant.objects.select_related(
+                    "analysis",
+                    "analysis__pipeline",
+                    "snv",
+                    "delins",
+                    "cnv",
+                    "sv",
+                    "repeat",
+                ).prefetch_related("genes", "statuses"),
+            ),
             'family__individuals',
             'family__individuals__cross_ids__id_type',
             'family__individuals__mother',
