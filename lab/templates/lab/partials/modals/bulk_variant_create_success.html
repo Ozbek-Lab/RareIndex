@@ -1,0 +1,41 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-5">
+    <h3 class="font-bold text-lg text-success flex items-center gap-2">
+        <i class="fa-solid fa-circle-check"></i>
+        Variants Created
+    </h3>
+</div>
+
+<div class="rounded-box border border-success/20 bg-success/5 px-4 py-3 text-sm text-base-content/80 mb-4">
+    {{ created_variants|length }} variant{{ created_variants|length|pluralize }} created.
+</div>
+
+<div class="overflow-x-auto rounded-box border border-base-200">
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Variant Object ID</th>
+                <th>Individual ID</th>
+                <th>Analysis</th>
+                <th>Type</th>
+                <th>Variant</th>
+                <th>Zygosity</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for variant in created_variants %}
+            <tr>
+                <td class="font-mono">{{ variant.pk }}</td>
+                <td class="font-mono">{{ variant.individual.individual_id }}</td>
+                <td class="font-mono">{% if variant.analysis_id %}#{{ variant.analysis_id }}{% else %}Direct{% endif %}</td>
+                <td>{{ variant.type }}</td>
+                <td class="font-mono">{{ variant }}</td>
+                <td>{{ variant.get_zygosity_display }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="modal-action mt-6 pt-4 border-t border-base-200">
+    <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('generic-modal').close()">Done</button>
+</div>

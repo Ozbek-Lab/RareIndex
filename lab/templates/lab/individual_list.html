@@ -76,6 +76,7 @@
                 </div>
              </div>
              <div class="flex items-center gap-2">
+                 {% include "lab/components/bulk_create_dropdown.html" %}
                  <a href="{% url 'lab:individual_export' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}"
                     @click="$event.currentTarget.href = '{% url 'lab:individual_export' %}' + window.location.search"
                     class="btn btn-ghost btn-sm" target="_blank">

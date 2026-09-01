@@ -1,13 +1,19 @@
+import json
+from calendar import monthrange
+from datetime import timedelta
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, HttpResponseForbidden, FileResponse, Http404
 from django.contrib.auth.decorators import login_required
 from django import forms
 from django.views.decorators.http import require_POST, require_http_methods
+from django.db import transaction
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.views.generic import View
 from django.urls import reverse
 from django.apps import apps
+from django.utils import timezone
 from pathlib import Path
 from .models import Family, Individual, Project, Task
 from .search_utils import filter_normalized_contains
@@ -1079,6 +1085,1684 @@ def sample_create_modal(request, individual_id):
         "status_options": _workflow_sample_status_options(form),
     }
     return render(request, "lab/partials/modals/sample_create_modal.html", context)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_sample_create_modal(request):
+    """First step of bulk sample creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("lab.add_sample"):
+        return HttpResponseForbidden("You do not have permission to bulk create samples.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_sample_create_modal"),
+        "bulk_sample_form_url": reverse("lab:bulk_sample_create_form"),
+    }
+    return render(request, "lab/partials/modals/bulk_sample_create_modal.html", context)
+
+
+def _ordered_unique_ints(values):
+    ids = []
+    seen = set()
+    for value in values:
+        try:
+            pk = int(value)
+        except (TypeError, ValueError):
+            continue
+        if pk not in seen:
+            ids.append(pk)
+            seen.add(pk)
+    return ids
+
+
+def _bulk_sample_rows_for_formset(formset):
+    from .models import Individual, Sample, SampleType
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_type_ids_by_individual = {pk: [] for pk in individual_ids}
+    seen_sample_types = {pk: set() for pk in individual_ids}
+    for individual_id, sample_type_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .select_related("sample_type")
+        .order_by("sample_type__name")
+        .values_list("individual_id", "sample_type_id")
+    ):
+        if sample_type_id in seen_sample_types[individual_id]:
+            continue
+        sample_type_ids_by_individual[individual_id].append(sample_type_id)
+        seen_sample_types[individual_id].add(sample_type_id)
+
+    rows = []
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+        sample_type_ids = sample_type_ids_by_individual.get(pk, [])
+        form.fields["sample_type"].queryset = SampleType.objects.filter(
+            pk__in=sample_type_ids
+        ).order_by("name")
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_type_options": bool(sample_type_ids),
+            }
+        )
+    return rows
+
+
+@login_required
+@require_POST
+def bulk_sample_create_form(request):
+    """Render and process per-individual rows for bulk sample creation."""
+    from .forms import BulkSampleCreateFormSet
+    from .models import Individual, Sample, SampleType
+
+    if not request.user.has_perm("lab.add_sample"):
+        return HttpResponseForbidden("You do not have permission to bulk create samples.")
+
+    action_url = reverse("lab:bulk_sample_create_form")
+    formset_prefix = "samples"
+    has_sample_types = SampleType.objects.exists()
+
+    if request.POST.get("bulk_sample_action") == "create":
+        formset = BulkSampleCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_sample_rows_for_formset(formset)
+        can_create_samples = bool(rows) and has_sample_types and all(
+            row["has_sample_type_options"] for row in rows
+        )
+
+        if can_create_samples and formset.is_valid():
+            default_status = _get_status_for_model(Sample, "Planned", "Not Available")
+            created_samples = []
+
+            with transaction.atomic():
+                for form in formset:
+                    sample = Sample.objects.create(
+                        individual=form.cleaned_data["individual"],
+                        sample_type=form.cleaned_data["sample_type"],
+                        created_by=request.user,
+                    )
+                    if default_status:
+                        sample.statuses.add(default_status)
+                    created_samples.append(sample)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_sample_create_success.html",
+                {"created_samples": created_samples},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_sample_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "has_sample_types": has_sample_types,
+                "can_create_samples": can_create_samples,
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkSampleCreateFormSet(
+        initial=[{"individual": individual.pk} for individual in individuals],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_sample_rows_for_formset(formset)
+    can_create_samples = bool(rows) and has_sample_types and all(
+        row["has_sample_type_options"] for row in rows
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_sample_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "has_sample_types": has_sample_types,
+            "can_create_samples": can_create_samples,
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_test_create_modal(request):
+    """First step of bulk test creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("lab.add_test"):
+        return HttpResponseForbidden("You do not have permission to bulk create tests.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_test_create_modal"),
+        "bulk_test_form_url": reverse("lab:bulk_test_create_form"),
+    }
+    return render(request, "lab/partials/modals/bulk_test_create_modal.html", context)
+
+
+def _bulk_test_rows_for_formset(formset):
+    from .models import Individual, Sample
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    for sample_id, individual_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .order_by("id")
+        .values_list("id", "individual_id")
+    ):
+        sample_ids_by_individual[individual_id].append(sample_id)
+
+    rows = []
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+        sample_ids = sample_ids_by_individual.get(pk, [])
+        form.fields["sample"].queryset = (
+            Sample.objects.select_related("individual", "sample_type")
+            .filter(pk__in=sample_ids)
+            .order_by("id")
+        )
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_options": bool(sample_ids),
+            }
+        )
+    return rows
+
+
+@login_required
+@require_POST
+def bulk_test_create_form(request):
+    """Render and process per-individual rows for bulk test creation."""
+    from .forms import BulkTestCreateFormSet
+    from .models import Individual, Test, TestType
+
+    if not request.user.has_perm("lab.add_test"):
+        return HttpResponseForbidden("You do not have permission to bulk create tests.")
+
+    action_url = reverse("lab:bulk_test_create_form")
+    formset_prefix = "tests"
+    has_test_types = TestType.objects.exists()
+
+    if request.POST.get("bulk_test_action") == "create":
+        formset = BulkTestCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_test_rows_for_formset(formset)
+        can_create_tests = bool(rows) and has_test_types and all(
+            row["has_sample_options"] for row in rows
+        )
+
+        if can_create_tests and formset.is_valid():
+            default_status = _get_status_for_model(
+                Test,
+                "Waiting Data/Bioinformatic process",
+                "Planned",
+                "Data Delivered / Completed",
+            )
+            created_tests = []
+
+            with transaction.atomic():
+                for form in formset:
+                    lab_test = Test.objects.create(
+                        sample=form.cleaned_data["sample"],
+                        test_type=form.cleaned_data["test_type"],
+                        created_by=request.user,
+                    )
+                    if default_status:
+                        lab_test.statuses.add(default_status)
+                    created_tests.append(lab_test)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_test_create_success.html",
+                {"created_tests": created_tests},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_test_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "has_test_types": has_test_types,
+                "can_create_tests": can_create_tests,
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkTestCreateFormSet(
+        initial=[{"individual": individual.pk} for individual in individuals],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_test_rows_for_formset(formset)
+    can_create_tests = bool(rows) and has_test_types and all(
+        row["has_sample_options"] for row in rows
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_test_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "has_test_types": has_test_types,
+            "can_create_tests": can_create_tests,
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_pipeline_create_modal(request):
+    """First step of bulk pipeline creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("lab.add_pipeline"):
+        return HttpResponseForbidden("You do not have permission to bulk create pipelines.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_pipeline_create_modal"),
+        "bulk_pipeline_form_url": reverse("lab:bulk_pipeline_create_form"),
+    }
+    return render(
+        request,
+        "lab/partials/modals/bulk_pipeline_create_modal.html",
+        context,
+    )
+
+
+def _first_int(values):
+    for value in values:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _bulk_pipeline_rows_for_formset(formset):
+    from .models import Individual, Sample, Test
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    sample_ids = []
+    for sample_id, individual_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .order_by("id")
+        .values_list("id", "individual_id")
+    ):
+        sample_ids_by_individual[individual_id].append(sample_id)
+        sample_ids.append(sample_id)
+
+    tests_by_sample = {sample_id: [] for sample_id in sample_ids}
+    for sample_id, test_id in (
+        Test.objects.filter(sample_id__in=sample_ids)
+        .order_by("id")
+        .values_list("sample_id", "id")
+    ):
+        tests_by_sample[sample_id].append(test_id)
+
+    rows = []
+    test_options_url = reverse("lab:bulk_pipeline_test_options")
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+
+        row_sample_ids = sample_ids_by_individual.get(pk, [])
+        selected_sample_id = _first_int([form["sample"].value()])
+        if not form.is_bound and selected_sample_id is None and len(row_sample_ids) == 1:
+            selected_sample_id = row_sample_ids[0]
+            form.initial["sample"] = selected_sample_id
+
+        if selected_sample_id in row_sample_ids:
+            test_queryset = Test.objects.select_related("test_type").filter(
+                sample_id=selected_sample_id
+            ).order_by("id")
+        else:
+            test_queryset = Test.objects.none()
+
+        form.fields["sample"].queryset = (
+            Sample.objects.select_related("individual", "sample_type")
+            .filter(pk__in=row_sample_ids)
+            .order_by("id")
+        )
+        form.fields["test"].queryset = test_queryset
+        form.fields["sample"].widget.attrs.update(
+            {
+                "hx-get": test_options_url,
+                "hx-target": f"#test-options-{form.prefix}",
+                "hx-swap": "innerHTML",
+                "hx-vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("test"),
+                        "field_id": form["test"].id_for_label,
+                        "individual_id": pk or "",
+                    }
+                ),
+            }
+        )
+
+        has_any_test_options = any(
+            tests_by_sample.get(sample_id) for sample_id in row_sample_ids
+        )
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_options": bool(row_sample_ids),
+                "has_any_test_options": has_any_test_options,
+                "selected_sample_id": str(selected_sample_id or ""),
+                "selected_test_id": str(form["test"].value() or ""),
+                "test_options": list(test_queryset),
+                "test_cell_id": f"test-options-{form.prefix}",
+                "test_field_name": form.add_prefix("test"),
+                "test_field_id": form["test"].id_for_label,
+            }
+        )
+    return rows
+
+
+def _can_create_pipeline_rows(rows, has_pipeline_types, has_performed_by_users):
+    return (
+        bool(rows)
+        and has_pipeline_types
+        and has_performed_by_users
+        and all(row["has_sample_options"] and row["has_any_test_options"] for row in rows)
+    )
+
+
+def _performed_date_shortcuts():
+    today = timezone.localdate()
+    previous_month = 12 if today.month == 1 else today.month - 1
+    previous_month_year = today.year - 1 if today.month == 1 else today.year
+    last_month = today.replace(
+        year=previous_month_year,
+        month=previous_month,
+        day=min(today.day, monthrange(previous_month_year, previous_month)[1]),
+    )
+    return [
+        {"label": "Tdy", "value": today.isoformat()},
+        {"label": "Ystrdy", "value": (today - timedelta(days=1)).isoformat()},
+        {"label": "LW", "value": (today - timedelta(days=7)).isoformat()},
+        {"label": "LM", "value": last_month.isoformat()},
+    ]
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_pipeline_test_options(request):
+    """Refresh the Test dropdown for one bulk pipeline row."""
+    from .models import Test
+
+    if not request.user.has_perm("lab.add_pipeline"):
+        return HttpResponseForbidden("You do not have permission to bulk create pipelines.")
+
+    sample_id = request.GET.get("sample_id")
+    if not sample_id:
+        sample_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-sample") or key == "sample"
+            ),
+            "",
+        )
+
+    sample_pk = _first_int([sample_id])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if sample_pk:
+        filters["sample_id"] = sample_pk
+    if individual_pk:
+        filters["sample__individual_id"] = individual_pk
+
+    tests = (
+        Test.objects.select_related("test_type", "sample")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("sample_id")
+        else Test.objects.none()
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_pipeline_test_select.html",
+        {
+            "field_name": request.GET.get("field_name", "test"),
+            "field_id": request.GET.get("field_id", "id_test"),
+            "tests": tests,
+            "sample_selected": bool(sample_pk),
+            "selected_test_id": request.GET.get("selected_test_id", ""),
+        },
+    )
+
+
+@login_required
+@require_POST
+def bulk_pipeline_create_form(request):
+    """Render and process per-individual rows for bulk pipeline creation."""
+    from .forms import BulkPipelineCreateFormSet
+    from .models import Individual, Pipeline, PipelineType
+
+    if not request.user.has_perm("lab.add_pipeline"):
+        return HttpResponseForbidden("You do not have permission to bulk create pipelines.")
+
+    action_url = reverse("lab:bulk_pipeline_create_form")
+    formset_prefix = "pipelines"
+    has_pipeline_types = PipelineType.objects.exists()
+    has_performed_by_users = request.user.__class__.objects.filter(is_active=True).exists()
+    performed_date_shortcuts = _performed_date_shortcuts()
+
+    if request.POST.get("bulk_pipeline_action") == "create":
+        formset = BulkPipelineCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_pipeline_rows_for_formset(formset)
+        can_create_pipelines = _can_create_pipeline_rows(
+            rows,
+            has_pipeline_types,
+            has_performed_by_users,
+        )
+
+        if can_create_pipelines and formset.is_valid():
+            default_status = _get_status_for_model(
+                Pipeline,
+                "Planned",
+                "Waiting Data/Bioinformatic process",
+                "Bioinformatic process completed",
+            )
+            created_pipelines = []
+
+            with transaction.atomic():
+                for form in formset:
+                    pipeline = Pipeline.objects.create(
+                        test=form.cleaned_data["test"],
+                        type=form.cleaned_data["pipeline_type"],
+                        performed_date=form.cleaned_data["performed_date"],
+                        performed_by=form.cleaned_data["performed_by"],
+                        created_by=request.user,
+                    )
+                    if default_status:
+                        pipeline.statuses.add(default_status)
+                    created_pipelines.append(pipeline)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_pipeline_create_success.html",
+                {"created_pipelines": created_pipelines},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_pipeline_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "has_pipeline_types": has_pipeline_types,
+                "has_performed_by_users": has_performed_by_users,
+                "can_create_pipelines": can_create_pipelines,
+                "performed_date_shortcuts": performed_date_shortcuts,
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkPipelineCreateFormSet(
+        initial=[
+            {"individual": individual.pk, "performed_by": request.user.pk}
+            for individual in individuals
+        ],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_pipeline_rows_for_formset(formset)
+    can_create_pipelines = _can_create_pipeline_rows(
+        rows,
+        has_pipeline_types,
+        has_performed_by_users,
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_pipeline_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "has_pipeline_types": has_pipeline_types,
+            "has_performed_by_users": has_performed_by_users,
+            "can_create_pipelines": can_create_pipelines,
+            "performed_date_shortcuts": performed_date_shortcuts,
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_analysis_create_modal(request):
+    """First step of bulk analysis creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to bulk create analyses.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_analysis_create_modal"),
+        "bulk_analysis_form_url": reverse("lab:bulk_analysis_create_form"),
+    }
+    return render(
+        request,
+        "lab/partials/modals/bulk_analysis_create_modal.html",
+        context,
+    )
+
+
+def _bulk_analysis_rows_for_formset(formset):
+    from .models import Individual, Pipeline, Sample, Test
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    sample_ids = []
+    for sample_id, individual_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .order_by("id")
+        .values_list("id", "individual_id")
+    ):
+        sample_ids_by_individual[individual_id].append(sample_id)
+        sample_ids.append(sample_id)
+
+    tests_by_sample = {sample_id: [] for sample_id in sample_ids}
+    test_ids = []
+    for sample_id, test_id in (
+        Test.objects.filter(sample_id__in=sample_ids)
+        .order_by("id")
+        .values_list("sample_id", "id")
+    ):
+        tests_by_sample[sample_id].append(test_id)
+        test_ids.append(test_id)
+
+    pipeline_ids_by_test = {test_id: [] for test_id in test_ids}
+    for test_id, pipeline_id in (
+        Pipeline.objects.filter(test_id__in=test_ids)
+        .order_by("id")
+        .values_list("test_id", "id")
+    ):
+        pipeline_ids_by_test[test_id].append(pipeline_id)
+
+    rows = []
+    test_options_url = reverse("lab:bulk_analysis_test_options")
+    pipeline_options_url = reverse("lab:bulk_analysis_pipeline_options")
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+
+        row_sample_ids = sample_ids_by_individual.get(pk, [])
+        selected_sample_id = _first_int([form["sample"].value()])
+        if not form.is_bound and selected_sample_id is None and len(row_sample_ids) == 1:
+            selected_sample_id = row_sample_ids[0]
+            form.initial["sample"] = selected_sample_id
+
+        row_test_ids = []
+        if selected_sample_id in row_sample_ids:
+            row_test_ids = tests_by_sample.get(selected_sample_id, [])
+
+        selected_test_id = _first_int([form["test"].value()])
+        if not form.is_bound and selected_test_id is None and len(row_test_ids) == 1:
+            selected_test_id = row_test_ids[0]
+            form.initial["test"] = selected_test_id
+
+        row_pipeline_ids = []
+        if selected_test_id in row_test_ids:
+            row_pipeline_ids = pipeline_ids_by_test.get(selected_test_id, [])
+
+        selected_pipeline_id = _first_int([form["pipeline"].value()])
+        if (
+            not form.is_bound
+            and selected_pipeline_id is None
+            and len(row_pipeline_ids) == 1
+        ):
+            selected_pipeline_id = row_pipeline_ids[0]
+            form.initial["pipeline"] = selected_pipeline_id
+
+        form.fields["sample"].queryset = (
+            Sample.objects.select_related("individual", "sample_type")
+            .filter(pk__in=row_sample_ids)
+            .order_by("id")
+        )
+        form.fields["test"].queryset = (
+            Test.objects.select_related("test_type", "sample")
+            .filter(pk__in=row_test_ids)
+            .order_by("id")
+        )
+        form.fields["pipeline"].queryset = (
+            Pipeline.objects.select_related("type", "test__test_type")
+            .filter(pk__in=row_pipeline_ids)
+            .order_by("id")
+        )
+
+        pipeline_cell_id = f"pipeline-options-{form.prefix}"
+        form.fields["sample"].widget.attrs.update(
+            {
+                "hx-get": test_options_url,
+                "hx-target": f"#test-options-{form.prefix}",
+                "hx-swap": "innerHTML",
+                "hx-vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("test"),
+                        "field_id": form["test"].id_for_label,
+                        "pipeline_field_name": form.add_prefix("pipeline"),
+                        "pipeline_field_id": form["pipeline"].id_for_label,
+                        "pipeline_cell_id": pipeline_cell_id,
+                        "individual_id": pk or "",
+                    }
+                ),
+            }
+        )
+
+        has_any_test_options = any(
+            tests_by_sample.get(sample_id) for sample_id in row_sample_ids
+        )
+        has_any_pipeline_options = any(
+            pipeline_ids_by_test.get(test_id)
+            for sample_id in row_sample_ids
+            for test_id in tests_by_sample.get(sample_id, [])
+        )
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_options": bool(row_sample_ids),
+                "has_any_test_options": has_any_test_options,
+                "has_any_pipeline_options": has_any_pipeline_options,
+                "selected_sample_id": str(selected_sample_id or ""),
+                "selected_test_id": str(selected_test_id or ""),
+                "selected_pipeline_id": str(selected_pipeline_id or ""),
+                "test_options": list(form.fields["test"].queryset),
+                "pipeline_options": list(form.fields["pipeline"].queryset),
+                "test_cell_id": f"test-options-{form.prefix}",
+                "test_field_name": form.add_prefix("test"),
+                "test_field_id": form["test"].id_for_label,
+                "pipeline_cell_id": pipeline_cell_id,
+                "pipeline_field_name": form.add_prefix("pipeline"),
+                "pipeline_field_id": form["pipeline"].id_for_label,
+                "pipeline_options_url": pipeline_options_url,
+                "pipeline_hx_vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("pipeline"),
+                        "field_id": form["pipeline"].id_for_label,
+                        "individual_id": pk or "",
+                        "sample_id": selected_sample_id or "",
+                    }
+                ),
+            }
+        )
+    return rows
+
+
+def _can_create_analysis_rows(rows, has_analysis_types, has_performed_by_users):
+    return (
+        bool(rows)
+        and has_analysis_types
+        and has_performed_by_users
+        and all(
+            row["has_sample_options"]
+            and row["has_any_test_options"]
+            and row["has_any_pipeline_options"]
+            for row in rows
+        )
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_analysis_test_options(request):
+    """Refresh the Test dropdown for one bulk analysis row."""
+    from .models import Test
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to bulk create analyses.")
+
+    sample_id = request.GET.get("sample_id")
+    if not sample_id:
+        sample_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-sample") or key == "sample"
+            ),
+            "",
+        )
+
+    sample_pk = _first_int([sample_id])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if sample_pk:
+        filters["sample_id"] = sample_pk
+    if individual_pk:
+        filters["sample__individual_id"] = individual_pk
+
+    tests = (
+        Test.objects.select_related("test_type", "sample")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("sample_id")
+        else Test.objects.none()
+    )
+    pipeline_field_name = request.GET.get("pipeline_field_name", "pipeline")
+    pipeline_field_id = request.GET.get("pipeline_field_id", "id_pipeline")
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_analysis_test_select.html",
+        {
+            "field_name": request.GET.get("field_name", "test"),
+            "field_id": request.GET.get("field_id", "id_test"),
+            "tests": tests,
+            "sample_selected": bool(sample_pk),
+            "selected_test_id": request.GET.get("selected_test_id", ""),
+            "pipeline_options_url": reverse("lab:bulk_analysis_pipeline_options"),
+            "pipeline_cell_id": request.GET.get("pipeline_cell_id", ""),
+            "pipeline_field_name": pipeline_field_name,
+            "pipeline_field_id": pipeline_field_id,
+            "include_pipeline_reset": True,
+            "pipeline_hx_vals": json.dumps(
+                {
+                    "field_name": pipeline_field_name,
+                    "field_id": pipeline_field_id,
+                    "individual_id": individual_pk or "",
+                    "sample_id": sample_pk or "",
+                }
+            ),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_analysis_pipeline_options(request):
+    """Refresh the Pipeline dropdown for one bulk analysis row."""
+    from .models import Pipeline
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to bulk create analyses.")
+
+    test_id = request.GET.get("test_id")
+    if not test_id:
+        test_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-test") or key == "test"
+            ),
+            "",
+        )
+
+    test_pk = _first_int([test_id])
+    sample_pk = _first_int([request.GET.get("sample_id")])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if test_pk:
+        filters["test_id"] = test_pk
+    if sample_pk:
+        filters["test__sample_id"] = sample_pk
+    if individual_pk:
+        filters["test__sample__individual_id"] = individual_pk
+
+    pipelines = (
+        Pipeline.objects.select_related("type", "test__test_type")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("test_id")
+        else Pipeline.objects.none()
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_analysis_pipeline_select.html",
+        {
+            "field_name": request.GET.get("field_name", "pipeline"),
+            "field_id": request.GET.get("field_id", "id_pipeline"),
+            "pipelines": pipelines,
+            "test_selected": bool(test_pk),
+            "selected_pipeline_id": request.GET.get("selected_pipeline_id", ""),
+        },
+    )
+
+
+@login_required
+@require_POST
+def bulk_analysis_create_form(request):
+    """Render and process per-individual rows for bulk analysis creation."""
+    from .forms import BulkAnalysisCreateFormSet
+    from .models import Analysis, AnalysisType, Individual
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to bulk create analyses.")
+
+    action_url = reverse("lab:bulk_analysis_create_form")
+    formset_prefix = "analyses"
+    has_analysis_types = AnalysisType.objects.exists()
+    has_performed_by_users = request.user.__class__.objects.filter(is_active=True).exists()
+    performed_date_shortcuts = _performed_date_shortcuts()
+
+    if request.POST.get("bulk_analysis_action") == "create":
+        formset = BulkAnalysisCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_analysis_rows_for_formset(formset)
+        can_create_analyses = _can_create_analysis_rows(
+            rows,
+            has_analysis_types,
+            has_performed_by_users,
+        )
+
+        if can_create_analyses and formset.is_valid():
+            default_status = _get_status_for_model(
+                Analysis,
+                "Planned",
+                "Waiting Confirmation",
+                "Completed",
+            )
+            created_analyses = []
+
+            with transaction.atomic():
+                for form in formset:
+                    analysis = Analysis.objects.create(
+                        pipeline=form.cleaned_data["pipeline"],
+                        type=form.cleaned_data["analysis_type"],
+                        performed_date=form.cleaned_data["performed_date"],
+                        created_by=request.user,
+                    )
+                    analysis.performed_by.set(form.cleaned_data["performed_by"])
+                    if default_status:
+                        analysis.statuses.add(default_status)
+                    created_analyses.append(analysis)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_analysis_create_success.html",
+                {"created_analyses": created_analyses},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_analysis_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "has_analysis_types": has_analysis_types,
+                "has_performed_by_users": has_performed_by_users,
+                "can_create_analyses": can_create_analyses,
+                "performed_date_shortcuts": performed_date_shortcuts,
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkAnalysisCreateFormSet(
+        initial=[
+            {
+                "individual": individual.pk,
+                "performed_by": [request.user.pk],
+            }
+            for individual in individuals
+        ],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_analysis_rows_for_formset(formset)
+    can_create_analyses = _can_create_analysis_rows(
+        rows,
+        has_analysis_types,
+        has_performed_by_users,
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_analysis_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "has_analysis_types": has_analysis_types,
+            "has_performed_by_users": has_performed_by_users,
+            "can_create_analyses": can_create_analyses,
+            "performed_date_shortcuts": performed_date_shortcuts,
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_variant_create_modal(request):
+    """First step of bulk variant creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_variant_create_modal"),
+        "bulk_variant_form_url": reverse("lab:bulk_variant_create_form"),
+    }
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_create_modal.html",
+        context,
+    )
+
+
+def _boolish(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in {"1", "true", "on", "yes"}
+
+
+def _bulk_variant_rows_for_formset(formset):
+    from .models import Analysis, Individual, Pipeline, Sample, Test
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    sample_ids = []
+    for sample_id, individual_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .order_by("id")
+        .values_list("id", "individual_id")
+    ):
+        sample_ids_by_individual[individual_id].append(sample_id)
+        sample_ids.append(sample_id)
+
+    tests_by_sample = {sample_id: [] for sample_id in sample_ids}
+    test_ids = []
+    for sample_id, test_id in (
+        Test.objects.filter(sample_id__in=sample_ids)
+        .order_by("id")
+        .values_list("sample_id", "id")
+    ):
+        tests_by_sample[sample_id].append(test_id)
+        test_ids.append(test_id)
+
+    pipeline_ids_by_test = {test_id: [] for test_id in test_ids}
+    pipeline_ids = []
+    for test_id, pipeline_id in (
+        Pipeline.objects.filter(test_id__in=test_ids)
+        .order_by("id")
+        .values_list("test_id", "id")
+    ):
+        pipeline_ids_by_test[test_id].append(pipeline_id)
+        pipeline_ids.append(pipeline_id)
+
+    analysis_ids_by_pipeline = {pipeline_id: [] for pipeline_id in pipeline_ids}
+    for pipeline_id, analysis_id in (
+        Analysis.objects.filter(pipeline_id__in=pipeline_ids)
+        .order_by("id")
+        .values_list("pipeline_id", "id")
+    ):
+        analysis_ids_by_pipeline[pipeline_id].append(analysis_id)
+
+    rows = []
+    test_options_url = reverse("lab:bulk_variant_test_options")
+    pipeline_options_url = reverse("lab:bulk_variant_pipeline_options")
+    analysis_options_url = reverse("lab:bulk_variant_analysis_options")
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+
+        row_sample_ids = sample_ids_by_individual.get(pk, [])
+        selected_sample_id = _first_int([form["sample"].value()])
+        if not form.is_bound and selected_sample_id is None and len(row_sample_ids) == 1:
+            selected_sample_id = row_sample_ids[0]
+            form.initial["sample"] = selected_sample_id
+
+        row_test_ids = []
+        if selected_sample_id in row_sample_ids:
+            row_test_ids = tests_by_sample.get(selected_sample_id, [])
+
+        selected_test_id = _first_int([form["test"].value()])
+        if not form.is_bound and selected_test_id is None and len(row_test_ids) == 1:
+            selected_test_id = row_test_ids[0]
+            form.initial["test"] = selected_test_id
+
+        row_pipeline_ids = []
+        if selected_test_id in row_test_ids:
+            row_pipeline_ids = pipeline_ids_by_test.get(selected_test_id, [])
+
+        selected_pipeline_id = _first_int([form["pipeline"].value()])
+        if (
+            not form.is_bound
+            and selected_pipeline_id is None
+            and len(row_pipeline_ids) == 1
+        ):
+            selected_pipeline_id = row_pipeline_ids[0]
+            form.initial["pipeline"] = selected_pipeline_id
+
+        row_analysis_ids = []
+        if selected_pipeline_id in row_pipeline_ids:
+            row_analysis_ids = analysis_ids_by_pipeline.get(selected_pipeline_id, [])
+
+        selected_analysis_id = _first_int([form["analysis"].value()])
+        if (
+            not form.is_bound
+            and selected_analysis_id is None
+            and len(row_analysis_ids) == 1
+        ):
+            selected_analysis_id = row_analysis_ids[0]
+            form.initial["analysis"] = selected_analysis_id
+
+        form.fields["sample"].queryset = (
+            Sample.objects.select_related("individual", "sample_type")
+            .filter(pk__in=row_sample_ids)
+            .order_by("id")
+        )
+        form.fields["test"].queryset = (
+            Test.objects.select_related("test_type", "sample")
+            .filter(pk__in=row_test_ids)
+            .order_by("id")
+        )
+        form.fields["pipeline"].queryset = (
+            Pipeline.objects.select_related("type", "test__test_type")
+            .filter(pk__in=row_pipeline_ids)
+            .order_by("id")
+        )
+        form.fields["analysis"].queryset = (
+            Analysis.objects.select_related("type", "pipeline")
+            .filter(pk__in=row_analysis_ids)
+            .order_by("id")
+        )
+
+        test_cell_id = f"test-options-{form.prefix}"
+        pipeline_cell_id = f"pipeline-options-{form.prefix}"
+        analysis_cell_id = f"analysis-options-{form.prefix}"
+        form.fields["sample"].widget.attrs.update(
+            {
+                "hx-get": test_options_url,
+                "hx-target": f"#{test_cell_id}",
+                "hx-swap": "innerHTML",
+                "hx-vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("test"),
+                        "field_id": form["test"].id_for_label,
+                        "pipeline_field_name": form.add_prefix("pipeline"),
+                        "pipeline_field_id": form["pipeline"].id_for_label,
+                        "pipeline_cell_id": pipeline_cell_id,
+                        "analysis_field_name": form.add_prefix("analysis"),
+                        "analysis_field_id": form["analysis"].id_for_label,
+                        "analysis_cell_id": analysis_cell_id,
+                        "individual_id": pk or "",
+                    }
+                ),
+                "x-bind:disabled": "!linked || true" if not row_sample_ids else "!linked",
+            }
+        )
+
+        has_any_test_options = any(
+            tests_by_sample.get(sample_id) for sample_id in row_sample_ids
+        )
+        has_any_pipeline_options = any(
+            pipeline_ids_by_test.get(test_id)
+            for sample_id in row_sample_ids
+            for test_id in tests_by_sample.get(sample_id, [])
+        )
+        has_any_analysis_options = any(
+            analysis_ids_by_pipeline.get(pipeline_id)
+            for sample_id in row_sample_ids
+            for test_id in tests_by_sample.get(sample_id, [])
+            for pipeline_id in pipeline_ids_by_test.get(test_id, [])
+        )
+        use_analysis_value = form["use_analysis"].value()
+        use_analysis_enabled = (
+            True
+            if use_analysis_value is None and not form.is_bound
+            else _boolish(use_analysis_value)
+        )
+        selected_variant_kind = form["variant_kind"].value() or "snv"
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_options": bool(row_sample_ids),
+                "has_any_test_options": has_any_test_options,
+                "has_any_pipeline_options": has_any_pipeline_options,
+                "has_any_analysis_options": has_any_analysis_options,
+                "use_analysis_enabled": use_analysis_enabled,
+                "selected_variant_kind": selected_variant_kind,
+                "selected_sample_id": str(selected_sample_id or ""),
+                "selected_test_id": str(selected_test_id or ""),
+                "selected_pipeline_id": str(selected_pipeline_id or ""),
+                "selected_analysis_id": str(selected_analysis_id or ""),
+                "test_options": list(form.fields["test"].queryset),
+                "pipeline_options": list(form.fields["pipeline"].queryset),
+                "analysis_options": list(form.fields["analysis"].queryset),
+                "test_cell_id": test_cell_id,
+                "test_field_name": form.add_prefix("test"),
+                "test_field_id": form["test"].id_for_label,
+                "pipeline_cell_id": pipeline_cell_id,
+                "pipeline_field_name": form.add_prefix("pipeline"),
+                "pipeline_field_id": form["pipeline"].id_for_label,
+                "pipeline_options_url": pipeline_options_url,
+                "pipeline_hx_vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("pipeline"),
+                        "field_id": form["pipeline"].id_for_label,
+                        "analysis_field_name": form.add_prefix("analysis"),
+                        "analysis_field_id": form["analysis"].id_for_label,
+                        "analysis_cell_id": analysis_cell_id,
+                        "individual_id": pk or "",
+                        "sample_id": selected_sample_id or "",
+                    }
+                ),
+                "analysis_cell_id": analysis_cell_id,
+                "analysis_field_name": form.add_prefix("analysis"),
+                "analysis_field_id": form["analysis"].id_for_label,
+                "analysis_options_url": analysis_options_url,
+                "analysis_hx_vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("analysis"),
+                        "field_id": form["analysis"].id_for_label,
+                        "individual_id": pk or "",
+                        "sample_id": selected_sample_id or "",
+                        "test_id": selected_test_id or "",
+                    }
+                ),
+            }
+        )
+    return rows
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_variant_test_options(request):
+    """Refresh the Test dropdown for one bulk variant row."""
+    from .models import Test
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    sample_id = request.GET.get("sample_id")
+    if not sample_id:
+        sample_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-sample") or key == "sample"
+            ),
+            "",
+        )
+
+    sample_pk = _first_int([sample_id])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if sample_pk:
+        filters["sample_id"] = sample_pk
+    if individual_pk:
+        filters["sample__individual_id"] = individual_pk
+
+    tests = (
+        Test.objects.select_related("test_type", "sample")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("sample_id")
+        else Test.objects.none()
+    )
+    pipeline_field_name = request.GET.get("pipeline_field_name", "pipeline")
+    pipeline_field_id = request.GET.get("pipeline_field_id", "id_pipeline")
+    analysis_field_name = request.GET.get("analysis_field_name", "analysis")
+    analysis_field_id = request.GET.get("analysis_field_id", "id_analysis")
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_test_select.html",
+        {
+            "field_name": request.GET.get("field_name", "test"),
+            "field_id": request.GET.get("field_id", "id_test"),
+            "tests": tests,
+            "sample_selected": bool(sample_pk),
+            "selected_test_id": request.GET.get("selected_test_id", ""),
+            "pipeline_options_url": reverse("lab:bulk_variant_pipeline_options"),
+            "pipeline_cell_id": request.GET.get("pipeline_cell_id", ""),
+            "pipeline_field_name": pipeline_field_name,
+            "pipeline_field_id": pipeline_field_id,
+            "analysis_cell_id": request.GET.get("analysis_cell_id", ""),
+            "analysis_field_name": analysis_field_name,
+            "analysis_field_id": analysis_field_id,
+            "include_pipeline_reset": True,
+            "include_analysis_reset": True,
+            "pipeline_hx_vals": json.dumps(
+                {
+                    "field_name": pipeline_field_name,
+                    "field_id": pipeline_field_id,
+                    "analysis_field_name": analysis_field_name,
+                    "analysis_field_id": analysis_field_id,
+                    "analysis_cell_id": request.GET.get("analysis_cell_id", ""),
+                    "individual_id": individual_pk or "",
+                    "sample_id": sample_pk or "",
+                }
+            ),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_variant_pipeline_options(request):
+    """Refresh the Pipeline dropdown for one bulk variant row."""
+    from .models import Pipeline
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    test_id = request.GET.get("test_id")
+    if not test_id:
+        test_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-test") or key == "test"
+            ),
+            "",
+        )
+
+    test_pk = _first_int([test_id])
+    sample_pk = _first_int([request.GET.get("sample_id")])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if test_pk:
+        filters["test_id"] = test_pk
+    if sample_pk:
+        filters["test__sample_id"] = sample_pk
+    if individual_pk:
+        filters["test__sample__individual_id"] = individual_pk
+
+    pipelines = (
+        Pipeline.objects.select_related("type", "test__test_type")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("test_id")
+        else Pipeline.objects.none()
+    )
+    analysis_field_name = request.GET.get("analysis_field_name", "analysis")
+    analysis_field_id = request.GET.get("analysis_field_id", "id_analysis")
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_pipeline_select.html",
+        {
+            "field_name": request.GET.get("field_name", "pipeline"),
+            "field_id": request.GET.get("field_id", "id_pipeline"),
+            "pipelines": pipelines,
+            "test_selected": bool(test_pk),
+            "selected_pipeline_id": request.GET.get("selected_pipeline_id", ""),
+            "analysis_options_url": reverse("lab:bulk_variant_analysis_options"),
+            "analysis_cell_id": request.GET.get("analysis_cell_id", ""),
+            "analysis_field_name": analysis_field_name,
+            "analysis_field_id": analysis_field_id,
+            "include_analysis_reset": True,
+            "analysis_hx_vals": json.dumps(
+                {
+                    "field_name": analysis_field_name,
+                    "field_id": analysis_field_id,
+                    "individual_id": individual_pk or "",
+                    "sample_id": sample_pk or "",
+                    "test_id": test_pk or "",
+                }
+            ),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_variant_analysis_options(request):
+    """Refresh the Analysis dropdown for one bulk variant row."""
+    from .models import Analysis
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    pipeline_id = request.GET.get("pipeline_id")
+    if not pipeline_id:
+        pipeline_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-pipeline") or key == "pipeline"
+            ),
+            "",
+        )
+
+    pipeline_pk = _first_int([pipeline_id])
+    test_pk = _first_int([request.GET.get("test_id")])
+    sample_pk = _first_int([request.GET.get("sample_id")])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if pipeline_pk:
+        filters["pipeline_id"] = pipeline_pk
+    if test_pk:
+        filters["pipeline__test_id"] = test_pk
+    if sample_pk:
+        filters["pipeline__test__sample_id"] = sample_pk
+    if individual_pk:
+        filters["pipeline__test__sample__individual_id"] = individual_pk
+
+    analyses = (
+        Analysis.objects.select_related("type", "pipeline")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("pipeline_id")
+        else Analysis.objects.none()
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_analysis_select.html",
+        {
+            "field_name": request.GET.get("field_name", "analysis"),
+            "field_id": request.GET.get("field_id", "id_analysis"),
+            "analyses": analyses,
+            "pipeline_selected": bool(pipeline_pk),
+            "selected_analysis_id": request.GET.get("selected_analysis_id", ""),
+        },
+    )
+
+
+def _create_bulk_variant_from_record(record, individual, analysis, assembly_version, zygosity, user):
+    from variant.models import CNV, Repeat, SNV, SV, delins
+
+    model_cls = {
+        "snv": SNV,
+        "delins": delins,
+        "cnv": CNV,
+        "sv": SV,
+        "repeat": Repeat,
+    }.get(record.get("kind"))
+    if model_cls is None:
+        return None
+
+    fields = {
+        "individual": individual,
+        "analysis": analysis,
+        "assembly_version": assembly_version,
+        "chromosome": record["chromosome"],
+        "start": record["start"],
+        "end": record.get("end", record["start"]),
+        "zygosity": zygosity,
+        "created_by": user,
+    }
+    if model_cls in (SNV, delins):
+        fields.update(
+            {
+                "reference": record["reference"],
+                "alternate": record["alternate"],
+            }
+        )
+    elif model_cls is CNV:
+        fields.update(
+            {
+                "cnv_type": record.get("cnv_type", "gain"),
+                "copy_number": record.get("copy_number"),
+            }
+        )
+    elif model_cls is SV:
+        fields["sv_type"] = record.get("sv_type", "deletion")
+        if record.get("breakpoints"):
+            fields["breakpoints"] = record["breakpoints"]
+    else:
+        fields.update(
+            {
+                "repeat_unit": record["repeat_unit"],
+                "repeat_count": record["repeat_count"],
+            }
+        )
+    return model_cls.objects.create(**fields)
+
+
+@login_required
+@require_POST
+def bulk_variant_create_form(request):
+    """Render and process per-individual rows for bulk variant creation."""
+    from .forms import BulkVariantCreateFormSet
+    from .models import Individual
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    action_url = reverse("lab:bulk_variant_create_form")
+    formset_prefix = "variants"
+
+    if request.POST.get("bulk_variant_action") == "create":
+        formset = BulkVariantCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_variant_rows_for_formset(formset)
+
+        if rows and formset.is_valid():
+            created_variants = []
+            with transaction.atomic():
+                for form in formset:
+                    variant = _create_bulk_variant_from_record(
+                        form.cleaned_data["variant_record"],
+                        form.cleaned_data["individual"],
+                        form.cleaned_data.get("analysis"),
+                        form.cleaned_data["assembly_version"],
+                        form.cleaned_data["zygosity"],
+                        request.user,
+                    )
+                    if variant:
+                        created_variants.append(variant)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_variant_create_success.html",
+                {"created_variants": created_variants},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_variant_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "can_create_variants": bool(rows),
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkVariantCreateFormSet(
+        initial=[
+            {
+                "individual": individual.pk,
+                "use_analysis": True,
+                "variant_kind": "snv",
+                "assembly_version": "hg38",
+                "zygosity": "unknown",
+            }
+            for individual in individuals
+        ],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_variant_rows_for_formset(formset)
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "can_create_variants": bool(rows),
+            "empty_selection": not bool(individuals),
+        },
+    )
 
 
 @login_required
