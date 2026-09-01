@@ -157,7 +157,7 @@
                             </button>
                         </td>
                         <td class="text-xs">{{ variant.get_zygosity_display }}</td>
-                        <td class="text-xs">{{ variant.type }}</td>
+                        <td class="text-xs">{{ variant.type_label }}</td>
                         <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
                         <td class="text-xs text-base-content/50">{{ variant.created_at|date:"M d, Y" }}</td>
                         {% if perms.variant.delete_variant %}
@@ -757,7 +757,7 @@
                                                                                             </button>
                                                                                         </td>
                                                                                         <td class="text-[9px]">{{ variant.get_zygosity_display }}</td>
-                                                                                        <td class="text-[9px]">{{ variant.type }}</td>
+                                                                                        <td class="text-[9px]">{{ variant.type_label }}</td>
                                                                                         <td class="italic text-[9px]">{{ variant.genes.all|join:", "|default:"--" }}</td>
                                                                                         {% if perms.variant.delete_variant %}
                                                                                         <td class="text-right">
@@ -850,7 +850,7 @@
                                                                                             </button>
                                                                                         </td>
                                                                                         <td class="text-xs">{{ variant.get_zygosity_display }}</td>
-                                                                                        <td class="text-xs">{{ variant.type }}</td>
+                                                                                        <td class="text-xs">{{ variant.type_label }}</td>
                                                                                         <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
                                                                                         {% if perms.variant.delete_variant %}
                                                                                         <td class="text-right">

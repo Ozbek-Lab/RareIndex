@@ -1,10 +1,60 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import RegexValidator
 from simple_history.models import HistoricalRecords
 from taggit.managers import TaggableManager
 from lab.models import Analysis, Individual, HistoryMixin, TaggedStatus
+
+
+VARIANT_TYPE_DEFINITIONS = (
+    {"key": "snv", "value": "SNV", "label": "SNV", "relation": "snv"},
+    {"key": "delins", "value": "delins", "label": "Delins", "relation": "delins"},
+    {"key": "cnv", "value": "CNV", "label": "CNV", "relation": "cnv"},
+    {"key": "sv", "value": "SV", "label": "SV", "relation": "sv"},
+    {"key": "repeat", "value": "Repeat", "label": "Repeat", "relation": "repeat"},
+)
+
+VARIANT_TYPE_CHOICES = tuple(
+    (definition["value"], definition["label"])
+    for definition in VARIANT_TYPE_DEFINITIONS
+)
+VARIANT_CREATE_TYPE_CHOICES = tuple(
+    (definition["key"], definition["label"])
+    for definition in VARIANT_TYPE_DEFINITIONS
+)
+VARIANT_TYPE_RELATION_LOOKUPS = {
+    definition["value"]: definition["relation"]
+    for definition in VARIANT_TYPE_DEFINITIONS
+}
+
+
+def normalize_variant_type_value(value):
+    text = str(value or "").strip()
+    for definition in VARIANT_TYPE_DEFINITIONS:
+        aliases = {
+            definition["key"].lower(),
+            definition["value"].lower(),
+            definition["label"].lower(),
+        }
+        if text.lower() in aliases:
+            return definition["value"]
+    return text
+
+
+def normalize_chromosome(value):
+    text = str(value or "").strip()
+    if not text:
+        return text
+
+    suffix = text[3:] if text.lower().startswith("chr") else text
+    if suffix.upper() == "MT":
+        suffix = "M"
+    elif suffix.upper() in {"X", "Y", "M"}:
+        suffix = suffix.upper()
+    return f"chr{suffix}"
+
 
 class Variant(HistoryMixin, models.Model):
     """Base class for all variant types"""
@@ -39,7 +89,7 @@ class Variant(HistoryMixin, models.Model):
         ordering = ["chromosome", "start"]
 
     def __str__(self):
-        return f"{self.chromosome}:{self.start}-{self.end}"
+        return self.display_name
 
     statuses = TaggableManager(through=TaggedStatus, blank=True, verbose_name="Statuses")
 
@@ -54,27 +104,110 @@ class Variant(HistoryMixin, models.Model):
     zygosity = models.CharField(max_length=20, choices=ZYGOSITY_CHOICES)
 
     def save(self, *args, **kwargs):
-        if self.chromosome and not self.chromosome.startswith("chr"):
-            self.chromosome = f"chr{self.chromosome}"
+        if self.chromosome:
+            self.chromosome = normalize_chromosome(self.chromosome)
         super().save(*args, **kwargs)
+
+    def _subtype_data(self):
+        cached = getattr(self, "_variant_subtype_cache", None)
+        if cached is not None:
+            return cached
+
+        model_name = self._meta.model_name
+        for definition in VARIANT_TYPE_DEFINITIONS:
+            relation = definition["relation"]
+            if model_name == relation:
+                subtype_data = (definition, self)
+                break
+            try:
+                subtype = getattr(self, relation)
+            except (ObjectDoesNotExist, AttributeError):
+                continue
+            else:
+                subtype_data = (definition, subtype)
+                break
+        else:
+            subtype_data = (None, self)
+
+        self._variant_subtype_cache = subtype_data
+        return subtype_data
+
+    @property
+    def concrete_variant(self):
+        return self._subtype_data()[1]
+
+    @property
+    def type_label(self):
+        definition = self._subtype_data()[0]
+        return definition["label"] if definition else "Variant"
 
     @property
     def hgvs_name(self):
-        if hasattr(self, 'snv'):
-            return f"{self.chromosome}:{self.start}{self.snv.reference}>{self.snv.alternate}"
-        return str(self)
+        return self.display_name
 
     @property
     def type(self):
-        if hasattr(self, 'snv'):
-            return "SNV"
-        if hasattr(self, 'cnv'):
-            return "CNV"
-        if hasattr(self, 'sv'):
-            return "SV"
-        if hasattr(self, 'repeat'):
-            return "Repeat"
-        return "Variant"
+        definition = self._subtype_data()[0]
+        return definition["value"] if definition else "Variant"
+
+    @property
+    def coordinates_display(self):
+        if self.start == self.end:
+            return f"{self.chromosome}:{self.start}"
+        return f"{self.chromosome}:{self.start}-{self.end}"
+
+    @property
+    def sequence_variant(self):
+        concrete = self.concrete_variant
+        if self.type in {"SNV", "delins"}:
+            return concrete
+        return None
+
+    @property
+    def is_sequence_variant(self):
+        return self.sequence_variant is not None
+
+    @property
+    def change_display(self):
+        concrete = self.concrete_variant
+        if self.type in {"SNV", "delins"}:
+            return f"{concrete.reference}>{concrete.alternate}"
+        if self.type == "CNV":
+            value = concrete.get_cnv_type_display()
+            if concrete.copy_number is not None:
+                value = f"{value} (copy number {concrete.copy_number})"
+            return value
+        if self.type == "SV":
+            return concrete.get_sv_type_display()
+        if self.type == "Repeat":
+            return f"({concrete.repeat_unit})x{concrete.repeat_count}"
+        return ""
+
+    @property
+    def display_name(self):
+        change = self.change_display
+        if change:
+            return f"{self.coordinates_display} {change}"
+        return self.coordinates_display
+
+    @property
+    def sequence_variant_id(self):
+        sequence_variant = self.sequence_variant
+        if not sequence_variant:
+            return ""
+        return (
+            f"{self.chromosome}-{self.start}-"
+            f"{sequence_variant.reference}-{sequence_variant.alternate}"
+        )
+
+    @property
+    def pipeline(self):
+        return self.analysis.pipeline if self.analysis and self.analysis.pipeline_id else None
+
+    @property
+    def pipeline_id(self):
+        pipeline = self.pipeline
+        return pipeline.pk if pipeline else None
 
 allele_validator = RegexValidator(
     regex=r"^[ATGC]+$",
@@ -88,7 +221,7 @@ class SNV(Variant):
     alternate = models.CharField(max_length=255, validators=[allele_validator])
     
     def __str__(self):
-        return f"{self.chromosome}:{self.start} {self.reference}>{self.alternate}"
+        return self.display_name
 
     def save(self, *args, **kwargs):
         # For SNVs we always normalize to end == start so the interval API
@@ -103,7 +236,7 @@ class delins(Variant):
     alternate = models.CharField(max_length=255, validators=[allele_validator])
     
     def __str__(self):
-        return f"{self.chromosome}:{self.start} {self.reference}>{self.alternate}"
+        return self.display_name
 
     def save(self, *args, **kwargs):
         # For basic delins we also keep end == start.
@@ -121,7 +254,7 @@ class CNV(Variant):
     copy_number = models.IntegerField(null=True, blank=True)
     
     def __str__(self):
-        return f"{self.chromosome}:{self.start}-{self.end} {self.cnv_type}"
+        return self.display_name
 
 class SV(Variant):
     """Structural Variant"""
@@ -136,7 +269,7 @@ class SV(Variant):
     breakpoints = models.JSONField(null=True, blank=True, help_text="Detailed breakpoint coordinates")
 
     def __str__(self):
-        return f"{self.chromosome}:{self.start}-{self.end} {self.sv_type}"
+        return self.display_name
 
 class Repeat(Variant):
     """Repeat Expansion"""
@@ -144,7 +277,7 @@ class Repeat(Variant):
     repeat_count = models.IntegerField()
     
     def __str__(self):
-        return f"{self.chromosome}:{self.start} ({self.repeat_unit})x{self.repeat_count}"
+        return self.display_name
 
 class Annotation(models.Model):
     """Stores annotations for variants from external sources"""

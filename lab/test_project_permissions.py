@@ -1,15 +1,18 @@
+from io import StringIO
+
 from django.contrib.auth.models import Permission, User
 from django.core.paginator import Paginator
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 
+from .management.commands.generate_sample_data import Command as SampleDataCommand
 from .htmx_views import (
     project_delete_modal,
     project_individual_add,
     project_individual_remove,
     project_individual_search,
 )
-from .models import CrossIdentifier, IdentifierType, Individual, Project
+from .models import CrossIdentifier, IdentifierType, Individual, Project, ProjectMembership
 
 
 class ProjectPermissionTest(TestCase):
@@ -27,6 +30,22 @@ class ProjectPermissionTest(TestCase):
             sex="male",
             created_by=self.user,
         )
+        self.source_project = Project.objects.create(name="Source", created_by=self.user)
+        self.source_project.individuals.add(self.individual)
+        for user in (self.user, self.editor, self.deleter):
+            ProjectMembership.objects.create(
+                project=self.project,
+                user=user,
+                role=ProjectMembership.Role.VIEWER,
+                created_by=self.user,
+            )
+        for user in (self.user, self.editor):
+            ProjectMembership.objects.create(
+                project=self.source_project,
+                user=user,
+                role=ProjectMembership.Role.VIEWER,
+                created_by=self.user,
+            )
         self.primary_type = IdentifierType.objects.create(
             name="RareBoost",
             use_priority=1,
@@ -139,6 +158,51 @@ class ProjectPermissionTest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(self.project.individuals.filter(pk=self.individual.pk).exists())
+
+    def test_sample_data_command_creates_project_memberships_for_non_staff_users(self):
+        pleb = User.objects.create_user(username="pleb", password="password")
+        normal = User.objects.create_user(username="normal", password="password")
+        staff = User.objects.create_user(
+            username="staff",
+            password="password",
+            is_staff=True,
+        )
+        first_project = Project.objects.create(name="First Project", created_by=self.user)
+        second_project = Project.objects.create(name="Second Project", created_by=self.user)
+        sample_command = SampleDataCommand()
+        sample_command.stdout = StringIO()
+        existing_memberships = ProjectMembership.objects.count()
+
+        memberships = sample_command._create_project_memberships(
+            [first_project, second_project],
+            [pleb, normal, staff],
+            self.user,
+        )
+        sample_command._create_project_memberships(
+            [first_project, second_project],
+            [pleb, normal, staff],
+            self.user,
+        )
+
+        self.assertEqual(len(memberships), 2)
+        self.assertEqual(ProjectMembership.objects.count(), existing_memberships + 2)
+        self.assertTrue(
+            ProjectMembership.objects.filter(
+                project=first_project,
+                user=pleb,
+                role=ProjectMembership.Role.VIEWER,
+                created_by=self.user,
+            ).exists()
+        )
+        self.assertTrue(
+            ProjectMembership.objects.filter(
+                project=second_project,
+                user=normal,
+                role=ProjectMembership.Role.EDITOR,
+                created_by=self.user,
+            ).exists()
+        )
+        self.assertFalse(ProjectMembership.objects.filter(user=staff).exists())
 
     def test_project_delete_endpoint_requires_delete_project_permission(self):
         response = project_delete_modal(self._request(user=self.user), self.project.pk)

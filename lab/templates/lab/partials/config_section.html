@@ -60,6 +60,9 @@
                                 {% elif field == "content_type" %}Scope
                                 {% elif field == "full_name" %}Name
                                 {% elif field == "institutions_as_staff" %}Institutions
+                                {% elif field == "project" %}Project
+                                {% elif field == "user" %}User
+                                {% elif field == "role" %}Role
                                 {% else %}{{ field|title }}
                                 {% endif %}
                             </th>
@@ -153,6 +156,15 @@
                                             <span class="text-base-content/40 text-xs">—</span>
                                         {% endfor %}
                                     </div>
+                                {% elif field == "project" %}
+                                    <span class="text-sm font-medium">{{ obj.project.name|default:"—" }}</span>
+                                {% elif field == "user" %}
+                                    <span class="text-sm">
+                                        {{ obj.user.get_full_name|default:obj.user.username }}
+                                        <span class="text-xs text-base-content/40">@{{ obj.user.username }}</span>
+                                    </span>
+                                {% elif field == "role" %}
+                                    <span class="badge badge-ghost badge-sm">{{ obj.get_role_display }}</span>
                                 {% else %}
                                     <span class="text-sm">
                                         {% if field == "name" %}{{ obj.name|default:"—" }}

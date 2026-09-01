@@ -1,0 +1,25 @@
+<select name="{{ field_name }}"
+        id="{{ field_id }}"
+        class="select select-bordered select-sm w-full"
+        {% if analysis_options_url %}
+        hx-get="{{ analysis_options_url }}"
+        hx-target="#{{ analysis_cell_id }}"
+        hx-swap="innerHTML"
+        hx-vals='{{ analysis_hx_vals }}'
+        {% endif %}
+        x-bind:disabled="!linked{% if not pipelines %} || true{% endif %}">
+    <option value="">{% if test_selected %}Choose pipeline{% else %}Choose test first{% endif %}</option>
+    {% for pipeline in pipelines %}
+    <option value="{{ pipeline.pk }}" {% if selected_pipeline_id == pipeline.pk|stringformat:"s" %}selected{% endif %}>
+        #{{ pipeline.pk }} - {{ pipeline.type }} - {{ pipeline.performed_date|date:"Y-m-d" }}
+    </option>
+    {% endfor %}
+</select>
+{% if test_selected and not pipelines %}
+<div class="text-error text-[10px] mt-1" x-show="linked">Selected test has no pipelines.</div>
+{% endif %}
+{% if include_analysis_reset and analysis_cell_id %}
+<div id="{{ analysis_cell_id }}" hx-swap-oob="innerHTML">
+    {% include "lab/partials/modals/bulk_variant_analysis_select.html" with field_name=analysis_field_name field_id=analysis_field_id analyses="" pipeline_selected=False selected_analysis_id="" %}
+</div>
+{% endif %}

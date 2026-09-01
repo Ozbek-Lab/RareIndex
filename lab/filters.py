@@ -5,9 +5,24 @@ from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual, Sample, Project, SampleType, TestType, Status, PipelineType,
     Institution, Test, Pipeline, Analysis, AnalysisType, TaggedStatus, Family,
+    AnalysisReport, AnalysisRequestForm, Note,
 )
 from .search_utils import filter_normalized_contains, normalized_contains, normalized_contains_q
-from variant.models import ACMGEvidenceOverride, Variant, Annotation
+
+from .access import accessible_projects, accessible_variants
+from variant.models import (
+    ACMGEvidenceOverride,
+    Annotation,
+    VARIANT_TYPE_CHOICES,
+    VARIANT_TYPE_RELATION_LOOKUPS,
+    Variant,
+    normalize_variant_type_value,
+    SNV,
+    delins,
+    CNV,
+    SV,
+    Repeat,
+)
 from variant.templatetags.variant_filters import ACMG_CRITERIA_INFO
 
 FILTER_MODE_SUFFIX = "__mode"
@@ -15,6 +30,7 @@ FILTER_MODE_ANY = "any"
 FILTER_MODE_ALL = "all"
 FILTER_MODE_TOGETHER = "together"
 FILTER_GROUP_MODE_ANY = "any"
+SEARCH_NOTES_PARAM = "search_notes"
 
 def _request_targets_table(request, target_id):
     return bool(
@@ -74,6 +90,16 @@ def _exclude_values_for_data(data, field_name):
     return value if isinstance(value, list) else [value]
 
 
+def _variant_type_q(values, prefix=""):
+    q_obj = Q()
+    for value in values:
+        normalized = normalize_variant_type_value(value)
+        relation = VARIANT_TYPE_RELATION_LOOKUPS.get(normalized)
+        if relation:
+            q_obj |= Q(**{f"{prefix}{relation}__isnull": False})
+    return q_obj
+
+
 def _matching_tagged_object_ids(model_class, status_values, mode=FILTER_MODE_ANY):
     ct = ContentType.objects.get_for_model(model_class)
     qs = TaggedStatus.objects.filter(content_type=ct, tag__in=status_values)
@@ -86,6 +112,118 @@ def _matching_tagged_object_ids(model_class, status_values, mode=FILTER_MODE_ANY
             .values_list("object_id", flat=True)
         )
     return qs.values_list("object_id", flat=True)
+
+
+def _flag_enabled(data, field_name):
+    return any(
+        str(value).lower() in {"1", "true", "on", "yes"}
+        for value in _values_for_data(data, field_name)
+    )
+
+
+def _visible_note_q(user):
+    query = Q(private_owner__isnull=True)
+    if user and getattr(user, "is_authenticated", False):
+        query |= Q(private_owner=user)
+    return query
+
+
+def _matching_note_object_ids(model_class, query, user=None):
+    ct = ContentType.objects.get_for_model(model_class)
+    notes = (
+        Note.objects.filter(content_type=ct)
+        .filter(_visible_note_q(user))
+        .order_by()
+    )
+
+    matched_ids = []
+    seen_ids = set()
+    for object_id, content in (
+        notes.values_list("object_id", "content").iterator(chunk_size=1000)
+    ):
+        if object_id in seen_ids:
+            continue
+        if normalized_contains(content, query):
+            seen_ids.add(object_id)
+            matched_ids.append(object_id)
+    return matched_ids
+
+
+def _add_related_ids(target_ids, queryset, lookup):
+    target_ids.update(
+        object_id
+        for object_id in queryset.values_list(lookup, flat=True)
+        if object_id is not None
+    )
+
+
+def _matching_individual_note_search_ids(query, user=None, include_variant_notes=True):
+    matched_ids = set(_matching_note_object_ids(Individual, query, user))
+
+    sample_ids = _matching_note_object_ids(Sample, query, user)
+    if sample_ids:
+        _add_related_ids(
+            matched_ids,
+            Sample.objects.filter(pk__in=sample_ids),
+            "individual_id",
+        )
+
+    test_ids = _matching_note_object_ids(Test, query, user)
+    if test_ids:
+        _add_related_ids(
+            matched_ids,
+            Test.objects.filter(pk__in=test_ids),
+            "sample__individual_id",
+        )
+
+    pipeline_ids = _matching_note_object_ids(Pipeline, query, user)
+    if pipeline_ids:
+        _add_related_ids(
+            matched_ids,
+            Pipeline.objects.filter(pk__in=pipeline_ids),
+            "test__sample__individual_id",
+        )
+
+    analysis_ids = _matching_note_object_ids(Analysis, query, user)
+    if analysis_ids:
+        _add_related_ids(
+            matched_ids,
+            Analysis.objects.filter(pk__in=analysis_ids),
+            "pipeline__test__sample__individual_id",
+        )
+
+    if include_variant_notes:
+        variant_ids = _matching_variant_note_object_ids(query, user)
+        if variant_ids:
+            _add_related_ids(
+                matched_ids,
+                Variant.objects.filter(pk__in=variant_ids),
+                "individual_id",
+            )
+
+    return matched_ids
+
+
+def _matching_variant_note_object_ids(query, user=None):
+    matched_ids = set()
+    for model_class in (Variant, SNV, delins, CNV, SV, Repeat):
+        matched_ids.update(_matching_note_object_ids(model_class, query, user))
+    return matched_ids
+
+
+def _matching_variant_note_search_ids(query, user=None):
+    matched_ids = set(_matching_variant_note_object_ids(query, user))
+    individual_ids = _matching_individual_note_search_ids(
+        query,
+        user=user,
+        include_variant_notes=False,
+    )
+    if individual_ids:
+        matched_ids.update(
+            Variant.objects.filter(individual_id__in=individual_ids)
+            .values_list("pk", flat=True)
+        )
+    return matched_ids
 
 
 class TristateFilterMixin:
@@ -390,19 +528,8 @@ class IndividualFilter(django_filters.FilterSet):
         method='filter_variant_status',
         label="Variant Status",
     )
-    # Note: Variant 'type' is a property, not a field, so we can't filter directly easily 
-    # unless we annotate or it's stored. Looking at models.py, SNV/CNV/etc are subclasses.
-    # We might need a custom method for variant type if it's strictly about the python property.
-    # However, standard Django filters work on database fields. 
-    # The user asked for "variant types". 
-    # Let's check if we can filter by the subclass existence or if there is a discriminatory field.
-    # The models are multi-table inheritance. 
-    # We can filter by `variants__snv__isnull=False` for SNV, etc.
-    # For now, I will add a custom method filter for Variant Type.
     variant_type = django_filters.MultipleChoiceFilter(
-        choices=[
-            ('SNV', 'SNV'), ('CNV', 'CNV'), ('SV', 'SV'), ('Repeat', 'Repeat')
-        ],
+        choices=VARIANT_TYPE_CHOICES,
         method='filter_variant_type',
         label="Variant Type"
     )
@@ -536,6 +663,7 @@ class IndividualFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         table_only_request = _request_targets_table(
             getattr(self, "request", None),
             "individual-table-container",
@@ -558,25 +686,33 @@ class IndividualFilter(django_filters.FilterSet):
                 "variants__acmg_evidence",
             )
         else:
+            individual_choice_qs = Individual.objects.all()
+            if request_user is not None:
+                from .access import accessible_individuals
+
+                individual_choice_qs = accessible_individuals(request_user, individual_choice_qs)
             # Populate dynamic choices for institution sub-filters
             city_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(city__isnull=True).exclude(city='')
-                .values_list('city', flat=True).distinct().order_by('city')
+                (v, v) for v in individual_choice_qs.exclude(institution__city__isnull=True)
+                .exclude(institution__city='')
+                .values_list('institution__city', flat=True).distinct().order_by('institution__city')
             ]
             speciality_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(speciality__isnull=True).exclude(speciality='')
-                .values_list('speciality', flat=True).distinct().order_by('speciality')
+                (v, v) for v in individual_choice_qs.exclude(institution__speciality__isnull=True)
+                .exclude(institution__speciality='')
+                .values_list('institution__speciality', flat=True).distinct().order_by('institution__speciality')
             ]
             center_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(center_name__isnull=True).exclude(center_name='')
-                .values_list('center_name', flat=True).distinct().order_by('center_name')
+                (v, v) for v in individual_choice_qs.exclude(institution__center_name__isnull=True)
+                .exclude(institution__center_name='')
+                .values_list('institution__center_name', flat=True).distinct().order_by('institution__center_name')
             ]
             
+            project_qs = Project.objects.all()
+            if request_user is not None:
+                project_qs = accessible_projects(request_user, project_qs)
             project_choices = [
-                (name, name) for name in Project.objects.values_list('name', flat=True).order_by('name')
+                (name, name) for name in project_qs.values_list('name', flat=True).order_by('name')
             ]
             annotation_classification_choices = _annotation_acmg_classification_choices()
             acmg_evidence_choices = _acmg_evidence_choices()
@@ -828,6 +964,11 @@ class IndividualFilter(django_filters.FilterSet):
 
         search_query = normalized_contains_q(queryset, ["cross_ids__id_value", "id"], value)
         request_user = getattr(getattr(self, "request", None), "user", None)
+        if _flag_enabled(self.data, SEARCH_NOTES_PARAM):
+            note_match_ids = _matching_individual_note_search_ids(value, request_user)
+            if note_match_ids:
+                search_query |= Q(pk__in=note_match_ids)
+
         if request_user and request_user.has_perm("lab.view_sensitive_data"):
             matching_name_ids = []
             name_queryset = (
@@ -845,53 +986,23 @@ class IndividualFilter(django_filters.FilterSet):
     def filter_variant_type(self, queryset, name, value):
         if not value:
             return queryset
-            
-        # This one is tricky for simple inclusion/exclusion in the same custom class
-        # because it's a method filter. 
-        # Let's handle the inclusion logic here manually.
-        # Value is a list of selected types strings ['SNV', 'CNV']
-        
-        # We need to construct a robust query.
-        q_obj = Q()
-        if 'SNV' in value:
-            q_obj |= Q(variants__snv__isnull=False)
-        if 'CNV' in value:
-            q_obj |= Q(variants__cnv__isnull=False)
-        if 'SV' in value:
-            q_obj |= Q(variants__sv__isnull=False)
-        if 'Repeat' in value:
-            q_obj |= Q(variants__repeat__isnull=False)
-            
-        # Handle Exclusion (checking query params directly)
-        data = self.data
-        excluded_values = _exclude_values_for_data(data, name)
-        
-        exclude_q = Q()
-        if 'SNV' in excluded_values:
-            exclude_q |= Q(variants__snv__isnull=False)
-        if 'CNV' in excluded_values:
-            exclude_q |= Q(variants__cnv__isnull=False)
-        if 'SV' in excluded_values:
-            exclude_q |= Q(variants__sv__isnull=False)
-        if 'Repeat' in excluded_values:
-            exclude_q |= Q(variants__repeat__isnull=False)
-            
+
+        excluded_values = _exclude_values_for_data(self.data, name)
         mode = _get_filter_mode(self.data, name, allow_together=True)
         if value:
             if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
                 for variant_type in value:
-                    if variant_type == 'SNV':
-                        queryset = queryset.filter(variants__snv__isnull=False)
-                    elif variant_type == 'CNV':
-                        queryset = queryset.filter(variants__cnv__isnull=False)
-                    elif variant_type == 'SV':
-                        queryset = queryset.filter(variants__sv__isnull=False)
-                    elif variant_type == 'Repeat':
-                        queryset = queryset.filter(variants__repeat__isnull=False)
+                    q_obj = _variant_type_q([variant_type], prefix="variants__")
+                    if q_obj.children:
+                        queryset = queryset.filter(q_obj)
             else:
-                queryset = queryset.filter(q_obj)
+                q_obj = _variant_type_q(value, prefix="variants__")
+                if q_obj.children:
+                    queryset = queryset.filter(q_obj)
         if excluded_values:
-            queryset = queryset.exclude(exclude_q)
+            exclude_q = _variant_type_q(excluded_values, prefix="variants__")
+            if exclude_q.children:
+                queryset = queryset.exclude(exclude_q)
             
         return queryset.distinct()
 
@@ -1097,24 +1208,14 @@ class IndividualFilter(django_filters.FilterSet):
     def _apply_variant_type_values(self, queryset, values, mode, prefix=""):
         if not values:
             return queryset
-        lookups = {
-            'SNV': f'{prefix}snv__isnull',
-            'CNV': f'{prefix}cnv__isnull',
-            'SV': f'{prefix}sv__isnull',
-            'Repeat': f'{prefix}repeat__isnull',
-        }
         if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
             for variant_type in values:
-                lookup = lookups.get(variant_type)
-                if lookup:
-                    queryset = queryset.filter(**{lookup: False})
+                q_obj = _variant_type_q([variant_type], prefix=prefix)
+                if q_obj.children:
+                    queryset = queryset.filter(q_obj)
             return queryset
-        q_obj = Q()
-        for variant_type in values:
-            lookup = lookups.get(variant_type)
-            if lookup:
-                q_obj |= Q(**{lookup: False})
-        return queryset.filter(q_obj)
+        q_obj = _variant_type_q(values, prefix=prefix)
+        return queryset.filter(q_obj) if q_obj.children else queryset
 
     def _apply_together_constraints(self, queryset):
         return self._apply_together_constraints_for_fields(queryset, None)
@@ -1230,21 +1331,16 @@ class VariantFilter(django_filters.FilterSet):
         queryset=Status.objects.all(),
         to_field_name='name',
         method='filter_variant_status',
-        label="Status",
+        label="Variant Status",
     )
     zygosity = TristateMultipleChoiceFilter(
         choices=Variant.ZYGOSITY_CHOICES,
         label="Zygosity",
     )
     variant_type = django_filters.MultipleChoiceFilter(
-        choices=[('SNV', 'SNV'), ('CNV', 'CNV'), ('SV', 'SV'), ('Repeat', 'Repeat')],
+        choices=VARIANT_TYPE_CHOICES,
         method='filter_variant_type',
         label="Type",
-    )
-    annotation_acmg_classification = django_filters.MultipleChoiceFilter(
-        choices=[],
-        method="filter_annotation_acmg_classification",
-        label="ACMG Classification",
     )
     chromosome = django_filters.CharFilter(lookup_expr='icontains', label="Chromosome")
     gene = django_filters.CharFilter(method='filter_gene', label="Gene Symbol")
@@ -1259,6 +1355,11 @@ class VariantFilter(django_filters.FilterSet):
         method='filter_annotation_source',
         label="Annotation Source",
     )
+    annotation_acmg_classification = django_filters.MultipleChoiceFilter(
+        choices=[],
+        method="filter_annotation_acmg_classification",
+        label="ACMG Classification",
+    )
     acmg_evidence = django_filters.MultipleChoiceFilter(
         choices=[],
         method="filter_acmg_evidence",
@@ -1269,70 +1370,348 @@ class VariantFilter(django_filters.FilterSet):
         label="gnomAD AF ≤",
     )
 
+    # Individual fields, scoped through Variant.individual
+    individual_status = TristateModelMultipleChoiceFilter(
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        method='filter_individual_status',
+        label="Individual Status",
+    )
+    sex = TristateMultipleChoiceFilter(
+        choices=Individual._meta.get_field('sex').choices,
+        method='filter_individual_sex',
+    )
+    is_alive = TristateMultipleChoiceFilter(
+        choices=[(True, 'Alive'), (False, 'Deceased')],
+        method='filter_individual_is_alive',
+    )
+    is_affected = TristateMultipleChoiceFilter(
+        choices=[(True, 'Affected'), (False, 'Unaffected')],
+        method='filter_individual_is_affected',
+    )
+    is_index = TristateMultipleChoiceFilter(
+        choices=[(True, 'Yes'), (False, 'No')],
+        method='filter_individual_is_index',
+        label="Is Index",
+    )
+    age_of_onset_months_min = django_filters.NumberFilter(
+        field_name="individual__age_of_onset_in_months",
+        lookup_expr="gte",
+        label="Minimum Age of Onset (months)",
+    )
+    age_of_onset_months_max = django_filters.NumberFilter(
+        field_name="individual__age_of_onset_in_months",
+        lookup_expr="lte",
+        label="Maximum Age of Onset (months)",
+    )
+    family__is_consanguineous = django_filters.MultipleChoiceFilter(
+        choices=[
+            ("false", "Non-Consanguineous"),
+            ("unknown", "Unknown"),
+            ("true", "Consanguineous"),
+        ],
+        method='filter_family_consanguinity',
+        label="Family Consanguinity",
+    )
+    has_report = django_filters.MultipleChoiceFilter(
+        choices=[('true', 'Yes'), ('false', 'No')],
+        method='filter_has_report',
+        label="Has Report",
+    )
+    has_request_form = django_filters.MultipleChoiceFilter(
+        choices=[('true', 'Yes'), ('false', 'No')],
+        method='filter_has_request_form',
+        label="Has Request Form",
+    )
+    projects = django_filters.MultipleChoiceFilter(
+        choices=[],
+        method='filter_projects',
+        label="Project",
+    )
+    hpo_terms = OpenMultipleChoiceFilter(
+        choices=[],
+        label="HPO Terms",
+        method='filter_hpo_terms',
+    )
+
+    # Institution filters
+    institution_name = django_filters.CharFilter(
+        method='filter_institution_name',
+        label="Institution Name",
+    )
+    institution__city = TristateMultipleChoiceFilter(
+        choices=[],
+        method='filter_institution_city',
+        label="Institution City",
+    )
+    institution__speciality = TristateMultipleChoiceFilter(
+        choices=[],
+        method='filter_institution_speciality',
+        label="Institution Speciality",
+    )
+    institution__center_name = TristateMultipleChoiceFilter(
+        choices=[],
+        method='filter_institution_center_name',
+        label="Institution Center",
+    )
+
+    # Sample fields
+    samples__status = TristateModelMultipleChoiceFilter(
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        method='filter_sample_status',
+        label="Sample Status",
+    )
+    samples__sample_type = TristateModelMultipleChoiceFilter(
+        queryset=SampleType.objects.all(),
+        to_field_name='name',
+        method='filter_sample_type',
+        label="Sample Type",
+    )
+
+    # Test fields
+    samples__tests__status = TristateModelMultipleChoiceFilter(
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        method='filter_test_status',
+        label="Test Status",
+    )
+    samples__tests__test_type = TristateModelMultipleChoiceFilter(
+        queryset=TestType.objects.all(),
+        to_field_name='name',
+        method='filter_test_type',
+        label="Test Type",
+    )
+
+    # Pipeline fields
+    samples__tests__pipelines__status = TristateModelMultipleChoiceFilter(
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        method='filter_pipeline_status',
+        label="Pipeline Status",
+    )
+    samples__tests__pipelines__type = TristateModelMultipleChoiceFilter(
+        queryset=PipelineType.objects.all(),
+        to_field_name='name',
+        method='filter_pipeline_type',
+        label="Pipeline Type",
+    )
+
+    # Analysis fields
+    samples__tests__pipelines__analyses__status = TristateModelMultipleChoiceFilter(
+        queryset=Status.objects.all(),
+        to_field_name='name',
+        method='filter_analysis_status',
+        label="Analysis Status",
+    )
+    samples__tests__pipelines__analyses__type = TristateModelMultipleChoiceFilter(
+        queryset=AnalysisType.objects.all(),
+        to_field_name='name',
+        method='filter_analysis_type',
+        label="Analysis Type",
+    )
+
     class Meta:
         model = Variant
         fields = ['zygosity']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         table_only_request = _request_targets_table(
             getattr(self, "request", None),
             "variant-table-container",
         )
 
-        # Restrict Status choices to Variant content type
-        ct = ContentType.objects.get_for_model(Variant)
-        self.filters['status'].queryset = Status.objects.filter(content_type=ct)
+        if 'hpo_terms' in self.filters:
+            from ontologies.models import Term
+            self.filters['hpo_terms'].queryset = Term.objects.all()
 
         if table_only_request:
             assembly_choices = _submitted_choice_values(self.data, "assembly_version")
             source_choices = _submitted_choice_values(self.data, "annotation_source")
+            project_choices = _submitted_choice_values(self.data, "projects")
+            city_choices = _submitted_choice_values(self.data, "institution__city")
+            speciality_choices = _submitted_choice_values(self.data, "institution__speciality")
+            center_choices = _submitted_choice_values(self.data, "institution__center_name")
             annotation_classification_choices = _submitted_choice_values(
                 self.data,
                 "annotation_acmg_classification",
             )
             acmg_evidence_choices = _submitted_choice_values(self.data, "acmg_evidence")
         else:
-            # Dynamically build assembly choices from existing data
+            variant_choice_qs = Variant.objects.all()
+            project_qs = Project.objects.all()
+            if request_user is not None:
+                variant_choice_qs = accessible_variants(request_user, variant_choice_qs)
+                project_qs = accessible_projects(request_user, project_qs)
             assemblies = (
-                Variant.objects.values_list('assembly_version', flat=True)
+                variant_choice_qs.values_list('assembly_version', flat=True)
                 .distinct()
                 .order_by('assembly_version')
             )
             assembly_choices = [(a, a) for a in assemblies if a]
 
-            # Dynamically build annotation source choices
             sources = (
-                Annotation.objects.values_list('source', flat=True)
+                Annotation.objects.filter(variant__in=variant_choice_qs).values_list('source', flat=True)
                 .distinct()
                 .order_by('source')
             )
             source_choices = [(s, s) for s in sources if s]
+
+            project_choices = [
+                (name, name) for name in project_qs.values_list('name', flat=True).order_by('name')
+            ]
+            city_choices = [
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__city__isnull=True)
+                .exclude(individual__institution__city='')
+                .values_list('individual__institution__city', flat=True).distinct().order_by('individual__institution__city')
+            ]
+            speciality_choices = [
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__speciality__isnull=True)
+                .exclude(individual__institution__speciality='')
+                .values_list('individual__institution__speciality', flat=True).distinct().order_by('individual__institution__speciality')
+            ]
+            center_choices = [
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__center_name__isnull=True)
+                .exclude(individual__institution__center_name='')
+                .values_list('individual__institution__center_name', flat=True).distinct().order_by('individual__institution__center_name')
+            ]
             annotation_classification_choices = _annotation_acmg_classification_choices()
             acmg_evidence_choices = _acmg_evidence_choices()
 
         self.filters['assembly_version'].field.choices = assembly_choices
         self.filters['annotation_source'].field.choices = source_choices
+        self.filters['projects'].field.choices = project_choices
+        self.filters['institution__city'].field.choices = city_choices
+        self.filters['institution__speciality'].field.choices = speciality_choices
+        self.filters['institution__center_name'].field.choices = center_choices
         self.filters["annotation_acmg_classification"].field.choices = annotation_classification_choices
         self.filters["acmg_evidence"].field.choices = acmg_evidence_choices
 
-    def filter_variant_status(self, queryset, name, value):
-        variant_ct = ContentType.objects.get_for_model(Variant)
-        if value:
-            matched_ids = TaggedStatus.objects.filter(
-                content_type=variant_ct,
-                tag__in=value,
-            ).values_list("object_id", flat=True)
-            queryset = queryset.filter(pk__in=matched_ids)
-        data = self.data
-        excluded_names = data.getlist("status__exclude") if hasattr(data, 'getlist') else []
-        if excluded_names:
-            excl_ids = TaggedStatus.objects.filter(
-                content_type=variant_ct,
-                tag__name__in=excluded_names,
-            ).values_list("object_id", flat=True)
-            queryset = queryset.exclude(pk__in=excl_ids)
-        return queryset.distinct()
+        self._restrict_status_queryset('status', Variant)
+        self._restrict_status_queryset('individual_status', Individual)
+        self._restrict_status_queryset('samples__status', Sample)
+        self._restrict_status_queryset('samples__tests__status', Test)
+        self._restrict_status_queryset('samples__tests__pipelines__status', Pipeline)
+        self._restrict_status_queryset('samples__tests__pipelines__analyses__status', Analysis)
+
+    def _restrict_status_queryset(self, field_name, model_class):
+        if field_name in self.filters:
+            ct = ContentType.objects.get_for_model(model_class)
+            self.filters[field_name].queryset = (
+                Status.objects.filter(content_type=ct)
+                .select_related("group")
+                .order_by("group__name", "name")
+            )
+
+    def _filter_exists(self, queryset, related_queryset):
+        return queryset.filter(Exists(related_queryset.values("pk")[:1]))
+
+    def _exclude_exists(self, queryset, related_queryset):
+        return queryset.exclude(Exists(related_queryset.values("pk")[:1]))
+
+    def _apply_exists_values(self, queryset, related_queryset_factory, values, mode):
+        if not values:
+            return queryset
+        values = list(values)
+        if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+            for value in values:
+                queryset = self._filter_exists(queryset, related_queryset_factory([value]))
+            return queryset
+        return self._filter_exists(queryset, related_queryset_factory(values))
+
+    def _apply_model_values(self, queryset, lookup_base, values, mode):
+        if not values:
+            return queryset
+        if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+            for value in values:
+                queryset = queryset.filter(**{lookup_base: value})
+            return queryset
+        return queryset.filter(**{f"{lookup_base}__in": values})
+
+    def _apply_lookup_values(self, queryset, lookup_base, field_name, values):
+        mode = _get_filter_mode(self.data, field_name, allow_together=True)
+        return _filter_lookup_values(queryset, lookup_base, values, mode).distinct()
+
+    def _status_queryset_from_names(self, model_class, status_names):
+        if not status_names:
+            return Status.objects.none()
+        ct = ContentType.objects.get_for_model(model_class)
+        return Status.objects.filter(content_type=ct, name__in=status_names)
+
+    def _apply_status_values_to_related_qs(self, related_qs, model_class, status_values, mode):
+        if not status_values:
+            return related_qs
+        first_value = next(iter(status_values), None)
+        if isinstance(first_value, str):
+            status_values = self._status_queryset_from_names(model_class, status_values)
+        matched_ids = _matching_tagged_object_ids(model_class, status_values, mode)
+        return related_qs.filter(pk__in=matched_ids)
+
+    def _values_for(self, field_name):
+        return _values_for_data(self.data, field_name)
+
+    def _exclude_values_for(self, field_name):
+        return _exclude_values_for_data(self.data, field_name)
+
+    def _is_empty_filter_value(self, value):
+        if value is None or value == "":
+            return True
+        if hasattr(value, "exists"):
+            return not value.exists()
+        try:
+            return len(value) == 0
+        except TypeError:
+            return False
+
+    def _section_uses_together(self, field_names):
+        return any(
+            _get_filter_mode(self.data, field_name, allow_together=True) == FILTER_MODE_TOGETHER
+            for field_name in field_names
+        )
+
+    def _variant_type_q(self, values):
+        return _variant_type_q(values)
+
+    def _apply_variant_type_values(self, queryset, values, mode):
+        if not values:
+            return queryset
+        if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+            for variant_type in values:
+                q_obj = self._variant_type_q([variant_type])
+                if q_obj.children:
+                    queryset = queryset.filter(q_obj)
+            return queryset
+        q_obj = self._variant_type_q(values)
+        return queryset.filter(q_obj) if q_obj.children else queryset
+
+    def _family_consanguinity_q(self, values):
+        values = {str(value).lower() for value in values}
+        query = Q()
+        known_values = []
+        if "true" in values:
+            known_values.append(True)
+        if "false" in values:
+            known_values.append(False)
+        if known_values:
+            query |= Q(individual__family__is_consanguineous__in=known_values)
+        if "unknown" in values:
+            query |= (
+                Q(individual__family__isnull=True) |
+                Q(individual__family__is_consanguineous__isnull=True)
+            )
+        return query
+
+    def _report_exists_qs(self):
+        return AnalysisReport.objects.filter(
+            analysis__pipeline__test__sample__individual_id=OuterRef("individual_id"),
+        )
+
+    def _request_form_exists_qs(self):
+        return AnalysisRequestForm.objects.filter(
+            individual_id=OuterRef("individual_id"),
+        )
 
     def filter_search(self, queryset, name, value):
         if not value:
@@ -1350,111 +1729,513 @@ class VariantFilter(django_filters.FilterSet):
         if request_user and request_user.has_perm("lab.view_sensitive_data"):
             search_fields.append("individual__full_name")
 
-        return filter_normalized_contains(queryset, search_fields, value).distinct()
+        search_query = normalized_contains_q(queryset, search_fields, value)
+        if _flag_enabled(self.data, SEARCH_NOTES_PARAM):
+            note_match_ids = _matching_variant_note_search_ids(value, request_user)
+            if note_match_ids:
+                search_query |= Q(pk__in=note_match_ids)
+
+        return queryset.filter(search_query).distinct()
 
     def filter_gene(self, queryset, name, value):
         return filter_normalized_contains(queryset, ["genes__symbol"], value).distinct()
 
-    def filter_variant_type(self, queryset, name, value):
-        if not value:
-            return queryset
-        q_obj = Q()
-        if 'SNV' in value:
-            q_obj |= Q(snv__isnull=False)
-        if 'CNV' in value:
-            q_obj |= Q(cnv__isnull=False)
-        if 'SV' in value:
-            q_obj |= Q(sv__isnull=False)
-        if 'Repeat' in value:
-            q_obj |= Q(repeat__isnull=False)
-
-        data = self.data
-        excluded = data.getlist(f"{name}__exclude") if hasattr(data, 'getlist') else []
-        exclude_q = Q()
-        if 'SNV' in excluded:
-            exclude_q |= Q(snv__isnull=False)
-        if 'CNV' in excluded:
-            exclude_q |= Q(cnv__isnull=False)
-        if 'SV' in excluded:
-            exclude_q |= Q(sv__isnull=False)
-        if 'Repeat' in excluded:
-            exclude_q |= Q(repeat__isnull=False)
-
+    def filter_variant_status(self, queryset, name, value):
         if value:
-            queryset = queryset.filter(q_obj)
-        if excluded:
-            queryset = queryset.exclude(exclude_q)
+            mode = _get_filter_mode(self.data, name, allow_together=True)
+            matched_ids = _matching_tagged_object_ids(Variant, value, mode)
+            queryset = queryset.filter(pk__in=matched_ids)
         return queryset.distinct()
 
+    def filter_variant_type(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        return self._apply_variant_type_values(queryset, value, mode).distinct()
+
     def filter_annotation_source(self, queryset, name, value):
-        if not value:
-            return queryset
-        q = Q()
-        for source in value:
-            q |= Q(annotations__source=source)
-        return queryset.filter(q).distinct()
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        return self._apply_model_values(queryset, "annotations__source", value, mode).distinct()
 
     def filter_annotation_acmg_classification(self, queryset, name, value):
         mode = _get_filter_mode(self.data, name)
-        queryset = _filter_annotation_acmg_classification_values(
+        return _filter_annotation_acmg_classification_values(
             queryset,
             "annotations",
             value,
             mode,
-        )
-
-        excluded_values = _exclude_values_for_data(self.data, name)
-        if excluded_values:
-            queryset = queryset.exclude(
-                _annotation_acmg_classification_q("annotations", excluded_values)
-            )
-
-        return queryset.distinct()
+        ).distinct()
 
     def filter_acmg_evidence(self, queryset, name, value):
         mode = _get_filter_mode(self.data, name, allow_together=True)
-        queryset = _filter_acmg_evidence_values(
+        return _filter_acmg_evidence_values(
             queryset,
             "acmg_evidence_overrides",
             value,
             mode,
-        )
-
-        excluded_values = _exclude_values_for_data(self.data, name)
-        if excluded_values:
-            queryset = queryset.exclude(
-                acmg_evidence_overrides__criterion__in=excluded_values,
-                acmg_evidence_overrides__included=True,
-            )
-
-        return queryset.distinct()
-
-    def filter_queryset(self, queryset):
-        queryset = super().filter_queryset(queryset)
-        excluded_classifications = _exclude_values_for_data(self.data, "annotation_acmg_classification")
-        if excluded_classifications:
-            queryset = queryset.exclude(
-                _annotation_acmg_classification_q("annotations", excluded_classifications)
-            )
-        excluded_values = _exclude_values_for_data(self.data, "acmg_evidence")
-        if excluded_values:
-            queryset = queryset.exclude(
-                acmg_evidence_overrides__criterion__in=excluded_values,
-                acmg_evidence_overrides__included=True,
-            )
-        return queryset.distinct()
+        ).distinct()
 
     def filter_gnomad_af_max(self, queryset, name, value):
         if value is None:
             return queryset
         threshold = float(value)
-        # Try the most common JSON paths used by myvariant.info and GeneBe
         annotated_variant_ids = Annotation.objects.filter(
             Q(data__gnomad_genome__af__af__lte=threshold)
             | Q(data__gnomad_exome__af__af__lte=threshold)
             | Q(data__gnomad__af__lte=threshold)
         ).values_list('variant_id', flat=True)
         return queryset.filter(pk__in=annotated_variant_ids).distinct()
+
+    def filter_individual_status(self, queryset, name, value):
+        if value:
+            mode = _get_filter_mode(self.data, name)
+            matched_ids = _matching_tagged_object_ids(Individual, value, mode)
+            queryset = queryset.filter(individual_id__in=matched_ids)
+        return queryset.distinct()
+
+    def filter_individual_sex(self, queryset, name, value):
+        return self._apply_lookup_values(queryset, "individual__sex", name, value)
+
+    def filter_individual_is_alive(self, queryset, name, value):
+        return self._apply_lookup_values(queryset, "individual__is_alive", name, value)
+
+    def filter_individual_is_affected(self, queryset, name, value):
+        return self._apply_lookup_values(queryset, "individual__is_affected", name, value)
+
+    def filter_individual_is_index(self, queryset, name, value):
+        return self._apply_lookup_values(queryset, "individual__is_index", name, value)
+
+    def filter_family_consanguinity(self, queryset, name, value):
+        values = set(value or [])
+        mode = _get_filter_mode(self.data, name)
+        if not values:
+            return queryset
+        if mode == FILTER_MODE_ALL and len(values) > 1:
+            return queryset.none()
+        return queryset.filter(self._family_consanguinity_q(values)).distinct()
+
+    def filter_has_report(self, queryset, name, value):
+        values = set(value or [])
+        mode = _get_filter_mode(self.data, name)
+        if not values or values == {'true', 'false'} and mode == FILTER_MODE_ANY:
+            return queryset
+        report_qs = self._report_exists_qs()
+        if values == {'true', 'false'}:
+            return queryset.none()
+        if 'true' in values:
+            return self._filter_exists(queryset, report_qs).distinct()
+        if 'false' in values:
+            return self._exclude_exists(queryset, report_qs).distinct()
+        return queryset
+
+    def filter_has_request_form(self, queryset, name, value):
+        values = set(value or [])
+        mode = _get_filter_mode(self.data, name)
+        if not values or values == {'true', 'false'} and mode == FILTER_MODE_ANY:
+            return queryset
+        request_form_qs = self._request_form_exists_qs()
+        if values == {'true', 'false'}:
+            return queryset.none()
+        if 'true' in values:
+            return self._filter_exists(queryset, request_form_qs).distinct()
+        if 'false' in values:
+            return self._exclude_exists(queryset, request_form_qs).distinct()
+        return queryset
+
+    def filter_projects(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        if not value:
+            return queryset
+        if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
+            for project_name in value:
+                queryset = queryset.filter(individual__projects__name=project_name)
+            return queryset.distinct()
+        return queryset.filter(individual__projects__name__in=value).distinct()
+
+    def filter_hpo_terms(self, queryset, name, value):
+        from ontologies.utils import get_descendants, get_descendants_from_obo
+
+        if not value:
+            return queryset
+
+        mode = _get_filter_mode(self.data, name)
+        term_groups = []
+        for selected_value in value:
+            selected_db_ids = set()
+            selected_obo_ids = set()
+            try:
+                selected_db_ids.add(int(selected_value))
+            except (ValueError, TypeError):
+                selected_obo_ids.add(str(selected_value))
+
+            relevant_term_ids = set()
+            if selected_db_ids:
+                relevant_term_ids.update(get_descendants(selected_db_ids))
+            if selected_obo_ids:
+                relevant_term_ids.update(get_descendants_from_obo(selected_obo_ids))
+            if relevant_term_ids:
+                term_groups.append(relevant_term_ids)
+
+        if mode == FILTER_MODE_ALL:
+            for term_ids in term_groups:
+                queryset = queryset.filter(individual__hpo_terms__in=term_ids)
+        else:
+            all_relevant_term_ids = set()
+            for term_ids in term_groups:
+                all_relevant_term_ids.update(term_ids)
+            queryset = queryset.filter(individual__hpo_terms__in=all_relevant_term_ids)
+
+        return queryset.distinct()
+
+    def filter_institution_name(self, queryset, name, value):
+        if value:
+            queryset = filter_normalized_contains(queryset, ["individual__institution__name"], value)
+        return queryset.distinct()
+
+    def filter_institution_city(self, queryset, name, value):
+        return self._apply_lookup_values(queryset, "individual__institution__city", name, value)
+
+    def filter_institution_speciality(self, queryset, name, value):
+        return self._apply_lookup_values(queryset, "individual__institution__speciality", name, value)
+
+    def filter_institution_center_name(self, queryset, name, value):
+        return self._apply_lookup_values(queryset, "individual__institution__center_name", name, value)
+
+    def filter_sample_status(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        if value:
+            sample_ids = _matching_tagged_object_ids(Sample, value, mode)
+            sample_qs = Sample.objects.filter(
+                individual_id=OuterRef("individual_id"),
+                pk__in=sample_ids,
+            )
+            queryset = self._filter_exists(queryset, sample_qs)
+        return queryset.distinct()
+
+    def filter_sample_type(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        return self._apply_exists_values(
+            queryset,
+            lambda values: Sample.objects.filter(
+                individual_id=OuterRef("individual_id"),
+                sample_type__in=values,
+            ),
+            value,
+            mode,
+        ).distinct()
+
+    def filter_test_status(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        if value:
+            test_ids = _matching_tagged_object_ids(Test, value, mode)
+            test_qs = Test.objects.filter(
+                sample__individual_id=OuterRef("individual_id"),
+                pk__in=test_ids,
+            )
+            queryset = self._filter_exists(queryset, test_qs)
+        return queryset.distinct()
+
+    def filter_test_type(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        return self._apply_exists_values(
+            queryset,
+            lambda values: Test.objects.filter(
+                sample__individual_id=OuterRef("individual_id"),
+                test_type__in=values,
+            ),
+            value,
+            mode,
+        ).distinct()
+
+    def filter_pipeline_status(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        if value:
+            pipe_ids = _matching_tagged_object_ids(Pipeline, value, mode)
+            pipeline_qs = Pipeline.objects.filter(
+                test__sample__individual_id=OuterRef("individual_id"),
+                pk__in=pipe_ids,
+            )
+            queryset = self._filter_exists(queryset, pipeline_qs)
+        return queryset.distinct()
+
+    def filter_pipeline_type(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        return self._apply_exists_values(
+            queryset,
+            lambda values: Pipeline.objects.filter(
+                test__sample__individual_id=OuterRef("individual_id"),
+                type__in=values,
+            ),
+            value,
+            mode,
+        ).distinct()
+
+    def filter_analysis_status(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        if value:
+            analysis_ids = _matching_tagged_object_ids(Analysis, value, mode)
+            analysis_qs = Analysis.objects.filter(
+                pipeline__test__sample__individual_id=OuterRef("individual_id"),
+                pk__in=analysis_ids,
+            )
+            queryset = self._filter_exists(queryset, analysis_qs)
+        return queryset.distinct()
+
+    def filter_analysis_type(self, queryset, name, value):
+        mode = _get_filter_mode(self.data, name, allow_together=True)
+        return self._apply_exists_values(
+            queryset,
+            lambda values: Analysis.objects.filter(
+                pipeline__test__sample__individual_id=OuterRef("individual_id"),
+                type__in=values,
+            ),
+            value,
+            mode,
+        ).distinct()
+
+    def filter_queryset(self, queryset):
+        if self.data.get("filter_group_mode") == FILTER_GROUP_MODE_ANY:
+            return self._filter_queryset_any_group(queryset)
+
+        search_value = self.form.cleaned_data.get("search")
+        for name, value in self.form.cleaned_data.items():
+            if name == "search":
+                continue
+            queryset = self.filters[name].filter(queryset, value)
+
+        queryset = self._apply_together_constraints(queryset)
+        queryset = self._apply_global_exclusions(queryset).distinct()
+        if search_value:
+            queryset = self.filters["search"].filter(queryset, search_value)
+        return queryset.distinct()
+
+    def _filter_queryset_any_group(self, queryset):
+        base_queryset = self._apply_global_exclusions(queryset)
+        search_value = self.form.cleaned_data.get("search")
+
+        combined_queryset = queryset.none()
+        has_include_group = False
+        for name, filter_instance in self.filters.items():
+            if name == "search":
+                continue
+            value = self.form.cleaned_data.get(name)
+            if self._is_empty_filter_value(value):
+                continue
+
+            has_include_group = True
+            filtered_group = filter_instance.filter(base_queryset, value)
+            filtered_group = self._apply_together_constraints_for_fields(filtered_group, [name])
+            combined_queryset = combined_queryset | filtered_group
+
+        result_queryset = combined_queryset.distinct() if has_include_group else base_queryset.distinct()
+        if search_value:
+            result_queryset = self.filters["search"].filter(result_queryset, search_value)
+        return result_queryset.distinct()
+
+    def _apply_global_exclusions(self, queryset):
+        for name in self.filters:
+            excluded_values = self._exclude_values_for(name)
+            if not excluded_values:
+                continue
+            queryset = self._exclude_filter_values(queryset, name, excluded_values)
+        return queryset.distinct()
+
+    def _exclude_filter_values(self, queryset, name, values):
+        if name == "status":
+            status_values = self._status_queryset_from_names(Variant, values)
+            matched_ids = _matching_tagged_object_ids(Variant, status_values)
+            return queryset.exclude(pk__in=matched_ids)
+        if name == "individual_status":
+            status_values = self._status_queryset_from_names(Individual, values)
+            matched_ids = _matching_tagged_object_ids(Individual, status_values)
+            return queryset.exclude(individual_id__in=matched_ids)
+        if name == "variant_type":
+            q_obj = self._variant_type_q(values)
+            return queryset.exclude(q_obj) if q_obj.children else queryset
+        if name == "annotation_source":
+            return queryset.exclude(annotations__source__in=values)
+        if name == "annotation_acmg_classification":
+            return queryset.exclude(_annotation_acmg_classification_q("annotations", values))
+        if name == "acmg_evidence":
+            return queryset.exclude(
+                acmg_evidence_overrides__criterion__in=values,
+                acmg_evidence_overrides__included=True,
+            )
+        if name == "zygosity":
+            return queryset.exclude(zygosity__in=values)
+        if name == "assembly_version":
+            return queryset.exclude(assembly_version__in=values)
+        if name == "sex":
+            return queryset.exclude(individual__sex__in=values)
+        if name == "is_alive":
+            return queryset.exclude(individual__is_alive__in=values)
+        if name == "is_affected":
+            return queryset.exclude(individual__is_affected__in=values)
+        if name == "is_index":
+            return queryset.exclude(individual__is_index__in=values)
+        if name == "family__is_consanguineous":
+            q_obj = self._family_consanguinity_q(values)
+            return queryset.exclude(q_obj) if q_obj.children else queryset
+        if name == "has_report":
+            return self._exclude_has_related(queryset, values, self._report_exists_qs())
+        if name == "has_request_form":
+            return self._exclude_has_related(queryset, values, self._request_form_exists_qs())
+        if name == "projects":
+            return queryset.exclude(individual__projects__name__in=values)
+        if name == "hpo_terms":
+            return self._exclude_hpo_terms(queryset, values)
+        if name == "institution__city":
+            return queryset.exclude(individual__institution__city__in=values)
+        if name == "institution__speciality":
+            return queryset.exclude(individual__institution__speciality__in=values)
+        if name == "institution__center_name":
+            return queryset.exclude(individual__institution__center_name__in=values)
+        if name == "samples__status":
+            return self._exclude_related_status(queryset, Sample, Sample.objects.filter(
+                individual_id=OuterRef("individual_id"),
+            ), values)
+        if name == "samples__sample_type":
+            return self._exclude_exists(
+                queryset,
+                Sample.objects.filter(
+                    individual_id=OuterRef("individual_id"),
+                    sample_type__name__in=values,
+                ),
+            )
+        if name == "samples__tests__status":
+            return self._exclude_related_status(queryset, Test, Test.objects.filter(
+                sample__individual_id=OuterRef("individual_id"),
+            ), values)
+        if name == "samples__tests__test_type":
+            return self._exclude_exists(
+                queryset,
+                Test.objects.filter(
+                    sample__individual_id=OuterRef("individual_id"),
+                    test_type__name__in=values,
+                ),
+            )
+        if name == "samples__tests__pipelines__status":
+            return self._exclude_related_status(queryset, Pipeline, Pipeline.objects.filter(
+                test__sample__individual_id=OuterRef("individual_id"),
+            ), values)
+        if name == "samples__tests__pipelines__type":
+            return self._exclude_exists(
+                queryset,
+                Pipeline.objects.filter(
+                    test__sample__individual_id=OuterRef("individual_id"),
+                    type__name__in=values,
+                ),
+            )
+        if name == "samples__tests__pipelines__analyses__status":
+            return self._exclude_related_status(queryset, Analysis, Analysis.objects.filter(
+                pipeline__test__sample__individual_id=OuterRef("individual_id"),
+            ), values)
+        if name == "samples__tests__pipelines__analyses__type":
+            return self._exclude_exists(
+                queryset,
+                Analysis.objects.filter(
+                    pipeline__test__sample__individual_id=OuterRef("individual_id"),
+                    type__name__in=values,
+                ),
+            )
+        return queryset
+
+    def _exclude_related_status(self, queryset, model_class, related_queryset, status_names):
+        status_values = self._status_queryset_from_names(model_class, status_names)
+        matched_ids = _matching_tagged_object_ids(model_class, status_values)
+        return self._exclude_exists(queryset, related_queryset.filter(pk__in=matched_ids))
+
+    def _exclude_has_related(self, queryset, values, related_queryset):
+        values = set(values or [])
+        if "true" in values:
+            queryset = self._exclude_exists(queryset, related_queryset)
+        if "false" in values:
+            queryset = self._filter_exists(queryset, related_queryset)
+        return queryset
+
+    def _exclude_hpo_terms(self, queryset, values):
+        from ontologies.utils import get_descendants, get_descendants_from_obo
+
+        excluded_term_ids = set()
+        for value in values:
+            try:
+                excluded_term_ids.update(get_descendants({int(value)}))
+            except (ValueError, TypeError):
+                excluded_term_ids.update(get_descendants_from_obo({str(value)}))
+        if excluded_term_ids:
+            queryset = queryset.exclude(individual__hpo_terms__in=excluded_term_ids)
+        return queryset
+
+    def _apply_together_constraints(self, queryset):
+        return self._apply_together_constraints_for_fields(queryset, None)
+
+    def _apply_together_constraints_for_fields(self, queryset, active_fields=None):
+        active_fields = set(active_fields) if active_fields is not None else None
+
+        def fields_are_active(field_names):
+            return active_fields is None or bool(active_fields.intersection(field_names))
+
+        institution_fields = ['institution__city', 'institution__speciality', 'institution__center_name']
+        if fields_are_active(institution_fields) and self._section_uses_together(institution_fields):
+            institution_qs = Institution.objects.all()
+            city_values = self._values_for('institution__city')
+            city_mode = _get_filter_mode(self.data, 'institution__city', allow_together=True)
+            institution_qs = self._apply_model_values(institution_qs, 'city', city_values, city_mode)
+            speciality_values = self._values_for('institution__speciality')
+            speciality_mode = _get_filter_mode(self.data, 'institution__speciality', allow_together=True)
+            institution_qs = self._apply_model_values(institution_qs, 'speciality', speciality_values, speciality_mode)
+            center_values = self._values_for('institution__center_name')
+            center_mode = _get_filter_mode(self.data, 'institution__center_name', allow_together=True)
+            institution_qs = self._apply_model_values(institution_qs, 'center_name', center_values, center_mode)
+            through_qs = Individual.institution.through.objects.filter(
+                individual_id=OuterRef("individual_id"),
+                institution_id__in=institution_qs.values("pk"),
+            )
+            queryset = self._filter_exists(queryset, through_qs)
+
+        sample_fields = ['samples__sample_type', 'samples__status']
+        if fields_are_active(sample_fields) and self._section_uses_together(sample_fields):
+            sample_qs = Sample.objects.filter(individual_id=OuterRef("individual_id"))
+            sample_type_values = self._values_for('samples__sample_type')
+            sample_type_mode = _get_filter_mode(self.data, 'samples__sample_type', allow_together=True)
+            sample_qs = self._apply_model_values(sample_qs, 'sample_type__name', sample_type_values, sample_type_mode)
+            sample_status_values = self._values_for('samples__status')
+            sample_status_mode = _get_filter_mode(self.data, 'samples__status', allow_together=True)
+            sample_qs = self._apply_status_values_to_related_qs(sample_qs, Sample, sample_status_values, sample_status_mode)
+            queryset = self._filter_exists(queryset, sample_qs)
+
+        test_fields = ['samples__tests__test_type', 'samples__tests__status']
+        if fields_are_active(test_fields) and self._section_uses_together(test_fields):
+            test_qs = Test.objects.filter(sample__individual_id=OuterRef("individual_id"))
+            test_type_values = self._values_for('samples__tests__test_type')
+            test_type_mode = _get_filter_mode(self.data, 'samples__tests__test_type', allow_together=True)
+            test_qs = self._apply_model_values(test_qs, 'test_type__name', test_type_values, test_type_mode)
+            test_status_values = self._values_for('samples__tests__status')
+            test_status_mode = _get_filter_mode(self.data, 'samples__tests__status', allow_together=True)
+            test_qs = self._apply_status_values_to_related_qs(test_qs, Test, test_status_values, test_status_mode)
+            queryset = self._filter_exists(queryset, test_qs)
+
+        pipeline_fields = ['samples__tests__pipelines__type', 'samples__tests__pipelines__status']
+        if fields_are_active(pipeline_fields) and self._section_uses_together(pipeline_fields):
+            pipeline_qs = Pipeline.objects.filter(test__sample__individual_id=OuterRef("individual_id"))
+            pipeline_type_values = self._values_for('samples__tests__pipelines__type')
+            pipeline_type_mode = _get_filter_mode(self.data, 'samples__tests__pipelines__type', allow_together=True)
+            pipeline_qs = self._apply_model_values(pipeline_qs, 'type__name', pipeline_type_values, pipeline_type_mode)
+            pipeline_status_values = self._values_for('samples__tests__pipelines__status')
+            pipeline_status_mode = _get_filter_mode(self.data, 'samples__tests__pipelines__status', allow_together=True)
+            pipeline_qs = self._apply_status_values_to_related_qs(pipeline_qs, Pipeline, pipeline_status_values, pipeline_status_mode)
+            queryset = self._filter_exists(queryset, pipeline_qs)
+
+        analysis_fields = ['samples__tests__pipelines__analyses__type', 'samples__tests__pipelines__analyses__status']
+        if fields_are_active(analysis_fields) and self._section_uses_together(analysis_fields):
+            analysis_qs = Analysis.objects.filter(pipeline__test__sample__individual_id=OuterRef("individual_id"))
+            analysis_type_values = self._values_for('samples__tests__pipelines__analyses__type')
+            analysis_type_mode = _get_filter_mode(self.data, 'samples__tests__pipelines__analyses__type', allow_together=True)
+            analysis_qs = self._apply_model_values(analysis_qs, 'type__name', analysis_type_values, analysis_type_mode)
+            analysis_status_values = self._values_for('samples__tests__pipelines__analyses__status')
+            analysis_status_mode = _get_filter_mode(self.data, 'samples__tests__pipelines__analyses__status', allow_together=True)
+            analysis_qs = self._apply_status_values_to_related_qs(analysis_qs, Analysis, analysis_status_values, analysis_status_mode)
+            queryset = self._filter_exists(queryset, analysis_qs)
+
+        return queryset.distinct()
 
 
 class ProjectFilter(django_filters.FilterSet):
@@ -1480,6 +2261,7 @@ class ProjectFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         # Restrict Status choices to Project content type
         ct = ContentType.objects.get_for_model(Project)
         self.filters['status'].queryset = Status.objects.filter(content_type=ct)
@@ -1487,7 +2269,15 @@ class ProjectFilter(django_filters.FilterSet):
         from django.contrib.auth import get_user_model
         User = get_user_model()
         if 'created_by' in self.filters:
-            self.filters['created_by'].queryset = User.objects.all()
+            user_qs = User.objects.all()
+            if request_user is not None:
+                user_qs = user_qs.filter(
+                    created_projects__in=accessible_projects(
+                        request_user,
+                        Project.objects.all(),
+                    )
+                ).distinct()
+            self.filters['created_by'].queryset = user_qs
         
         # Restrict Status choices by ContentType
         self._restrict_status_queryset('status', Project)

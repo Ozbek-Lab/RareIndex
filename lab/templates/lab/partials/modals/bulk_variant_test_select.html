@@ -1,0 +1,30 @@
+<select name="{{ field_name }}"
+        id="{{ field_id }}"
+        class="select select-bordered select-sm w-full"
+        {% if pipeline_options_url %}
+        hx-get="{{ pipeline_options_url }}"
+        hx-target="#{{ pipeline_cell_id }}"
+        hx-swap="innerHTML"
+        hx-vals='{{ pipeline_hx_vals }}'
+        {% endif %}
+        x-bind:disabled="!linked{% if not tests %} || true{% endif %}">
+    <option value="">{% if sample_selected %}Choose test{% else %}Choose sample first{% endif %}</option>
+    {% for test in tests %}
+    <option value="{{ test.pk }}" {% if selected_test_id == test.pk|stringformat:"s" %}selected{% endif %}>
+        #{{ test.pk }} - {{ test.test_type }}
+    </option>
+    {% endfor %}
+</select>
+{% if sample_selected and not tests %}
+<div class="text-error text-[10px] mt-1" x-show="linked">Selected sample has no tests.</div>
+{% endif %}
+{% if include_pipeline_reset and pipeline_cell_id %}
+<div id="{{ pipeline_cell_id }}" hx-swap-oob="innerHTML">
+    {% include "lab/partials/modals/bulk_variant_pipeline_select.html" with field_name=pipeline_field_name field_id=pipeline_field_id pipelines="" test_selected=False selected_pipeline_id="" analysis_options_url="" analysis_cell_id=analysis_cell_id analysis_field_name=analysis_field_name analysis_field_id=analysis_field_id include_analysis_reset=False %}
+</div>
+{% endif %}
+{% if include_analysis_reset and analysis_cell_id %}
+<div id="{{ analysis_cell_id }}" hx-swap-oob="innerHTML">
+    {% include "lab/partials/modals/bulk_variant_analysis_select.html" with field_name=analysis_field_name field_id=analysis_field_id analyses="" pipeline_selected=False selected_analysis_id="" %}
+</div>
+{% endif %}

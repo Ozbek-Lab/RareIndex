@@ -55,7 +55,7 @@
               {% endif %}
             </div>
             <p class="text-purple-100 mt-1">
-              {{ item.assembly_version }} | {{ item.type|default:"Variant" }}
+              {{ item.assembly_version }} | {{ item.type_label|default:"Variant" }}
             </p>
             </div>
           </div>
@@ -63,13 +63,15 @@
             {% partial status-badge %}
             <!-- External Links -->
             <div class="flex gap-2">
+              {% if item.is_sequence_variant %}
               <a
-                href="https://gnomad.broadinstitute.org/variant/{{ item.chromosome }}-{{ item.start }}-{{ item.reference }}-{{ item.alternate }}?dataset=gnomad_r4"
+                href="https://gnomad.broadinstitute.org/variant/{{ item.sequence_variant_id }}?dataset=gnomad_r4"
                 target="_blank"
                 class="text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded transition"
               >
                 gnomAD
               </a>
+              {% endif %}
               <a
                 href="https://clinvar.ncbi.nlm.nih.gov/clinvar/?term={{ item.chromosome }}%5Bchr%5D+AND+{{ item.start }}%5Bchrpos%5D"
                 target="_blank"
@@ -77,13 +79,15 @@
               >
                 ClinVar
               </a>
+              {% if item.is_sequence_variant %}
               <a
-                href="https://franklin.genoox.com/clinical-db/variant/snp/{{ item.chromosome }}-{{ item.start }}-{{ item.snv.reference }}-{{ item.snv.alternate }}-{{ item.assembly_version }}"
+                href="https://franklin.genoox.com/clinical-db/variant/snp/{{ item.sequence_variant_id }}-{{ item.assembly_version }}"
                 target="_blank"
                 class="text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded transition"
               >
                 Franklin
               </a>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -104,11 +108,7 @@
               Change
             </h3>
             <p class="text-gray-900 dark:text-gray-100">
-              {% if item.snv %}
-                {{ item.snv.reference }} > {{ item.snv.alternate }}
-              {% else %}
-                -
-              {% endif %}
+              {{ item.change_display|default:"-" }}
             </p>
           </div>
           <div>
@@ -420,7 +420,7 @@
     <div class="mb-2">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">
-          {{ item.type|default:"Variant" }}
+          {{ item.type_label|default:"Variant" }}
         </span>
         <span class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300">
           {{ item.assembly_version }}
@@ -471,7 +471,9 @@
           <p class="font-medium truncate text-gray-900 dark:text-gray-100">
             {% if item.analysis %}
               {{ item.analysis.type.name }}
-              / {{ item.analysis.test.test_type.name }}
+              {% if item.pipeline and item.pipeline.test %}
+                / {{ item.pipeline.test.test_type.name }}
+              {% endif %}
             {% else %}
               -
             {% endif %}
@@ -551,7 +553,6 @@
           href="{% url 'lab:generic_detail' %}?app_label=variant&model_name=Variant&pk={{ item.pk }}"
           class="hover:underline"
         >
-        >
           {{ item.hgvs_name }} <span class="italic">{{ item.genes.first.symbol|default:"" }}</span>
         </a>
       </h4>
@@ -562,7 +563,7 @@
       </span>
     </div>
     <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">
-      {{ item.type|default:"Variant" }}
+      {{ item.type_label|default:"Variant" }}
     </div>
     <div class="flex justify-between items-end">
       <div class="text-xs">
@@ -613,11 +614,7 @@
   <td
     class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400"
   >
-    <div class="flex flex-col">
-      <span>{{ item.reference|default:"-" }}</span>
-      <span class="text-xs text-gray-400">&gt;</span>
-      <span>{{ item.alternate|default:"-" }}</span>
-    </div>
+    {{ item.change_display|default:"-" }}
   </td>
   <td
     class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400"
@@ -644,9 +641,9 @@
     {% if item.analysis %}
       <div class="flex flex-col">
         <span>{{ item.analysis.type.name }}</span>
-        <span class="text-xs text-gray-400"
-          >{{ item.analysis.test.test_type.name }}</span
-        >
+        {% if item.pipeline and item.pipeline.test %}
+          <span class="text-xs text-gray-400">{{ item.pipeline.test.test_type.name }}</span>
+        {% endif %}
       </div>
     {% else %}
       -

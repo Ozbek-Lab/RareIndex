@@ -37,9 +37,9 @@
 
     <div class="form-control">
       <label class="label">
-        <span class="label-text">{% trans "Email" %}</span>
+        <span class="label-text">{{ form.login.label }}</span>
       </label>
-      {% render_field form.login class="input input-bordered w-full" placeholder="email@example.com" %}
+      {% render_field form.login class="input input-bordered w-full" placeholder=form.login.label %}
     </div>
 
     <div class="form-control" x-data="{ show: false }">

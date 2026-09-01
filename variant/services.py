@@ -46,11 +46,7 @@ class AnnotationService:
         # Construct HGVS ID or similar
         # For SNV: chr1:g.123A>G
         # Assuming hg38
-        snv = None
-        if isinstance(variant, (SNV, delins)):
-            snv = variant
-        elif hasattr(variant, 'snv'):
-            snv = variant.snv
+        snv = variant if isinstance(variant, (SNV, delins)) else variant.sequence_variant
         if snv is None:
             return None # MyVariant mostly for SNVs/indels
         
@@ -83,8 +79,9 @@ class AnnotationService:
         # Helper to strip 'chr' prefix if present, as Ensembl expects just the number/letter
         chrom = variant.chromosome.replace("chr", "")
         
-        if isinstance(variant, (SNV, delins)) or hasattr(variant, 'snv'):
-            snv = variant if isinstance(variant, (SNV, delins)) else variant.snv
+        concrete_variant = variant.concrete_variant
+        if variant.type in {"SNV", "delins"}:
+            snv = concrete_variant
             # Check for insertion (start > end)
             if snv.start > snv.end:
                 # Insertion: 9:22125503-22125502:1/C
@@ -95,8 +92,8 @@ class AnnotationService:
                 # Format: {chr}:{start}:{end}/{alt}
                 region_str = f"{chrom}:{snv.start}:{snv.end}/{snv.alternate}"
                 
-        elif isinstance(variant, SV) or hasattr(variant, 'sv'):
-            sv = variant if isinstance(variant, SV) else variant.sv
+        elif variant.type == "SV":
+            sv = concrete_variant
             # SV: 7:100318423-100321323:1/DUP
             # Map types
             type_map = {
@@ -109,8 +106,8 @@ class AnnotationService:
             # Format: {chr}:{start}-{end}:1/{type}
             region_str = f"{chrom}:{sv.start}-{sv.end}:1/{vep_type}"
 
-        elif isinstance(variant, CNV) or hasattr(variant, 'cnv'):
-            cnv = variant if isinstance(variant, CNV) else variant.cnv
+        elif variant.type == "CNV":
+            cnv = concrete_variant
             type_map = {
                 "loss": "DEL",
                 "gain": "DUP",
@@ -140,9 +137,7 @@ class AnnotationService:
 
     def fetch_genebe(self, variant):
         """Fetch annotation from GeneBe."""
-        snv = getattr(variant, "snv", None)
-        if snv is None and hasattr(variant, "reference") and hasattr(variant, "alternate"):
-            snv = variant
+        snv = variant.sequence_variant
 
         if snv is None:
             return None
