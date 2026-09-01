@@ -9,7 +9,7 @@ from .htmx_views import (
     individual_identification_edit,
     individual_identification_save,
 )
-from .models import CrossIdentifier, IdentifierType, Individual
+from .models import CrossIdentifier, IdentifierType, Individual, Project, ProjectMembership
 from .tables import IndividualTable
 from .views import DashboardView, IndividualDetailView
 
@@ -29,6 +29,15 @@ class PIIRevealTest(TestCase):
             sex="male",
             created_by=self.user,
         )
+        self.project = Project.objects.create(name="PII Project", created_by=self.user)
+        self.project.individuals.add(self.individual)
+        for user in (self.user, self.admin):
+            ProjectMembership.objects.create(
+                project=self.project,
+                user=user,
+                role=ProjectMembership.Role.VIEWER,
+                created_by=self.user,
+            )
         self.primary_type = IdentifierType.objects.create(
             name="RareBoost",
             use_priority=1,

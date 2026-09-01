@@ -764,9 +764,9 @@
             <i class="fa-solid fa-pencil"></i>
         </button>
     </div>
-    {% if individual.projects.exists %}
+    {% if visible_individual_projects %}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {% for project in individual.projects.all %}
+            {% for project in visible_individual_projects %}
             <div class="p-3 bg-base-200/50 rounded-lg space-y-2">
                 <div class="flex items-start justify-between gap-2">
                     <div>
@@ -829,7 +829,7 @@
     
     <div x-data="{
             selectedProjects: [
-                {% for project in individual.projects.all %}
+                {% for project in visible_individual_projects %}
                 {id: '{{ project.id }}', name: '{{ project.name|escapejs }}'},
                 {% endfor %}
             ],

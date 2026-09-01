@@ -5,7 +5,15 @@ from django.contrib.auth.models import Permission, User
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
-from lab.models import CrossIdentifier, IdentifierType, Individual, Sample, SampleType
+from lab.models import (
+    CrossIdentifier,
+    IdentifierType,
+    Individual,
+    Project,
+    ProjectMembership,
+    Sample,
+    SampleType,
+)
 from lab.views import (
     IndividualDetailView,
     IndividualFHIRExportView,
@@ -63,6 +71,20 @@ class IndividualClinicalJsonExportTest(TestCase):
             sample_measurements="OD 1.8",
             created_by=self.user,
         )
+        self.project = Project.objects.create(name="Clinical Export Project", created_by=self.user)
+        self.project.individuals.add(self.individual)
+        self._grant_project_access(self.user)
+
+    def _grant_project_access(self, *users):
+        for user in users:
+            ProjectMembership.objects.get_or_create(
+                project=self.project,
+                user=user,
+                defaults={
+                    "role": ProjectMembership.Role.VIEWER,
+                    "created_by": self.user,
+                },
+            )
 
     def test_info_tab_shows_json_export_buttons(self):
         request = self.factory.get(reverse("lab:individual_detail", args=[self.individual.pk]))
@@ -84,10 +106,11 @@ class IndividualClinicalJsonExportTest(TestCase):
     def test_info_tab_shows_disabled_json_export_buttons_without_both_permissions(self):
         users = [
             User.objects.create_user(username="viewonly", password="password"),
-            User.objects.create_user(username="sensitiveonly", password="password"),
+            User.objects.create_user(username="viewonly-no-sensitive", password="password"),
         ]
         users[0].user_permissions.add(self.view_permission)
-        users[1].user_permissions.add(self.sensitive_permission)
+        users[1].user_permissions.add(self.view_permission)
+        self._grant_project_access(*users)
 
         for user in users:
             request = self.factory.get(reverse("lab:individual_detail", args=[self.individual.pk]))
@@ -140,6 +163,7 @@ class IndividualClinicalJsonExportTest(TestCase):
         sensitive_only_user = User.objects.create_user(username="sensitiveonly-export", password="password")
         view_only_user.user_permissions.add(self.view_permission)
         sensitive_only_user.user_permissions.add(self.sensitive_permission)
+        self._grant_project_access(limited_user, view_only_user, sensitive_only_user)
 
         for user in [limited_user, view_only_user, sensitive_only_user]:
             request = self.factory.get(reverse("lab:individual_export_fhir", args=[self.individual.pk]))
@@ -155,6 +179,7 @@ class IndividualClinicalJsonExportTest(TestCase):
         sensitive_only_user = User.objects.create_user(username="sensitiveonly-phenopacket", password="password")
         view_only_user.user_permissions.add(self.view_permission)
         sensitive_only_user.user_permissions.add(self.sensitive_permission)
+        self._grant_project_access(limited_user, view_only_user, sensitive_only_user)
 
         for user in [limited_user, view_only_user, sensitive_only_user]:
             request = self.factory.get(

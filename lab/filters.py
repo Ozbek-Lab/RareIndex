@@ -8,6 +8,8 @@ from .models import (
     AnalysisReport, AnalysisRequestForm, Note,
 )
 from .search_utils import filter_normalized_contains, normalized_contains, normalized_contains_q
+
+from .access import accessible_projects, accessible_variants
 from variant.models import (
     ACMGEvidenceOverride, Variant, Annotation, SNV, delins, CNV, SV, Repeat,
 )
@@ -652,6 +654,7 @@ class IndividualFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         table_only_request = _request_targets_table(
             getattr(self, "request", None),
             "individual-table-container",
@@ -674,25 +677,33 @@ class IndividualFilter(django_filters.FilterSet):
                 "variants__acmg_evidence",
             )
         else:
+            individual_choice_qs = Individual.objects.all()
+            if request_user is not None:
+                from .access import accessible_individuals
+
+                individual_choice_qs = accessible_individuals(request_user, individual_choice_qs)
             # Populate dynamic choices for institution sub-filters
             city_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(city__isnull=True).exclude(city='')
-                .values_list('city', flat=True).distinct().order_by('city')
+                (v, v) for v in individual_choice_qs.exclude(institution__city__isnull=True)
+                .exclude(institution__city='')
+                .values_list('institution__city', flat=True).distinct().order_by('institution__city')
             ]
             speciality_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(speciality__isnull=True).exclude(speciality='')
-                .values_list('speciality', flat=True).distinct().order_by('speciality')
+                (v, v) for v in individual_choice_qs.exclude(institution__speciality__isnull=True)
+                .exclude(institution__speciality='')
+                .values_list('institution__speciality', flat=True).distinct().order_by('institution__speciality')
             ]
             center_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(center_name__isnull=True).exclude(center_name='')
-                .values_list('center_name', flat=True).distinct().order_by('center_name')
+                (v, v) for v in individual_choice_qs.exclude(institution__center_name__isnull=True)
+                .exclude(institution__center_name='')
+                .values_list('institution__center_name', flat=True).distinct().order_by('institution__center_name')
             ]
             
+            project_qs = Project.objects.all()
+            if request_user is not None:
+                project_qs = accessible_projects(request_user, project_qs)
             project_choices = [
-                (name, name) for name in Project.objects.values_list('name', flat=True).order_by('name')
+                (name, name) for name in project_qs.values_list('name', flat=True).order_by('name')
             ]
             annotation_classification_choices = _annotation_acmg_classification_choices()
             acmg_evidence_choices = _acmg_evidence_choices()
@@ -1537,6 +1548,7 @@ class VariantFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         table_only_request = _request_targets_table(
             getattr(self, "request", None),
             "variant-table-container",
@@ -1559,37 +1571,42 @@ class VariantFilter(django_filters.FilterSet):
             )
             acmg_evidence_choices = _submitted_choice_values(self.data, "acmg_evidence")
         else:
+            variant_choice_qs = Variant.objects.all()
+            project_qs = Project.objects.all()
+            if request_user is not None:
+                variant_choice_qs = accessible_variants(request_user, variant_choice_qs)
+                project_qs = accessible_projects(request_user, project_qs)
             assemblies = (
-                Variant.objects.values_list('assembly_version', flat=True)
+                variant_choice_qs.values_list('assembly_version', flat=True)
                 .distinct()
                 .order_by('assembly_version')
             )
             assembly_choices = [(a, a) for a in assemblies if a]
 
             sources = (
-                Annotation.objects.values_list('source', flat=True)
+                Annotation.objects.filter(variant__in=variant_choice_qs).values_list('source', flat=True)
                 .distinct()
                 .order_by('source')
             )
             source_choices = [(s, s) for s in sources if s]
 
             project_choices = [
-                (name, name) for name in Project.objects.values_list('name', flat=True).order_by('name')
+                (name, name) for name in project_qs.values_list('name', flat=True).order_by('name')
             ]
             city_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(city__isnull=True).exclude(city='')
-                .values_list('city', flat=True).distinct().order_by('city')
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__city__isnull=True)
+                .exclude(individual__institution__city='')
+                .values_list('individual__institution__city', flat=True).distinct().order_by('individual__institution__city')
             ]
             speciality_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(speciality__isnull=True).exclude(speciality='')
-                .values_list('speciality', flat=True).distinct().order_by('speciality')
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__speciality__isnull=True)
+                .exclude(individual__institution__speciality='')
+                .values_list('individual__institution__speciality', flat=True).distinct().order_by('individual__institution__speciality')
             ]
             center_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(center_name__isnull=True).exclude(center_name='')
-                .values_list('center_name', flat=True).distinct().order_by('center_name')
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__center_name__isnull=True)
+                .exclude(individual__institution__center_name='')
+                .values_list('individual__institution__center_name', flat=True).distinct().order_by('individual__institution__center_name')
             ]
             annotation_classification_choices = _annotation_acmg_classification_choices()
             acmg_evidence_choices = _acmg_evidence_choices()
@@ -2284,6 +2301,7 @@ class ProjectFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         # Restrict Status choices to Project content type
         ct = ContentType.objects.get_for_model(Project)
         self.filters['status'].queryset = Status.objects.filter(content_type=ct)
@@ -2291,7 +2309,15 @@ class ProjectFilter(django_filters.FilterSet):
         from django.contrib.auth import get_user_model
         User = get_user_model()
         if 'created_by' in self.filters:
-            self.filters['created_by'].queryset = User.objects.all()
+            user_qs = User.objects.all()
+            if request_user is not None:
+                user_qs = user_qs.filter(
+                    created_projects__in=accessible_projects(
+                        request_user,
+                        Project.objects.all(),
+                    )
+                ).distinct()
+            self.filters['created_by'].queryset = user_qs
         
         # Restrict Status choices by ContentType
         self._restrict_status_queryset('status', Project)

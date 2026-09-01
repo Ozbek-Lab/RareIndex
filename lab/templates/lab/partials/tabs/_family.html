@@ -35,9 +35,15 @@
                 </button>
                 {% endif %}
             </div>
+            {% if family.scoped_individuals %}
+            <span class="badge badge-ghost badge-sm text-base-content/50">
+                {{ family.scoped_individuals|length }} member{{ family.scoped_individuals|length|pluralize }}
+            </span>
+            {% else %}
             <span class="badge badge-ghost badge-sm text-base-content/50">
                 {{ family.individuals.count }} member{{ family.individuals.count|pluralize }}
             </span>
+            {% endif %}
         </div>
         {% family_pedigree_dataset family individual as pedigree_json %}
         <div class="family-pedigree-panel mb-3 rounded-lg border border-base-200 bg-base-100/70 p-3"
@@ -73,9 +79,15 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for member in family.individuals.all %}
+                    {% if family.scoped_individuals %}
+                        {% for member in family.scoped_individuals %}
+                            {% include "lab/partials/family_member_row.html" with member=member individual=individual edit_mode=False %}
+                        {% endfor %}
+                    {% else %}
+                        {% for member in family.individuals.all %}
                         {% include "lab/partials/family_member_row.html" with member=member individual=individual edit_mode=False %}
-                    {% endfor %}
+                        {% endfor %}
+                    {% endif %}
                 </tbody>
             </table>
         </div>

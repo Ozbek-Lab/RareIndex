@@ -222,6 +222,50 @@ class Project(HistoryMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+class ProjectMembership(HistoryMixin, models.Model):
+    class Role(models.TextChoices):
+        VIEWER = "viewer", "Viewer"
+        EDITOR = "editor", "Editor"
+        MANAGER = "manager", "Manager"
+
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="project_memberships",
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.VIEWER,
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="created_project_memberships",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    history = HistoricalRecords()
+
+    class Meta:
+        ordering = ["project__name", "user__username"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "user"],
+                name="unique_project_membership",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.get_username()} in {self.project.name} ({self.get_role_display()})"
+
+
 class Note(HistoryMixin, models.Model):
     content = models.TextField()
     user = models.ForeignKey(User, on_delete=models.PROTECT)
