@@ -49,7 +49,7 @@ from lab.management.commands._import_helpers import (
     identifier_type_example_for_name,
 )
 from ontologies.models import Ontology, Term
-from variant.models import Classification, Gene, SNV, Variant
+from variant.models import Classification, Gene, SNV, Variant, delins
 
 User = get_user_model()
 
@@ -1219,11 +1219,12 @@ class Command(BaseCommand):
             loc_part, alleles_part = variant_str.split(" ")
             chrom_part, pos_part   = loc_part.split("-")
             ref, alt               = alleles_part.split(">")
-            chrom = chrom_part        # keep "chr" prefix — Variant.save normalises
+            chrom = chrom_part        # Keep "chr" prefix; Variant.save normalizes.
             start = int(pos_part)
 
             # Variant.analysis replaces the old Variant.pipeline FK
-            snv = SNV.objects.create(
+            variant_model = SNV if len(ref) == len(alt) == 1 else delins
+            variant_obj = variant_model.objects.create(
                 individual=individual,
                 analysis=analysis,
                 chromosome=chrom,
@@ -1244,13 +1245,13 @@ class Command(BaseCommand):
             ]
             inheritance_choices = ["ad", "ar", "x_linked", "mitochondrial", "de_novo", "unknown"]
             classification = Classification.objects.create(
-                variant=snv,
+                variant=variant_obj,
                 user=user,
-                classification=classification_choices[snv.pk % len(classification_choices)],
-                inheritance=inheritance_choices[snv.pk % len(inheritance_choices)],
+                classification=classification_choices[variant_obj.pk % len(classification_choices)],
+                inheritance=inheritance_choices[variant_obj.pk % len(inheritance_choices)],
                 notes="Auto-generated classification",
             )
             self._set_variant_statuses(
-                snv,
-                self._variant_statuses(all_statuses, snv.pk),
+                variant_obj,
+                self._variant_statuses(all_statuses, variant_obj.pk),
             )

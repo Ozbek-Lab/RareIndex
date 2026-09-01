@@ -2,9 +2,9 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
-from lab.models import Pipeline, Individual
+from lab.models import Analysis, Pipeline, Individual
 from .models import Variant
-from .forms import SNVForm, CNVForm, SVForm, RepeatForm, VariantContextForm, VariantUpdateForm
+from .forms import VARIANT_FORM_CLASSES, VariantContextForm, VariantUpdateForm
 from django.urls import reverse
 from urllib.parse import urlencode
 from lab.access import get_accessible_individual_or_404, user_can_access_object
@@ -12,6 +12,7 @@ from lab.access import get_accessible_individual_or_404, user_can_access_object
 @login_required
 @require_http_methods(["GET", "POST"])
 def variant_create(request):
+    analysis_id = request.GET.get("analysis_id") or request.GET.get("analysis")
     if not request.user.has_perm("variant.add_variant"):
         return HttpResponseForbidden("You do not have permission to add variants.")
 
@@ -20,7 +21,7 @@ def variant_create(request):
     
     # If we don't have pipeline_id or variant_type, show the selection form
     # We also check if this is NOT a specific variant form submission (POST)
-    if (not pipeline_id or not variant_type) and request.method == "GET":
+    if (not (analysis_id or pipeline_id) or not variant_type) and request.method == "GET":
         # If this is an HTMX request for the selection form (filtering)
         # We re-render the form with the current data to update querysets
         form = VariantContextForm(data=request.GET)
@@ -54,11 +55,12 @@ def variant_create(request):
         return HttpResponseBadRequest("Invalid Variant Type.")
         
     if request.method == "POST":
-        form = form_class(request.POST)
+        individual = pipeline.test.sample.individual
+        form = form_class(request.POST, individual=individual)
         if form.is_valid():
             variant = form.save(commit=False)
-            variant.pipeline = pipeline
-            variant.individual = pipeline.test.sample.individual
+            variant.analysis = analysis
+            variant.individual = individual
             variant.created_by = request.user
             variant.save()
             
@@ -77,6 +79,7 @@ def variant_create(request):
         
     return render(request, "variant/variant_form.html", {
         "form": form,
+        "analysis": analysis,
         "pipeline": pipeline,
         "variant_type": variant_type
     })

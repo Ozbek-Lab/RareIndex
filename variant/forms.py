@@ -1,7 +1,16 @@
 from django import forms
 import re
 
-from .models import Variant, SNV, CNV, SV, Repeat
+from .models import (
+    CNV,
+    SNV,
+    SV,
+    Repeat,
+    VARIANT_CREATE_TYPE_CHOICES,
+    Variant,
+    delins,
+    normalize_chromosome,
+)
 from lab.models import Individual, Test, Pipeline, Analysis
 
 class VariantContextForm(forms.Form):
@@ -31,12 +40,7 @@ class VariantContextForm(forms.Form):
         })
     )
     variant_type = forms.ChoiceField(
-        choices=[
-            ('snv', 'SNV'),
-            ('cnv', 'CNV'),
-            ('sv', 'SV'),
-            ('repeat', 'Repeat'),
-        ],
+        choices=VARIANT_CREATE_TYPE_CHOICES,
         widget=forms.Select(attrs={
             'class': 'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 dark:focus:border-blue-400 transition-colors duration-200'
         })
@@ -87,6 +91,7 @@ CHROMOSOME_SIZES = {
     "chrY": 57227415,
     "chr22": 50818468,
     "chr21": 46709983,
+    "chrM": 16569,
 }
 
 CHROMOSOME_CHOICES = [(chrom, chrom) for chrom in CHROMOSOME_SIZES.keys()]
@@ -123,14 +128,17 @@ class BaseVariantForm(forms.ModelForm):
         chromosome = cleaned_data.get("chromosome")
         start = cleaned_data.get("start")
         end = cleaned_data.get("end")
+        if chromosome:
+            chromosome = normalize_chromosome(chromosome)
+            cleaned_data["chromosome"] = chromosome
 
-        if start and start < 1:
-             self.add_error('start', "Start position must be greater than 0.")
+        if start is not None and start < 1:
+            self.add_error('start', "Start position must be greater than 0.")
 
-        if end and end < 1:
-             self.add_error('end', "End position must be greater than 0.")
+        if end is not None and end < 1:
+            self.add_error('end', "End position must be greater than 0.")
 
-        if start and end:
+        if start is not None and end is not None:
             if start > end:
                 self.add_error('start', "Start position cannot be greater than end position.")
 
@@ -139,7 +147,7 @@ class BaseVariantForm(forms.ModelForm):
                 if end > max_size:
                     self.add_error('end', f"End position exceeds the size of {chromosome} ({max_size} bp).")
                 if start > max_size:
-                     self.add_error('start', f"Start position exceeds the size of {chromosome} ({max_size} bp).")
+                    self.add_error('start', f"Start position exceeds the size of {chromosome} ({max_size} bp).")
         
         if not self.errors and self.individual:
             query = dict()
@@ -147,8 +155,9 @@ class BaseVariantForm(forms.ModelForm):
                 if field in cleaned_data and cleaned_data[field] is not None:
                     query[field] = cleaned_data[field]
             
+            model_fields = {field.name for field in self._meta.model._meta.fields}
             for field in ['reference', 'alternate', 'cnv_type', 'copy_number', 'sv_type', 'repeat_unit', 'repeat_count']:
-                if field in self.fields and field in cleaned_data:
+                if field in model_fields and field in cleaned_data:
                     query[field] = cleaned_data[field]
             
             existing = self._meta.model.objects.filter(individual=self.individual, **query)
@@ -159,12 +168,7 @@ class BaseVariantForm(forms.ModelForm):
 
 
 class VariantTypeForm(forms.Form):
-    VARIANT_TYPE_CHOICES = [
-        ("snv", "SNV"),
-        ("cnv", "CNV"),
-        ("sv", "SV"),
-        ("repeat", "Repeat"),
-    ]
+    VARIANT_TYPE_CHOICES = VARIANT_CREATE_TYPE_CHOICES
 
     variant_type = forms.ChoiceField(
         choices=VARIANT_TYPE_CHOICES,
@@ -207,7 +211,7 @@ class SNVForm(BaseVariantForm):
     # Combined human-friendly representation: chr:posREF>ALT
     snv_string = forms.CharField(
         label="Variant (chr:posREF>ALT)",
-        help_text="e.g. chr3:33114394TGC>T",
+        help_text="e.g. chr10:77984023A>G",
     )
 
     class Meta(BaseVariantForm.Meta):
@@ -226,22 +230,86 @@ class SNVForm(BaseVariantForm):
         self.fields["snv_string"].widget.attrs.update(
             {
                 "class": "input input-bordered w-full font-mono text-xs",
-                "placeholder": "chr3:33114394TGC>T",
-                "pattern": r"^(chr[0-9]{1,2}|chrX|chrY|chrM):\d+[ACGT]+>[ACGT]+$",
-                "title": "Format: chrN:positionREF>ALT, e.g. chr3:33114394TGC>T",
+                "placeholder": "chr10:77984023A>G",
+                "pattern": r"^([cC][hH][rR][0-9]{1,2}|[cC][hH][rR][XxYyMm]):\d+[ACGTacgt]+>[ACGTacgt]+$",
+                "title": "Format: chrN:positionREF>ALT, e.g. chr10:77984023A>G",
             }
         )
 
     def clean_snv_string(self):
         value = self.cleaned_data["snv_string"].strip()
         # Basic strict pattern: chrN:posREF>ALT
-        m = re.match(r"^(chr[0-9]{1,2}|chrX|chrY|chrM):(\d+)([ACGT]+)>([ACGT]+)$", value)
+        m = re.match(r"^(chr[0-9]{1,2}|chrX|chrY|chrM):(\d+)([ACGT]+)>([ACGT]+)$", value, re.I)
         if not m:
-            raise forms.ValidationError("Use format chrN:positionREF>ALT, e.g. chr3:33114394TGC>T")
+            raise forms.ValidationError("Use format chrN:positionREF>ALT, e.g. chr10:77984023A>G")
         chrom, pos, ref, alt = m.groups()
+        chrom = normalize_chromosome(chrom)
+        ref = ref.upper()
+        alt = alt.upper()
+        if len(ref) != 1 or len(alt) != 1:
+            raise forms.ValidationError("SNV requires single-base reference and alternate alleles. Use Delins for multi-base changes.")
         pos_int = int(pos)
 
         # Populate fields used by the model and BaseVariantForm.clean
+        self.cleaned_data["chromosome"] = chrom
+        self.cleaned_data["start"] = pos_int
+        self.cleaned_data["end"] = pos_int
+        self.cleaned_data["reference"] = ref
+        self.cleaned_data["alternate"] = alt
+        return value
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        obj.chromosome = self.cleaned_data["chromosome"]
+        obj.start = self.cleaned_data["start"]
+        obj.end = self.cleaned_data["end"]
+        obj.reference = self.cleaned_data["reference"]
+        obj.alternate = self.cleaned_data["alternate"]
+        if commit:
+            obj.save()
+        return obj
+
+
+class DelinsForm(BaseVariantForm):
+    delins_string = forms.CharField(
+        label="Variant (chr:posREF>ALT)",
+        help_text="e.g. chr3:33114394TGC>T",
+    )
+
+    class Meta(BaseVariantForm.Meta):
+        model = delins
+        fields = ["assembly_version", "delins_string", "zygosity"]
+        widgets = {
+            **BaseVariantForm.Meta.widgets,
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in ("chromosome", "start", "end", "reference", "alternate"):
+            self.fields.pop(name, None)
+
+        self.fields["delins_string"].widget.attrs.update(
+            {
+                "class": "input input-bordered w-full font-mono text-xs",
+                "placeholder": "chr3:33114394TGC>T",
+                "pattern": r"^([cC][hH][rR][0-9]{1,2}|[cC][hH][rR][XxYyMm]):\d+[ACGTacgt]+>[ACGTacgt]+$",
+                "title": "Format: chrN:positionREF>ALT, e.g. chr3:33114394TGC>T",
+            }
+        )
+
+    def clean_delins_string(self):
+        value = self.cleaned_data["delins_string"].strip()
+        m = re.match(r"^(chr[0-9]{1,2}|chrX|chrY|chrM):(\d+)([ACGT]+)>([ACGT]+)$", value, re.I)
+        if not m:
+            raise forms.ValidationError("Use format chrN:positionREF>ALT, e.g. chr3:33114394TGC>T")
+        chrom, pos, ref, alt = m.groups()
+        chrom = normalize_chromosome(chrom)
+        ref = ref.upper()
+        alt = alt.upper()
+        if len(ref) == 1 and len(alt) == 1:
+            raise forms.ValidationError("Use SNV for single-base substitutions.")
+        pos_int = int(pos)
+
         self.cleaned_data["chromosome"] = chrom
         self.cleaned_data["start"] = pos_int
         self.cleaned_data["end"] = pos_int
@@ -270,6 +338,13 @@ class CNVForm(BaseVariantForm):
             'copy_number': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
         }
 
+    def clean_copy_number(self):
+        copy_number = self.cleaned_data.get("copy_number")
+        if copy_number is not None and copy_number < 0:
+            raise forms.ValidationError("Copy number cannot be negative.")
+        return copy_number
+
+
 class SVForm(BaseVariantForm):
     class Meta(BaseVariantForm.Meta):
         model = SV
@@ -289,6 +364,19 @@ class RepeatForm(BaseVariantForm):
             'repeat_unit': forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
             'repeat_count': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm'}),
         }
+
+    def clean_repeat_unit(self):
+        repeat_unit = (self.cleaned_data.get("repeat_unit") or "").strip().upper()
+        if not re.match(r"^[ACGT]+$", repeat_unit):
+            raise forms.ValidationError("Repeat unit must contain only A, C, G, or T.")
+        return repeat_unit
+
+    def clean_repeat_count(self):
+        repeat_count = self.cleaned_data.get("repeat_count")
+        if repeat_count is not None and repeat_count < 1:
+            raise forms.ValidationError("Repeat count must be greater than 0.")
+        return repeat_count
+
 
 class VariantUpdateForm(forms.ModelForm):
     class Meta:
@@ -310,3 +398,12 @@ class VariantUpdateForm(forms.ModelForm):
                 "focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
             }
         )
+
+
+VARIANT_FORM_CLASSES = {
+    "snv": SNVForm,
+    "delins": DelinsForm,
+    "cnv": CNVForm,
+    "sv": SVForm,
+    "repeat": RepeatForm,
+}

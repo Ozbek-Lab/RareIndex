@@ -11,8 +11,19 @@ from .search_utils import filter_normalized_contains, normalized_contains, norma
 
 from .access import accessible_projects, accessible_variants
 from variant.models import (
-    ACMGEvidenceOverride, Variant, Annotation, SNV, delins, CNV, SV, Repeat,
-)
+    ACMGEvidenceOverride,
+    Annotation,
+    VARIANT_TYPE_CHOICES,
+    VARIANT_TYPE_RELATION_LOOKUPS,
+    Variant,
+    normalize_variant_type_value,
+    Annotation,
+    SNV,
+    delins,
+    CNV,
+    SV,
+    Repeat,
+
 from variant.templatetags.variant_filters import ACMG_CRITERIA_INFO
 
 FILTER_MODE_SUFFIX = "__mode"
@@ -78,6 +89,16 @@ def _exclude_values_for_data(data, field_name):
     if not value:
         return []
     return value if isinstance(value, list) else [value]
+
+
+def _variant_type_q(values, prefix=""):
+    q_obj = Q()
+    for value in values:
+        normalized = normalize_variant_type_value(value)
+        relation = VARIANT_TYPE_RELATION_LOOKUPS.get(normalized)
+        if relation:
+            q_obj |= Q(**{f"{prefix}{relation}__isnull": False})
+    return q_obj
 
 
 def _matching_tagged_object_ids(model_class, status_values, mode=FILTER_MODE_ANY):
@@ -508,19 +529,8 @@ class IndividualFilter(django_filters.FilterSet):
         method='filter_variant_status',
         label="Variant Status",
     )
-    # Note: Variant 'type' is a property, not a field, so we can't filter directly easily 
-    # unless we annotate or it's stored. Looking at models.py, SNV/CNV/etc are subclasses.
-    # We might need a custom method for variant type if it's strictly about the python property.
-    # However, standard Django filters work on database fields. 
-    # The user asked for "variant types". 
-    # Let's check if we can filter by the subclass existence or if there is a discriminatory field.
-    # The models are multi-table inheritance. 
-    # We can filter by `variants__snv__isnull=False` for SNV, etc.
-    # For now, I will add a custom method filter for Variant Type.
     variant_type = django_filters.MultipleChoiceFilter(
-        choices=[
-            ('SNV', 'SNV'), ('CNV', 'CNV'), ('SV', 'SV'), ('Repeat', 'Repeat')
-        ],
+        choices=VARIANT_TYPE_CHOICES,
         method='filter_variant_type',
         label="Variant Type"
     )
@@ -977,53 +987,23 @@ class IndividualFilter(django_filters.FilterSet):
     def filter_variant_type(self, queryset, name, value):
         if not value:
             return queryset
-            
-        # This one is tricky for simple inclusion/exclusion in the same custom class
-        # because it's a method filter. 
-        # Let's handle the inclusion logic here manually.
-        # Value is a list of selected types strings ['SNV', 'CNV']
-        
-        # We need to construct a robust query.
-        q_obj = Q()
-        if 'SNV' in value:
-            q_obj |= Q(variants__snv__isnull=False)
-        if 'CNV' in value:
-            q_obj |= Q(variants__cnv__isnull=False)
-        if 'SV' in value:
-            q_obj |= Q(variants__sv__isnull=False)
-        if 'Repeat' in value:
-            q_obj |= Q(variants__repeat__isnull=False)
-            
-        # Handle Exclusion (checking query params directly)
-        data = self.data
-        excluded_values = _exclude_values_for_data(data, name)
-        
-        exclude_q = Q()
-        if 'SNV' in excluded_values:
-            exclude_q |= Q(variants__snv__isnull=False)
-        if 'CNV' in excluded_values:
-            exclude_q |= Q(variants__cnv__isnull=False)
-        if 'SV' in excluded_values:
-            exclude_q |= Q(variants__sv__isnull=False)
-        if 'Repeat' in excluded_values:
-            exclude_q |= Q(variants__repeat__isnull=False)
-            
+
+        excluded_values = _exclude_values_for_data(self.data, name)
         mode = _get_filter_mode(self.data, name, allow_together=True)
         if value:
             if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
                 for variant_type in value:
-                    if variant_type == 'SNV':
-                        queryset = queryset.filter(variants__snv__isnull=False)
-                    elif variant_type == 'CNV':
-                        queryset = queryset.filter(variants__cnv__isnull=False)
-                    elif variant_type == 'SV':
-                        queryset = queryset.filter(variants__sv__isnull=False)
-                    elif variant_type == 'Repeat':
-                        queryset = queryset.filter(variants__repeat__isnull=False)
+                    q_obj = _variant_type_q([variant_type], prefix="variants__")
+                    if q_obj.children:
+                        queryset = queryset.filter(q_obj)
             else:
-                queryset = queryset.filter(q_obj)
+                q_obj = _variant_type_q(value, prefix="variants__")
+                if q_obj.children:
+                    queryset = queryset.filter(q_obj)
         if excluded_values:
-            queryset = queryset.exclude(exclude_q)
+            exclude_q = _variant_type_q(excluded_values, prefix="variants__")
+            if exclude_q.children:
+                queryset = queryset.exclude(exclude_q)
             
         return queryset.distinct()
 
@@ -1229,24 +1209,14 @@ class IndividualFilter(django_filters.FilterSet):
     def _apply_variant_type_values(self, queryset, values, mode, prefix=""):
         if not values:
             return queryset
-        lookups = {
-            'SNV': f'{prefix}snv__isnull',
-            'CNV': f'{prefix}cnv__isnull',
-            'SV': f'{prefix}sv__isnull',
-            'Repeat': f'{prefix}repeat__isnull',
-        }
         if mode in {FILTER_MODE_ALL, FILTER_MODE_TOGETHER}:
             for variant_type in values:
-                lookup = lookups.get(variant_type)
-                if lookup:
-                    queryset = queryset.filter(**{lookup: False})
+                q_obj = _variant_type_q([variant_type], prefix=prefix)
+                if q_obj.children:
+                    queryset = queryset.filter(q_obj)
             return queryset
-        q_obj = Q()
-        for variant_type in values:
-            lookup = lookups.get(variant_type)
-            if lookup:
-                q_obj |= Q(**{lookup: False})
-        return queryset.filter(q_obj)
+        q_obj = _variant_type_q(values, prefix=prefix)
+        return queryset.filter(q_obj) if q_obj.children else queryset
 
     def _apply_together_constraints(self, queryset):
         return self._apply_together_constraints_for_fields(queryset, None)
@@ -1369,7 +1339,7 @@ class VariantFilter(django_filters.FilterSet):
         label="Zygosity",
     )
     variant_type = django_filters.MultipleChoiceFilter(
-        choices=[('SNV', 'SNV'), ('CNV', 'CNV'), ('SV', 'SV'), ('Repeat', 'Repeat')],
+        choices=VARIANT_TYPE_CHOICES,
         method='filter_variant_type',
         label="Type",
     )
@@ -1703,16 +1673,7 @@ class VariantFilter(django_filters.FilterSet):
         )
 
     def _variant_type_q(self, values):
-        q_obj = Q()
-        if 'SNV' in values:
-            q_obj |= Q(snv__isnull=False)
-        if 'CNV' in values:
-            q_obj |= Q(cnv__isnull=False)
-        if 'SV' in values:
-            q_obj |= Q(sv__isnull=False)
-        if 'Repeat' in values:
-            q_obj |= Q(repeat__isnull=False)
-        return q_obj
+        return _variant_type_q(values)
 
     def _apply_variant_type_values(self, queryset, values, mode):
         if not values:

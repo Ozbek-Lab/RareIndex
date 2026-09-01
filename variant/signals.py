@@ -1,9 +1,10 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .models import SNV, CNV, SV, Repeat
+from .models import SNV, CNV, SV, Repeat, delins
 from .services import AnnotationService
 
 @receiver(post_save, sender=SNV)
+@receiver(post_save, sender=delins)
 @receiver(post_save, sender=CNV)
 @receiver(post_save, sender=SV)
 @receiver(post_save, sender=Repeat)

@@ -9,8 +9,8 @@
       </button>
     </div>
 
-    <form method="post" action="{% url 'lab:variant_create' %}?analysis_id={{ analysis.id }}&type={{ variant_type }}" 
-          hx-post="{% url 'lab:variant_create' %}?analysis_id={{ analysis.id }}&type={{ variant_type }}" 
+    <form method="post" action="{% url 'lab:variant_create' %}?{% if analysis %}analysis_id={{ analysis.id }}{% else %}pipeline_id={{ pipeline.id }}{% endif %}&type={{ variant_type }}"
+          hx-post="{% url 'lab:variant_create' %}?{% if analysis %}analysis_id={{ analysis.id }}{% else %}pipeline_id={{ pipeline.id }}{% endif %}&type={{ variant_type }}"
           hx-target="#modal-root" 
           hx-swap="innerHTML"
           class="space-y-4">

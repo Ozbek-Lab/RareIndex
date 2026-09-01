@@ -66,6 +66,7 @@ from variant.models import (
     Variant,
     Annotation as VariantAnnotation,
     Classification as VariantClassification,
+    VARIANT_TYPE_DEFINITIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -606,10 +607,10 @@ def _variant_filter_counts(user=None):
         return result
 
     type_counts = {
-        'SNV':    Variant.objects.filter(snv__isnull=False).count(),
-        'CNV':    Variant.objects.filter(cnv__isnull=False).count(),
-        'SV':     Variant.objects.filter(sv__isnull=False).count(),
-        'Repeat': Variant.objects.filter(repeat__isnull=False).count(),
+        definition["value"]: Variant.objects.filter(
+            **{f"{definition['relation']}__isnull": False}
+        ).count()
+        for definition in VARIANT_TYPE_DEFINITIONS
     }
 
     zygosity_counts = {choice[0]: 0 for choice in Variant.ZYGOSITY_CHOICES}
@@ -1031,10 +1032,10 @@ def _individual_filter_counts(user=None):
 
     # Variant type (distinct individuals with that variant subtype)
     variant_type_counts = {
-        'SNV':    Individual.objects.filter(variants__snv__isnull=False).distinct().count(),
-        'CNV':    Individual.objects.filter(variants__cnv__isnull=False).distinct().count(),
-        'SV':     Individual.objects.filter(variants__sv__isnull=False).distinct().count(),
-        'Repeat': Individual.objects.filter(variants__repeat__isnull=False).distinct().count(),
+        definition["value"]: Individual.objects.filter(
+            **{f"variants__{definition['relation']}__isnull": False}
+        ).distinct().count()
+        for definition in VARIANT_TYPE_DEFINITIONS
     }
 
     # Variant status (distinct individuals)
@@ -1684,15 +1685,12 @@ class VariantListView(LoginRequiredMixin, MainAppPermissionRequiredMixin, Single
     paginate_by = 25
 
     def get_queryset(self):
-        return accessible_variants(
-            self.request.user,
-            super().get_queryset(),
-        ).select_related("individual").prefetch_related("statuses", "genes")
-
-    def get_filterset_kwargs(self, filterset_class):
-        kwargs = super().get_filterset_kwargs(filterset_class)
-        kwargs["request"] = self.request
-        return kwargs
+        return (
+            super()
+            .get_queryset()
+            .select_related("individual", "snv", "delins", "cnv", "sv", "repeat")
+            .prefetch_related("statuses", "genes")
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -2063,28 +2061,33 @@ class IndividualDetailView(LoginRequiredMixin, MainAppPermissionRequiredMixin, D
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Prefetch related data for performance
-        individual = accessible_individuals(
-            self.request.user,
-            Individual.objects.prefetch_related(
-                'samples',
-                'samples__tests',
-                'samples__tests__pipelines',
-                'cross_ids',
-                'cross_ids__id_type',
-                'hpo_terms',
-                'institution',
-                'physicians',
-                'projects',
-                Prefetch(
-                    'family__individuals',
-                    queryset=accessible_individuals(
-                        self.request.user,
-                        Individual.objects.select_related("mother", "father")
-                        .prefetch_related("cross_ids__id_type", "statuses"),
-                    ),
-                    to_attr="scoped_individuals",
-                ),
+        individual = Individual.objects.prefetch_related(
+            'samples', 
+            'samples__tests',
+            'samples__tests__pipelines',
+            'cross_ids',
+            'cross_ids__id_type',
+            'hpo_terms',
+            'institution',
+            'physicians',
+            'projects',
+            Prefetch(
+                "variants",
+                queryset=Variant.objects.select_related(
+                    "analysis",
+                    "analysis__pipeline",
+                    "snv",
+                    "delins",
+                    "cnv",
+                    "sv",
+                    "repeat",
+                ).prefetch_related("genes", "statuses"),
             ),
+            'family__individuals',
+            'family__individuals__cross_ids__id_type',
+            'family__individuals__mother',
+            'family__individuals__father',
+            'family__individuals__statuses',
         ).get(pk=self.kwargs['pk'])
         
         context['individual'] = individual
