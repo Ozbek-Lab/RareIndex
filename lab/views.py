@@ -111,7 +111,7 @@ def _request_uses_loopback_host(request):
     return _is_loopback_hostname(urlsplit(f"//{request.get_host()}").hostname)
 
 
-def _direct_docker_marimo_base_url(request, target_port):
+def _direct_docker_marimo_base_url(request, target_port, proxy_path):
     request_parts = urlsplit(f"//{request.get_host()}")
     if request_parts.port != 8090:
         return None
@@ -120,7 +120,7 @@ def _direct_docker_marimo_base_url(request, target_port):
     host = request_parts.hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
-    return f"{request.scheme}://{host}:{target_port}"
+    return f"{request.scheme}://{host}:{target_port}{proxy_path.rstrip('/')}"
 
 
 def _browser_marimo_base_url(request, configured_url, proxy_path):
@@ -136,14 +136,14 @@ def _browser_marimo_base_url(request, configured_url, proxy_path):
     proxy_target_port = 8092 if proxy_path == "/marimo-edit" else 8091
     if not base_url:
         return (
-            _direct_docker_marimo_base_url(request, proxy_target_port)
+            _direct_docker_marimo_base_url(request, proxy_target_port, proxy_path)
             or proxy_path.rstrip("/")
         )
 
     parts = urlsplit(base_url)
     if not parts.scheme and base_url.startswith("/"):
         return (
-            _direct_docker_marimo_base_url(request, proxy_target_port)
+            _direct_docker_marimo_base_url(request, proxy_target_port, proxy_path)
             or base_url
         )
     if parts.scheme and _is_loopback_hostname(parts.hostname):
@@ -151,6 +151,7 @@ def _browser_marimo_base_url(request, configured_url, proxy_path):
             direct_url = _direct_docker_marimo_base_url(
                 request,
                 parts.port or proxy_target_port,
+                proxy_path,
             )
             if direct_url:
                 return direct_url

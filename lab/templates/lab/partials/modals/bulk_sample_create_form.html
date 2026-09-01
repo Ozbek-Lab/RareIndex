@@ -1,0 +1,91 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-5">
+    <div class="flex items-start justify-between gap-4 pr-8">
+        <div>
+            <h3 class="font-bold text-lg text-primary flex items-center gap-2">
+                <i class="fa-solid fa-vial-circle-check"></i>
+                Add Samples
+            </h3>
+            <p class="text-xs text-base-content/60 mt-1">
+                {{ rows|length }} matched individual{{ rows|length|pluralize }}
+            </p>
+        </div>
+    </div>
+</div>
+
+{% if empty_selection %}
+<div class="rounded-box border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-base-content/80">
+    No matched individuals were selected.
+</div>
+<div class="modal-action mt-6 pt-4 border-t border-base-200">
+    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('generic-modal').close()">Close</button>
+</div>
+{% else %}
+<form hx-post="{{ action_url }}"
+      hx-target="#generic-modal-content"
+      hx-swap="innerHTML"
+      class="space-y-5">
+    {% csrf_token %}
+    <input type="hidden" name="bulk_sample_action" value="create">
+    {{ formset.management_form }}
+
+    {% if formset.errors or formset.non_form_errors %}
+    <div class="rounded-box border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+        <div class="font-semibold">Please fix the highlighted rows.</div>
+        {% if formset.non_form_errors %}
+        <div class="text-xs mt-1">{{ formset.non_form_errors.0 }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if not has_sample_types %}
+    <div class="rounded-box border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-base-content/80">
+        No sample types are configured.
+    </div>
+    {% endif %}
+
+    <div class="overflow-x-auto rounded-box border border-base-200">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Individual ID</th>
+                    <th class="w-72">Sample Type</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr {% if row.form.errors or not row.has_sample_type_options %}class="bg-error/5"{% endif %}>
+                    <td class="font-mono">
+                        {{ row.form.individual }}
+                        {% if row.individual %}{{ row.individual.individual_id }}{% else %}Unknown individual{% endif %}
+                        {% if row.form.individual.errors %}
+                        <div class="text-error text-[10px] mt-1">{{ row.form.individual.errors.0 }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ row.form.sample_type }}
+                        {% if not row.has_sample_type_options %}
+                        <div class="text-error text-[10px] mt-1">No available sample types.</div>
+                        {% endif %}
+                        {% if row.form.sample_type.errors %}
+                        <div class="text-error text-[10px] mt-1">{{ row.form.sample_type.errors.0 }}</div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="modal-action mt-8 pt-4 border-t border-base-200 flex justify-between">
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('generic-modal').close()">
+            Cancel
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm px-8" {% if not can_create_samples %}disabled{% endif %}>
+            <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+            Create Samples
+        </button>
+    </div>
+</form>
+{% endif %}

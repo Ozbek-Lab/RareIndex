@@ -1,0 +1,14 @@
+<select name="{{ field_name }}"
+        id="{{ field_id }}"
+        class="select select-bordered select-sm w-full"
+        {% if not tests %}disabled{% endif %}>
+    <option value="">{% if sample_selected %}Choose test{% else %}Choose sample first{% endif %}</option>
+    {% for test in tests %}
+    <option value="{{ test.pk }}" {% if selected_test_id == test.pk|stringformat:"s" %}selected{% endif %}>
+        #{{ test.pk }} - {{ test.test_type }}
+    </option>
+    {% endfor %}
+</select>
+{% if sample_selected and not tests %}
+<div class="text-error text-[10px] mt-1">Selected sample has no tests.</div>
+{% endif %}

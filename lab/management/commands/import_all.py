@@ -446,10 +446,10 @@ def _extract_variant_records(token: str) -> list[dict]:
         copy_match = re.search(r"x(?P<copy>\d+)", variant_text, re.I)
         has_gain = re.search(r"\bgain\b|\bamplification\b", variant_text, re.I)
         has_loss = re.search(r"\bloss\b", variant_text, re.I)
-        has_dup = re.search(r"\bdup(lication)?\b|\bduplikasyon\b", variant_text, re.I)
-        has_del = re.search(r"\bdel(etion)?\b|\bdelesyon\b", variant_text, re.I)
-        has_inv = re.search(r"\binv(ersion)?\b|\binversiyon\b", variant_text, re.I)
-        has_ins = re.search(r"\bins(ertion)?\b|\binsersiyon\b", variant_text, re.I)
+        has_dup = re.search(r"(?<![A-Za-z])dup(lication)?\b|\bduplikasyon\b", variant_text, re.I)
+        has_del = re.search(r"(?<![A-Za-z])del(etion)?\b|\bdelesyon\b", variant_text, re.I)
+        has_inv = re.search(r"(?<![A-Za-z])inv(ersion)?\b|\binversiyon\b", variant_text, re.I)
+        has_ins = re.search(r"(?<![A-Za-z])ins(ertion)?\b|\binsersiyon\b", variant_text, re.I)
         has_trans = re.search(r"\btranslocation\b|\btranslokasyon\b|\bt\(", variant_text, re.I)
         if not (copy_match or has_gain or has_loss or has_dup or has_del or has_inv or has_ins or has_trans):
             return []

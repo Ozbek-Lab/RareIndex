@@ -2,9 +2,10 @@
 from collections import OrderedDict
 
 import json
+import re
 
 from django import forms
-from django.forms import BaseFormSet
+from django.forms import BaseFormSet, formset_factory
 from django.contrib.auth.models import User
 from django.utils import timezone
 from .models import (
@@ -34,6 +35,8 @@ from .models import (
 )
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
+from variant.forms import CHROMOSOME_CHOICES, CHROMOSOME_SIZES
+from variant.models import CNV, Repeat, SNV, SV, Variant, delins
 
 
 def _validate_cross_identifier_value(form, field_name, id_type, value):
@@ -87,6 +90,817 @@ def _grouped_status_group_choices(groups):
         grouped.setdefault(label, []).append((str(group.pk), group.name))
 
     return list(grouped.items())
+
+
+def parse_bulk_create_id_text(value):
+    """Split pasted identifiers on spaces, tabs, newlines, and commas."""
+    return [
+        token.strip()
+        for token in re.split(r"[\s,]+", str(value or ""))
+        if token.strip()
+    ]
+
+
+def _compact_bulk_variant_coord(value):
+    return re.sub(r"[,\s.]", "", str(value or "").strip())
+
+
+def _normalize_bulk_variant_chromosome(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.lower().startswith("chr"):
+        return text if text.startswith("chr") else f"chr{text[3:]}"
+    match = re.match(r"^(?P<chrom>\d+|x|y|m)", text, re.I)
+    if match:
+        chrom = match.group("chrom")
+        return f"chr{chrom.upper() if len(chrom) == 1 else chrom}"
+    return text
+
+
+def _parse_bulk_repeat_variant_text(value):
+    text = str(value or "").strip()
+    match = re.search(
+        r"(?P<chrom>chr[\w]+|[0-9XYM]+)[\s:,-]+(?P<start>[\d.,]+)"
+        r"(?:\s*[-_]\s*(?P<end>[\d.,]+))?\s*"
+        r"(?:\((?P<unit_paren>[ACGT]+)\)|(?P<unit>[ACGT]+))\s*x(?P<count>\d+)",
+        text,
+        re.I,
+    )
+    if not match:
+        return []
+
+    start = int(_compact_bulk_variant_coord(match.group("start")))
+    end = int(_compact_bulk_variant_coord(match.group("end") or match.group("start")))
+    repeat_unit = (match.group("unit_paren") or match.group("unit")).upper()
+    return [
+        {
+            "chromosome": _normalize_bulk_variant_chromosome(match.group("chrom")),
+            "start": min(start, end),
+            "end": max(start, end),
+            "kind": "repeat",
+            "repeat_unit": repeat_unit,
+            "repeat_count": int(match.group("count")),
+            "source_text": text,
+        }
+    ]
+
+
+def parse_bulk_variant_text(value):
+    """Parse one supported bulk variant string into one variant record."""
+    try:
+        from lab.management.commands.import_all import _extract_variant_records
+    except Exception:
+        records = []
+    else:
+        records = _extract_variant_records(value)
+
+    return records or _parse_bulk_repeat_variant_text(value)
+
+
+def _variant_model_for_bulk_record(record):
+    return {
+        "snv": SNV,
+        "delins": delins,
+        "cnv": CNV,
+        "sv": SV,
+        "repeat": Repeat,
+    }.get(record.get("kind"))
+
+
+def _variant_lookup_for_bulk_record(record, individual):
+    model_cls = _variant_model_for_bulk_record(record)
+    if model_cls is None or individual is None:
+        return None, {}
+
+    lookup = {
+        "individual": individual,
+        "chromosome": record.get("chromosome"),
+        "start": record.get("start"),
+    }
+    if model_cls in (SNV, delins):
+        lookup.update(
+            {
+                "reference": record.get("reference"),
+                "alternate": record.get("alternate"),
+            }
+        )
+    elif model_cls is CNV:
+        lookup.update(
+            {
+                "end": record.get("end"),
+                "cnv_type": record.get("cnv_type", "gain"),
+                "copy_number": record.get("copy_number"),
+            }
+        )
+    elif model_cls is SV:
+        lookup.update(
+            {
+                "end": record.get("end"),
+                "sv_type": record.get("sv_type", "deletion"),
+            }
+        )
+    else:
+        lookup.update(
+            {
+                "end": record.get("end", record.get("start")),
+                "repeat_unit": record.get("repeat_unit"),
+                "repeat_count": record.get("repeat_count"),
+            }
+        )
+    return model_cls, lookup
+
+
+BULK_CHROMOSOME_CHOICES = list(CHROMOSOME_CHOICES)
+if ("chrM", "chrM") not in BULK_CHROMOSOME_CHOICES:
+    BULK_CHROMOSOME_CHOICES.append(("chrM", "chrM"))
+
+
+class BulkCreateIdLookupForm(forms.Form):
+    ids = forms.CharField(
+        label="Individual IDs",
+        widget=forms.Textarea(
+            attrs={
+                "class": "textarea textarea-bordered w-full min-h-40 font-mono text-sm",
+                "placeholder": "Paste IDs separated by spaces, tabs, new lines, or commas",
+                "spellcheck": "false",
+            }
+        ),
+    )
+
+    def clean_ids(self):
+        value = self.cleaned_data["ids"]
+        parsed_ids = parse_bulk_create_id_text(value)
+        if not parsed_ids:
+            raise forms.ValidationError("Enter at least one ID.")
+        self.parsed_ids = parsed_ids
+        return value
+
+
+class BulkSampleCreateRowForm(forms.Form):
+    individual = forms.ModelChoiceField(
+        queryset=Individual.objects.all(),
+        widget=forms.HiddenInput,
+    )
+    sample_type = forms.ModelChoiceField(
+        queryset=SampleType.objects.none(),
+        required=True,
+        label="Sample type",
+        empty_label="Choose sample type",
+        error_messages={"required": "Choose a sample type."},
+    )
+
+    def __init__(self, *args, sample_type_queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["sample_type"].queryset = (
+            sample_type_queryset
+            if sample_type_queryset is not None
+            else SampleType.objects.none()
+        )
+        self.fields["sample_type"].widget.attrs.update(
+            {"class": "select select-bordered select-sm w-full"}
+        )
+
+
+BulkSampleCreateFormSet = formset_factory(
+    BulkSampleCreateRowForm,
+    extra=0,
+    min_num=1,
+    validate_min=True,
+)
+
+
+class BulkTestCreateRowForm(forms.Form):
+    individual = forms.ModelChoiceField(
+        queryset=Individual.objects.all(),
+        widget=forms.HiddenInput,
+    )
+    sample = forms.ModelChoiceField(
+        queryset=Sample.objects.none(),
+        required=True,
+        label="Sample",
+        empty_label="Choose sample",
+        error_messages={"required": "Choose a sample."},
+    )
+    test_type = forms.ModelChoiceField(
+        queryset=TestType.objects.none(),
+        required=True,
+        label="Test type",
+        empty_label="Choose test type",
+        error_messages={"required": "Choose a test type."},
+    )
+
+    def __init__(self, *args, sample_queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["sample"].queryset = (
+            sample_queryset if sample_queryset is not None else Sample.objects.none()
+        )
+        self.fields["test_type"].queryset = TestType.objects.order_by("name")
+        self.fields["sample"].label_from_instance = lambda sample: (
+            f"#{sample.pk} - {sample.sample_type} - "
+            f"{sample.receipt_date.isoformat() if sample.receipt_date else 'No receipt date'}"
+        )
+        self.fields["sample"].widget.attrs.update(
+            {"class": "select select-bordered select-sm w-full"}
+        )
+        self.fields["test_type"].widget.attrs.update(
+            {"class": "select select-bordered select-sm w-full"}
+        )
+
+
+BulkTestCreateFormSet = formset_factory(
+    BulkTestCreateRowForm,
+    extra=0,
+    min_num=1,
+    validate_min=True,
+)
+
+
+class BulkPipelineCreateRowForm(forms.Form):
+    individual = forms.ModelChoiceField(
+        queryset=Individual.objects.all(),
+        widget=forms.HiddenInput,
+    )
+    sample = forms.ModelChoiceField(
+        queryset=Sample.objects.none(),
+        required=True,
+        label="Sample",
+        empty_label="Choose sample",
+        error_messages={"required": "Choose a sample."},
+    )
+    test = forms.ModelChoiceField(
+        queryset=Test.objects.none(),
+        required=True,
+        label="Test",
+        empty_label="Choose test",
+        error_messages={"required": "Choose a test."},
+    )
+    pipeline_type = forms.ModelChoiceField(
+        queryset=PipelineType.objects.none(),
+        required=True,
+        label="Pipeline type",
+        empty_label="Choose pipeline type",
+        error_messages={"required": "Choose a pipeline type."},
+    )
+    performed_date = forms.DateField(
+        required=True,
+        label="Performed date",
+        widget=forms.DateInput(
+            attrs={"type": "date", "class": "input input-bordered input-sm w-full"}
+        ),
+        error_messages={"required": "Enter a performed date."},
+    )
+    performed_by = forms.ModelChoiceField(
+        queryset=User.objects.none(),
+        required=True,
+        label="Performed by",
+        empty_label="Choose user",
+        error_messages={"required": "Choose who performed it."},
+    )
+
+    def __init__(self, *args, sample_queryset=None, test_queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["sample"].queryset = (
+            sample_queryset if sample_queryset is not None else Sample.objects.none()
+        )
+        self.fields["test"].queryset = (
+            test_queryset if test_queryset is not None else Test.objects.none()
+        )
+        self.fields["pipeline_type"].queryset = PipelineType.objects.order_by(
+            "name",
+            "-version",
+        )
+        self.fields["performed_by"].queryset = User.objects.filter(
+            is_active=True
+        ).order_by("username")
+        self.fields["sample"].label_from_instance = lambda sample: (
+            f"#{sample.pk} - {sample.sample_type} - "
+            f"{sample.receipt_date.isoformat() if sample.receipt_date else 'No receipt date'}"
+        )
+        self.fields["test"].label_from_instance = lambda lab_test: (
+            f"#{lab_test.pk} - {lab_test.test_type}"
+        )
+        self.fields["pipeline_type"].label_from_instance = lambda pipeline_type: (
+            f"{pipeline_type.name} v{pipeline_type.version}"
+            if pipeline_type.version
+            else pipeline_type.name
+        )
+        for field_name in ("sample", "test", "pipeline_type", "performed_by"):
+            self.fields[field_name].widget.attrs.update(
+                {"class": "select select-bordered select-sm w-full"}
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        sample = cleaned_data.get("sample")
+        lab_test = cleaned_data.get("test")
+        if sample and lab_test and lab_test.sample_id != sample.pk:
+            self.add_error("test", "Choose a test that belongs to the selected sample.")
+        return cleaned_data
+
+
+BulkPipelineCreateFormSet = formset_factory(
+    BulkPipelineCreateRowForm,
+    extra=0,
+    min_num=1,
+    validate_min=True,
+)
+
+
+class BulkAnalysisCreateRowForm(forms.Form):
+    individual = forms.ModelChoiceField(
+        queryset=Individual.objects.all(),
+        widget=forms.HiddenInput,
+    )
+    sample = forms.ModelChoiceField(
+        queryset=Sample.objects.none(),
+        required=True,
+        label="Sample",
+        empty_label="Choose sample",
+        error_messages={"required": "Choose a sample."},
+    )
+    test = forms.ModelChoiceField(
+        queryset=Test.objects.none(),
+        required=True,
+        label="Test",
+        empty_label="Choose test",
+        error_messages={"required": "Choose a test."},
+    )
+    pipeline = forms.ModelChoiceField(
+        queryset=Pipeline.objects.none(),
+        required=True,
+        label="Pipeline",
+        empty_label="Choose pipeline",
+        error_messages={"required": "Choose a pipeline."},
+    )
+    analysis_type = forms.ModelChoiceField(
+        queryset=AnalysisType.objects.none(),
+        required=True,
+        label="Analysis type",
+        empty_label="Choose analysis type",
+        error_messages={"required": "Choose an analysis type."},
+    )
+    performed_date = forms.DateField(
+        required=True,
+        label="Performed date",
+        widget=forms.DateInput(
+            attrs={"type": "date", "class": "input input-bordered input-sm w-full"}
+        ),
+        error_messages={"required": "Enter a performed date."},
+    )
+    performed_by = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=True,
+        label="Performed by",
+        widget=forms.SelectMultiple(attrs={"size": "2"}),
+        error_messages={"required": "Choose who performed it."},
+    )
+
+    def __init__(
+        self,
+        *args,
+        sample_queryset=None,
+        test_queryset=None,
+        pipeline_queryset=None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.fields["sample"].queryset = (
+            sample_queryset if sample_queryset is not None else Sample.objects.none()
+        )
+        self.fields["test"].queryset = (
+            test_queryset if test_queryset is not None else Test.objects.none()
+        )
+        self.fields["pipeline"].queryset = (
+            pipeline_queryset if pipeline_queryset is not None else Pipeline.objects.none()
+        )
+        self.fields["analysis_type"].queryset = AnalysisType.objects.order_by("name")
+        self.fields["performed_by"].queryset = User.objects.filter(
+            is_active=True
+        ).order_by("username")
+        self.fields["sample"].label_from_instance = lambda sample: (
+            f"#{sample.pk} - {sample.sample_type} - "
+            f"{sample.receipt_date.isoformat() if sample.receipt_date else 'No receipt date'}"
+        )
+        self.fields["test"].label_from_instance = lambda lab_test: (
+            f"#{lab_test.pk} - {lab_test.test_type}"
+        )
+        self.fields["pipeline"].label_from_instance = lambda pipeline: (
+            f"#{pipeline.pk} - {pipeline.type} - {pipeline.performed_date.isoformat()}"
+        )
+        self.fields["analysis_type"].label_from_instance = lambda analysis_type: (
+            analysis_type.name
+        )
+        self.fields["performed_by"].label_from_instance = lambda user: (
+            user.get_full_name() or user.username
+        )
+        for field_name in (
+            "sample",
+            "test",
+            "pipeline",
+            "analysis_type",
+            "performed_by",
+        ):
+            self.fields[field_name].widget.attrs.update(
+                {"class": "select select-bordered select-sm w-full"}
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        sample = cleaned_data.get("sample")
+        lab_test = cleaned_data.get("test")
+        pipeline = cleaned_data.get("pipeline")
+        if sample and lab_test and lab_test.sample_id != sample.pk:
+            self.add_error("test", "Choose a test that belongs to the selected sample.")
+        if lab_test and pipeline and pipeline.test_id != lab_test.pk:
+            self.add_error(
+                "pipeline",
+                "Choose a pipeline that belongs to the selected test.",
+            )
+        return cleaned_data
+
+
+BulkAnalysisCreateFormSet = formset_factory(
+    BulkAnalysisCreateRowForm,
+    extra=0,
+    min_num=1,
+    validate_min=True,
+)
+
+
+class BulkVariantCreateRowForm(forms.Form):
+    VARIANT_KIND_CHOICES = [
+        ("snv", "SNV"),
+        ("delins", "delins"),
+        ("cnv", "CNV"),
+        ("sv", "SV"),
+        ("repeat", "Repeat"),
+    ]
+
+    individual = forms.ModelChoiceField(
+        queryset=Individual.objects.all(),
+        widget=forms.HiddenInput,
+    )
+    use_analysis = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Link analysis",
+    )
+    sample = forms.ModelChoiceField(
+        queryset=Sample.objects.none(),
+        required=False,
+        label="Sample",
+        empty_label="Choose sample",
+    )
+    test = forms.ModelChoiceField(
+        queryset=Test.objects.none(),
+        required=False,
+        label="Test",
+        empty_label="Choose test",
+    )
+    pipeline = forms.ModelChoiceField(
+        queryset=Pipeline.objects.none(),
+        required=False,
+        label="Pipeline",
+        empty_label="Choose pipeline",
+    )
+    analysis = forms.ModelChoiceField(
+        queryset=Analysis.objects.none(),
+        required=False,
+        label="Analysis",
+        empty_label="Choose analysis",
+    )
+    variant_kind = forms.ChoiceField(
+        choices=VARIANT_KIND_CHOICES,
+        required=True,
+        initial="snv",
+        label="Type",
+        widget=forms.Select(attrs={"class": "select select-bordered select-sm w-full"}),
+    )
+    chromosome = forms.ChoiceField(
+        choices=BULK_CHROMOSOME_CHOICES,
+        required=True,
+        label="Chr",
+        widget=forms.Select(attrs={"class": "select select-bordered select-sm w-full"}),
+    )
+    start = forms.IntegerField(
+        required=True,
+        min_value=1,
+        label="Start",
+        widget=forms.NumberInput(attrs={"class": "input input-bordered input-sm w-full"}),
+        error_messages={"required": "Enter start."},
+    )
+    end = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="End",
+        widget=forms.NumberInput(attrs={"class": "input input-bordered input-sm w-full"}),
+    )
+    reference = forms.CharField(
+        required=False,
+        label="Ref",
+        widget=forms.TextInput(
+            attrs={
+                "class": "input input-bordered input-sm w-full font-mono uppercase",
+                "placeholder": "A",
+                "spellcheck": "false",
+            }
+        ),
+    )
+    alternate = forms.CharField(
+        required=False,
+        label="Alt",
+        widget=forms.TextInput(
+            attrs={
+                "class": "input input-bordered input-sm w-full font-mono uppercase",
+                "placeholder": "G",
+                "spellcheck": "false",
+            }
+        ),
+    )
+    cnv_type = forms.ChoiceField(
+        choices=[("", "CNV type"), *CNV.TYPE_CHOICES],
+        required=False,
+        label="CNV",
+        widget=forms.Select(attrs={"class": "select select-bordered select-sm w-full"}),
+    )
+    copy_number = forms.IntegerField(
+        required=False,
+        min_value=0,
+        label="Copy #",
+        widget=forms.NumberInput(attrs={"class": "input input-bordered input-sm w-full"}),
+    )
+    sv_type = forms.ChoiceField(
+        choices=[("", "SV type"), *SV.TYPE_CHOICES],
+        required=False,
+        label="SV",
+        widget=forms.Select(attrs={"class": "select select-bordered select-sm w-full"}),
+    )
+    breakpoints = forms.CharField(
+        required=False,
+        label="Breakpoints",
+        widget=forms.TextInput(
+            attrs={
+                "class": "input input-bordered input-sm w-full font-mono",
+                "placeholder": "{}",
+                "spellcheck": "false",
+            }
+        ),
+    )
+    repeat_unit = forms.CharField(
+        required=False,
+        label="Unit",
+        widget=forms.TextInput(
+            attrs={
+                "class": "input input-bordered input-sm w-full font-mono uppercase",
+                "placeholder": "CAG",
+                "spellcheck": "false",
+            }
+        ),
+    )
+    repeat_count = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="Count",
+        widget=forms.NumberInput(attrs={"class": "input input-bordered input-sm w-full"}),
+    )
+    assembly_version = forms.ChoiceField(
+        choices=[("hg38", "GRCh38 (hg38)")],
+        initial="hg38",
+        label="Assembly",
+        widget=forms.Select(attrs={"class": "select select-bordered select-sm w-full"}),
+    )
+    zygosity = forms.ChoiceField(
+        choices=Variant.ZYGOSITY_CHOICES,
+        initial="unknown",
+        label="Zygosity",
+        widget=forms.Select(attrs={"class": "select select-bordered select-sm w-full"}),
+        error_messages={"required": "Choose zygosity."},
+    )
+
+    def __init__(
+        self,
+        *args,
+        sample_queryset=None,
+        test_queryset=None,
+        pipeline_queryset=None,
+        analysis_queryset=None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.fields["sample"].queryset = (
+            sample_queryset if sample_queryset is not None else Sample.objects.none()
+        )
+        self.fields["test"].queryset = (
+            test_queryset if test_queryset is not None else Test.objects.none()
+        )
+        self.fields["pipeline"].queryset = (
+            pipeline_queryset if pipeline_queryset is not None else Pipeline.objects.none()
+        )
+        self.fields["analysis"].queryset = (
+            analysis_queryset if analysis_queryset is not None else Analysis.objects.none()
+        )
+        self.fields["sample"].label_from_instance = lambda sample: (
+            f"#{sample.pk} - {sample.sample_type} - "
+            f"{sample.receipt_date.isoformat() if sample.receipt_date else 'No receipt date'}"
+        )
+        self.fields["test"].label_from_instance = lambda lab_test: (
+            f"#{lab_test.pk} - {lab_test.test_type}"
+        )
+        self.fields["pipeline"].label_from_instance = lambda pipeline: (
+            f"#{pipeline.pk} - {pipeline.type} - {pipeline.performed_date.isoformat()}"
+        )
+        self.fields["analysis"].label_from_instance = lambda analysis: (
+            f"#{analysis.pk} - {analysis.type or 'Analysis'}"
+        )
+        for field_name in ("sample", "test", "pipeline", "analysis"):
+            self.fields[field_name].widget.attrs.update(
+                {
+                    "class": "select select-bordered select-sm w-full",
+                    "x-bind:disabled": "!linked",
+                }
+            )
+        self.fields["use_analysis"].widget.attrs.update(
+            {
+                "class": "toggle toggle-primary toggle-xs",
+                "x-model": "linked",
+            }
+        )
+        self.fields["variant_kind"].widget.attrs.update({"x-model": "variantKind"})
+
+    def clean(self):
+        cleaned_data = super().clean()
+        individual = cleaned_data.get("individual")
+        use_analysis = cleaned_data.get("use_analysis")
+        sample = cleaned_data.get("sample")
+        lab_test = cleaned_data.get("test")
+        pipeline = cleaned_data.get("pipeline")
+        analysis = cleaned_data.get("analysis")
+        variant_kind = cleaned_data.get("variant_kind")
+        chromosome = cleaned_data.get("chromosome")
+        start = cleaned_data.get("start")
+        end = cleaned_data.get("end")
+        reference = (cleaned_data.get("reference") or "").strip().upper()
+        alternate = (cleaned_data.get("alternate") or "").strip().upper()
+        cnv_type = cleaned_data.get("cnv_type")
+        copy_number = cleaned_data.get("copy_number")
+        sv_type = cleaned_data.get("sv_type")
+        breakpoints = (cleaned_data.get("breakpoints") or "").strip()
+        repeat_unit = (cleaned_data.get("repeat_unit") or "").strip().upper()
+        repeat_count = cleaned_data.get("repeat_count")
+
+        record = None
+        interval_end = end or start
+        allele_pattern = re.compile(r"^[ACGT]+$")
+
+        if start and interval_end and start > interval_end:
+            self.add_error("start", "Start position cannot be greater than end position.")
+        if chromosome in CHROMOSOME_SIZES and interval_end and interval_end > CHROMOSOME_SIZES[chromosome]:
+            self.add_error(
+                "end",
+                f"End position exceeds the size of {chromosome} ({CHROMOSOME_SIZES[chromosome]} bp).",
+            )
+
+        if variant_kind in {"snv", "delins"}:
+            if not reference:
+                self.add_error("reference", "Enter reference.")
+            elif not allele_pattern.match(reference):
+                self.add_error("reference", "Use A, C, G, and T only.")
+            if not alternate:
+                self.add_error("alternate", "Enter alternate.")
+            elif not allele_pattern.match(alternate):
+                self.add_error("alternate", "Use A, C, G, and T only.")
+            if (
+                variant_kind == "snv"
+                and reference
+                and alternate
+                and (len(reference) != 1 or len(alternate) != 1)
+            ):
+                self.add_error("reference", "SNV ref and alt must each be one base.")
+            if start and reference and alternate:
+                record = {
+                    "chromosome": chromosome,
+                    "start": start,
+                    "end": start,
+                    "kind": variant_kind,
+                    "reference": reference,
+                    "alternate": alternate,
+                }
+        elif variant_kind == "cnv":
+            if not end:
+                self.add_error("end", "Enter end.")
+            if not cnv_type:
+                self.add_error("cnv_type", "Choose CNV type.")
+            if start and end and cnv_type:
+                record = {
+                    "chromosome": chromosome,
+                    "start": min(start, end),
+                    "end": max(start, end),
+                    "kind": "cnv",
+                    "cnv_type": cnv_type,
+                    "copy_number": copy_number,
+                }
+        elif variant_kind == "sv":
+            if not end:
+                self.add_error("end", "Enter end.")
+            if not sv_type:
+                self.add_error("sv_type", "Choose SV type.")
+            parsed_breakpoints = None
+            if breakpoints:
+                try:
+                    parsed_breakpoints = json.loads(breakpoints)
+                except json.JSONDecodeError:
+                    self.add_error("breakpoints", "Enter valid JSON.")
+            if start and end and sv_type:
+                record = {
+                    "chromosome": chromosome,
+                    "start": min(start, end),
+                    "end": max(start, end),
+                    "kind": "sv",
+                    "sv_type": sv_type,
+                    "breakpoints": parsed_breakpoints,
+                }
+        elif variant_kind == "repeat":
+            if not repeat_unit:
+                self.add_error("repeat_unit", "Enter repeat unit.")
+            elif not allele_pattern.match(repeat_unit):
+                self.add_error("repeat_unit", "Use A, C, G, and T only.")
+            if repeat_count is None:
+                self.add_error("repeat_count", "Enter repeat count.")
+            if start and repeat_unit and repeat_count is not None:
+                record = {
+                    "chromosome": chromosome,
+                    "start": min(start, interval_end),
+                    "end": max(start, interval_end),
+                    "kind": "repeat",
+                    "repeat_unit": repeat_unit,
+                    "repeat_count": repeat_count,
+                }
+        else:
+            self.add_error("variant_kind", "Choose a variant type.")
+
+        if record:
+            model_cls, lookup = _variant_lookup_for_bulk_record(record, individual)
+            if model_cls is None:
+                self.add_error(
+                    "variant_kind",
+                    "Choose a supported variant type.",
+                )
+            elif model_cls.objects.filter(**lookup).exists():
+                self.add_error(
+                    "chromosome",
+                    "This variant has already been added to this individual.",
+                )
+            cleaned_data["variant_record"] = record
+
+        if use_analysis:
+            if not sample:
+                self.add_error("sample", "Choose a sample.")
+            if not lab_test:
+                self.add_error("test", "Choose a test.")
+            if not pipeline:
+                self.add_error("pipeline", "Choose a pipeline.")
+            if not analysis:
+                self.add_error("analysis", "Choose an analysis.")
+            if sample and lab_test and lab_test.sample_id != sample.pk:
+                self.add_error("test", "Choose a test that belongs to the selected sample.")
+            if lab_test and pipeline and pipeline.test_id != lab_test.pk:
+                self.add_error(
+                    "pipeline",
+                    "Choose a pipeline that belongs to the selected test.",
+                )
+            if pipeline and analysis and analysis.pipeline_id != pipeline.pk:
+                self.add_error(
+                    "analysis",
+                    "Choose an analysis that belongs to the selected pipeline.",
+                )
+            if (
+                individual
+                and analysis
+                and analysis.pipeline
+                and analysis.pipeline.test
+                and analysis.pipeline.test.sample
+                and analysis.pipeline.test.sample.individual_id != individual.pk
+            ):
+                self.add_error(
+                    "analysis",
+                    "Choose an analysis that belongs to this individual.",
+                )
+        else:
+            cleaned_data["sample"] = None
+            cleaned_data["test"] = None
+            cleaned_data["pipeline"] = None
+            cleaned_data["analysis"] = None
+
+        return cleaned_data
+
+
+BulkVariantCreateFormSet = formset_factory(
+    BulkVariantCreateRowForm,
+    extra=0,
+    min_num=1,
+    validate_min=True,
+)
 
 
 class BaseForm(forms.ModelForm):

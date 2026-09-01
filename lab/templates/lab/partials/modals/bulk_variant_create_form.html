@@ -1,0 +1,275 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-5">
+    <div class="flex items-start justify-between gap-4 pr-8">
+        <div>
+            <h3 class="font-bold text-lg text-primary flex items-center gap-2">
+                <i class="fa-solid fa-dna"></i>
+                Add Variants
+            </h3>
+            <p class="text-xs text-base-content/60 mt-1">
+                {{ rows|length }} matched individual{{ rows|length|pluralize }}
+            </p>
+        </div>
+    </div>
+</div>
+
+<style>
+    .bulk-variant-details {
+        display: grid;
+        grid-template-columns: repeat(16, minmax(0, 1fr));
+        gap: 0.5rem;
+        min-width: 72rem;
+        width: 72rem;
+        align-items: start;
+    }
+    .bulk-variant-field {
+        grid-column: span 2 / span 2;
+        min-width: 0;
+    }
+    .bulk-variant-field-wide {
+        grid-column: span 4 / span 4;
+        min-width: 0;
+    }
+</style>
+
+{% if empty_selection %}
+<div class="rounded-box border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-base-content/80">
+    No matched individuals were selected.
+</div>
+<div class="modal-action mt-6 pt-4 border-t border-base-200">
+    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('generic-modal').close()">Close</button>
+</div>
+{% else %}
+<form hx-post="{{ action_url }}"
+      hx-target="#generic-modal-content"
+      hx-swap="innerHTML"
+      class="space-y-5">
+    {% csrf_token %}
+    <input type="hidden" name="bulk_variant_action" value="create">
+    {{ formset.management_form }}
+
+    {% if formset.errors or formset.non_form_errors %}
+    <div class="rounded-box border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+        <div class="font-semibold">Please fix the highlighted rows.</div>
+        {% if formset.non_form_errors %}
+        <div class="text-xs mt-1">{{ formset.non_form_errors.0 }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="overflow-x-auto rounded-box border border-base-200">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th class="w-48">Individual ID</th>
+                    <th class="w-24">Analysis</th>
+                    <th class="w-64">Sample</th>
+                    <th class="w-56">Test</th>
+                    <th class="w-64">Pipeline</th>
+                    <th class="w-56">Analysis Object</th>
+                    <th style="min-width: 72rem; width: 72rem;">Variant Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr x-data="{ linked: {{ row.use_analysis_enabled|yesno:'true,false' }}, variantKind: '{{ row.selected_variant_kind }}' }"
+                    {% if row.form.errors %}class="bg-error/5"{% endif %}>
+                    <td class="font-mono">
+                        {{ row.form.individual }}
+                        {% if row.individual %}{{ row.individual.individual_id }}{% else %}Unknown individual{% endif %}
+                        {% if row.form.individual.errors %}
+                        <div class="text-error text-[10px] mt-1">{{ row.form.individual.errors.0 }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="flex items-center justify-center">
+                            {{ row.form.use_analysis }}
+                        </div>
+                        {% if row.form.use_analysis.errors %}
+                        <div class="text-error text-[10px] mt-1">{{ row.form.use_analysis.errors.0 }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ row.form.sample }}
+                        {% if not row.has_sample_options %}
+                        <div class="text-error text-[10px] mt-1" x-show="linked">This individual has no samples.</div>
+                        {% endif %}
+                        {% if row.form.sample.errors %}
+                        <div class="text-error text-[10px] mt-1">{{ row.form.sample.errors.0 }}</div>
+                        {% endif %}
+                    </td>
+                    <td id="{{ row.test_cell_id }}">
+                        {% include "lab/partials/modals/bulk_variant_test_select.html" with field_name=row.test_field_name field_id=row.test_field_id tests=row.test_options sample_selected=row.selected_sample_id selected_test_id=row.selected_test_id pipeline_options_url=row.pipeline_options_url pipeline_cell_id=row.pipeline_cell_id pipeline_field_name=row.pipeline_field_name pipeline_field_id=row.pipeline_field_id pipeline_hx_vals=row.pipeline_hx_vals analysis_cell_id=row.analysis_cell_id analysis_field_name=row.analysis_field_name analysis_field_id=row.analysis_field_id %}
+                        {% if row.has_sample_options and not row.has_any_test_options %}
+                        <div class="text-error text-[10px] mt-1" x-show="linked">This individual's samples have no tests.</div>
+                        {% endif %}
+                        {% if row.form.test.errors %}
+                        <div class="text-error text-[10px] mt-1">{{ row.form.test.errors.0 }}</div>
+                        {% endif %}
+                    </td>
+                    <td id="{{ row.pipeline_cell_id }}">
+                        {% include "lab/partials/modals/bulk_variant_pipeline_select.html" with field_name=row.pipeline_field_name field_id=row.pipeline_field_id pipelines=row.pipeline_options test_selected=row.selected_test_id selected_pipeline_id=row.selected_pipeline_id analysis_options_url=row.analysis_options_url analysis_cell_id=row.analysis_cell_id analysis_field_name=row.analysis_field_name analysis_field_id=row.analysis_field_id analysis_hx_vals=row.analysis_hx_vals %}
+                        {% if row.has_any_test_options and not row.has_any_pipeline_options %}
+                        <div class="text-error text-[10px] mt-1" x-show="linked">This individual's tests have no pipelines.</div>
+                        {% endif %}
+                        {% if row.form.pipeline.errors %}
+                        <div class="text-error text-[10px] mt-1">{{ row.form.pipeline.errors.0 }}</div>
+                        {% endif %}
+                    </td>
+                    <td id="{{ row.analysis_cell_id }}">
+                        {% include "lab/partials/modals/bulk_variant_analysis_select.html" with field_name=row.analysis_field_name field_id=row.analysis_field_id analyses=row.analysis_options pipeline_selected=row.selected_pipeline_id selected_analysis_id=row.selected_analysis_id %}
+                        {% if row.has_any_pipeline_options and not row.has_any_analysis_options %}
+                        <div class="text-error text-[10px] mt-1" x-show="linked">This individual's pipelines have no analyses.</div>
+                        {% endif %}
+                        {% if row.form.analysis.errors %}
+                        <div class="text-error text-[10px] mt-1">{{ row.form.analysis.errors.0 }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="bulk-variant-details">
+                            <div class="bulk-variant-field">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.variant_kind.label }}</span>
+                                </label>
+                                {{ row.form.variant_kind }}
+                                {% if row.form.variant_kind.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.variant_kind.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.chromosome.label }}</span>
+                                </label>
+                                {{ row.form.chromosome }}
+                                {% if row.form.chromosome.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.chromosome.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.start.label }}</span>
+                                </label>
+                                {{ row.form.start }}
+                                {% if row.form.start.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.start.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field" x-show="variantKind === 'cnv' || variantKind === 'sv' || variantKind === 'repeat'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.end.label }}</span>
+                                </label>
+                                {{ row.form.end }}
+                                {% if row.form.end.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.end.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.zygosity.label }}</span>
+                                </label>
+                                {{ row.form.zygosity }}
+                                {% if row.form.zygosity.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.zygosity.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.assembly_version.label }}</span>
+                                </label>
+                                {{ row.form.assembly_version }}
+                                {% if row.form.assembly_version.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.assembly_version.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field" x-show="variantKind === 'snv' || variantKind === 'delins'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.reference.label }}</span>
+                                </label>
+                                {{ row.form.reference }}
+                                {% if row.form.reference.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.reference.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field" x-show="variantKind === 'snv' || variantKind === 'delins'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.alternate.label }}</span>
+                                </label>
+                                {{ row.form.alternate }}
+                                {% if row.form.alternate.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.alternate.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field" x-show="variantKind === 'cnv'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.cnv_type.label }}</span>
+                                </label>
+                                {{ row.form.cnv_type }}
+                                {% if row.form.cnv_type.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.cnv_type.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field" x-show="variantKind === 'cnv'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.copy_number.label }}</span>
+                                </label>
+                                {{ row.form.copy_number }}
+                                {% if row.form.copy_number.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.copy_number.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field" x-show="variantKind === 'sv'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.sv_type.label }}</span>
+                                </label>
+                                {{ row.form.sv_type }}
+                                {% if row.form.sv_type.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.sv_type.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field-wide" x-show="variantKind === 'sv'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.breakpoints.label }}</span>
+                                </label>
+                                {{ row.form.breakpoints }}
+                                {% if row.form.breakpoints.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.breakpoints.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field" x-show="variantKind === 'repeat'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.repeat_unit.label }}</span>
+                                </label>
+                                {{ row.form.repeat_unit }}
+                                {% if row.form.repeat_unit.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.repeat_unit.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="bulk-variant-field" x-show="variantKind === 'repeat'">
+                                <label class="label py-0">
+                                    <span class="label-text text-[10px] font-semibold opacity-70">{{ row.form.repeat_count.label }}</span>
+                                </label>
+                                {{ row.form.repeat_count }}
+                                {% if row.form.repeat_count.errors %}
+                                <div class="text-error text-[10px] mt-1">{{ row.form.repeat_count.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="modal-action mt-8 pt-4 border-t border-base-200 flex justify-between">
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('generic-modal').close()">
+            Cancel
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm px-8" {% if not can_create_variants %}disabled{% endif %}>
+            <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+            Create Variants
+        </button>
+    </div>
+</form>
+{% endif %}

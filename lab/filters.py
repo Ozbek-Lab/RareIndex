@@ -5,11 +5,14 @@ from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual, Sample, Project, SampleType, TestType, Status, PipelineType,
     Institution, Test, Pipeline, Analysis, AnalysisType, TaggedStatus, Family,
-    AnalysisReport, AnalysisRequestForm,
+    AnalysisReport, AnalysisRequestForm, Note,
 )
 from .search_utils import filter_normalized_contains, normalized_contains, normalized_contains_q
+
 from .access import accessible_projects, accessible_variants
-from variant.models import ACMGEvidenceOverride, Variant, Annotation
+from variant.models import (
+    ACMGEvidenceOverride, Variant, Annotation, SNV, delins, CNV, SV, Repeat,
+)
 from variant.templatetags.variant_filters import ACMG_CRITERIA_INFO
 
 FILTER_MODE_SUFFIX = "__mode"
@@ -17,6 +20,7 @@ FILTER_MODE_ANY = "any"
 FILTER_MODE_ALL = "all"
 FILTER_MODE_TOGETHER = "together"
 FILTER_GROUP_MODE_ANY = "any"
+SEARCH_NOTES_PARAM = "search_notes"
 
 def _request_targets_table(request, target_id):
     return bool(
@@ -88,6 +92,118 @@ def _matching_tagged_object_ids(model_class, status_values, mode=FILTER_MODE_ANY
             .values_list("object_id", flat=True)
         )
     return qs.values_list("object_id", flat=True)
+
+
+def _flag_enabled(data, field_name):
+    return any(
+        str(value).lower() in {"1", "true", "on", "yes"}
+        for value in _values_for_data(data, field_name)
+    )
+
+
+def _visible_note_q(user):
+    query = Q(private_owner__isnull=True)
+    if user and getattr(user, "is_authenticated", False):
+        query |= Q(private_owner=user)
+    return query
+
+
+def _matching_note_object_ids(model_class, query, user=None):
+    ct = ContentType.objects.get_for_model(model_class)
+    notes = (
+        Note.objects.filter(content_type=ct)
+        .filter(_visible_note_q(user))
+        .order_by()
+    )
+
+    matched_ids = []
+    seen_ids = set()
+    for object_id, content in (
+        notes.values_list("object_id", "content").iterator(chunk_size=1000)
+    ):
+        if object_id in seen_ids:
+            continue
+        if normalized_contains(content, query):
+            seen_ids.add(object_id)
+            matched_ids.append(object_id)
+    return matched_ids
+
+
+def _add_related_ids(target_ids, queryset, lookup):
+    target_ids.update(
+        object_id
+        for object_id in queryset.values_list(lookup, flat=True)
+        if object_id is not None
+    )
+
+
+def _matching_individual_note_search_ids(query, user=None, include_variant_notes=True):
+    matched_ids = set(_matching_note_object_ids(Individual, query, user))
+
+    sample_ids = _matching_note_object_ids(Sample, query, user)
+    if sample_ids:
+        _add_related_ids(
+            matched_ids,
+            Sample.objects.filter(pk__in=sample_ids),
+            "individual_id",
+        )
+
+    test_ids = _matching_note_object_ids(Test, query, user)
+    if test_ids:
+        _add_related_ids(
+            matched_ids,
+            Test.objects.filter(pk__in=test_ids),
+            "sample__individual_id",
+        )
+
+    pipeline_ids = _matching_note_object_ids(Pipeline, query, user)
+    if pipeline_ids:
+        _add_related_ids(
+            matched_ids,
+            Pipeline.objects.filter(pk__in=pipeline_ids),
+            "test__sample__individual_id",
+        )
+
+    analysis_ids = _matching_note_object_ids(Analysis, query, user)
+    if analysis_ids:
+        _add_related_ids(
+            matched_ids,
+            Analysis.objects.filter(pk__in=analysis_ids),
+            "pipeline__test__sample__individual_id",
+        )
+
+    if include_variant_notes:
+        variant_ids = _matching_variant_note_object_ids(query, user)
+        if variant_ids:
+            _add_related_ids(
+                matched_ids,
+                Variant.objects.filter(pk__in=variant_ids),
+                "individual_id",
+            )
+
+    return matched_ids
+
+
+def _matching_variant_note_object_ids(query, user=None):
+    matched_ids = set()
+    for model_class in (Variant, SNV, delins, CNV, SV, Repeat):
+        matched_ids.update(_matching_note_object_ids(model_class, query, user))
+    return matched_ids
+
+
+def _matching_variant_note_search_ids(query, user=None):
+    matched_ids = set(_matching_variant_note_object_ids(query, user))
+    individual_ids = _matching_individual_note_search_ids(
+        query,
+        user=user,
+        include_variant_notes=False,
+    )
+    if individual_ids:
+        matched_ids.update(
+            Variant.objects.filter(individual_id__in=individual_ids)
+            .values_list("pk", flat=True)
+        )
+    return matched_ids
 
 
 class TristateFilterMixin:
@@ -839,6 +955,11 @@ class IndividualFilter(django_filters.FilterSet):
 
         search_query = normalized_contains_q(queryset, ["cross_ids__id_value", "id"], value)
         request_user = getattr(getattr(self, "request", None), "user", None)
+        if _flag_enabled(self.data, SEARCH_NOTES_PARAM):
+            note_match_ids = _matching_individual_note_search_ids(value, request_user)
+            if note_match_ids:
+                search_query |= Q(pk__in=note_match_ids)
+
         if request_user and request_user.has_perm("lab.view_sensitive_data"):
             matching_name_ids = []
             name_queryset = (
@@ -1648,7 +1769,13 @@ class VariantFilter(django_filters.FilterSet):
         if request_user and request_user.has_perm("lab.view_sensitive_data"):
             search_fields.append("individual__full_name")
 
-        return filter_normalized_contains(queryset, search_fields, value).distinct()
+        search_query = normalized_contains_q(queryset, search_fields, value)
+        if _flag_enabled(self.data, SEARCH_NOTES_PARAM):
+            note_match_ids = _matching_variant_note_search_ids(value, request_user)
+            if note_match_ids:
+                search_query |= Q(pk__in=note_match_ids)
+
+        return queryset.filter(search_query).distinct()
 
     def filter_gene(self, queryset, name, value):
         return filter_normalized_contains(queryset, ["genes__symbol"], value).distinct()

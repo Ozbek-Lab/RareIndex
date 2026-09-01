@@ -1,0 +1,14 @@
+<select name="{{ field_name }}"
+        id="{{ field_id }}"
+        class="select select-bordered select-sm w-full"
+        {% if not pipelines %}disabled{% endif %}>
+    <option value="">{% if test_selected %}Choose pipeline{% else %}Choose test first{% endif %}</option>
+    {% for pipeline in pipelines %}
+    <option value="{{ pipeline.pk }}" {% if selected_pipeline_id == pipeline.pk|stringformat:"s" %}selected{% endif %}>
+        #{{ pipeline.pk }} - {{ pipeline.type }} - {{ pipeline.performed_date|date:"Y-m-d" }}
+    </option>
+    {% endfor %}
+</select>
+{% if test_selected and not pipelines %}
+<div class="text-error text-[10px] mt-1">Selected test has no pipelines.</div>
+{% endif %}

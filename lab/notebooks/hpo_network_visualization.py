@@ -45,8 +45,6 @@ def _():
     import networkx as nx
     import warnings
 
-    import _utils
-
     warnings.filterwarnings(
         "ignore",
         message=r"No path from .* to root node .*",
@@ -296,8 +294,31 @@ def _():
         theme_mode: str,
         fullscreen: bool = False,
     ):
-        cytoscape_js = f"{_utils.DJANGO_API_URL.rstrip('/')}/static/lab/js/cytoscape.min.js"
-        cytoscape_svg_js = f"{_utils.DJANGO_API_URL.rstrip('/')}/static/lab/js/cytoscape-svg.min.js"
+        import json
+        from pathlib import Path
+
+        def read_static_js(filename: str) -> str:
+            candidates = [
+                Path.cwd() / "lab" / "static" / "lab" / "js" / filename,
+                Path.cwd().parent / "lab" / "static" / "lab" / "js" / filename,
+                Path.cwd().parent.parent / "lab" / "static" / "lab" / "js" / filename,
+            ]
+            file_path = globals().get("__file__")
+            if file_path:
+                file_path = Path(file_path).resolve()
+                candidates.extend(
+                    [
+                        file_path.parents[2] / "lab" / "static" / "lab" / "js" / filename,
+                        file_path.parent.parent / "static" / "lab" / "js" / filename,
+                    ]
+                )
+            for candidate in candidates:
+                if candidate.is_file():
+                    return candidate.read_text(encoding="utf-8").replace("</script", "<\\/script")
+            raise FileNotFoundError(f"Could not find static JS asset: {filename}")
+
+        cytoscape_js = read_static_js("cytoscape.min.js")
+        cytoscape_svg_js = read_static_js("cytoscape-svg.min.js")
         elements_json = json.dumps(elements).replace("</", "<\\/")
         layout_mode = "Layered" if str(layout_mode).strip().lower() == "layered" else "Circular"
         theme_mode = "Rainbow" if str(theme_mode).strip().lower() == "rainbow" else "Icefire"
@@ -338,8 +359,8 @@ def _():
     </div>
   </div>
   <script id="hpo-elements" type="application/json">{elements_json}</script>
-  <script src="{cytoscape_js}"></script>
-  <script src="{cytoscape_svg_js}"></script>
+  <script>{cytoscape_js}</script>
+  <script>{cytoscape_svg_js}</script>
   <script>
     (function() {{
       try {{
