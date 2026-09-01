@@ -214,7 +214,9 @@ def family_pedigree_dataset(family, proband=None):
     if not family:
         return mark_safe("[]")
 
-    members = list(family.individuals.all())
+    scoped_members = getattr(family, "scoped_individuals", None)
+    members = list(scoped_members) if scoped_members is not None else list(family.individuals.all())
+    scoped_member_ids = {member.pk for member in members} if scoped_members is not None else None
     indexed_proband = next((member for member in members if member.is_index), None)
     if indexed_proband:
         proband = indexed_proband
@@ -229,7 +231,7 @@ def family_pedigree_dataset(family, proband=None):
         return f"unknown_{role}_for_i_{child.pk}"
 
     def ensure_parent(parent, role, child):
-        if parent:
+        if parent and (scoped_member_ids is None or parent.pk in scoped_member_ids):
             by_id[parent.pk] = parent
             parent_roles[parent.pk] = role
             return node_name(parent)
@@ -252,6 +254,8 @@ def family_pedigree_dataset(family, proband=None):
         processed.add(member.pk)
         if member.mother_id or member.father_id:
             for parent, role in ((member.mother, "mother"), (member.father, "father")):
+                if parent and scoped_member_ids is not None and parent.pk not in scoped_member_ids:
+                    continue
                 if parent and parent.pk not in by_id:
                     by_id[parent.pk] = parent
                     pending.append(parent)

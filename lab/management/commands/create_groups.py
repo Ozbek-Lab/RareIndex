@@ -19,6 +19,7 @@ CONFIG_MODELS = (
     "status",
     "institution",
     "contact",
+    "projectmembership",
 )
 
 WORKFLOW_MODELS = (
@@ -75,6 +76,7 @@ HISTORY_MODELS = (
     "historicalpipelinetype",
     "historicalplottemplate",
     "historicalproject",
+    "historicalprojectmembership",
     "historicalsample",
     "historicalsampletype",
     "historicalstatus",
@@ -90,6 +92,23 @@ HISTORY_MODELS = (
     "historicalsnv",
     "historicalsv",
     "historicalvariant",
+)
+
+VARIANT_HISTORY_MODELS = (
+    "historicalannotation",
+    "historicalclassification",
+    "historicalcnv",
+    "historicaldelins",
+    "historicalrepeat",
+    "historicalsnv",
+    "historicalsv",
+    "historicalvariant",
+)
+
+LAB_HISTORY_MODELS = tuple(
+    model_name
+    for model_name in HISTORY_MODELS
+    if model_name not in VARIANT_HISTORY_MODELS
 )
 
 
@@ -136,8 +155,8 @@ def build_groups_perms():
     variants_delete = model_permissions("variant", ("variant",), ("delete",))
     ontologies_view = model_permissions("ontologies", ONTOLOGY_MODELS, VIEW)
     history_view = combine_permissions(
-        model_permissions("lab", HISTORY_MODELS, VIEW),
-        model_permissions("variant", HISTORY_MODELS, VIEW),
+        model_permissions("lab", LAB_HISTORY_MODELS, VIEW),
+        model_permissions("variant", VARIANT_HISTORY_MODELS, VIEW),
     )
     sensitive_view = codename_permissions("lab", ("view_sensitive_data",))
 
@@ -180,11 +199,13 @@ def expected_permission_codenames():
             (CONFIG_MODELS, VIEW),
             (CONFIG_MODELS, CRUD),
             (WORKFLOW_MODELS, ADD_CHANGE_VIEW),
+            (LAB_HISTORY_MODELS, VIEW),
             (("sample", "test", "pipeline", "analysis", "analysisreport"), ("delete",)),
             (("individual",), ("view_sensitive_data",)),
         ),
         "variant": (
             (VARIANT_MODELS, ADD_CHANGE_VIEW),
+            (VARIANT_HISTORY_MODELS, VIEW),
             (("variant",), ("delete",)),
         ),
         "ontologies": ((ONTOLOGY_MODELS, VIEW),),

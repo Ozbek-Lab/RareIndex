@@ -1,0 +1,37 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-5">
+    <h3 class="font-bold text-lg text-success flex items-center gap-2">
+        <i class="fa-solid fa-circle-check"></i>
+        Tests Created
+    </h3>
+</div>
+
+<div class="rounded-box border border-success/20 bg-success/5 px-4 py-3 text-sm text-base-content/80 mb-4">
+    {{ created_tests|length }} test{{ created_tests|length|pluralize }} created.
+</div>
+
+<div class="overflow-x-auto rounded-box border border-base-200">
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Test Object ID</th>
+                <th>Individual ID</th>
+                <th>Sample</th>
+                <th>Test Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for test in created_tests %}
+            <tr>
+                <td class="font-mono">{{ test.pk }}</td>
+                <td class="font-mono">{{ test.sample.individual.individual_id }}</td>
+                <td class="font-mono">#{{ test.sample.pk }}</td>
+                <td>{{ test.test_type }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="modal-action mt-6 pt-4 border-t border-base-200">
+    <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('generic-modal').close()">Done</button>
+</div>

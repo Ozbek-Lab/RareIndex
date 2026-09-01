@@ -5,9 +5,11 @@ from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual, Sample, Project, SampleType, TestType, Status, PipelineType,
     Institution, Test, Pipeline, Analysis, AnalysisType, TaggedStatus, Family,
-    AnalysisReport, AnalysisRequestForm,
+    AnalysisReport, AnalysisRequestForm, Note,
 )
 from .search_utils import filter_normalized_contains, normalized_contains, normalized_contains_q
+
+from .access import accessible_projects, accessible_variants
 from variant.models import (
     ACMGEvidenceOverride,
     Annotation,
@@ -15,7 +17,13 @@ from variant.models import (
     VARIANT_TYPE_RELATION_LOOKUPS,
     Variant,
     normalize_variant_type_value,
-)
+    Annotation,
+    SNV,
+    delins,
+    CNV,
+    SV,
+    Repeat,
+
 from variant.templatetags.variant_filters import ACMG_CRITERIA_INFO
 
 FILTER_MODE_SUFFIX = "__mode"
@@ -23,6 +31,7 @@ FILTER_MODE_ANY = "any"
 FILTER_MODE_ALL = "all"
 FILTER_MODE_TOGETHER = "together"
 FILTER_GROUP_MODE_ANY = "any"
+SEARCH_NOTES_PARAM = "search_notes"
 
 def _request_targets_table(request, target_id):
     return bool(
@@ -104,6 +113,118 @@ def _matching_tagged_object_ids(model_class, status_values, mode=FILTER_MODE_ANY
             .values_list("object_id", flat=True)
         )
     return qs.values_list("object_id", flat=True)
+
+
+def _flag_enabled(data, field_name):
+    return any(
+        str(value).lower() in {"1", "true", "on", "yes"}
+        for value in _values_for_data(data, field_name)
+    )
+
+
+def _visible_note_q(user):
+    query = Q(private_owner__isnull=True)
+    if user and getattr(user, "is_authenticated", False):
+        query |= Q(private_owner=user)
+    return query
+
+
+def _matching_note_object_ids(model_class, query, user=None):
+    ct = ContentType.objects.get_for_model(model_class)
+    notes = (
+        Note.objects.filter(content_type=ct)
+        .filter(_visible_note_q(user))
+        .order_by()
+    )
+
+    matched_ids = []
+    seen_ids = set()
+    for object_id, content in (
+        notes.values_list("object_id", "content").iterator(chunk_size=1000)
+    ):
+        if object_id in seen_ids:
+            continue
+        if normalized_contains(content, query):
+            seen_ids.add(object_id)
+            matched_ids.append(object_id)
+    return matched_ids
+
+
+def _add_related_ids(target_ids, queryset, lookup):
+    target_ids.update(
+        object_id
+        for object_id in queryset.values_list(lookup, flat=True)
+        if object_id is not None
+    )
+
+
+def _matching_individual_note_search_ids(query, user=None, include_variant_notes=True):
+    matched_ids = set(_matching_note_object_ids(Individual, query, user))
+
+    sample_ids = _matching_note_object_ids(Sample, query, user)
+    if sample_ids:
+        _add_related_ids(
+            matched_ids,
+            Sample.objects.filter(pk__in=sample_ids),
+            "individual_id",
+        )
+
+    test_ids = _matching_note_object_ids(Test, query, user)
+    if test_ids:
+        _add_related_ids(
+            matched_ids,
+            Test.objects.filter(pk__in=test_ids),
+            "sample__individual_id",
+        )
+
+    pipeline_ids = _matching_note_object_ids(Pipeline, query, user)
+    if pipeline_ids:
+        _add_related_ids(
+            matched_ids,
+            Pipeline.objects.filter(pk__in=pipeline_ids),
+            "test__sample__individual_id",
+        )
+
+    analysis_ids = _matching_note_object_ids(Analysis, query, user)
+    if analysis_ids:
+        _add_related_ids(
+            matched_ids,
+            Analysis.objects.filter(pk__in=analysis_ids),
+            "pipeline__test__sample__individual_id",
+        )
+
+    if include_variant_notes:
+        variant_ids = _matching_variant_note_object_ids(query, user)
+        if variant_ids:
+            _add_related_ids(
+                matched_ids,
+                Variant.objects.filter(pk__in=variant_ids),
+                "individual_id",
+            )
+
+    return matched_ids
+
+
+def _matching_variant_note_object_ids(query, user=None):
+    matched_ids = set()
+    for model_class in (Variant, SNV, delins, CNV, SV, Repeat):
+        matched_ids.update(_matching_note_object_ids(model_class, query, user))
+    return matched_ids
+
+
+def _matching_variant_note_search_ids(query, user=None):
+    matched_ids = set(_matching_variant_note_object_ids(query, user))
+    individual_ids = _matching_individual_note_search_ids(
+        query,
+        user=user,
+        include_variant_notes=False,
+    )
+    if individual_ids:
+        matched_ids.update(
+            Variant.objects.filter(individual_id__in=individual_ids)
+            .values_list("pk", flat=True)
+        )
+    return matched_ids
 
 
 class TristateFilterMixin:
@@ -543,6 +664,7 @@ class IndividualFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         table_only_request = _request_targets_table(
             getattr(self, "request", None),
             "individual-table-container",
@@ -565,25 +687,33 @@ class IndividualFilter(django_filters.FilterSet):
                 "variants__acmg_evidence",
             )
         else:
+            individual_choice_qs = Individual.objects.all()
+            if request_user is not None:
+                from .access import accessible_individuals
+
+                individual_choice_qs = accessible_individuals(request_user, individual_choice_qs)
             # Populate dynamic choices for institution sub-filters
             city_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(city__isnull=True).exclude(city='')
-                .values_list('city', flat=True).distinct().order_by('city')
+                (v, v) for v in individual_choice_qs.exclude(institution__city__isnull=True)
+                .exclude(institution__city='')
+                .values_list('institution__city', flat=True).distinct().order_by('institution__city')
             ]
             speciality_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(speciality__isnull=True).exclude(speciality='')
-                .values_list('speciality', flat=True).distinct().order_by('speciality')
+                (v, v) for v in individual_choice_qs.exclude(institution__speciality__isnull=True)
+                .exclude(institution__speciality='')
+                .values_list('institution__speciality', flat=True).distinct().order_by('institution__speciality')
             ]
             center_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(center_name__isnull=True).exclude(center_name='')
-                .values_list('center_name', flat=True).distinct().order_by('center_name')
+                (v, v) for v in individual_choice_qs.exclude(institution__center_name__isnull=True)
+                .exclude(institution__center_name='')
+                .values_list('institution__center_name', flat=True).distinct().order_by('institution__center_name')
             ]
             
+            project_qs = Project.objects.all()
+            if request_user is not None:
+                project_qs = accessible_projects(request_user, project_qs)
             project_choices = [
-                (name, name) for name in Project.objects.values_list('name', flat=True).order_by('name')
+                (name, name) for name in project_qs.values_list('name', flat=True).order_by('name')
             ]
             annotation_classification_choices = _annotation_acmg_classification_choices()
             acmg_evidence_choices = _acmg_evidence_choices()
@@ -835,6 +965,11 @@ class IndividualFilter(django_filters.FilterSet):
 
         search_query = normalized_contains_q(queryset, ["cross_ids__id_value", "id"], value)
         request_user = getattr(getattr(self, "request", None), "user", None)
+        if _flag_enabled(self.data, SEARCH_NOTES_PARAM):
+            note_match_ids = _matching_individual_note_search_ids(value, request_user)
+            if note_match_ids:
+                search_query |= Q(pk__in=note_match_ids)
+
         if request_user and request_user.has_perm("lab.view_sensitive_data"):
             matching_name_ids = []
             name_queryset = (
@@ -1383,6 +1518,7 @@ class VariantFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         table_only_request = _request_targets_table(
             getattr(self, "request", None),
             "variant-table-container",
@@ -1405,37 +1541,42 @@ class VariantFilter(django_filters.FilterSet):
             )
             acmg_evidence_choices = _submitted_choice_values(self.data, "acmg_evidence")
         else:
+            variant_choice_qs = Variant.objects.all()
+            project_qs = Project.objects.all()
+            if request_user is not None:
+                variant_choice_qs = accessible_variants(request_user, variant_choice_qs)
+                project_qs = accessible_projects(request_user, project_qs)
             assemblies = (
-                Variant.objects.values_list('assembly_version', flat=True)
+                variant_choice_qs.values_list('assembly_version', flat=True)
                 .distinct()
                 .order_by('assembly_version')
             )
             assembly_choices = [(a, a) for a in assemblies if a]
 
             sources = (
-                Annotation.objects.values_list('source', flat=True)
+                Annotation.objects.filter(variant__in=variant_choice_qs).values_list('source', flat=True)
                 .distinct()
                 .order_by('source')
             )
             source_choices = [(s, s) for s in sources if s]
 
             project_choices = [
-                (name, name) for name in Project.objects.values_list('name', flat=True).order_by('name')
+                (name, name) for name in project_qs.values_list('name', flat=True).order_by('name')
             ]
             city_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(city__isnull=True).exclude(city='')
-                .values_list('city', flat=True).distinct().order_by('city')
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__city__isnull=True)
+                .exclude(individual__institution__city='')
+                .values_list('individual__institution__city', flat=True).distinct().order_by('individual__institution__city')
             ]
             speciality_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(speciality__isnull=True).exclude(speciality='')
-                .values_list('speciality', flat=True).distinct().order_by('speciality')
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__speciality__isnull=True)
+                .exclude(individual__institution__speciality='')
+                .values_list('individual__institution__speciality', flat=True).distinct().order_by('individual__institution__speciality')
             ]
             center_choices = [
-                (v, v) for v in
-                Institution.objects.exclude(center_name__isnull=True).exclude(center_name='')
-                .values_list('center_name', flat=True).distinct().order_by('center_name')
+                (v, v) for v in variant_choice_qs.exclude(individual__institution__center_name__isnull=True)
+                .exclude(individual__institution__center_name='')
+                .values_list('individual__institution__center_name', flat=True).distinct().order_by('individual__institution__center_name')
             ]
             annotation_classification_choices = _annotation_acmg_classification_choices()
             acmg_evidence_choices = _acmg_evidence_choices()
@@ -1589,7 +1730,13 @@ class VariantFilter(django_filters.FilterSet):
         if request_user and request_user.has_perm("lab.view_sensitive_data"):
             search_fields.append("individual__full_name")
 
-        return filter_normalized_contains(queryset, search_fields, value).distinct()
+        search_query = normalized_contains_q(queryset, search_fields, value)
+        if _flag_enabled(self.data, SEARCH_NOTES_PARAM):
+            note_match_ids = _matching_variant_note_search_ids(value, request_user)
+            if note_match_ids:
+                search_query |= Q(pk__in=note_match_ids)
+
+        return queryset.filter(search_query).distinct()
 
     def filter_gene(self, queryset, name, value):
         return filter_normalized_contains(queryset, ["genes__symbol"], value).distinct()
@@ -2115,6 +2262,7 @@ class ProjectFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        request_user = getattr(getattr(self, "request", None), "user", None)
         # Restrict Status choices to Project content type
         ct = ContentType.objects.get_for_model(Project)
         self.filters['status'].queryset = Status.objects.filter(content_type=ct)
@@ -2122,7 +2270,15 @@ class ProjectFilter(django_filters.FilterSet):
         from django.contrib.auth import get_user_model
         User = get_user_model()
         if 'created_by' in self.filters:
-            self.filters['created_by'].queryset = User.objects.all()
+            user_qs = User.objects.all()
+            if request_user is not None:
+                user_qs = user_qs.filter(
+                    created_projects__in=accessible_projects(
+                        request_user,
+                        Project.objects.all(),
+                    )
+                ).distinct()
+            self.filters['created_by'].queryset = user_qs
         
         # Restrict Status choices by ContentType
         self._restrict_status_queryset('status', Project)

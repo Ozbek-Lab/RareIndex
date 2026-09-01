@@ -31,6 +31,7 @@ from lab.models import (
     Pipeline,
     PipelineType,
     Project,
+    ProjectMembership,
     PlotTemplate,
     Sample,
     SampleType,
@@ -218,12 +219,15 @@ class Command(BaseCommand):
             self.stdout.write("Creating default superuser…")
             user = User.objects.create_superuser("admin", "admin@example.com", "admin")
         contact = get_or_create_contact_for_user(user, user)
-        if not User.objects.filter(username="pleb").exists():
+        pleb = User.objects.filter(username="pleb").first()
+        if not pleb:
             self.stdout.write("Creating pleb user…")
-            User.objects.create_user("pleb", "pleb@example.com", "pleb")
-        if not User.objects.filter(username="normal").exists():
+            pleb = User.objects.create_user("pleb", "pleb@example.com", "pleb")
+        normal = User.objects.filter(username="normal").first()
+        if not normal:
             self.stdout.write("Creating normal user…")
-            User.objects.create_user("normal", "normal@example.com", "normal")
+            normal = User.objects.create_user("normal", "normal@example.com", "normal")
+        sample_users = [pleb, normal]
 
         # ── Checkpoint 0d: Plot templates ───────────────────────────
         self._ensure_plot_templates()
@@ -236,6 +240,7 @@ class Command(BaseCommand):
         analysis_types  = self._create_analysis_types(user)
         institutions    = self._get_or_create_institutions(user)
         projects        = self._create_projects(user, all_statuses)
+        self._create_project_memberships(projects, sample_users, user)
         identifier_types = self._create_identifier_types(user)
 
         hpo_terms = list(Term.objects.filter(ontology__type=1).order_by("?")[:50])
@@ -672,6 +677,47 @@ class Command(BaseCommand):
                 project.statuses.set([status])
             projects.append(project)
         return projects
+
+    def _create_project_memberships(self, projects, users, created_by):
+        projects = list(projects)
+        member_users = [
+            user
+            for user in users
+            if user and not user.is_staff and not user.is_superuser
+        ]
+        if not projects or not member_users:
+            return []
+
+        role_cycle = (
+            ProjectMembership.Role.VIEWER,
+            ProjectMembership.Role.EDITOR,
+            ProjectMembership.Role.MANAGER,
+        )
+        memberships = []
+        for user_index, member_user in enumerate(member_users):
+            assigned_projects = projects[user_index::len(member_users)]
+            if not assigned_projects:
+                assigned_projects = [projects[user_index % len(projects)]]
+
+            for project_index, project in enumerate(assigned_projects):
+                role = role_cycle[(user_index + project_index) % len(role_cycle)]
+                membership, created = ProjectMembership.objects.get_or_create(
+                    project=project,
+                    user=member_user,
+                    defaults={
+                        "role": role,
+                        "created_by": created_by,
+                    },
+                )
+                if not created and membership.created_by_id is None:
+                    membership.created_by = created_by
+                    membership.save(update_fields=["created_by"])
+                memberships.append(membership)
+
+        self.stdout.write(
+            f"Project memberships available for sample users: {len(memberships)}"
+        )
+        return memberships
 
     def _create_identifier_types(self, user):
         config = [

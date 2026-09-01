@@ -4,7 +4,7 @@ import re
 from urllib.parse import urlsplit
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse, QueryDict
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse, QueryDict
 from django.utils import timezone
 from django.views.decorators.vary import vary_on_headers
 from django.contrib.auth.decorators import login_required
@@ -39,6 +39,14 @@ from .models import (
     DashboardWidget,
     Family,
 )
+from .access import (
+    accessible_individuals,
+    accessible_projects,
+    accessible_variants,
+    get_accessible_individual_or_404,
+    user_can_access_object,
+    user_has_project_scope_bypass,
+)
 from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
 from .filters import (
     IndividualFilter,
@@ -64,6 +72,30 @@ from variant.models import (
 logger = logging.getLogger(__name__)
 
 
+def _user_has_main_app_permission(user, permission):
+    return bool(
+        user
+        and getattr(user, "is_authenticated", False)
+        and (
+            getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)
+            or user.has_perm(permission)
+        )
+    )
+
+
+class MainAppPermissionRequiredMixin:
+    permission_required = None
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.permission_required and not _user_has_main_app_permission(
+            request.user,
+            self.permission_required,
+        ):
+            return HttpResponseForbidden("Permission denied.")
+        return super().dispatch(request, *args, **kwargs)
+
+
 def _is_loopback_hostname(hostname):
     if not hostname:
         return False
@@ -80,7 +112,7 @@ def _request_uses_loopback_host(request):
     return _is_loopback_hostname(urlsplit(f"//{request.get_host()}").hostname)
 
 
-def _direct_docker_marimo_base_url(request, target_port):
+def _direct_docker_marimo_base_url(request, target_port, proxy_path):
     request_parts = urlsplit(f"//{request.get_host()}")
     if request_parts.port != 8090:
         return None
@@ -89,7 +121,7 @@ def _direct_docker_marimo_base_url(request, target_port):
     host = request_parts.hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
-    return f"{request.scheme}://{host}:{target_port}"
+    return f"{request.scheme}://{host}:{target_port}{proxy_path.rstrip('/')}"
 
 
 def _browser_marimo_base_url(request, configured_url, proxy_path):
@@ -105,14 +137,14 @@ def _browser_marimo_base_url(request, configured_url, proxy_path):
     proxy_target_port = 8092 if proxy_path == "/marimo-edit" else 8091
     if not base_url:
         return (
-            _direct_docker_marimo_base_url(request, proxy_target_port)
+            _direct_docker_marimo_base_url(request, proxy_target_port, proxy_path)
             or proxy_path.rstrip("/")
         )
 
     parts = urlsplit(base_url)
     if not parts.scheme and base_url.startswith("/"):
         return (
-            _direct_docker_marimo_base_url(request, proxy_target_port)
+            _direct_docker_marimo_base_url(request, proxy_target_port, proxy_path)
             or base_url
         )
     if parts.scheme and _is_loopback_hostname(parts.hostname):
@@ -120,6 +152,7 @@ def _browser_marimo_base_url(request, configured_url, proxy_path):
             direct_url = _direct_docker_marimo_base_url(
                 request,
                 parts.port or proxy_target_port,
+                proxy_path,
             )
             if direct_url:
                 return direct_url
@@ -230,7 +263,312 @@ def _dashboard_group_status_counts(model, counts):
     return grouped
 
 
-def _variant_filter_counts():
+def _dashboard_history_queryset(model, user):
+    if user_has_project_scope_bypass(user):
+        return model.history.all()
+
+    scoped_individuals = accessible_individuals(user, Individual.objects.all())
+    scoped_projects = accessible_projects(user, Project.objects.all())
+
+    object_ids = None
+    if model is Individual:
+        object_ids = scoped_individuals.values_list("pk", flat=True)
+    elif model is Project:
+        object_ids = scoped_projects.values_list("pk", flat=True)
+    elif model is Sample:
+        object_ids = Sample.objects.filter(
+            individual__in=scoped_individuals
+        ).values_list("pk", flat=True)
+    elif model is Test:
+        object_ids = Test.objects.filter(
+            sample__individual__in=scoped_individuals
+        ).values_list("pk", flat=True)
+    elif model is Pipeline:
+        object_ids = Pipeline.objects.filter(
+            test__sample__individual__in=scoped_individuals
+        ).values_list("pk", flat=True)
+    elif model is Note:
+        note_filter = Q()
+        for content_model, related_ids in (
+            (Individual, scoped_individuals.values_list("pk", flat=True)),
+            (Project, scoped_projects.values_list("pk", flat=True)),
+            (
+                Sample,
+                Sample.objects.filter(individual__in=scoped_individuals).values_list(
+                    "pk", flat=True
+                ),
+            ),
+            (
+                Test,
+                Test.objects.filter(sample__individual__in=scoped_individuals).values_list(
+                    "pk", flat=True
+                ),
+            ),
+            (
+                Pipeline,
+                Pipeline.objects.filter(
+                    test__sample__individual__in=scoped_individuals
+                ).values_list("pk", flat=True),
+            ),
+        ):
+            note_filter |= Q(
+                content_type=ContentType.objects.get_for_model(content_model),
+                object_id__in=related_ids,
+            )
+        object_ids = Note.objects.filter(note_filter).values_list("pk", flat=True)
+
+    if object_ids is None:
+        return model.history.none()
+    return model.history.filter(id__in=object_ids)
+
+
+def _tagged_status_counts_for_queryset(model_class, queryset):
+    from .models import TaggedStatus
+
+    ct = ContentType.objects.get_for_model(model_class)
+    result = {
+        name: 0
+        for name in Status.objects.filter(content_type=ct).values_list("name", flat=True)
+    }
+    object_ids = queryset.values_list("pk", flat=True)
+    result.update({
+        row["tag__name"]: row["c"]
+        for row in TaggedStatus.objects.filter(content_type=ct, object_id__in=object_ids)
+        .values("tag__name")
+        .annotate(c=Count("object_id", distinct=True))
+        if row["tag__name"]
+    })
+    return result
+
+
+def _choice_count_dict(queryset, field_name, choices):
+    result = {choice[0]: 0 for choice in choices}
+    result.update({
+        row[field_name]: row["c"]
+        for row in queryset.values(field_name).annotate(c=Count("id", distinct=True))
+        if row[field_name] not in (None, "")
+    })
+    return result
+
+
+def _annotation_acmg_classification_counts_for_queryset(annotation_qs, count_field):
+    lookups = ("data__variants__0__acmg_classification", "data__acmg_classification")
+    values = set()
+    for lookup in lookups:
+        values.update(
+            value
+            for value in annotation_qs.filter(source__icontains="genebe")
+            .exclude(**{f"{lookup}__isnull": True})
+            .exclude(**{lookup: ""})
+            .values_list(lookup, flat=True)
+            if value
+        )
+
+    counts = {}
+    for value in values:
+        counts[value] = (
+            annotation_qs.filter(source__icontains="genebe")
+            .filter(
+                Q(data__variants__0__acmg_classification=value)
+                | Q(data__acmg_classification=value)
+            )
+            .aggregate(c=Count(count_field, distinct=True))["c"]
+        )
+    return counts
+
+
+def _acmg_evidence_counts_for_queryset(override_qs, count_field):
+    return {
+        row["criterion"]: row["c"]
+        for row in override_qs.filter(included=True)
+        .values("criterion")
+        .annotate(c=Count(count_field, distinct=True))
+        if row["criterion"]
+    }
+
+
+def _individual_filter_counts_for_queryset(individual_qs):
+    individual_ids = individual_qs.values_list("pk", flat=True)
+    sample_qs = Sample.objects.filter(individual_id__in=individual_ids)
+    test_qs = Test.objects.filter(sample__individual_id__in=individual_ids)
+    pipeline_qs = Pipeline.objects.filter(test__sample__individual_id__in=individual_ids)
+    analysis_qs = Analysis.objects.filter(pipeline__test__sample__individual_id__in=individual_ids)
+    variant_qs = Variant.objects.filter(individual_id__in=individual_ids)
+    annotation_qs = VariantAnnotation.objects.filter(variant__individual_id__in=individual_ids)
+    override_qs = ACMGEvidenceOverride.objects.filter(variant__individual_id__in=individual_ids)
+
+    return {
+        "status": _tagged_status_counts_for_queryset(Individual, individual_qs),
+        "sex": _choice_count_dict(individual_qs, "sex", Individual._meta.get_field("sex").choices),
+        "is_alive": _choice_count_dict(individual_qs, "is_alive", ((True, "Alive"), (False, "Deceased"))),
+        "is_affected": _choice_count_dict(individual_qs, "is_affected", ((True, "Affected"), (False, "Unaffected"))),
+        "is_index": _choice_count_dict(individual_qs, "is_index", ((True, "Yes"), (False, "No"))),
+        "family_consanguinity": {
+            "false": individual_qs.filter(family__is_consanguineous=False).distinct().count(),
+            "unknown": individual_qs.filter(
+                Q(family__isnull=True) | Q(family__is_consanguineous__isnull=True)
+            ).distinct().count(),
+            "true": individual_qs.filter(family__is_consanguineous=True).distinct().count(),
+        },
+        "has_report": {
+            "true": individual_qs.filter(samples__tests__pipelines__analyses__reports__isnull=False).distinct().count(),
+            "false": individual_qs.exclude(samples__tests__pipelines__analyses__reports__isnull=False).distinct().count(),
+        },
+        "has_request_form": {
+            "true": individual_qs.filter(analysis_request_forms__isnull=False).distinct().count(),
+            "false": individual_qs.exclude(analysis_request_forms__isnull=False).distinct().count(),
+        },
+        "projects": {
+            row["projects__name"]: row["c"]
+            for row in individual_qs.filter(projects__isnull=False)
+            .values("projects__name")
+            .annotate(c=Count("id", distinct=True))
+            if row["projects__name"]
+        },
+        "sample_type": {
+            row["sample_type__name"]: row["c"]
+            for row in sample_qs.values("sample_type__name")
+            .annotate(c=Count("individual_id", distinct=True))
+            if row["sample_type__name"]
+        },
+        "sample_status": _tagged_status_counts_for_queryset(Sample, sample_qs),
+        "test_type": {
+            row["test_type__name"]: row["c"]
+            for row in test_qs.values("test_type__name")
+            .annotate(c=Count("sample__individual_id", distinct=True))
+            if row["test_type__name"]
+        },
+        "test_status": _tagged_status_counts_for_queryset(Test, test_qs),
+        "pipeline_type": {
+            row["type__name"]: row["c"]
+            for row in pipeline_qs.values("type__name")
+            .annotate(c=Count("test__sample__individual_id", distinct=True))
+            if row["type__name"]
+        },
+        "pipeline_status": _tagged_status_counts_for_queryset(Pipeline, pipeline_qs),
+        "analysis_type": {
+            row["type__name"]: row["c"]
+            for row in analysis_qs.values("type__name")
+            .annotate(c=Count("pipeline__test__sample__individual_id", distinct=True))
+            if row["type__name"]
+        },
+        "analysis_status": _tagged_status_counts_for_queryset(Analysis, analysis_qs),
+        "variant_type": {
+            "SNV": individual_qs.filter(variants__snv__isnull=False).distinct().count(),
+            "CNV": individual_qs.filter(variants__cnv__isnull=False).distinct().count(),
+            "SV": individual_qs.filter(variants__sv__isnull=False).distinct().count(),
+            "Repeat": individual_qs.filter(variants__repeat__isnull=False).distinct().count(),
+        },
+        "variant_status": _tagged_status_counts_for_queryset(Variant, variant_qs),
+        "classification": {
+            row["classification"]: row["c"]
+            for row in VariantClassification.objects.filter(
+                variant__individual_id__in=individual_ids
+            ).values("classification")
+            .annotate(c=Count("variant__individual_id", distinct=True))
+            if row["classification"]
+        },
+        "variants__annotation_acmg_classification": _annotation_acmg_classification_counts_for_queryset(
+            annotation_qs,
+            "variant__individual_id",
+        ),
+        "variants__acmg_evidence": _acmg_evidence_counts_for_queryset(
+            override_qs,
+            "variant__individual_id",
+        ),
+        "institution_city": {
+            row["institution__city"]: row["c"]
+            for row in individual_qs.filter(institution__city__isnull=False)
+            .exclude(institution__city="")
+            .values("institution__city")
+            .annotate(c=Count("id", distinct=True))
+            if row["institution__city"]
+        },
+        "institution_speciality": {
+            row["institution__speciality"]: row["c"]
+            for row in individual_qs.filter(institution__speciality__isnull=False)
+            .exclude(institution__speciality="")
+            .values("institution__speciality")
+            .annotate(c=Count("id", distinct=True))
+            if row["institution__speciality"]
+        },
+        "institution_center": {
+            row["institution__center_name"]: row["c"]
+            for row in individual_qs.filter(institution__center_name__isnull=False)
+            .exclude(institution__center_name="")
+            .values("institution__center_name")
+            .annotate(c=Count("id", distinct=True))
+            if row["institution__center_name"]
+        },
+    }
+
+
+def _variant_filter_counts_for_queryset(variant_qs):
+    individual_qs = Individual.objects.filter(variants__in=variant_qs).distinct()
+    individual_ids = individual_qs.values_list("pk", flat=True)
+    annotation_qs = VariantAnnotation.objects.filter(variant__in=variant_qs)
+    override_qs = ACMGEvidenceOverride.objects.filter(variant__in=variant_qs)
+    counts = _individual_filter_counts_for_queryset(individual_qs)
+    counts.update({
+        "variant_type": {
+            "SNV": variant_qs.filter(snv__isnull=False).count(),
+            "CNV": variant_qs.filter(cnv__isnull=False).count(),
+            "SV": variant_qs.filter(sv__isnull=False).count(),
+            "Repeat": variant_qs.filter(repeat__isnull=False).count(),
+        },
+        "zygosity": _choice_count_dict(variant_qs, "zygosity", Variant.ZYGOSITY_CHOICES),
+        "status": _tagged_status_counts_for_queryset(Variant, variant_qs),
+        "assembly_version": {
+            row["assembly_version"]: row["c"]
+            for row in variant_qs.values("assembly_version").annotate(c=Count("id", distinct=True))
+            if row["assembly_version"]
+        },
+        "annotation_source": {
+            row["source"]: row["c"]
+            for row in annotation_qs.values("source").annotate(c=Count("variant_id", distinct=True))
+            if row["source"]
+        },
+        "annotation_acmg_classification": _annotation_acmg_classification_counts_for_queryset(
+            annotation_qs,
+            "variant_id",
+        ),
+        "acmg_evidence": _acmg_evidence_counts_for_queryset(override_qs, "variant_id"),
+        "individual_status": _tagged_status_counts_for_queryset(Individual, individual_qs),
+        "classification": {
+            row["classification"]: row["c"]
+            for row in VariantClassification.objects.filter(variant__in=variant_qs)
+            .values("classification")
+            .annotate(c=Count("variant_id", distinct=True))
+            if row["classification"]
+        },
+        "projects": {
+            row["individual__projects__name"]: row["c"]
+            for row in variant_qs.filter(individual__projects__isnull=False)
+            .values("individual__projects__name")
+            .annotate(c=Count("id", distinct=True))
+            if row["individual__projects__name"]
+        },
+    })
+    counts["sex"] = _choice_count_dict(variant_qs, "individual__sex", Individual._meta.get_field("sex").choices)
+    counts["is_alive"] = _choice_count_dict(variant_qs, "individual__is_alive", ((True, "Alive"), (False, "Deceased")))
+    counts["is_affected"] = _choice_count_dict(variant_qs, "individual__is_affected", ((True, "Affected"), (False, "Unaffected")))
+    counts["is_index"] = _choice_count_dict(variant_qs, "individual__is_index", ((True, "Yes"), (False, "No")))
+    return counts
+
+
+def _project_filter_counts_for_queryset(project_qs):
+    return {
+        "status": _tagged_status_counts_for_queryset(Project, project_qs),
+        "priority": _choice_count_dict(project_qs, "priority", Task.PRIORITY_CHOICES),
+        "created_by": {
+            row["created_by__username"]: row["c"]
+            for row in project_qs.values("created_by__username").annotate(c=Count("id", distinct=True))
+            if row["created_by__username"]
+        },
+    }
+
+
+def _variant_filter_counts(user=None):
     """
     Returns per-option counts for the variant filter sidebar.
 
@@ -240,7 +578,12 @@ def _variant_filter_counts():
     automatically after TTL; for immediate refresh after bulk imports use
     cache.delete("variant_filter_counts").
     """
-    CACHE_KEY = "variant_filter_counts_v3"
+    if user is not None and not user_has_project_scope_bypass(user):
+        return _variant_filter_counts_for_queryset(
+            accessible_variants(user, Variant.objects.all())
+        )
+
+    CACHE_KEY = "variant_filter_counts_v2"
     CACHE_TTL = 300  # seconds
 
     counts = cache.get(CACHE_KEY)
@@ -514,13 +857,18 @@ def _annotation_acmg_classification_counts(count_field):
         )
     return counts
 
-def _individual_filter_counts():
+def _individual_filter_counts(user=None):
     """
     Returns per-option counts for the individual filter sidebar.
     Each count represents the number of distinct individuals matching that option.
     Cached for 5 minutes.
     """
-    CACHE_KEY = "individual_filter_counts_v2"
+    if user is not None and not user_has_project_scope_bypass(user):
+        return _individual_filter_counts_for_queryset(
+            accessible_individuals(user, Individual.objects.all())
+        )
+
+    CACHE_KEY = "individual_filter_counts"
     CACHE_TTL = 300
 
     counts = cache.get(CACHE_KEY)
@@ -771,11 +1119,16 @@ def _individual_filter_counts():
     return counts
 
 
-def _project_filter_counts():
+def _project_filter_counts(user=None):
     """
     Returns per-option counts for the project filter sidebar.
     Cached for 5 minutes.
     """
+    if user is not None and not user_has_project_scope_bypass(user):
+        return _project_filter_counts_for_queryset(
+            accessible_projects(user, Project.objects.all())
+        )
+
     CACHE_KEY = "project_filter_counts"
     CACHE_TTL = 300
 
@@ -831,8 +1184,15 @@ def generic_detail(request):
     target_model = apps.get_model(
         app_label=target_app_label, model_name=target_model_name
     )
+    if not _user_has_main_app_permission(
+        request.user,
+        f"{target_app_label}.view_{target_model._meta.model_name}",
+    ):
+        return HttpResponseForbidden("Permission denied.")
 
     obj = get_object_or_404(target_model, pk=pk)
+    if not user_can_access_object(request.user, obj):
+        raise Http404
 
     if target_app_label == "variant":
         template_base = "variant/variant.html"
@@ -870,6 +1230,10 @@ def generic_detail(request):
                 continue
 
     if target_model_name == "Individual":
+        context["visible_individual_projects"] = accessible_projects(
+            request.user,
+            obj.projects.all(),
+        )
         context["tests"] = [
             test for sample in obj.samples.all() for test in sample.tests.all()
         ]
@@ -969,19 +1333,22 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         ).order_by('-id')[:5]
 
         # 1.5 Header Stats & breakdowns
-        context['individual_count'] = Individual.objects.count()
-        context['sample_count'] = Sample.objects.count()
-        context['project_count'] = Project.objects.count()
-        context['variant_count'] = Variant.objects.count()
-        context['test_count'] = Test.objects.count()
-        context['pipeline_count'] = Pipeline.objects.count()
-        context['analysis_count'] = Analysis.objects.count()
-        context['institution_count'] = Institution.objects.count()
+        scoped_individuals = accessible_individuals(self.request.user, Individual.objects.all())
+        scoped_projects = accessible_projects(self.request.user, Project.objects.all())
+        scoped_variants = accessible_variants(self.request.user, Variant.objects.all())
+        context['individual_count'] = scoped_individuals.count()
+        context['sample_count'] = Sample.objects.filter(individual__in=scoped_individuals).count()
+        context['project_count'] = scoped_projects.count()
+        context['variant_count'] = scoped_variants.count()
+        context['test_count'] = Test.objects.filter(sample__individual__in=scoped_individuals).count()
+        context['pipeline_count'] = Pipeline.objects.filter(test__sample__individual__in=scoped_individuals).count()
+        context['analysis_count'] = Analysis.objects.filter(pipeline__test__sample__individual__in=scoped_individuals).count()
+        context['institution_count'] = Institution.objects.filter(individuals__in=scoped_individuals).distinct().count()
 
         # Cached breakdowns reused from filter sidebars
-        context['individual_filter_counts'] = _individual_filter_counts()
-        context['project_filter_counts'] = _project_filter_counts()
-        context['variant_filter_counts'] = _variant_filter_counts()
+        context['individual_filter_counts'] = _individual_filter_counts(self.request.user)
+        context['project_filter_counts'] = _project_filter_counts(self.request.user)
+        context['variant_filter_counts'] = _variant_filter_counts(self.request.user)
         context["dashboard_status_groups"] = {
             "individual": _dashboard_group_status_counts(
                 Individual,
@@ -1015,10 +1382,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         # Lightweight institution breakdown (top cities)
         context['institution_city_counts'] = (
-            Institution.objects.exclude(city__isnull=True)
+            Institution.objects.filter(individuals__in=scoped_individuals)
+            .exclude(city__isnull=True)
             .exclude(city__exact="")
             .values('city')
-            .annotate(c=Count('id'))
+            .annotate(c=Count('id', distinct=True))
             .order_by('-c', 'city')[:10]
         )
         
@@ -1038,7 +1406,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         
         # Helper to get recent history
         def get_history(model):
-            return model.history.all().order_by('-history_date')[:10]
+            return _dashboard_history_queryset(
+                model,
+                self.request.user,
+            ).order_by('-history_date')[:10]
         
         individual_history = get_history(Individual)
         sample_history = get_history(Sample)
@@ -1088,15 +1459,21 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         
         return context
 
-class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
+class IndividualListView(LoginRequiredMixin, MainAppPermissionRequiredMixin, SingleTableMixin, FilterView):
     model = Individual
     table_class = IndividualTable
     filterset_class = IndividualFilter
+    permission_required = "lab.view_individual"
     template_name = "lab/individual_list.html"
     paginate_by = 25
     
     def get_queryset(self):
         return self._individual_queryset(prefetch_for_table=False)
+
+    def get_filterset_kwargs(self, filterset_class):
+        kwargs = super().get_filterset_kwargs(filterset_class)
+        kwargs["request"] = self.request
+        return kwargs
 
     def get_table_pagination(self, table):
         paginate = super().get_table_pagination(table)
@@ -1113,7 +1490,7 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         Base queryset for individual filtering and table hydration.
         Annotates first_institution_name so the Institution column can be sorted.
         """
-        qs = super().get_queryset()
+        qs = accessible_individuals(self.request.user, super().get_queryset())
         if prefetch_for_table:
             qs = qs.prefetch_related(
                 "cross_ids__id_type",
@@ -1186,13 +1563,16 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['total_count'] = self.model.objects.count()
+        context['total_count'] = accessible_individuals(
+            self.request.user,
+            self.model.objects.all(),
+        ).count()
         context['status_metadata'] = build_status_metadata_by_model()
         
         # Filter counts are needed whenever the full page/sidebar renders.
         # Skip them only for HTMX requests that swap just the table container.
         if not self.request.htmx or self.request.headers.get("HX-Target") != "individual-table-container":
-            context['filter_counts'] = _individual_filter_counts()
+            context['filter_counts'] = _individual_filter_counts(self.request.user)
         else:
             context['filter_counts'] = {}
 
@@ -1242,30 +1622,39 @@ class IndividualListView(LoginRequiredMixin, SingleTableMixin, FilterView):
             
         return ["lab/individual_list.html"]
 
-class ProjectListView(LoginRequiredMixin, SingleTableMixin, FilterView):
+class ProjectListView(LoginRequiredMixin, MainAppPermissionRequiredMixin, SingleTableMixin, FilterView):
     model = Project
     table_class = ProjectTable
     filterset_class = ProjectFilter
+    permission_required = "lab.view_project"
     template_name = "lab/project_list.html"
     paginate_by = 25
     
     def get_queryset(self):
         # Optimize query by prefetching individuals and their families
-        return super().get_queryset().prefetch_related(
+        return accessible_projects(self.request.user, super().get_queryset()).prefetch_related(
             'individuals',
             'individuals__family',
             'statuses',
             'created_by',
         )
+
+    def get_filterset_kwargs(self, filterset_class):
+        kwargs = super().get_filterset_kwargs(filterset_class)
+        kwargs["request"] = self.request
+        return kwargs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['total_count'] = self.model.objects.count()
+        context['total_count'] = accessible_projects(
+            self.request.user,
+            self.model.objects.all(),
+        ).count()
         context['status_metadata'] = build_status_metadata_by_model()
 
         # Filter counts are needed whenever the full page/sidebar renders.
         if not self.request.htmx or self.request.headers.get("HX-Target") != "project-table-container":
-            context['filter_counts'] = _project_filter_counts()
+            context['filter_counts'] = _project_filter_counts(self.request.user)
         else:
             context['filter_counts'] = {}
         
@@ -1287,10 +1676,11 @@ class ProjectListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         return ["lab/project_list.html"]
 
 
-class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
+class VariantListView(LoginRequiredMixin, MainAppPermissionRequiredMixin, SingleTableMixin, FilterView):
     model = Variant
     table_class = VariantTable
     filterset_class = VariantFilter
+    permission_required = "variant.view_variant"
     template_name = "lab/variant_list.html"
     paginate_by = 25
 
@@ -1304,13 +1694,16 @@ class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["total_count"] = self.model.objects.count()
+        context["total_count"] = accessible_variants(
+            self.request.user,
+            self.model.objects.all(),
+        ).count()
         context["status_metadata"] = build_status_metadata_by_model()
 
         # Filter counts are needed whenever the full page/sidebar renders.
         # Skip them only for HTMX requests that swap just the table container.
         if not self.request.htmx or self.request.headers.get("HX-Target") != "variant-table-container":
-            context["filter_counts"] = _variant_filter_counts()
+            context["filter_counts"] = _variant_filter_counts(self.request.user)
         else:
             context["filter_counts"] = {}
 
@@ -1337,12 +1730,17 @@ class VariantListView(LoginRequiredMixin, SingleTableMixin, FilterView):
         return ["lab/variant_list.html"]
 
 
-class MapVisualizationView(LoginRequiredMixin, TemplateView):
+class MapVisualizationView(LoginRequiredMixin, MainAppPermissionRequiredMixin, TemplateView):
+    permission_required = "lab.view_individual"
     template_name = "lab/visualizations.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        filterset = IndividualFilter(self.request.GET or None, queryset=Individual.objects.all())
+        filterset = IndividualFilter(
+            self.request.GET or None,
+            queryset=accessible_individuals(self.request.user, Individual.objects.all()),
+            request=self.request,
+        )
         qs = filterset.qs.filter(institution__city__isnull=False).distinct()
 
         # Aggregate counts by institution city for different views:
@@ -1411,7 +1809,7 @@ class MapVisualizationView(LoginRequiredMixin, TemplateView):
         context["city_totals"] = city_totals
         context["filter"] = filterset
         context["status_metadata"] = build_status_metadata_by_model()
-        context["filter_counts"] = _individual_filter_counts()
+        context["filter_counts"] = _individual_filter_counts(self.request.user)
         context["plot_templates"] = PlotTemplate.objects.filter(
             is_published=True
         ).order_by("name")
@@ -1506,7 +1904,10 @@ class HPOTermSearchView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         individual_id = self.request.GET.get('individual_id')
         if individual_id:
-            context['individual'] = get_object_or_404(Individual, pk=individual_id)
+            context['individual'] = get_accessible_individual_or_404(
+                self.request.user,
+                pk=individual_id,
+            )
         return context
     
     def get_queryset(self):
@@ -1533,7 +1934,10 @@ class HPOTermSearchView(LoginRequiredMixin, ListView):
         individual_id = self.request.GET.get('individual_id')
         if individual_id:
             try:
-                individual = Individual.objects.get(pk=individual_id)
+                individual = accessible_individuals(
+                    self.request.user,
+                    Individual.objects.all(),
+                ).get(pk=individual_id)
                 qs = qs.exclude(pk__in=individual.hpo_terms.all())
             except Individual.DoesNotExist:
                 pass
@@ -1553,23 +1957,32 @@ class RenderSelectedHPOTermView(LoginRequiredMixin, DetailView):
         return response
 
 
-class SampleListView(LoginRequiredMixin, SingleTableMixin, FilterView):
+class SampleListView(LoginRequiredMixin, MainAppPermissionRequiredMixin, SingleTableMixin, FilterView):
     model = Sample
     table_class = SampleTable
+    filterset_fields = []
+    permission_required = "lab.view_sample"
     template_name = "lab/sample_list.html"
     paginate_by = 25
+
+    def get_queryset(self):
+        return Sample.objects.filter(
+            individual__in=accessible_individuals(self.request.user, Individual.objects.all())
+        ).select_related("individual", "sample_type").prefetch_related("statuses")
 
     def get_template_names(self):
         if self.request.htmx:
             return ["lab/partials/sample_table.html"]
+        return [self.template_name]
 
-class ProjectDetailView(LoginRequiredMixin, DetailView):
+class ProjectDetailView(LoginRequiredMixin, MainAppPermissionRequiredMixin, DetailView):
     model = Project
+    permission_required = "lab.view_project"
     template_name = "lab/project_detail.html"
     context_object_name = "project"
 
     def get_queryset(self):
-        return Project.objects.prefetch_related(
+        return accessible_projects(self.request.user, Project.objects.all()).prefetch_related(
             'individuals',
             'individuals__cross_ids__id_type',
             'individuals__statuses',
@@ -1620,13 +2033,30 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
         context["project_individuals_search"] = search
         context["project_individuals_sort"] = sort
         context["project_individuals_dir"] = direction
+        context["can_manage_project_memberships"] = (
+            request.user.is_staff or request.user.is_superuser
+        )
+        if context["can_manage_project_memberships"]:
+            from .forms import ProjectMembershipForm
+
+            context["project_membership_form"] = ProjectMembershipForm(
+                project=self.object
+            )
+            context["project_memberships"] = self.object.memberships.select_related(
+                "user", "created_by"
+            ).order_by("user__last_name", "user__first_name", "user__username")
+            context["project_membership_roles"] = self.object.memberships.model.Role.choices
         return context
 
 
-class IndividualDetailView(LoginRequiredMixin, DetailView):
+class IndividualDetailView(LoginRequiredMixin, MainAppPermissionRequiredMixin, DetailView):
     model = Individual
+    permission_required = "lab.view_individual"
     template_name = "lab/individual_detail.html"
     context_object_name = "individual"
+
+    def get_queryset(self):
+        return accessible_individuals(self.request.user, Individual.objects.all())
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1661,6 +2091,10 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
         ).get(pk=self.kwargs['pk'])
         
         context['individual'] = individual
+        context['visible_individual_projects'] = accessible_projects(
+            self.request.user,
+            individual.projects.all(),
+        )
         context['workflow_content_id'] = f"workflow-content-{individual.pk}"
         context['workflow_target_id'] = f"#{context['workflow_content_id']}"
 
@@ -1724,8 +2158,9 @@ class IndividualDetailView(LoginRequiredMixin, DetailView):
         return super().render_to_response(context, **response_kwargs)
 
 
-class TaskDetailView(LoginRequiredMixin, DetailView):
+class TaskDetailView(LoginRequiredMixin, MainAppPermissionRequiredMixin, DetailView):
     model = Task
+    permission_required = "lab.view_task"
     template_name = "lab/task_detail.html"
     context_object_name = "task"
 
@@ -1733,6 +2168,12 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
         return Task.objects.select_related(
             "assigned_to", "created_by", "project", "content_type"
         ).prefetch_related("statuses", "notes__user")
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not user_can_access_object(self.request.user, obj):
+            raise Http404
+        return obj
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1931,6 +2372,8 @@ class CompleteTaskView(LoginRequiredMixin, TemplateView):
     def post(self, request, pk):
         from .models import Task
         task = get_object_or_404(Task, pk=pk)
+        if not user_can_access_object(request.user, task):
+            raise Http404
         
         if task.assigned_to != request.user and not request.user.is_superuser:
             return HttpResponseForbidden("You are not assigned to this task.")
@@ -1948,6 +2391,8 @@ class ReopenTaskView(LoginRequiredMixin, TemplateView):
     def post(self, request, pk):
         from .models import Task
         task = get_object_or_404(Task, pk=pk)
+        if not user_can_access_object(request.user, task):
+            raise Http404
 
         # Permission check
         if task.assigned_to != request.user and not request.user.is_superuser:
@@ -1983,8 +2428,9 @@ import csv
 from django.views import View
 
 
-def _get_individual_for_json_export(pk):
-    return get_object_or_404(
+def _get_individual_for_json_export(user, pk):
+    return get_accessible_individual_or_404(
+        user,
         Individual.objects.prefetch_related(
             "cross_ids",
             "cross_ids__id_type",
@@ -2017,7 +2463,7 @@ class IndividualFHIRExportView(LoginRequiredMixin, View):
     def get(self, request, pk, *args, **kwargs):
         if not _user_can_export_individual_json(request.user):
             return HttpResponseForbidden("You do not have permission to export this individual.")
-        individual = _get_individual_for_json_export(pk)
+        individual = _get_individual_for_json_export(request.user, pk)
         payload = build_fhir_bundle(individual, request.user)
         filename = f"individual-{individual.pk}.fhir.json"
         return _json_download_response(payload, filename, "application/fhir+json")
@@ -2027,7 +2473,7 @@ class IndividualPhenopacketExportView(LoginRequiredMixin, View):
     def get(self, request, pk, *args, **kwargs):
         if not _user_can_export_individual_json(request.user):
             return HttpResponseForbidden("You do not have permission to export this individual.")
-        individual = _get_individual_for_json_export(pk)
+        individual = _get_individual_for_json_export(request.user, pk)
         payload = build_phenopacket(individual, request.user)
         filename = f"individual-{individual.pk}.phenopacket.json"
         return _json_download_response(payload, filename)
@@ -2035,8 +2481,10 @@ class IndividualPhenopacketExportView(LoginRequiredMixin, View):
 
 class IndividualExportView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
+        if not _user_has_main_app_permission(request.user, "lab.view_individual"):
+            return HttpResponseForbidden("Permission denied.")
         # 1. Apply Filters (Same as List View)
-        qs = Individual.objects.all().prefetch_related(
+        qs = accessible_individuals(request.user, Individual.objects.all()).prefetch_related(
             'samples', 'samples__tests', 'cross_ids', 'hpo_terms',
             'institution', 'physicians', 'projects', 'family',
              'samples__isolation_by', 'samples__tests__test_type'
@@ -2336,14 +2784,14 @@ def _plot_visualization_filter_data(request):
     return query_data
 
 
-def _apply_visualization_filters(qs, model_name, request):
+def _apply_visualization_filters(qs, model_name, request, user):
     filter_data = _plot_visualization_filter_data(request)
     if not filter_data:
         return qs
 
     filterset = IndividualFilter(
         filter_data,
-        queryset=Individual.objects.all(),
+        queryset=accessible_individuals(user, Individual.objects.all()),
         request=request,
     )
     if not filterset.form.is_valid():
@@ -2365,7 +2813,28 @@ def _apply_visualization_filters(qs, model_name, request):
     return qs.filter(**{lookup: filtered_individuals}).distinct()
 
 
-def _plot_data_for_model(model_name, config, request=None):
+def _scope_plot_queryset_for_user(qs, model_name, user):
+    if user is None or user_has_project_scope_bypass(user):
+        return qs
+    individuals = accessible_individuals(user, Individual.objects.all())
+    if model_name == "Individual":
+        return qs.filter(pk__in=individuals)
+    if model_name == "Project":
+        return accessible_projects(user, qs)
+    individual_lookup_by_model = {
+        "Sample": "individual__in",
+        "Test": "sample__individual__in",
+        "Pipeline": "test__sample__individual__in",
+        "Analysis": "pipeline__test__sample__individual__in",
+        "Variant": "individual__in",
+    }
+    lookup = individual_lookup_by_model.get(model_name)
+    if lookup:
+        return qs.filter(**{lookup: individuals}).distinct()
+    return qs
+
+
+def _plot_data_for_model(model_name, config, request=None, user=None):
     try:
         model = apps.get_model("lab", model_name)
     except LookupError:
@@ -2374,8 +2843,8 @@ def _plot_data_for_model(model_name, config, request=None):
         except LookupError:
             raise LookupError(f"Model {model_name} not found")
 
-    qs = model.objects.all()
-    qs = _apply_visualization_filters(qs, model_name, request)
+    qs = _scope_plot_queryset_for_user(model.objects.all(), model_name, user)
+    qs = _apply_visualization_filters(qs, model_name, request, user)
 
     filters = _plot_config_filters(config)
     if filters:
@@ -2414,7 +2883,7 @@ def generic_plot_data(request):
         return JsonResponse({"error": "Invalid query config"}, status=400)
 
     try:
-        data = _plot_data_for_model(model_name, config, request=request)
+        data = _plot_data_for_model(model_name, config, request=request, user=user)
     except LookupError as e:
         return JsonResponse({"error": str(e)}, status=400)
     except ValueError as e:

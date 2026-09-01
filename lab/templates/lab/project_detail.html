@@ -61,6 +61,18 @@
                         {{ project.individuals.count }}
                     </span>
                 </a>
+                {% if can_manage_project_memberships %}
+                <a role="tab"
+                   class="tab transition-all duration-200"
+                   :class="{ 'tab-active bg-white shadow-sm font-semibold': currentTab === 'members' }"
+                   @click="currentTab = 'members'">
+                    <i class="fa-solid fa-user-shield mr-2"></i>Members
+                    <span id="project-member-count-badge"
+                          class="ml-2 badge badge-sm badge-ghost">
+                        {{ project.memberships.count }}
+                    </span>
+                </a>
+                {% endif %}
             </div>
 
             <div class="p-2 min-h-[300px]">
@@ -70,6 +82,14 @@
                      x-transition:enter-end="opacity-100 translate-y-0">
                     {% include "lab/partials/tabs/_project_individuals.html" %}
                 </div>
+                {% if can_manage_project_memberships %}
+                <div x-show="currentTab === 'members'"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0 translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0">
+                    {% include "lab/partials/tabs/_project_members.html" %}
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

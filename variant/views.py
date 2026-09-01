@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from django.http import HttpResponseBadRequest
+from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from lab.models import Analysis, Pipeline, Individual
@@ -7,11 +7,15 @@ from .models import Variant
 from .forms import VARIANT_FORM_CLASSES, VariantContextForm, VariantUpdateForm
 from django.urls import reverse
 from urllib.parse import urlencode
+from lab.access import get_accessible_individual_or_404, user_can_access_object
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def variant_create(request):
     analysis_id = request.GET.get("analysis_id") or request.GET.get("analysis")
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to add variants.")
+
     pipeline_id = request.GET.get("pipeline_id") or request.GET.get("pipeline")
     variant_type = request.GET.get("type") or request.GET.get("variant_type")
     
@@ -28,30 +32,24 @@ def variant_create(request):
         individual_id = request.GET.get("individual")
         if individual_id:
             try:
-                individual = Individual.objects.get(pk=individual_id)
+                individual = get_accessible_individual_or_404(request.user, pk=individual_id)
                 context["individual_name"] = individual.full_name
-            except (Individual.DoesNotExist, ValueError):
+            except (Http404, Individual.DoesNotExist, ValueError):
                 pass
                 
         return render(request, "variant/variant_create_select.html", context)
 
-    # If we have analysis/pipeline context and variant_type, proceed to specific form
-    analysis = None
-    pipeline = None
-    if analysis_id:
-        analysis = get_object_or_404(
-            Analysis.objects.select_related("pipeline__test__sample__individual"),
-            pk=analysis_id,
-        )
-        pipeline = analysis.pipeline
-    elif pipeline_id:
-        pipeline = get_object_or_404(Pipeline.objects.select_related("test__sample__individual"), pk=pipeline_id)
-        analysis = pipeline.analyses.order_by("id").first()
-
-    if not pipeline:
-        return HttpResponseBadRequest("Selected analysis has no pipeline.")
-
-    form_class = VARIANT_FORM_CLASSES.get(variant_type)
+    # If we have pipeline_id and variant_type, proceed to specific form
+    pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
+    if not user_can_access_object(request.user, pipeline):
+        raise Http404
+    
+    form_class = {
+        "snv": SNVForm,
+        "cnv": CNVForm,
+        "sv": SVForm,
+        "repeat": RepeatForm,
+    }.get(variant_type)
     
     if not form_class:
         return HttpResponseBadRequest("Invalid Variant Type.")
@@ -89,6 +87,10 @@ def variant_create(request):
 @login_required
 def variant_update(request, pk):
     variant = get_object_or_404(Variant, pk=pk)
+    if not user_can_access_object(request.user, variant):
+        raise Http404
+    if not request.user.has_perm("variant.change_variant"):
+        return HttpResponseForbidden("You do not have permission to change variants.")
     
     # Handle cancel request
     if request.GET.get("cancel") == "true":

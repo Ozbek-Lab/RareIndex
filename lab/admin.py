@@ -44,6 +44,23 @@ class IndividualProjectsInline(admin.TabularInline):
     autocomplete_fields = ["project"]
 
 
+class ProjectMembershipInline(admin.TabularInline):
+    model = models.ProjectMembership
+    extra = 1
+    fields = ("user", "role", "created_by", "created_at")
+    readonly_fields = ("created_at",)
+    autocomplete_fields = ("user", "created_by")
+
+
+class UserProjectMembershipInline(admin.TabularInline):
+    model = models.ProjectMembership
+    fk_name = "user"
+    extra = 1
+    fields = ("project", "role", "created_by", "created_at")
+    readonly_fields = ("created_at",)
+    autocomplete_fields = ("project", "created_by")
+
+
 @admin.register(models.Note)
 class NoteAdmin(SimpleHistoryAdmin):
     list_display = ["content_object", "user", "private_owner", "get_created_at", "get_updated_at"]
@@ -506,7 +523,7 @@ class ProjectAdmin(SimpleHistoryAdmin):
     get_updated_at.admin_order_field = "id"
 
     autocomplete_fields = ["created_by"]
-    inlines = [ProjectIndividualsInline]
+    inlines = [ProjectIndividualsInline, ProjectMembershipInline]
     exclude = ("individuals",)
 
     def get_statuses(self, obj):
@@ -516,6 +533,36 @@ class ProjectAdmin(SimpleHistoryAdmin):
     def get_completion_percentage(self, obj):
         return f"{obj.get_completion_percentage()}%"
     get_completion_percentage.short_description = "Completion %"
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        for obj in instances:
+            if isinstance(obj, models.ProjectMembership) and not obj.created_by_id:
+                obj.created_by = request.user
+            obj.save()
+        formset.save_m2m()
+
+
+@admin.register(models.ProjectMembership)
+class ProjectMembershipAdmin(SimpleHistoryAdmin):
+    list_display = ["project", "user", "role", "created_by", "created_at"]
+    list_filter = ["role", "project", "created_at"]
+    search_fields = [
+        "project__name",
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+        "user__email",
+    ]
+    autocomplete_fields = ["project", "user", "created_by"]
+    readonly_fields = ["created_at"]
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by_id:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(models.IdentifierType)
@@ -632,7 +679,7 @@ class ProfileInline(admin.StackedInline):
 
 class CustomUserAdmin(BaseUserAdmin):
     add_form = CustomUserCreationForm
-    inlines = (ProfileInline,)
+    inlines = (ProfileInline, UserProjectMembershipInline)
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
         (
             "Report Signer",
@@ -663,6 +710,16 @@ class CustomUserAdmin(BaseUserAdmin):
             profile, _ = models.Profile.objects.get_or_create(user=obj)
             profile.signer_block_text = signer_block_text
             profile.save(update_fields=["signer_block_text"])
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        for obj in instances:
+            if isinstance(obj, models.ProjectMembership) and not obj.created_by_id:
+                obj.created_by = request.user
+            obj.save()
+        formset.save_m2m()
 
     def _get_profile(self, obj):
         return getattr(obj, "profile", None)

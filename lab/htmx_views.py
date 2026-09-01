@@ -1,16 +1,70 @@
+import json
+from calendar import monthrange
+from datetime import timedelta
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, HttpResponseForbidden, FileResponse, Http404
 from django.contrib.auth.decorators import login_required
 from django import forms
 from django.views.decorators.http import require_POST, require_http_methods
+from django.db import transaction
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.views.generic import View
 from django.urls import reverse
 from django.apps import apps
+from django.utils import timezone
 from pathlib import Path
-from .models import Family, Individual, Project, Task
+from .models import Family, Individual, Project, ProjectMembership, Task
+from .access import (
+    accessible_individuals,
+    accessible_families,
+    accessible_projects,
+    accessible_variants,
+    get_accessible_family_or_404,
+    get_accessible_individual_or_404,
+    get_accessible_project_or_404,
+    user_can_access_object,
+)
 from .search_utils import filter_normalized_contains
+
+
+def _user_can_manage_project_memberships_from_project(user):
+    return bool(
+        user
+        and getattr(user, "is_authenticated", False)
+        and (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False))
+    )
+
+
+def _project_membership_context(project, form=None):
+    from .forms import ProjectMembershipForm
+
+    return {
+        "project": project,
+        "project_membership_form": form or ProjectMembershipForm(project=project),
+        "project_memberships": project.memberships.select_related(
+            "user", "created_by"
+        ).order_by("user__last_name", "user__first_name", "user__username"),
+        "project_membership_roles": ProjectMembership.Role.choices,
+    }
+
+
+def _get_scoped_object_or_404(request, model_or_queryset, **kwargs):
+    obj = get_object_or_404(model_or_queryset, **kwargs)
+    if not user_can_access_object(request.user, obj):
+        raise Http404
+    return obj
+
+
+def _individual_projects_context(request, individual):
+    return {
+        "individual": individual,
+        "visible_individual_projects": accessible_projects(
+            request.user,
+            individual.projects.all(),
+        ),
+    }
 
 
 def _get_status_for_model(model, *names):
@@ -62,7 +116,7 @@ class RevealSensitiveFieldView(View):
         except LookupError:
             return HttpResponse("<span>(Error: Invalid Model)</span>")
 
-        obj = get_object_or_404(Model, pk=pk)
+        obj = _get_scoped_object_or_404(request, Model, pk=pk)
 
         # Basic security check: ensure the field exists
         if not hasattr(obj, field_name):
@@ -148,13 +202,17 @@ def add_individual_row(request):
 
 class IndividualHPOEditView(View):
     def get(self, request, pk):
-        individual = get_object_or_404(Individual, pk=pk)
+        individual = get_accessible_individual_or_404(request.user, pk=pk)
+        if not request.user.has_perm("lab.change_individual"):
+            return HttpResponseForbidden("You do not have permission to edit this individual.")
         return render(request, "lab/partials/tabs/_phenotype.html#hpo_edit", {"individual": individual})
 
 @login_required
 @require_POST
 def manage_hpo_term(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     action = request.POST.get("action")
     term_id = request.POST.get("term_id")
     
@@ -202,6 +260,7 @@ def note_create(request):
              return HttpResponse(f"Error: Invalid content type '{content_type_str}'", status=400)
 
         content_type = ContentType.objects.get_for_model(model)
+        _get_scoped_object_or_404(request, model, pk=object_id)
         
         # Create the note
         is_private = request.POST.get("private") in ["1", "true", "on", "True"]
@@ -247,6 +306,8 @@ def note_update(request, pk):
     """Update an existing note"""
     from .models import Note
     note = get_object_or_404(Note, id=pk)
+    if note.content_object and not user_can_access_object(request.user, note.content_object):
+        raise Http404
 
     # Only allow the note creator or staff to edit
     if request.user == note.user or request.user.is_staff:
@@ -263,6 +324,8 @@ def note_delete(request, pk):
     from .models import Note
     if request.method == "DELETE":
         note = get_object_or_404(Note, id=pk)
+        if note.content_object and not user_can_access_object(request.user, note.content_object):
+            raise Http404
         
         content_type = note.content_type
         content_type_str = content_type.model
@@ -309,6 +372,7 @@ def note_list(request):
     try:
         model = apps.get_model("lab", content_type_str) # defaults to lab for simplicity
         content_type = ContentType.objects.get_for_model(model)
+        _get_scoped_object_or_404(request, model, pk=object_id)
         
         notes = Note.objects.filter(
             content_type=content_type, 
@@ -339,6 +403,7 @@ def note_count(request):
     try:
         model = apps.get_model("lab", content_type_str)
         content_type = ContentType.objects.get_for_model(model)
+        _get_scoped_object_or_404(request, model, pk=object_id)
         
         notes = Note.objects.filter(
             content_type=content_type, 
@@ -363,7 +428,7 @@ def note_count(request):
 
 @login_required
 def individual_identification_edit(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_individual"):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualIdentificationForm
@@ -393,7 +458,7 @@ def individual_identification_edit(request, pk):
 @login_required
 @require_POST
 def individual_identification_save(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_individual"):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualIdentificationForm
@@ -428,7 +493,7 @@ def individual_identification_save(request, pk):
 
 @login_required
 def individual_demographics_edit(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_individual"):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualDemographicsForm
@@ -448,7 +513,7 @@ def individual_demographics_edit(request, pk):
 @login_required
 @require_POST
 def individual_demographics_save(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_individual"):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualDemographicsForm
@@ -477,14 +542,14 @@ def individual_demographics_save(request, pk):
 
 @login_required
 def individual_identification_display(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     context = {"individual": individual, "edit_mode": False}
     return render(request, "lab/partials/tabs/_info.html#identification_content", context)
 
 
 @login_required
 def individual_demographics_display(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     context = {"individual": individual, "edit_mode": False}
     return render(request, "lab/partials/tabs/_info.html#demographics_content", context)
 
@@ -530,7 +595,8 @@ def _individual_contact_context(individual, form=None, edit_mode=False):
 
 @login_required
 def individual_contact_information_display(request, pk):
-    individual = get_object_or_404(
+    individual = get_accessible_individual_or_404(
+        request.user,
         Individual.objects.prefetch_related("institution", "physicians"),
         pk=pk,
     )
@@ -543,10 +609,13 @@ def individual_contact_information_display(request, pk):
 
 @login_required
 def individual_contact_information_edit(request, pk):
-    individual = get_object_or_404(
+    individual = get_accessible_individual_or_404(
+        request.user,
         Individual.objects.prefetch_related("institution", "physicians"),
         pk=pk,
     )
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     return render(
         request,
         "lab/partials/tabs/_info.html#contact_information_content",
@@ -557,13 +626,16 @@ def individual_contact_information_edit(request, pk):
 @login_required
 @require_POST
 def individual_contact_information_save(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualContactInformationForm
 
     form = IndividualContactInformationForm(request.POST, instance=individual)
     if form.is_valid():
         form.save()
-        individual = get_object_or_404(
+        individual = get_accessible_individual_or_404(
+            request.user,
             Individual.objects.prefetch_related("institution", "physicians"),
             pk=pk,
         )
@@ -582,7 +654,7 @@ def individual_contact_information_save(request, pk):
 
 @login_required
 def individual_demographics_display(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     context = {"individual": individual, "edit_mode": False}
     return render(request, "lab/partials/tabs/_info.html#demographics_content", context)
 
@@ -592,7 +664,7 @@ def family_search(request):
     query = request.GET.get("q", "")
     page_number = request.GET.get("page", 1)
     
-    families = Family.objects.all()
+    families = accessible_families(request.user, Family.objects.all())
     if query:
         families = filter_normalized_contains(families, ["family_id", "description"], query)
     
@@ -608,10 +680,13 @@ def family_search(request):
 def individual_parents_edit(request, pk):
     if not request.user.has_perm("lab.change_family"):
         return HttpResponseForbidden("You do not have permission to edit family relationships.")
-    member = get_object_or_404(Individual, pk=pk)
+    member = get_accessible_individual_or_404(request.user, pk=pk)
     individual_pk = request.GET.get("individual_pk")
-    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
-    family_members = member.family.individuals.exclude(pk=pk) if member.family else Individual.objects.none()
+    individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else member
+    family_members = (
+        accessible_individuals(request.user, member.family.individuals.exclude(pk=pk))
+        if member.family else Individual.objects.none()
+    )
     context = {"member": member, "individual": individual, "family_members": family_members, "edit_mode": True}
     return render(request, "lab/partials/family_member_row.html", context)
 
@@ -620,10 +695,10 @@ def individual_parents_edit(request, pk):
 def family_id_edit(request, pk):
     """Render inline edit form, or display mode when cancel=1."""
     from .models import Family
-    family = get_object_or_404(Family, pk=pk)
+    family = get_accessible_family_or_404(request.user, pk=pk)
     individual_pk = request.GET.get("individual_pk", "")
     if request.GET.get("cancel"):
-        individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else family.individuals.first()
+        individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else accessible_individuals(request.user, family.individuals.all()).first()
         return render(request, "lab/partials/family_title_display.html", {
             "family": family,
             "individual": individual,
@@ -640,12 +715,12 @@ def family_id_save(request, pk):
     """Save the new family_id and re-render the title row."""
     from .models import Family
     from django.core.exceptions import ValidationError
-    family = get_object_or_404(Family, pk=pk)
+    family = get_accessible_family_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_family"):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden()
     individual_pk = request.POST.get("individual_pk", "")
-    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else None
+    individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else None
     new_id = request.POST.get("family_id", "").strip()
     consanguinity_value = request.POST.get("is_consanguineous", "")
     error = None
@@ -682,10 +757,13 @@ def family_manage_members(request, pk):
     """Render the manage-members modal content for a family."""
     from .models import Family
     from .forms import QuickAddMemberForm
-    family = get_object_or_404(Family, pk=pk)
+    family = get_accessible_family_or_404(request.user, pk=pk)
     individual_pk = request.GET.get("individual_pk", "")
     form = QuickAddMemberForm()
-    members = family.individuals.select_related("family").prefetch_related("statuses").order_by("pk")
+    members = accessible_individuals(
+        request.user,
+        family.individuals.select_related("family").prefetch_related("statuses").order_by("pk"),
+    )
     return render(request, "lab/partials/family_manage_members.html", {
         "family": family,
         "members": members,
@@ -701,7 +779,7 @@ def family_add_member(request, pk):
     from .models import Family
     from .forms import QuickAddMemberForm
     from django.http import HttpResponseForbidden
-    family = get_object_or_404(Family, pk=pk)
+    family = get_accessible_family_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.add_individual"):
         return HttpResponseForbidden()
     individual_pk = request.POST.get("individual_pk", "")
@@ -711,6 +789,20 @@ def family_add_member(request, pk):
         member.family = family
         member.created_by = request.user
         member.save()
+        source_individual = (
+            get_accessible_individual_or_404(request.user, pk=individual_pk)
+            if individual_pk else None
+        )
+        source_projects = (
+            source_individual.projects.all()
+            if source_individual is not None
+            else Project.objects.filter(individuals__family=family)
+        )
+        member.projects.add(
+            *accessible_projects(request.user, source_projects)
+            .values_list("pk", flat=True)
+            .distinct()
+        )
         # Save statuses
         selected_statuses = form.cleaned_data.get("statuses")
         if selected_statuses:
@@ -731,7 +823,10 @@ def family_add_member(request, pk):
         _save_priority_id(1, form.cleaned_data.get("primary_id"))
         _save_priority_id(2, form.cleaned_data.get("secondary_id"))
         form = QuickAddMemberForm()
-        members = family.individuals.select_related("family").prefetch_related("statuses").order_by("pk")
+        members = accessible_individuals(
+            request.user,
+            family.individuals.select_related("family").prefetch_related("statuses").order_by("pk"),
+        )
         response = render(request, "lab/partials/family_manage_members.html", {
             "family": family,
             "members": members,
@@ -741,7 +836,10 @@ def family_add_member(request, pk):
         })
         response["HX-Trigger"] = "familyUpdated"
         return response
-    members = family.individuals.select_related("family").prefetch_related("statuses").order_by("pk")
+    members = accessible_individuals(
+        request.user,
+        family.individuals.select_related("family").prefetch_related("statuses").order_by("pk"),
+    )
     return render(request, "lab/partials/family_manage_members.html", {
         "family": family,
         "members": members,
@@ -755,7 +853,7 @@ def family_add_member(request, pk):
 def family_remove_member(request, pk):
     """Remove an individual from their family (set family=None)."""
     from django.http import HttpResponseForbidden
-    member = get_object_or_404(Individual, pk=pk)
+    member = get_accessible_individual_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_individual"):
         return HttpResponseForbidden()
     member.family = None
@@ -768,15 +866,22 @@ def family_remove_member(request, pk):
 @login_required
 def individual_family_section(request, pk):
     """Return the family section partial for OOB refresh."""
-    individual = get_object_or_404(
+    from django.db.models import Prefetch
+
+    individual = get_accessible_individual_or_404(
+        request.user,
         Individual.objects.select_related("family", "mother", "father")
         .prefetch_related(
             "cross_ids__id_type",
-            "family__individuals",
-            "family__individuals__cross_ids__id_type",
-            "family__individuals__mother",
-            "family__individuals__father",
-            "family__individuals__statuses",
+            Prefetch(
+                "family__individuals",
+                queryset=accessible_individuals(
+                    request.user,
+                    Individual.objects.select_related("mother", "father")
+                    .prefetch_related("cross_ids__id_type", "statuses"),
+                ),
+                to_attr="scoped_individuals",
+            ),
         ),
         pk=pk,
     )
@@ -787,14 +892,14 @@ def individual_family_section(request, pk):
 @require_POST
 def individual_toggle_index(request, pk):
     """Toggle the is_index flag on a family member and re-render the row."""
-    member = get_object_or_404(Individual, pk=pk)
+    member = get_accessible_individual_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_individual"):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden()
     member.is_index = not member.is_index
     member.save(update_fields=["is_index"])
     individual_pk = request.POST.get("individual_pk")
-    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+    individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else member
     context = {"member": member, "individual": individual, "edit_mode": False}
     return render(request, "lab/partials/family_member_row.html", context)
 
@@ -803,23 +908,23 @@ def individual_toggle_index(request, pk):
 @require_POST
 def individual_toggle_affected(request, pk):
     """Toggle the is_affected flag on a family member and re-render the row."""
-    member = get_object_or_404(Individual, pk=pk)
+    member = get_accessible_individual_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_individual"):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden()
     member.is_affected = not member.is_affected
     member.save(update_fields=["is_affected"])
     individual_pk = request.POST.get("individual_pk")
-    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+    individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else member
     context = {"member": member, "individual": individual, "edit_mode": False}
     return render(request, "lab/partials/family_member_row.html", context)
 
 
 @login_required
 def individual_parents_display(request, pk):
-    member = get_object_or_404(Individual, pk=pk)
+    member = get_accessible_individual_or_404(request.user, pk=pk)
     individual_pk = request.GET.get("individual_pk")
-    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+    individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else member
     context = {"member": member, "individual": individual, "edit_mode": False}
     return render(request, "lab/partials/family_member_row.html", context)
 
@@ -829,9 +934,9 @@ def individual_parents_display(request, pk):
 def individual_parents_save(request, pk):
     if not request.user.has_perm("lab.change_family"):
         return HttpResponseForbidden("You do not have permission to edit family relationships.")
-    member = get_object_or_404(Individual, pk=pk)
+    member = get_accessible_individual_or_404(request.user, pk=pk)
     individual_pk = request.POST.get("individual_pk")
-    individual = get_object_or_404(Individual, pk=individual_pk) if individual_pk else member
+    individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else member
 
     father_id = request.POST.get("father_id") or None
     mother_id = request.POST.get("mother_id") or None
@@ -844,14 +949,19 @@ def individual_parents_save(request, pk):
     member.save()
     member.refresh_from_db()
 
-    family_members = member.family.individuals.exclude(pk=pk) if member.family else Individual.objects.none()
+    family_members = (
+        accessible_individuals(request.user, member.family.individuals.exclude(pk=pk))
+        if member.family else Individual.objects.none()
+    )
     context = {"member": member, "individual": individual, "family_members": family_members, "edit_mode": False}
     return render(request, "lab/partials/family_member_row.html", context)
 
 
 @login_required
 def individual_clinical_summary_edit(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import ClinicalSummaryForm
     form = ClinicalSummaryForm(instance=individual)
     context = {"individual": individual, "form": form, "edit_mode": True}
@@ -861,7 +971,9 @@ def individual_clinical_summary_edit(request, pk):
 @login_required
 @require_POST
 def individual_clinical_summary_save(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import ClinicalSummaryForm
     form = ClinicalSummaryForm(request.POST, instance=individual)
     
@@ -878,14 +990,16 @@ def individual_clinical_summary_save(request, pk):
 
 @login_required
 def individual_clinical_summary_display(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     context = {"individual": individual, "edit_mode": False}
     return render(request, "lab/partials/tabs/_phenotype.html#clinical_summary_content", context)
 
 
 @login_required
 def individual_age_of_onset_months_edit(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import AgeOfOnsetMonthsForm
     form = AgeOfOnsetMonthsForm(instance=individual)
     context = {
@@ -899,7 +1013,9 @@ def individual_age_of_onset_months_edit(request, pk):
 @login_required
 @require_POST
 def individual_age_of_onset_months_save(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import AgeOfOnsetMonthsForm
     form = AgeOfOnsetMonthsForm(request.POST, instance=individual)
     if form.is_valid():
@@ -917,7 +1033,7 @@ def individual_age_of_onset_months_save(request, pk):
 
 @login_required
 def individual_age_of_onset_months_display(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
     context = {"individual": individual}
     return render(request, "lab/partials/tabs/_phenotype.html#age_of_onset_months_content", context)
 
@@ -933,7 +1049,7 @@ def update_status(request, content_type_id, object_id, status_id):
 
     ct = get_object_or_404(ContentType, pk=content_type_id)
     Model = ct.model_class()
-    obj = get_object_or_404(Model, pk=object_id)
+    obj = _get_scoped_object_or_404(request, Model, pk=object_id)
     toggle_status = get_object_or_404(Status, pk=status_id)
 
     change_perms = [f"{ct.app_label}.change_{ct.model}"]
@@ -1025,7 +1141,7 @@ def sample_create_modal(request, individual_id):
     if not request.user.has_perm("lab.add_sample"):
         return HttpResponseForbidden("You do not have permission to add samples.")
 
-    individual = get_object_or_404(Individual, pk=individual_id)
+    individual = get_accessible_individual_or_404(request.user, pk=individual_id)
 
     if request.method == "POST":
         form = WorkflowSampleCreateForm(request.POST, individual=individual)
@@ -1082,6 +1198,1684 @@ def sample_create_modal(request, individual_id):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
+def bulk_sample_create_modal(request):
+    """First step of bulk sample creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("lab.add_sample"):
+        return HttpResponseForbidden("You do not have permission to bulk create samples.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_sample_create_modal"),
+        "bulk_sample_form_url": reverse("lab:bulk_sample_create_form"),
+    }
+    return render(request, "lab/partials/modals/bulk_sample_create_modal.html", context)
+
+
+def _ordered_unique_ints(values):
+    ids = []
+    seen = set()
+    for value in values:
+        try:
+            pk = int(value)
+        except (TypeError, ValueError):
+            continue
+        if pk not in seen:
+            ids.append(pk)
+            seen.add(pk)
+    return ids
+
+
+def _bulk_sample_rows_for_formset(formset):
+    from .models import Individual, Sample, SampleType
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_type_ids_by_individual = {pk: [] for pk in individual_ids}
+    seen_sample_types = {pk: set() for pk in individual_ids}
+    for individual_id, sample_type_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .select_related("sample_type")
+        .order_by("sample_type__name")
+        .values_list("individual_id", "sample_type_id")
+    ):
+        if sample_type_id in seen_sample_types[individual_id]:
+            continue
+        sample_type_ids_by_individual[individual_id].append(sample_type_id)
+        seen_sample_types[individual_id].add(sample_type_id)
+
+    rows = []
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+        sample_type_ids = sample_type_ids_by_individual.get(pk, [])
+        form.fields["sample_type"].queryset = SampleType.objects.filter(
+            pk__in=sample_type_ids
+        ).order_by("name")
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_type_options": bool(sample_type_ids),
+            }
+        )
+    return rows
+
+
+@login_required
+@require_POST
+def bulk_sample_create_form(request):
+    """Render and process per-individual rows for bulk sample creation."""
+    from .forms import BulkSampleCreateFormSet
+    from .models import Individual, Sample, SampleType
+
+    if not request.user.has_perm("lab.add_sample"):
+        return HttpResponseForbidden("You do not have permission to bulk create samples.")
+
+    action_url = reverse("lab:bulk_sample_create_form")
+    formset_prefix = "samples"
+    has_sample_types = SampleType.objects.exists()
+
+    if request.POST.get("bulk_sample_action") == "create":
+        formset = BulkSampleCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_sample_rows_for_formset(formset)
+        can_create_samples = bool(rows) and has_sample_types and all(
+            row["has_sample_type_options"] for row in rows
+        )
+
+        if can_create_samples and formset.is_valid():
+            default_status = _get_status_for_model(Sample, "Planned", "Not Available")
+            created_samples = []
+
+            with transaction.atomic():
+                for form in formset:
+                    sample = Sample.objects.create(
+                        individual=form.cleaned_data["individual"],
+                        sample_type=form.cleaned_data["sample_type"],
+                        created_by=request.user,
+                    )
+                    if default_status:
+                        sample.statuses.add(default_status)
+                    created_samples.append(sample)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_sample_create_success.html",
+                {"created_samples": created_samples},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_sample_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "has_sample_types": has_sample_types,
+                "can_create_samples": can_create_samples,
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkSampleCreateFormSet(
+        initial=[{"individual": individual.pk} for individual in individuals],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_sample_rows_for_formset(formset)
+    can_create_samples = bool(rows) and has_sample_types and all(
+        row["has_sample_type_options"] for row in rows
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_sample_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "has_sample_types": has_sample_types,
+            "can_create_samples": can_create_samples,
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_test_create_modal(request):
+    """First step of bulk test creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("lab.add_test"):
+        return HttpResponseForbidden("You do not have permission to bulk create tests.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_test_create_modal"),
+        "bulk_test_form_url": reverse("lab:bulk_test_create_form"),
+    }
+    return render(request, "lab/partials/modals/bulk_test_create_modal.html", context)
+
+
+def _bulk_test_rows_for_formset(formset):
+    from .models import Individual, Sample
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    for sample_id, individual_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .order_by("id")
+        .values_list("id", "individual_id")
+    ):
+        sample_ids_by_individual[individual_id].append(sample_id)
+
+    rows = []
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+        sample_ids = sample_ids_by_individual.get(pk, [])
+        form.fields["sample"].queryset = (
+            Sample.objects.select_related("individual", "sample_type")
+            .filter(pk__in=sample_ids)
+            .order_by("id")
+        )
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_options": bool(sample_ids),
+            }
+        )
+    return rows
+
+
+@login_required
+@require_POST
+def bulk_test_create_form(request):
+    """Render and process per-individual rows for bulk test creation."""
+    from .forms import BulkTestCreateFormSet
+    from .models import Individual, Test, TestType
+
+    if not request.user.has_perm("lab.add_test"):
+        return HttpResponseForbidden("You do not have permission to bulk create tests.")
+
+    action_url = reverse("lab:bulk_test_create_form")
+    formset_prefix = "tests"
+    has_test_types = TestType.objects.exists()
+
+    if request.POST.get("bulk_test_action") == "create":
+        formset = BulkTestCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_test_rows_for_formset(formset)
+        can_create_tests = bool(rows) and has_test_types and all(
+            row["has_sample_options"] for row in rows
+        )
+
+        if can_create_tests and formset.is_valid():
+            default_status = _get_status_for_model(
+                Test,
+                "Waiting Data/Bioinformatic process",
+                "Planned",
+                "Data Delivered / Completed",
+            )
+            created_tests = []
+
+            with transaction.atomic():
+                for form in formset:
+                    lab_test = Test.objects.create(
+                        sample=form.cleaned_data["sample"],
+                        test_type=form.cleaned_data["test_type"],
+                        created_by=request.user,
+                    )
+                    if default_status:
+                        lab_test.statuses.add(default_status)
+                    created_tests.append(lab_test)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_test_create_success.html",
+                {"created_tests": created_tests},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_test_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "has_test_types": has_test_types,
+                "can_create_tests": can_create_tests,
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkTestCreateFormSet(
+        initial=[{"individual": individual.pk} for individual in individuals],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_test_rows_for_formset(formset)
+    can_create_tests = bool(rows) and has_test_types and all(
+        row["has_sample_options"] for row in rows
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_test_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "has_test_types": has_test_types,
+            "can_create_tests": can_create_tests,
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_pipeline_create_modal(request):
+    """First step of bulk pipeline creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("lab.add_pipeline"):
+        return HttpResponseForbidden("You do not have permission to bulk create pipelines.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_pipeline_create_modal"),
+        "bulk_pipeline_form_url": reverse("lab:bulk_pipeline_create_form"),
+    }
+    return render(
+        request,
+        "lab/partials/modals/bulk_pipeline_create_modal.html",
+        context,
+    )
+
+
+def _first_int(values):
+    for value in values:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _bulk_pipeline_rows_for_formset(formset):
+    from .models import Individual, Sample, Test
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    sample_ids = []
+    for sample_id, individual_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .order_by("id")
+        .values_list("id", "individual_id")
+    ):
+        sample_ids_by_individual[individual_id].append(sample_id)
+        sample_ids.append(sample_id)
+
+    tests_by_sample = {sample_id: [] for sample_id in sample_ids}
+    for sample_id, test_id in (
+        Test.objects.filter(sample_id__in=sample_ids)
+        .order_by("id")
+        .values_list("sample_id", "id")
+    ):
+        tests_by_sample[sample_id].append(test_id)
+
+    rows = []
+    test_options_url = reverse("lab:bulk_pipeline_test_options")
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+
+        row_sample_ids = sample_ids_by_individual.get(pk, [])
+        selected_sample_id = _first_int([form["sample"].value()])
+        if not form.is_bound and selected_sample_id is None and len(row_sample_ids) == 1:
+            selected_sample_id = row_sample_ids[0]
+            form.initial["sample"] = selected_sample_id
+
+        if selected_sample_id in row_sample_ids:
+            test_queryset = Test.objects.select_related("test_type").filter(
+                sample_id=selected_sample_id
+            ).order_by("id")
+        else:
+            test_queryset = Test.objects.none()
+
+        form.fields["sample"].queryset = (
+            Sample.objects.select_related("individual", "sample_type")
+            .filter(pk__in=row_sample_ids)
+            .order_by("id")
+        )
+        form.fields["test"].queryset = test_queryset
+        form.fields["sample"].widget.attrs.update(
+            {
+                "hx-get": test_options_url,
+                "hx-target": f"#test-options-{form.prefix}",
+                "hx-swap": "innerHTML",
+                "hx-vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("test"),
+                        "field_id": form["test"].id_for_label,
+                        "individual_id": pk or "",
+                    }
+                ),
+            }
+        )
+
+        has_any_test_options = any(
+            tests_by_sample.get(sample_id) for sample_id in row_sample_ids
+        )
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_options": bool(row_sample_ids),
+                "has_any_test_options": has_any_test_options,
+                "selected_sample_id": str(selected_sample_id or ""),
+                "selected_test_id": str(form["test"].value() or ""),
+                "test_options": list(test_queryset),
+                "test_cell_id": f"test-options-{form.prefix}",
+                "test_field_name": form.add_prefix("test"),
+                "test_field_id": form["test"].id_for_label,
+            }
+        )
+    return rows
+
+
+def _can_create_pipeline_rows(rows, has_pipeline_types, has_performed_by_users):
+    return (
+        bool(rows)
+        and has_pipeline_types
+        and has_performed_by_users
+        and all(row["has_sample_options"] and row["has_any_test_options"] for row in rows)
+    )
+
+
+def _performed_date_shortcuts():
+    today = timezone.localdate()
+    previous_month = 12 if today.month == 1 else today.month - 1
+    previous_month_year = today.year - 1 if today.month == 1 else today.year
+    last_month = today.replace(
+        year=previous_month_year,
+        month=previous_month,
+        day=min(today.day, monthrange(previous_month_year, previous_month)[1]),
+    )
+    return [
+        {"label": "Tdy", "value": today.isoformat()},
+        {"label": "Ystrdy", "value": (today - timedelta(days=1)).isoformat()},
+        {"label": "LW", "value": (today - timedelta(days=7)).isoformat()},
+        {"label": "LM", "value": last_month.isoformat()},
+    ]
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_pipeline_test_options(request):
+    """Refresh the Test dropdown for one bulk pipeline row."""
+    from .models import Test
+
+    if not request.user.has_perm("lab.add_pipeline"):
+        return HttpResponseForbidden("You do not have permission to bulk create pipelines.")
+
+    sample_id = request.GET.get("sample_id")
+    if not sample_id:
+        sample_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-sample") or key == "sample"
+            ),
+            "",
+        )
+
+    sample_pk = _first_int([sample_id])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if sample_pk:
+        filters["sample_id"] = sample_pk
+    if individual_pk:
+        filters["sample__individual_id"] = individual_pk
+
+    tests = (
+        Test.objects.select_related("test_type", "sample")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("sample_id")
+        else Test.objects.none()
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_pipeline_test_select.html",
+        {
+            "field_name": request.GET.get("field_name", "test"),
+            "field_id": request.GET.get("field_id", "id_test"),
+            "tests": tests,
+            "sample_selected": bool(sample_pk),
+            "selected_test_id": request.GET.get("selected_test_id", ""),
+        },
+    )
+
+
+@login_required
+@require_POST
+def bulk_pipeline_create_form(request):
+    """Render and process per-individual rows for bulk pipeline creation."""
+    from .forms import BulkPipelineCreateFormSet
+    from .models import Individual, Pipeline, PipelineType
+
+    if not request.user.has_perm("lab.add_pipeline"):
+        return HttpResponseForbidden("You do not have permission to bulk create pipelines.")
+
+    action_url = reverse("lab:bulk_pipeline_create_form")
+    formset_prefix = "pipelines"
+    has_pipeline_types = PipelineType.objects.exists()
+    has_performed_by_users = request.user.__class__.objects.filter(is_active=True).exists()
+    performed_date_shortcuts = _performed_date_shortcuts()
+
+    if request.POST.get("bulk_pipeline_action") == "create":
+        formset = BulkPipelineCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_pipeline_rows_for_formset(formset)
+        can_create_pipelines = _can_create_pipeline_rows(
+            rows,
+            has_pipeline_types,
+            has_performed_by_users,
+        )
+
+        if can_create_pipelines and formset.is_valid():
+            default_status = _get_status_for_model(
+                Pipeline,
+                "Planned",
+                "Waiting Data/Bioinformatic process",
+                "Bioinformatic process completed",
+            )
+            created_pipelines = []
+
+            with transaction.atomic():
+                for form in formset:
+                    pipeline = Pipeline.objects.create(
+                        test=form.cleaned_data["test"],
+                        type=form.cleaned_data["pipeline_type"],
+                        performed_date=form.cleaned_data["performed_date"],
+                        performed_by=form.cleaned_data["performed_by"],
+                        created_by=request.user,
+                    )
+                    if default_status:
+                        pipeline.statuses.add(default_status)
+                    created_pipelines.append(pipeline)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_pipeline_create_success.html",
+                {"created_pipelines": created_pipelines},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_pipeline_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "has_pipeline_types": has_pipeline_types,
+                "has_performed_by_users": has_performed_by_users,
+                "can_create_pipelines": can_create_pipelines,
+                "performed_date_shortcuts": performed_date_shortcuts,
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkPipelineCreateFormSet(
+        initial=[
+            {"individual": individual.pk, "performed_by": request.user.pk}
+            for individual in individuals
+        ],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_pipeline_rows_for_formset(formset)
+    can_create_pipelines = _can_create_pipeline_rows(
+        rows,
+        has_pipeline_types,
+        has_performed_by_users,
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_pipeline_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "has_pipeline_types": has_pipeline_types,
+            "has_performed_by_users": has_performed_by_users,
+            "can_create_pipelines": can_create_pipelines,
+            "performed_date_shortcuts": performed_date_shortcuts,
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_analysis_create_modal(request):
+    """First step of bulk analysis creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to bulk create analyses.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_analysis_create_modal"),
+        "bulk_analysis_form_url": reverse("lab:bulk_analysis_create_form"),
+    }
+    return render(
+        request,
+        "lab/partials/modals/bulk_analysis_create_modal.html",
+        context,
+    )
+
+
+def _bulk_analysis_rows_for_formset(formset):
+    from .models import Individual, Pipeline, Sample, Test
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    sample_ids = []
+    for sample_id, individual_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .order_by("id")
+        .values_list("id", "individual_id")
+    ):
+        sample_ids_by_individual[individual_id].append(sample_id)
+        sample_ids.append(sample_id)
+
+    tests_by_sample = {sample_id: [] for sample_id in sample_ids}
+    test_ids = []
+    for sample_id, test_id in (
+        Test.objects.filter(sample_id__in=sample_ids)
+        .order_by("id")
+        .values_list("sample_id", "id")
+    ):
+        tests_by_sample[sample_id].append(test_id)
+        test_ids.append(test_id)
+
+    pipeline_ids_by_test = {test_id: [] for test_id in test_ids}
+    for test_id, pipeline_id in (
+        Pipeline.objects.filter(test_id__in=test_ids)
+        .order_by("id")
+        .values_list("test_id", "id")
+    ):
+        pipeline_ids_by_test[test_id].append(pipeline_id)
+
+    rows = []
+    test_options_url = reverse("lab:bulk_analysis_test_options")
+    pipeline_options_url = reverse("lab:bulk_analysis_pipeline_options")
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+
+        row_sample_ids = sample_ids_by_individual.get(pk, [])
+        selected_sample_id = _first_int([form["sample"].value()])
+        if not form.is_bound and selected_sample_id is None and len(row_sample_ids) == 1:
+            selected_sample_id = row_sample_ids[0]
+            form.initial["sample"] = selected_sample_id
+
+        row_test_ids = []
+        if selected_sample_id in row_sample_ids:
+            row_test_ids = tests_by_sample.get(selected_sample_id, [])
+
+        selected_test_id = _first_int([form["test"].value()])
+        if not form.is_bound and selected_test_id is None and len(row_test_ids) == 1:
+            selected_test_id = row_test_ids[0]
+            form.initial["test"] = selected_test_id
+
+        row_pipeline_ids = []
+        if selected_test_id in row_test_ids:
+            row_pipeline_ids = pipeline_ids_by_test.get(selected_test_id, [])
+
+        selected_pipeline_id = _first_int([form["pipeline"].value()])
+        if (
+            not form.is_bound
+            and selected_pipeline_id is None
+            and len(row_pipeline_ids) == 1
+        ):
+            selected_pipeline_id = row_pipeline_ids[0]
+            form.initial["pipeline"] = selected_pipeline_id
+
+        form.fields["sample"].queryset = (
+            Sample.objects.select_related("individual", "sample_type")
+            .filter(pk__in=row_sample_ids)
+            .order_by("id")
+        )
+        form.fields["test"].queryset = (
+            Test.objects.select_related("test_type", "sample")
+            .filter(pk__in=row_test_ids)
+            .order_by("id")
+        )
+        form.fields["pipeline"].queryset = (
+            Pipeline.objects.select_related("type", "test__test_type")
+            .filter(pk__in=row_pipeline_ids)
+            .order_by("id")
+        )
+
+        pipeline_cell_id = f"pipeline-options-{form.prefix}"
+        form.fields["sample"].widget.attrs.update(
+            {
+                "hx-get": test_options_url,
+                "hx-target": f"#test-options-{form.prefix}",
+                "hx-swap": "innerHTML",
+                "hx-vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("test"),
+                        "field_id": form["test"].id_for_label,
+                        "pipeline_field_name": form.add_prefix("pipeline"),
+                        "pipeline_field_id": form["pipeline"].id_for_label,
+                        "pipeline_cell_id": pipeline_cell_id,
+                        "individual_id": pk or "",
+                    }
+                ),
+            }
+        )
+
+        has_any_test_options = any(
+            tests_by_sample.get(sample_id) for sample_id in row_sample_ids
+        )
+        has_any_pipeline_options = any(
+            pipeline_ids_by_test.get(test_id)
+            for sample_id in row_sample_ids
+            for test_id in tests_by_sample.get(sample_id, [])
+        )
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_options": bool(row_sample_ids),
+                "has_any_test_options": has_any_test_options,
+                "has_any_pipeline_options": has_any_pipeline_options,
+                "selected_sample_id": str(selected_sample_id or ""),
+                "selected_test_id": str(selected_test_id or ""),
+                "selected_pipeline_id": str(selected_pipeline_id or ""),
+                "test_options": list(form.fields["test"].queryset),
+                "pipeline_options": list(form.fields["pipeline"].queryset),
+                "test_cell_id": f"test-options-{form.prefix}",
+                "test_field_name": form.add_prefix("test"),
+                "test_field_id": form["test"].id_for_label,
+                "pipeline_cell_id": pipeline_cell_id,
+                "pipeline_field_name": form.add_prefix("pipeline"),
+                "pipeline_field_id": form["pipeline"].id_for_label,
+                "pipeline_options_url": pipeline_options_url,
+                "pipeline_hx_vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("pipeline"),
+                        "field_id": form["pipeline"].id_for_label,
+                        "individual_id": pk or "",
+                        "sample_id": selected_sample_id or "",
+                    }
+                ),
+            }
+        )
+    return rows
+
+
+def _can_create_analysis_rows(rows, has_analysis_types, has_performed_by_users):
+    return (
+        bool(rows)
+        and has_analysis_types
+        and has_performed_by_users
+        and all(
+            row["has_sample_options"]
+            and row["has_any_test_options"]
+            and row["has_any_pipeline_options"]
+            for row in rows
+        )
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_analysis_test_options(request):
+    """Refresh the Test dropdown for one bulk analysis row."""
+    from .models import Test
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to bulk create analyses.")
+
+    sample_id = request.GET.get("sample_id")
+    if not sample_id:
+        sample_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-sample") or key == "sample"
+            ),
+            "",
+        )
+
+    sample_pk = _first_int([sample_id])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if sample_pk:
+        filters["sample_id"] = sample_pk
+    if individual_pk:
+        filters["sample__individual_id"] = individual_pk
+
+    tests = (
+        Test.objects.select_related("test_type", "sample")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("sample_id")
+        else Test.objects.none()
+    )
+    pipeline_field_name = request.GET.get("pipeline_field_name", "pipeline")
+    pipeline_field_id = request.GET.get("pipeline_field_id", "id_pipeline")
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_analysis_test_select.html",
+        {
+            "field_name": request.GET.get("field_name", "test"),
+            "field_id": request.GET.get("field_id", "id_test"),
+            "tests": tests,
+            "sample_selected": bool(sample_pk),
+            "selected_test_id": request.GET.get("selected_test_id", ""),
+            "pipeline_options_url": reverse("lab:bulk_analysis_pipeline_options"),
+            "pipeline_cell_id": request.GET.get("pipeline_cell_id", ""),
+            "pipeline_field_name": pipeline_field_name,
+            "pipeline_field_id": pipeline_field_id,
+            "include_pipeline_reset": True,
+            "pipeline_hx_vals": json.dumps(
+                {
+                    "field_name": pipeline_field_name,
+                    "field_id": pipeline_field_id,
+                    "individual_id": individual_pk or "",
+                    "sample_id": sample_pk or "",
+                }
+            ),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_analysis_pipeline_options(request):
+    """Refresh the Pipeline dropdown for one bulk analysis row."""
+    from .models import Pipeline
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to bulk create analyses.")
+
+    test_id = request.GET.get("test_id")
+    if not test_id:
+        test_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-test") or key == "test"
+            ),
+            "",
+        )
+
+    test_pk = _first_int([test_id])
+    sample_pk = _first_int([request.GET.get("sample_id")])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if test_pk:
+        filters["test_id"] = test_pk
+    if sample_pk:
+        filters["test__sample_id"] = sample_pk
+    if individual_pk:
+        filters["test__sample__individual_id"] = individual_pk
+
+    pipelines = (
+        Pipeline.objects.select_related("type", "test__test_type")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("test_id")
+        else Pipeline.objects.none()
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_analysis_pipeline_select.html",
+        {
+            "field_name": request.GET.get("field_name", "pipeline"),
+            "field_id": request.GET.get("field_id", "id_pipeline"),
+            "pipelines": pipelines,
+            "test_selected": bool(test_pk),
+            "selected_pipeline_id": request.GET.get("selected_pipeline_id", ""),
+        },
+    )
+
+
+@login_required
+@require_POST
+def bulk_analysis_create_form(request):
+    """Render and process per-individual rows for bulk analysis creation."""
+    from .forms import BulkAnalysisCreateFormSet
+    from .models import Analysis, AnalysisType, Individual
+
+    if not request.user.has_perm("lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to bulk create analyses.")
+
+    action_url = reverse("lab:bulk_analysis_create_form")
+    formset_prefix = "analyses"
+    has_analysis_types = AnalysisType.objects.exists()
+    has_performed_by_users = request.user.__class__.objects.filter(is_active=True).exists()
+    performed_date_shortcuts = _performed_date_shortcuts()
+
+    if request.POST.get("bulk_analysis_action") == "create":
+        formset = BulkAnalysisCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_analysis_rows_for_formset(formset)
+        can_create_analyses = _can_create_analysis_rows(
+            rows,
+            has_analysis_types,
+            has_performed_by_users,
+        )
+
+        if can_create_analyses and formset.is_valid():
+            default_status = _get_status_for_model(
+                Analysis,
+                "Planned",
+                "Waiting Confirmation",
+                "Completed",
+            )
+            created_analyses = []
+
+            with transaction.atomic():
+                for form in formset:
+                    analysis = Analysis.objects.create(
+                        pipeline=form.cleaned_data["pipeline"],
+                        type=form.cleaned_data["analysis_type"],
+                        performed_date=form.cleaned_data["performed_date"],
+                        created_by=request.user,
+                    )
+                    analysis.performed_by.set(form.cleaned_data["performed_by"])
+                    if default_status:
+                        analysis.statuses.add(default_status)
+                    created_analyses.append(analysis)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_analysis_create_success.html",
+                {"created_analyses": created_analyses},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_analysis_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "has_analysis_types": has_analysis_types,
+                "has_performed_by_users": has_performed_by_users,
+                "can_create_analyses": can_create_analyses,
+                "performed_date_shortcuts": performed_date_shortcuts,
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkAnalysisCreateFormSet(
+        initial=[
+            {
+                "individual": individual.pk,
+                "performed_by": [request.user.pk],
+            }
+            for individual in individuals
+        ],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_analysis_rows_for_formset(formset)
+    can_create_analyses = _can_create_analysis_rows(
+        rows,
+        has_analysis_types,
+        has_performed_by_users,
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_analysis_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "has_analysis_types": has_analysis_types,
+            "has_performed_by_users": has_performed_by_users,
+            "can_create_analyses": can_create_analyses,
+            "performed_date_shortcuts": performed_date_shortcuts,
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def bulk_variant_create_modal(request):
+    """First step of bulk variant creation: resolve pasted individual IDs."""
+    from .forms import BulkCreateIdLookupForm
+    from .models import Individual
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    form = BulkCreateIdLookupForm(request.POST or None)
+    matched_individuals = []
+    parsed_ids = []
+
+    if request.method == "POST" and form.is_valid():
+        parsed_ids = form.parsed_ids
+        unique_ids = list(dict.fromkeys(parsed_ids))
+        matched_individuals = list(
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids)
+            .distinct()
+            .order_by("id")
+        )
+
+    context = {
+        "form": form,
+        "matched_individuals": matched_individuals,
+        "parsed_ids": parsed_ids,
+        "submitted": request.method == "POST",
+        "action_url": reverse("lab:bulk_variant_create_modal"),
+        "bulk_variant_form_url": reverse("lab:bulk_variant_create_form"),
+    }
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_create_modal.html",
+        context,
+    )
+
+
+def _boolish(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in {"1", "true", "on", "yes"}
+
+
+def _bulk_variant_rows_for_formset(formset):
+    from .models import Analysis, Individual, Pipeline, Sample, Test
+
+    individual_ids = _ordered_unique_ints(
+        form["individual"].value() for form in formset.forms
+    )
+    individuals_by_id = Individual.objects.prefetch_related(
+        "cross_ids__id_type"
+    ).in_bulk(individual_ids)
+    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    sample_ids = []
+    for sample_id, individual_id in (
+        Sample.objects.filter(individual_id__in=individual_ids)
+        .order_by("id")
+        .values_list("id", "individual_id")
+    ):
+        sample_ids_by_individual[individual_id].append(sample_id)
+        sample_ids.append(sample_id)
+
+    tests_by_sample = {sample_id: [] for sample_id in sample_ids}
+    test_ids = []
+    for sample_id, test_id in (
+        Test.objects.filter(sample_id__in=sample_ids)
+        .order_by("id")
+        .values_list("sample_id", "id")
+    ):
+        tests_by_sample[sample_id].append(test_id)
+        test_ids.append(test_id)
+
+    pipeline_ids_by_test = {test_id: [] for test_id in test_ids}
+    pipeline_ids = []
+    for test_id, pipeline_id in (
+        Pipeline.objects.filter(test_id__in=test_ids)
+        .order_by("id")
+        .values_list("test_id", "id")
+    ):
+        pipeline_ids_by_test[test_id].append(pipeline_id)
+        pipeline_ids.append(pipeline_id)
+
+    analysis_ids_by_pipeline = {pipeline_id: [] for pipeline_id in pipeline_ids}
+    for pipeline_id, analysis_id in (
+        Analysis.objects.filter(pipeline_id__in=pipeline_ids)
+        .order_by("id")
+        .values_list("pipeline_id", "id")
+    ):
+        analysis_ids_by_pipeline[pipeline_id].append(analysis_id)
+
+    rows = []
+    test_options_url = reverse("lab:bulk_variant_test_options")
+    pipeline_options_url = reverse("lab:bulk_variant_pipeline_options")
+    analysis_options_url = reverse("lab:bulk_variant_analysis_options")
+    for form in formset.forms:
+        raw_pk = form["individual"].value()
+        try:
+            pk = int(raw_pk)
+        except (TypeError, ValueError):
+            pk = None
+
+        row_sample_ids = sample_ids_by_individual.get(pk, [])
+        selected_sample_id = _first_int([form["sample"].value()])
+        if not form.is_bound and selected_sample_id is None and len(row_sample_ids) == 1:
+            selected_sample_id = row_sample_ids[0]
+            form.initial["sample"] = selected_sample_id
+
+        row_test_ids = []
+        if selected_sample_id in row_sample_ids:
+            row_test_ids = tests_by_sample.get(selected_sample_id, [])
+
+        selected_test_id = _first_int([form["test"].value()])
+        if not form.is_bound and selected_test_id is None and len(row_test_ids) == 1:
+            selected_test_id = row_test_ids[0]
+            form.initial["test"] = selected_test_id
+
+        row_pipeline_ids = []
+        if selected_test_id in row_test_ids:
+            row_pipeline_ids = pipeline_ids_by_test.get(selected_test_id, [])
+
+        selected_pipeline_id = _first_int([form["pipeline"].value()])
+        if (
+            not form.is_bound
+            and selected_pipeline_id is None
+            and len(row_pipeline_ids) == 1
+        ):
+            selected_pipeline_id = row_pipeline_ids[0]
+            form.initial["pipeline"] = selected_pipeline_id
+
+        row_analysis_ids = []
+        if selected_pipeline_id in row_pipeline_ids:
+            row_analysis_ids = analysis_ids_by_pipeline.get(selected_pipeline_id, [])
+
+        selected_analysis_id = _first_int([form["analysis"].value()])
+        if (
+            not form.is_bound
+            and selected_analysis_id is None
+            and len(row_analysis_ids) == 1
+        ):
+            selected_analysis_id = row_analysis_ids[0]
+            form.initial["analysis"] = selected_analysis_id
+
+        form.fields["sample"].queryset = (
+            Sample.objects.select_related("individual", "sample_type")
+            .filter(pk__in=row_sample_ids)
+            .order_by("id")
+        )
+        form.fields["test"].queryset = (
+            Test.objects.select_related("test_type", "sample")
+            .filter(pk__in=row_test_ids)
+            .order_by("id")
+        )
+        form.fields["pipeline"].queryset = (
+            Pipeline.objects.select_related("type", "test__test_type")
+            .filter(pk__in=row_pipeline_ids)
+            .order_by("id")
+        )
+        form.fields["analysis"].queryset = (
+            Analysis.objects.select_related("type", "pipeline")
+            .filter(pk__in=row_analysis_ids)
+            .order_by("id")
+        )
+
+        test_cell_id = f"test-options-{form.prefix}"
+        pipeline_cell_id = f"pipeline-options-{form.prefix}"
+        analysis_cell_id = f"analysis-options-{form.prefix}"
+        form.fields["sample"].widget.attrs.update(
+            {
+                "hx-get": test_options_url,
+                "hx-target": f"#{test_cell_id}",
+                "hx-swap": "innerHTML",
+                "hx-vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("test"),
+                        "field_id": form["test"].id_for_label,
+                        "pipeline_field_name": form.add_prefix("pipeline"),
+                        "pipeline_field_id": form["pipeline"].id_for_label,
+                        "pipeline_cell_id": pipeline_cell_id,
+                        "analysis_field_name": form.add_prefix("analysis"),
+                        "analysis_field_id": form["analysis"].id_for_label,
+                        "analysis_cell_id": analysis_cell_id,
+                        "individual_id": pk or "",
+                    }
+                ),
+                "x-bind:disabled": "!linked || true" if not row_sample_ids else "!linked",
+            }
+        )
+
+        has_any_test_options = any(
+            tests_by_sample.get(sample_id) for sample_id in row_sample_ids
+        )
+        has_any_pipeline_options = any(
+            pipeline_ids_by_test.get(test_id)
+            for sample_id in row_sample_ids
+            for test_id in tests_by_sample.get(sample_id, [])
+        )
+        has_any_analysis_options = any(
+            analysis_ids_by_pipeline.get(pipeline_id)
+            for sample_id in row_sample_ids
+            for test_id in tests_by_sample.get(sample_id, [])
+            for pipeline_id in pipeline_ids_by_test.get(test_id, [])
+        )
+        use_analysis_value = form["use_analysis"].value()
+        use_analysis_enabled = (
+            True
+            if use_analysis_value is None and not form.is_bound
+            else _boolish(use_analysis_value)
+        )
+        selected_variant_kind = form["variant_kind"].value() or "snv"
+        rows.append(
+            {
+                "form": form,
+                "individual": individuals_by_id.get(pk),
+                "individual_pk": raw_pk,
+                "has_sample_options": bool(row_sample_ids),
+                "has_any_test_options": has_any_test_options,
+                "has_any_pipeline_options": has_any_pipeline_options,
+                "has_any_analysis_options": has_any_analysis_options,
+                "use_analysis_enabled": use_analysis_enabled,
+                "selected_variant_kind": selected_variant_kind,
+                "selected_sample_id": str(selected_sample_id or ""),
+                "selected_test_id": str(selected_test_id or ""),
+                "selected_pipeline_id": str(selected_pipeline_id or ""),
+                "selected_analysis_id": str(selected_analysis_id or ""),
+                "test_options": list(form.fields["test"].queryset),
+                "pipeline_options": list(form.fields["pipeline"].queryset),
+                "analysis_options": list(form.fields["analysis"].queryset),
+                "test_cell_id": test_cell_id,
+                "test_field_name": form.add_prefix("test"),
+                "test_field_id": form["test"].id_for_label,
+                "pipeline_cell_id": pipeline_cell_id,
+                "pipeline_field_name": form.add_prefix("pipeline"),
+                "pipeline_field_id": form["pipeline"].id_for_label,
+                "pipeline_options_url": pipeline_options_url,
+                "pipeline_hx_vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("pipeline"),
+                        "field_id": form["pipeline"].id_for_label,
+                        "analysis_field_name": form.add_prefix("analysis"),
+                        "analysis_field_id": form["analysis"].id_for_label,
+                        "analysis_cell_id": analysis_cell_id,
+                        "individual_id": pk or "",
+                        "sample_id": selected_sample_id or "",
+                    }
+                ),
+                "analysis_cell_id": analysis_cell_id,
+                "analysis_field_name": form.add_prefix("analysis"),
+                "analysis_field_id": form["analysis"].id_for_label,
+                "analysis_options_url": analysis_options_url,
+                "analysis_hx_vals": json.dumps(
+                    {
+                        "field_name": form.add_prefix("analysis"),
+                        "field_id": form["analysis"].id_for_label,
+                        "individual_id": pk or "",
+                        "sample_id": selected_sample_id or "",
+                        "test_id": selected_test_id or "",
+                    }
+                ),
+            }
+        )
+    return rows
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_variant_test_options(request):
+    """Refresh the Test dropdown for one bulk variant row."""
+    from .models import Test
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    sample_id = request.GET.get("sample_id")
+    if not sample_id:
+        sample_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-sample") or key == "sample"
+            ),
+            "",
+        )
+
+    sample_pk = _first_int([sample_id])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if sample_pk:
+        filters["sample_id"] = sample_pk
+    if individual_pk:
+        filters["sample__individual_id"] = individual_pk
+
+    tests = (
+        Test.objects.select_related("test_type", "sample")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("sample_id")
+        else Test.objects.none()
+    )
+    pipeline_field_name = request.GET.get("pipeline_field_name", "pipeline")
+    pipeline_field_id = request.GET.get("pipeline_field_id", "id_pipeline")
+    analysis_field_name = request.GET.get("analysis_field_name", "analysis")
+    analysis_field_id = request.GET.get("analysis_field_id", "id_analysis")
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_test_select.html",
+        {
+            "field_name": request.GET.get("field_name", "test"),
+            "field_id": request.GET.get("field_id", "id_test"),
+            "tests": tests,
+            "sample_selected": bool(sample_pk),
+            "selected_test_id": request.GET.get("selected_test_id", ""),
+            "pipeline_options_url": reverse("lab:bulk_variant_pipeline_options"),
+            "pipeline_cell_id": request.GET.get("pipeline_cell_id", ""),
+            "pipeline_field_name": pipeline_field_name,
+            "pipeline_field_id": pipeline_field_id,
+            "analysis_cell_id": request.GET.get("analysis_cell_id", ""),
+            "analysis_field_name": analysis_field_name,
+            "analysis_field_id": analysis_field_id,
+            "include_pipeline_reset": True,
+            "include_analysis_reset": True,
+            "pipeline_hx_vals": json.dumps(
+                {
+                    "field_name": pipeline_field_name,
+                    "field_id": pipeline_field_id,
+                    "analysis_field_name": analysis_field_name,
+                    "analysis_field_id": analysis_field_id,
+                    "analysis_cell_id": request.GET.get("analysis_cell_id", ""),
+                    "individual_id": individual_pk or "",
+                    "sample_id": sample_pk or "",
+                }
+            ),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_variant_pipeline_options(request):
+    """Refresh the Pipeline dropdown for one bulk variant row."""
+    from .models import Pipeline
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    test_id = request.GET.get("test_id")
+    if not test_id:
+        test_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-test") or key == "test"
+            ),
+            "",
+        )
+
+    test_pk = _first_int([test_id])
+    sample_pk = _first_int([request.GET.get("sample_id")])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if test_pk:
+        filters["test_id"] = test_pk
+    if sample_pk:
+        filters["test__sample_id"] = sample_pk
+    if individual_pk:
+        filters["test__sample__individual_id"] = individual_pk
+
+    pipelines = (
+        Pipeline.objects.select_related("type", "test__test_type")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("test_id")
+        else Pipeline.objects.none()
+    )
+    analysis_field_name = request.GET.get("analysis_field_name", "analysis")
+    analysis_field_id = request.GET.get("analysis_field_id", "id_analysis")
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_pipeline_select.html",
+        {
+            "field_name": request.GET.get("field_name", "pipeline"),
+            "field_id": request.GET.get("field_id", "id_pipeline"),
+            "pipelines": pipelines,
+            "test_selected": bool(test_pk),
+            "selected_pipeline_id": request.GET.get("selected_pipeline_id", ""),
+            "analysis_options_url": reverse("lab:bulk_variant_analysis_options"),
+            "analysis_cell_id": request.GET.get("analysis_cell_id", ""),
+            "analysis_field_name": analysis_field_name,
+            "analysis_field_id": analysis_field_id,
+            "include_analysis_reset": True,
+            "analysis_hx_vals": json.dumps(
+                {
+                    "field_name": analysis_field_name,
+                    "field_id": analysis_field_id,
+                    "individual_id": individual_pk or "",
+                    "sample_id": sample_pk or "",
+                    "test_id": test_pk or "",
+                }
+            ),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def bulk_variant_analysis_options(request):
+    """Refresh the Analysis dropdown for one bulk variant row."""
+    from .models import Analysis
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    pipeline_id = request.GET.get("pipeline_id")
+    if not pipeline_id:
+        pipeline_id = next(
+            (
+                value
+                for key, value in request.GET.items()
+                if key.endswith("-pipeline") or key == "pipeline"
+            ),
+            "",
+        )
+
+    pipeline_pk = _first_int([pipeline_id])
+    test_pk = _first_int([request.GET.get("test_id")])
+    sample_pk = _first_int([request.GET.get("sample_id")])
+    individual_pk = _first_int([request.GET.get("individual_id")])
+    filters = {}
+    if pipeline_pk:
+        filters["pipeline_id"] = pipeline_pk
+    if test_pk:
+        filters["pipeline__test_id"] = test_pk
+    if sample_pk:
+        filters["pipeline__test__sample_id"] = sample_pk
+    if individual_pk:
+        filters["pipeline__test__sample__individual_id"] = individual_pk
+
+    analyses = (
+        Analysis.objects.select_related("type", "pipeline")
+        .filter(**filters)
+        .order_by("id")
+        if filters.get("pipeline_id")
+        else Analysis.objects.none()
+    )
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_analysis_select.html",
+        {
+            "field_name": request.GET.get("field_name", "analysis"),
+            "field_id": request.GET.get("field_id", "id_analysis"),
+            "analyses": analyses,
+            "pipeline_selected": bool(pipeline_pk),
+            "selected_analysis_id": request.GET.get("selected_analysis_id", ""),
+        },
+    )
+
+
+def _create_bulk_variant_from_record(record, individual, analysis, assembly_version, zygosity, user):
+    from variant.models import CNV, Repeat, SNV, SV, delins
+
+    model_cls = {
+        "snv": SNV,
+        "delins": delins,
+        "cnv": CNV,
+        "sv": SV,
+        "repeat": Repeat,
+    }.get(record.get("kind"))
+    if model_cls is None:
+        return None
+
+    fields = {
+        "individual": individual,
+        "analysis": analysis,
+        "assembly_version": assembly_version,
+        "chromosome": record["chromosome"],
+        "start": record["start"],
+        "end": record.get("end", record["start"]),
+        "zygosity": zygosity,
+        "created_by": user,
+    }
+    if model_cls in (SNV, delins):
+        fields.update(
+            {
+                "reference": record["reference"],
+                "alternate": record["alternate"],
+            }
+        )
+    elif model_cls is CNV:
+        fields.update(
+            {
+                "cnv_type": record.get("cnv_type", "gain"),
+                "copy_number": record.get("copy_number"),
+            }
+        )
+    elif model_cls is SV:
+        fields["sv_type"] = record.get("sv_type", "deletion")
+        if record.get("breakpoints"):
+            fields["breakpoints"] = record["breakpoints"]
+    else:
+        fields.update(
+            {
+                "repeat_unit": record["repeat_unit"],
+                "repeat_count": record["repeat_count"],
+            }
+        )
+    return model_cls.objects.create(**fields)
+
+
+@login_required
+@require_POST
+def bulk_variant_create_form(request):
+    """Render and process per-individual rows for bulk variant creation."""
+    from .forms import BulkVariantCreateFormSet
+    from .models import Individual
+
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to bulk create variants.")
+
+    action_url = reverse("lab:bulk_variant_create_form")
+    formset_prefix = "variants"
+
+    if request.POST.get("bulk_variant_action") == "create":
+        formset = BulkVariantCreateFormSet(request.POST, prefix=formset_prefix)
+        rows = _bulk_variant_rows_for_formset(formset)
+
+        if rows and formset.is_valid():
+            created_variants = []
+            with transaction.atomic():
+                for form in formset:
+                    variant = _create_bulk_variant_from_record(
+                        form.cleaned_data["variant_record"],
+                        form.cleaned_data["individual"],
+                        form.cleaned_data.get("analysis"),
+                        form.cleaned_data["assembly_version"],
+                        form.cleaned_data["zygosity"],
+                        request.user,
+                    )
+                    if variant:
+                        created_variants.append(variant)
+
+            return render(
+                request,
+                "lab/partials/modals/bulk_variant_create_success.html",
+                {"created_variants": created_variants},
+            )
+
+        return render(
+            request,
+            "lab/partials/modals/bulk_variant_create_form.html",
+            {
+                "formset": formset,
+                "rows": rows,
+                "action_url": action_url,
+                "can_create_variants": bool(rows),
+            },
+        )
+
+    individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
+    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals = [
+        individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
+    ]
+
+    formset = BulkVariantCreateFormSet(
+        initial=[
+            {
+                "individual": individual.pk,
+                "use_analysis": True,
+                "variant_kind": "snv",
+                "assembly_version": "hg38",
+                "zygosity": "unknown",
+            }
+            for individual in individuals
+        ],
+        prefix=formset_prefix,
+    )
+    rows = _bulk_variant_rows_for_formset(formset)
+
+    return render(
+        request,
+        "lab/partials/modals/bulk_variant_create_form.html",
+        {
+            "formset": formset,
+            "rows": rows,
+            "action_url": action_url,
+            "can_create_variants": bool(rows),
+            "empty_selection": not bool(individuals),
+        },
+    )
+
+
+@login_required
 def test_create_modal(request, sample_id):
     """Render a test creation form or handle submission"""
     from .forms import TestForm
@@ -1091,7 +2885,7 @@ def test_create_modal(request, sample_id):
     if not request.user.has_perm("lab.add_test"):
         return HttpResponseForbidden("You do not have permission to add tests.")
     
-    sample = get_object_or_404(Sample, pk=sample_id)
+    sample = _get_scoped_object_or_404(request, Sample, pk=sample_id)
     individual = sample.individual
     
     if request.method == "POST":
@@ -1193,7 +2987,7 @@ def pipeline_create_modal(request, test_id):
     if not request.user.has_perm("lab.add_pipeline"):
         return HttpResponseForbidden("You do not have permission to add pipelines.")
     
-    test = get_object_or_404(Test, pk=test_id)
+    test = _get_scoped_object_or_404(request, Test, pk=test_id)
     individual = test.sample.individual
     
     if request.method == "POST":
@@ -1288,7 +3082,7 @@ def analysis_create_modal(request, pipeline_id):
     if not request.user.has_perm("lab.add_analysis"):
         return HttpResponseForbidden("You do not have permission to add analyses.")
     
-    pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
+    pipeline = _get_scoped_object_or_404(request, Pipeline, pk=pipeline_id)
     individual = pipeline.test.sample.individual
     
     if request.method == "POST":
@@ -1378,7 +3172,7 @@ def task_create_modal(request, content_type_id, object_id):
     
     ct = get_object_or_404(ContentType, pk=content_type_id)
     Model = ct.model_class()
-    obj = get_object_or_404(Model, pk=object_id)
+    obj = _get_scoped_object_or_404(request, Model, pk=object_id)
     
     
     # Determine target ID and partial name
@@ -1432,6 +3226,7 @@ def task_create_modal(request, content_type_id, object_id):
             content_object=obj,
             individual=individual,
             project=obj if isinstance(obj, Project) else None,
+            user=request.user,
         )
         if form.is_valid():
             task = form.save(commit=False)
@@ -1524,6 +3319,7 @@ def task_create_modal(request, content_type_id, object_id):
             content_object=obj,
             individual=individual,
             project=obj if isinstance(obj, Project) else None,
+            user=request.user,
         )
         # Hide generic fields
         form.fields["content_type"].widget = forms.HiddenInput()
@@ -1570,27 +3366,56 @@ def task_create_modal(request, content_type_id, object_id):
 
 @login_required
 def individual_projects_edit(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     if request.GET.get("display"):
-        return render(request, "lab/partials/tabs/_info.html#projects_display", {"individual": individual})
-    return render(request, "lab/partials/tabs/_info.html#projects_edit", {"individual": individual})
+        return render(
+            request,
+            "lab/partials/tabs/_info.html#projects_display",
+            _individual_projects_context(request, individual),
+        )
+    return render(
+        request,
+        "lab/partials/tabs/_info.html#projects_edit",
+        _individual_projects_context(request, individual),
+    )
 
 
 @login_required
 @require_POST
 def individual_projects_save(request, pk):
-    individual = get_object_or_404(Individual, pk=pk)
+    individual = get_accessible_individual_or_404(request.user, pk=pk)
+    if not request.user.has_perm("lab.change_individual"):
+        return HttpResponseForbidden("You do not have permission to edit this individual.")
     # Expecting a list of project IDs
     project_ids = request.POST.getlist("projects")
     from .models import Project
-    individual.projects.set(Project.objects.filter(id__in=project_ids))
-    return render(request, "lab/partials/tabs/_info.html#projects_display", {"individual": individual})
+    selected_projects = accessible_projects(
+        request.user,
+        Project.objects.filter(id__in=project_ids),
+    )
+    if request.user.is_staff or request.user.is_superuser:
+        individual.projects.set(selected_projects)
+    else:
+        hidden_project_ids = individual.projects.exclude(
+            pk__in=accessible_projects(request.user, Project.objects.all())
+        ).values_list("pk", flat=True)
+        individual.projects.set(
+            list(hidden_project_ids)
+            + list(selected_projects.values_list("pk", flat=True))
+        )
+    return render(
+        request,
+        "lab/partials/tabs/_info.html#projects_display",
+        _individual_projects_context(request, individual),
+    )
 
 
 @login_required
 def project_search(request):
     query = request.GET.get("q", "")
-    projects = Project.objects.all()
+    projects = accessible_projects(request.user, Project.objects.all())
     if query:
         projects = filter_normalized_contains(projects, ["name"], query)
     return render(request, "lab/partials/project_picker_results.html", {"projects": projects[:10]})
@@ -1598,14 +3423,17 @@ def project_search(request):
 
 @login_required
 def project_individual_search(request, pk):
-    project = get_object_or_404(Project, pk=pk)
+    project = get_accessible_project_or_404(request.user, pk=pk)
     if not request.user.has_perm("lab.change_project"):
         return HttpResponseForbidden("You do not have permission to change projects.")
     query = (request.GET.get("search") or request.GET.get("q") or "").strip()
     individuals = Individual.objects.none()
     if query:
         individuals = filter_normalized_contains(
-            Individual.objects.prefetch_related("cross_ids__id_type", "statuses"),
+            accessible_individuals(
+                request.user,
+                Individual.objects.prefetch_related("cross_ids__id_type", "statuses"),
+            ),
             ["cross_ids__id_value", "cross_ids__id_type__name"],
             query,
         ).distinct()[:15]
@@ -1664,17 +3492,82 @@ def _project_individuals_page_context(request, project, per_page: int = 25):
 @login_required
 def project_individuals_page(request, pk):
     """Return only the next chunk of project-individual rows for infinite scroll."""
-    project = get_object_or_404(Project, pk=pk)
+    project = get_accessible_project_or_404(request.user, pk=pk)
     context = _project_individuals_page_context(request, project)
     # Only return table rows; outer template wraps them in <tbody>.
     return render(request, "lab/partials/project_individual_rows.html", context)
 
 
 @login_required
+def project_memberships_panel(request, pk):
+    if not _user_can_manage_project_memberships_from_project(request.user):
+        return HttpResponseForbidden("You do not have permission to manage project memberships.")
+    project = get_object_or_404(Project, pk=pk)
+    return render(
+        request,
+        "lab/partials/tabs/_project_members.html",
+        _project_membership_context(project),
+    )
+
+
+@login_required
+@require_POST
+def project_membership_add(request, pk):
+    if not _user_can_manage_project_memberships_from_project(request.user):
+        return HttpResponseForbidden("You do not have permission to manage project memberships.")
+    project = get_object_or_404(Project, pk=pk)
+    from .forms import ProjectMembershipForm
+
+    form = ProjectMembershipForm(request.POST, project=project)
+    if form.is_valid():
+        form.save(user=request.user)
+        form = ProjectMembershipForm(project=project)
+    context = _project_membership_context(project, form=form)
+    return render(request, "lab/partials/tabs/_project_members.html", context)
+
+
+@login_required
+@require_POST
+def project_membership_update(request, project_pk, membership_pk):
+    if not _user_can_manage_project_memberships_from_project(request.user):
+        return HttpResponseForbidden("You do not have permission to manage project memberships.")
+    project = get_object_or_404(Project, pk=project_pk)
+    membership = get_object_or_404(ProjectMembership, pk=membership_pk, project=project)
+    role = request.POST.get("role")
+    valid_roles = {choice[0] for choice in ProjectMembership.Role.choices}
+    if role in valid_roles:
+        membership.role = role
+        membership.save(update_fields=["role"])
+    return render(
+        request,
+        "lab/partials/tabs/_project_members.html",
+        _project_membership_context(project),
+    )
+
+
+@login_required
+def project_membership_remove(request, project_pk, membership_pk):
+    if request.method not in ("DELETE", "POST"):
+        from django.http import HttpResponseNotAllowed
+
+        return HttpResponseNotAllowed(["DELETE", "POST"])
+    if not _user_can_manage_project_memberships_from_project(request.user):
+        return HttpResponseForbidden("You do not have permission to manage project memberships.")
+    project = get_object_or_404(Project, pk=project_pk)
+    membership = get_object_or_404(ProjectMembership, pk=membership_pk, project=project)
+    membership.delete()
+    return render(
+        request,
+        "lab/partials/tabs/_project_members.html",
+        _project_membership_context(project),
+    )
+
+
+@login_required
 def task_detail_edit(request, pk):
     """Return the edit form partial for a task's details."""
     from .forms import TaskEditForm
-    task = get_object_or_404(Task, pk=pk)
+    task = _get_scoped_object_or_404(request, Task, pk=pk)
     form = TaskEditForm(instance=task)
     return render(request, "lab/task_detail.html#task_details", {
         "task": task,
@@ -1688,7 +3581,7 @@ def task_detail_edit(request, pk):
 def task_detail_save(request, pk):
     """Save edited task details and return the display partial."""
     from .forms import TaskEditForm
-    task = get_object_or_404(Task, pk=pk)
+    task = _get_scoped_object_or_404(request, Task, pk=pk)
     form = TaskEditForm(request.POST, instance=task)
     if form.is_valid():
         task = form.save()
@@ -1713,7 +3606,7 @@ def project_tasks_page(request, pk):
     from .models import Task
     from django.core.paginator import Paginator
 
-    project = get_object_or_404(Project, pk=pk)
+    project = get_accessible_project_or_404(request.user, pk=pk)
     per_page = 5
     tasks_qs = (
         project.tasks
@@ -1736,8 +3629,8 @@ def project_tasks_page(request, pk):
 def project_individual_add(request, project_pk, individual_pk):
     if not request.user.has_perm("lab.change_project"):
         return HttpResponseForbidden("You do not have permission to change projects.")
-    project = get_object_or_404(Project, pk=project_pk)
-    individual = get_object_or_404(Individual, pk=individual_pk)
+    project = get_accessible_project_or_404(request.user, pk=project_pk)
+    individual = get_accessible_individual_or_404(request.user, pk=individual_pk)
     project.individuals.add(individual)
     project.refresh_from_db()
     project = (
@@ -1760,8 +3653,8 @@ def project_individual_remove(request, project_pk, individual_pk):
         return HttpResponseNotAllowed(["DELETE", "POST"])
     if not request.user.has_perm("lab.change_project"):
         return HttpResponseForbidden("You do not have permission to change projects.")
-    project = get_object_or_404(Project, pk=project_pk)
-    individual = get_object_or_404(Individual, pk=individual_pk)
+    project = get_accessible_project_or_404(request.user, pk=project_pk)
+    individual = get_accessible_individual_or_404(request.user, pk=individual_pk)
     project.individuals.remove(individual)
     project.refresh_from_db()
     project = (
@@ -1800,7 +3693,7 @@ def document_preview(request, model_name, pk):
     from django.apps import apps
     try:
         Model = apps.get_model("lab", model_name)
-        obj = get_object_or_404(Model, pk=pk)
+        obj = _get_scoped_object_or_404(request, Model, pk=pk)
     except (LookupError, ValueError):
         return HttpResponse("Invalid model or object.")
 
@@ -1820,7 +3713,7 @@ def document_preview(request, model_name, pk):
 def document_download(request, model_name, pk):
     try:
         Model = apps.get_model("lab", model_name)
-        obj = get_object_or_404(Model, pk=pk)
+        obj = _get_scoped_object_or_404(request, Model, pk=pk)
     except (LookupError, ValueError):
         return HttpResponse("Invalid model or object.")
 
@@ -1845,16 +3738,36 @@ def project_create_modal(request):
     """
     from .forms import ProjectCreateWithCopyForm
 
+    if not request.user.has_perm("lab.add_project"):
+        return HttpResponseForbidden("You do not have permission to add projects.")
+
     if request.method == "POST":
         form = ProjectCreateWithCopyForm(request.POST)
+        form.fields["copy_from_projects"].queryset = accessible_projects(
+            request.user,
+            Project.objects.all(),
+        ).order_by("name")
         if form.is_valid():
             # BaseForm.save handles created_by when possible
-            project = form.save()
+            project = form.save(user=request.user)
+
+            if not (request.user.is_staff or request.user.is_superuser):
+                ProjectMembership.objects.get_or_create(
+                    project=project,
+                    user=request.user,
+                    defaults={
+                        "role": ProjectMembership.Role.MANAGER,
+                        "created_by": request.user,
+                    },
+                )
 
             copy_from = form.cleaned_data.get("copy_from_projects")
             if copy_from:
                 individual_ids = (
-                    Individual.objects.filter(projects__in=copy_from)
+                    accessible_individuals(
+                        request.user,
+                        Individual.objects.filter(projects__in=copy_from),
+                    )
                     .values_list("id", flat=True)
                     .distinct()
                 )
@@ -1867,6 +3780,10 @@ def project_create_modal(request):
             return response
     else:
         form = ProjectCreateWithCopyForm()
+        form.fields["copy_from_projects"].queryset = accessible_projects(
+            request.user,
+            Project.objects.all(),
+        ).order_by("name")
 
     context = {
         "form": form,
@@ -1881,7 +3798,7 @@ def project_create_modal(request):
 @login_required
 def project_delete_modal(request, pk):
     """Confirm and delete a project from the project detail page."""
-    project = get_object_or_404(Project, pk=pk)
+    project = get_accessible_project_or_404(request.user, pk=pk)
 
     if not request.user.has_perm("lab.delete_project"):
         return HttpResponseForbidden("You do not have permission to delete projects.")
@@ -1905,8 +3822,11 @@ def request_form_create_modal(request, individual_id):
     """Render an analysis request form creation modal or handle submission"""
     from .forms import AnalysisRequestFormForm
     from .models import Individual
+
+    if not request.user.has_perm("lab.add_analysisrequestform"):
+        return HttpResponseForbidden("You do not have permission to upload request forms.")
     
-    individual = get_object_or_404(Individual, pk=individual_id)
+    individual = get_accessible_individual_or_404(request.user, pk=individual_id)
     
     if request.method == "POST":
         form = AnalysisRequestFormForm(request.POST, request.FILES)
@@ -1935,8 +3855,11 @@ def report_create_modal(request, analysis_id):
     """Render an analysis report creation modal or handle submission"""
     from .forms import AnalysisReportForm
     from .models import Analysis
+
+    if not request.user.has_perm("lab.add_analysisreport"):
+        return HttpResponseForbidden("You do not have permission to upload analysis reports.")
     
-    analysis = get_object_or_404(Analysis, pk=analysis_id)
+    analysis = _get_scoped_object_or_404(request, Analysis, pk=analysis_id)
     individual = analysis.pipeline.test.sample.individual
     workflow_target_id = f"#workflow-content-{individual.pk}"
     
@@ -1985,7 +3908,11 @@ def generate_analysis_report_docx(request, analysis_id):
     )
     from .forms import AnalysisReportGenerateForm
 
-    analysis = get_object_or_404(
+    if not request.user.has_perm("lab.add_analysisreport"):
+        return HttpResponseForbidden("You do not have permission to generate analysis reports.")
+
+    analysis = _get_scoped_object_or_404(
+        request,
         Analysis.objects.select_related("pipeline__test__sample__individual", "pipeline__test__test_type"),
         pk=analysis_id,
     )
@@ -2279,7 +4206,11 @@ def report_replace_modal(request, report_id):
     from .forms import AnalysisReportReplaceForm
     from .models import AnalysisReport
 
-    report = get_object_or_404(AnalysisReport.objects.select_related("analysis__pipeline__test__sample__individual"), pk=report_id)
+    report = _get_scoped_object_or_404(
+        request,
+        AnalysisReport.objects.select_related("analysis__pipeline__test__sample__individual"),
+        pk=report_id,
+    )
     individual = report.analysis.pipeline.test.sample.individual if report.analysis and report.analysis.pipeline_id else None
     workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
 
@@ -2474,7 +4405,7 @@ def workflow_delete_confirm(request, model_name, pk):
     if not request.user.has_perm(config["permission"]):
         return HttpResponseForbidden("You do not have permission to delete this item.")
 
-    obj = get_object_or_404(config["model"], pk=pk)
+    obj = _get_scoped_object_or_404(request, config["model"], pk=pk)
     context = _workflow_delete_context(model_name, obj, config)
     return render(request, "lab/partials/modals/workflow_delete_confirm.html", context)
 
@@ -2491,7 +4422,7 @@ def workflow_delete(request, model_name, pk):
     if not request.user.has_perm(config["permission"]):
         return HttpResponseForbidden("You do not have permission to delete this item.")
 
-    obj = get_object_or_404(config["model"], pk=pk)
+    obj = _get_scoped_object_or_404(request, config["model"], pk=pk)
     individual = _resolve_workflow_individual(obj)
     blockers = _workflow_delete_blockers(obj, config)
     if blockers:
@@ -2554,13 +4485,20 @@ def variant_create_modal(request, individual_id=None, analysis_id=None):
     from variant.forms import VARIANT_FORM_CLASSES, VariantTypeForm
     from lab.models import Individual, Analysis
 
+    if not request.user.has_perm("variant.add_variant"):
+        return HttpResponseForbidden("You do not have permission to add variants.")
+
     analysis = None
     individual = None
     title = ""
     post_url = ""
 
     if analysis_id:
-        analysis = get_object_or_404(Analysis.objects.select_related("pipeline__test__sample__individual"), pk=analysis_id)
+        analysis = _get_scoped_object_or_404(
+            request,
+            Analysis.objects.select_related("pipeline__test__sample__individual"),
+            pk=analysis_id,
+        )
         pipeline = analysis.pipeline
         if not pipeline:
             return HttpResponse("Analysis has no pipeline attached.", status=400)
@@ -2568,7 +4506,7 @@ def variant_create_modal(request, individual_id=None, analysis_id=None):
         title = f"Add Variant for {analysis.type.name if analysis.type else 'Analysis'}"
         post_url = reverse("lab:variant_create_for_analysis_modal", kwargs={"analysis_id": analysis.id})
     elif individual_id:
-        individual = get_object_or_404(Individual, pk=individual_id)
+        individual = get_accessible_individual_or_404(request.user, pk=individual_id)
         title = f"Add Variant for {individual.primary_id}"
         post_url = reverse("lab:variant_create_for_individual_modal", kwargs={"individual_id": individual.id})
     else:
@@ -2849,7 +4787,8 @@ def variant_detail_partial(request, pk):
     """Return the expanded detail panel for a single variant row."""
     from variant.models import Variant
     from variant.forms import VariantACMGEvidenceOverrideForm
-    variant = get_object_or_404(
+    variant = _get_scoped_object_or_404(
+        request,
         Variant.objects.select_related(
             "individual",
             "created_by",
@@ -2897,7 +4836,7 @@ def variant_detail_partial(request, pk):
     gene_cohort_data = []
     for gene in variant.genes.all():
         gene_variants = (
-            Variant.objects.filter(genes=gene)
+            accessible_variants(request.user, Variant.objects.filter(genes=gene))
             .select_related(
                 "individual",
                 "snv",
@@ -2961,6 +4900,7 @@ def variant_genebe_fetch(request, pk):
     if not request.user.has_perm("variant.change_variant"):
         return HttpResponseForbidden("You do not have permission to fetch GeneBe classifications.")
 
+
     variant = get_object_or_404(
         Variant.objects.select_related(
             "individual",
@@ -3007,7 +4947,11 @@ def variant_acmg_evidence_save(request, pk):
         _record_acmg_map,
     )
 
-    variant = get_object_or_404(Variant.objects.prefetch_related("annotations", "acmg_evidence_overrides"), pk=pk)
+    variant = _get_scoped_object_or_404(
+        request,
+        Variant.objects.prefetch_related("annotations", "acmg_evidence_overrides"),
+        pk=pk,
+    )
 
     if not request.user.has_perm("variant.change_variant"):
         return HttpResponseForbidden("You do not have permission to change ACMG evidence.")
@@ -3065,7 +5009,11 @@ def variant_acmg_evidence_save(request, pk):
             },
         )
 
-    variant = Variant.objects.prefetch_related("annotations", "acmg_evidence_overrides").get(pk=pk)
+    variant = _get_scoped_object_or_404(
+        request,
+        Variant.objects.prefetch_related("annotations", "acmg_evidence_overrides"),
+        pk=pk,
+    )
 
     genebe = variant.annotations.filter(source="genebe").first()
     genebe_data = genebe.data if genebe else None
@@ -3081,11 +5029,11 @@ def variant_acmg_evidence_save(request, pk):
 # ---------------------------------------------------------------------------
 
 def _get_config_registry():
-    from .models import Contact, SampleType, TestType, Institution, PipelineType, AnalysisType, IdentifierType, Status, StatusGroup
+    from .models import Contact, SampleType, TestType, Institution, PipelineType, AnalysisType, IdentifierType, Status, StatusGroup, ProjectMembership
     from .forms import (
         ContactConfigForm, SampleTypeForm, TestTypeForm, InstitutionConfigForm,
         PipelineTypeForm, AnalysisTypeForm, IdentifierTypeForm,
-        StatusConfigForm, StatusGroupConfigForm,
+        StatusConfigForm, StatusGroupConfigForm, ProjectMembershipForm,
     )
     return {
         "sampletype": {
@@ -3159,6 +5107,13 @@ def _get_config_registry():
                 {"accessor": "institutions_as_staff", "verbose_name": "institution"},
             ],
         },
+        "projectmembership": {
+            "model": ProjectMembership, "form": ProjectMembershipForm,
+            "label": "Project Memberships", "icon": "fa-solid fa-user-shield",
+            "fields": ["project", "user", "role"],
+            "usage_relation": None,
+            "usage_label": "",
+        },
     }
 
 
@@ -3205,7 +5160,11 @@ def _build_section_context(request, key, config):
     from django.db.models import Count
 
     usage_relation = config.get("usage_relation")
-    if usage_relation:
+    if key == "projectmembership":
+        objects = config["model"].objects.select_related(
+            "project", "user", "created_by"
+        ).order_by("project__name", "user__last_name", "user__first_name", "user__username")
+    elif usage_relation:
         objects = config["model"].objects.annotate(
             usage_count=Count(usage_relation, distinct=True)
         )

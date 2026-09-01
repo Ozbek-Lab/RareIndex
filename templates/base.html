@@ -96,7 +96,7 @@
     <script defer src="{% static 'lab/js/family_pedigree.js' %}"></script>
     
     <!-- HTMX -->
-    <script defer src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script defer src="{% static 'vendor/js/htmx.min.js' %}"></script>
     
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
@@ -449,6 +449,44 @@
             event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
             cleanFilterRequestParameters(event);
         });
+
+        document.body.addEventListener('htmx:responseError', showGenericModalRequestError);
+        document.body.addEventListener('htmx:sendError', showGenericModalRequestError);
+        document.body.addEventListener('htmx:timeout', showGenericModalRequestError);
+
+        function showGenericModalRequestError(event) {
+            const detail = event.detail || {};
+            const modalContent = document.getElementById('generic-modal-content');
+            if (!modalContent || detail.target !== modalContent) return;
+
+            const xhr = detail.xhr;
+            const status = xhr ? xhr.status : null;
+            const statusText = xhr && xhr.statusText ? ` ${xhr.statusText}` : '';
+            let message = 'The modal request could not be loaded.';
+
+            if (status === 403) {
+                message = 'You do not have permission to open this bulk create form.';
+            } else if (status === 404) {
+                message = 'The bulk create endpoint was not found. Restart the development server so the new URL is loaded.';
+            } else if (status) {
+                message = `The modal request failed (${status}${statusText}).`;
+            }
+
+            modalContent.innerHTML = `
+                <div class="modal-header border-b border-base-200 pb-4 mb-4">
+                    <h3 class="font-bold text-lg text-error flex items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        Could Not Load
+                    </h3>
+                </div>
+                <div class="rounded-box border border-error/20 bg-error/5 p-4 text-sm text-base-content/80">
+                    ${message}
+                </div>
+                <div class="modal-action mt-6 pt-4 border-t border-base-200">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('generic-modal').close()">Close</button>
+                </div>
+            `;
+        }
 
         function cleanFilterRequestParameters(event) {
             const parameters = event.detail && event.detail.parameters;

@@ -1,9 +1,9 @@
 {% load lab_tags %}
 <div x-data="{
         state: 'neutral',
-        value: '{{ value }}',
-        name: '{{ name }}',
-        icon: '{{ icon|default:'' }}',
+        value: '{{ value|escapejs }}',
+        name: '{{ name|escapejs }}',
+        icon: '{{ icon|default_if_none:""|escapejs }}',
         init() {
             // Check initial state from server-rendered active lists
             const currentValues = {{ current_values|safe|default:'[]' }};
@@ -71,7 +71,7 @@
 
     <!-- Label -->
     <span
-      x-text="'{{ short_label|default:'' }}'.trim() || '{{ label }}'.trim() || '{{ value }}'"
+      x-text="'{{ short_label|default_if_none:""|escapejs }}'.trim() || '{{ label|default_if_none:""|escapejs }}'.trim() || '{{ value|escapejs }}'"
       {% if short_label %}title="{{ label }}"{% endif %}
     ></span>
 
