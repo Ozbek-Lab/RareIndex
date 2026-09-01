@@ -17,13 +17,12 @@ from variant.models import (
     VARIANT_TYPE_RELATION_LOOKUPS,
     Variant,
     normalize_variant_type_value,
-    Annotation,
     SNV,
     delins,
     CNV,
     SV,
     Repeat,
-
+)
 from variant.templatetags.variant_filters import ACMG_CRITERIA_INFO
 
 FILTER_MODE_SUFFIX = "__mode"

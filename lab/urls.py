@@ -21,6 +21,7 @@ from .views import (
     MapVisualizationView,
     issue_plot_token_view,
     generic_plot_data,
+    generic_detail,
     PlotGalleryView,
     add_widget,
     remove_widget,
@@ -136,6 +137,7 @@ urlpatterns = [
     path("variants/", VariantListView.as_view(), name="variant_list"),
     path("variants/create/", variant_create, name="variant_create"),
     path("variants/<int:pk>/update/", variant_update, name="variant_update"),
+    path("detail/", generic_detail, name="generic_detail"),
     # Map visualization (current and default at /visualizations/)
     path("visualizations/", MapVisualizationView.as_view(), name="map_visualization"),
     path("individuals/export/", IndividualExportView.as_view(), name="individual_export"),

@@ -39,23 +39,35 @@ def variant_create(request):
                 
         return render(request, "variant/variant_create_select.html", context)
 
-    # If we have pipeline_id and variant_type, proceed to specific form
-    pipeline = get_object_or_404(Pipeline, pk=pipeline_id)
-    if not user_can_access_object(request.user, pipeline):
-        raise Http404
-    
-    form_class = {
-        "snv": SNVForm,
-        "cnv": CNVForm,
-        "sv": SVForm,
-        "repeat": RepeatForm,
-    }.get(variant_type)
+    analysis = None
+    pipeline = None
+    if analysis_id:
+        analysis = get_object_or_404(
+            Analysis.objects.select_related("pipeline__test__sample__individual"),
+            pk=analysis_id,
+        )
+        if not user_can_access_object(request.user, analysis):
+            raise Http404
+        pipeline = analysis.pipeline
+        if pipeline is None:
+            return HttpResponseBadRequest("Selected analysis has no pipeline.")
+    elif pipeline_id:
+        pipeline = get_object_or_404(
+            Pipeline.objects.select_related("test__sample__individual"),
+            pk=pipeline_id,
+        )
+        if not user_can_access_object(request.user, pipeline):
+            raise Http404
+    else:
+        return HttpResponseBadRequest("Missing Variant Context.")
+
+    individual = pipeline.test.sample.individual
+    form_class = VARIANT_FORM_CLASSES.get(variant_type)
     
     if not form_class:
         return HttpResponseBadRequest("Invalid Variant Type.")
         
     if request.method == "POST":
-        individual = pipeline.test.sample.individual
         form = form_class(request.POST, individual=individual)
         if form.is_valid():
             variant = form.save(commit=False)
@@ -72,10 +84,15 @@ def variant_create(request):
                 return response
             
             url = reverse("lab:generic_detail")
-            params = urlencode({"app_label": "lab", "model_name": "Pipeline", "pk": pipeline.id})
+            detail_obj = analysis or pipeline
+            params = urlencode({
+                "app_label": "lab",
+                "model_name": detail_obj.__class__.__name__,
+                "pk": detail_obj.id,
+            })
             return redirect(f"{url}?{params}")
     else:
-        form = form_class()
+        form = form_class(individual=individual)
         
     return render(request, "variant/variant_form.html", {
         "form": form,
