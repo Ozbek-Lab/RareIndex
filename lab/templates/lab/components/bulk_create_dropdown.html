@@ -1,0 +1,85 @@
+<div class="dropdown dropdown-end dropdown-bottom">
+    <button type="button"
+            tabindex="0"
+            class="btn btn-ghost btn-sm gap-1"
+            aria-label="Bulk create"
+            aria-haspopup="menu">
+        <span class="relative inline-flex h-4 w-4 shrink-0 items-center justify-center">
+            <i class="fa-solid fa-plus absolute text-[6px] opacity-30 top-0 right-0" aria-hidden="true"></i>
+            <i class="fa-solid fa-plus absolute text-[7px] opacity-60 top-[3px] right-[3px]" aria-hidden="true"></i>
+            <i class="fa-solid fa-plus absolute text-[8px] bottom-0 left-0" aria-hidden="true"></i>
+        </span>
+        Bulk Create
+        <i class="fa-solid fa-chevron-down text-[10px] opacity-50" aria-hidden="true"></i>
+    </button>
+    <ul tabindex="0"
+        role="menu"
+        aria-label="Bulk create options"
+        class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-52 mt-2">
+        <li role="none">
+            <button type="button"
+                    role="menuitem"
+                    class="flex items-center gap-3 py-2.5 px-4 font-normal"
+                    hx-get="/htmx/bulk-create/samples/"
+                    hx-target="#generic-modal-content"
+                    hx-swap="innerHTML"
+                    onclick="document.getElementById('generic-modal').showModal()"
+                    data-bulk-create-type="sample">
+                <i class="fa-solid fa-vial text-secondary text-xs w-4 text-center" aria-hidden="true"></i>
+                Samples
+            </button>
+        </li>
+        <li role="none">
+            <button type="button"
+                    role="menuitem"
+                    class="flex items-center gap-3 py-2.5 px-4 font-normal"
+                    hx-get="/htmx/bulk-create/tests/"
+                    hx-target="#generic-modal-content"
+                    hx-swap="innerHTML"
+                    onclick="document.getElementById('generic-modal').showModal()"
+                    data-bulk-create-type="test">
+                <i class="fa-solid fa-flask text-primary text-xs w-4 text-center" aria-hidden="true"></i>
+                Tests
+            </button>
+        </li>
+        <li role="none">
+            <button type="button"
+                    role="menuitem"
+                    class="flex items-center gap-3 py-2.5 px-4 font-normal"
+                    hx-get="/htmx/bulk-create/pipelines/"
+                    hx-target="#generic-modal-content"
+                    hx-swap="innerHTML"
+                    onclick="document.getElementById('generic-modal').showModal()"
+                    data-bulk-create-type="pipeline">
+                <i class="fa-solid fa-diagram-project text-accent text-xs w-4 text-center" aria-hidden="true"></i>
+                Pipelines
+            </button>
+        </li>
+        <li role="none">
+            <button type="button"
+                    role="menuitem"
+                    class="flex items-center gap-3 py-2.5 px-4 font-normal"
+                    hx-get="/htmx/bulk-create/analyses/"
+                    hx-target="#generic-modal-content"
+                    hx-swap="innerHTML"
+                    onclick="document.getElementById('generic-modal').showModal()"
+                    data-bulk-create-type="analysis">
+                <i class="fa-solid fa-laptop-medical text-warning text-xs w-4 text-center" aria-hidden="true"></i>
+                Analyses
+            </button>
+        </li>
+        <li role="none">
+            <button type="button"
+                    role="menuitem"
+                    class="flex items-center gap-3 py-2.5 px-4 font-normal"
+                    hx-get="/htmx/bulk-create/variants/"
+                    hx-target="#generic-modal-content"
+                    hx-swap="innerHTML"
+                    onclick="document.getElementById('generic-modal').showModal()"
+                    data-bulk-create-type="variant">
+                <i class="fa-solid fa-dna text-info text-xs w-4 text-center" aria-hidden="true"></i>
+                Variants
+            </button>
+        </li>
+    </ul>
+</div>

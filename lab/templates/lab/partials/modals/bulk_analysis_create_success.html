@@ -1,0 +1,43 @@
+<div class="modal-header border-b border-base-200 pb-4 mb-5">
+    <h3 class="font-bold text-lg text-success flex items-center gap-2">
+        <i class="fa-solid fa-circle-check"></i>
+        Analyses Created
+    </h3>
+</div>
+
+<div class="rounded-box border border-success/20 bg-success/5 px-4 py-3 text-sm text-base-content/80 mb-4">
+    {{ created_analyses|length }} {% if created_analyses|length == 1 %}analysis{% else %}analyses{% endif %} created.
+</div>
+
+<div class="overflow-x-auto rounded-box border border-base-200">
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Analysis Object ID</th>
+                <th>Individual ID</th>
+                <th>Sample</th>
+                <th>Test</th>
+                <th>Pipeline</th>
+                <th>Analysis Type</th>
+                <th>Performed By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for analysis in created_analyses %}
+            <tr>
+                <td class="font-mono">{{ analysis.pk }}</td>
+                <td class="font-mono">{{ analysis.pipeline.test.sample.individual.individual_id }}</td>
+                <td class="font-mono">#{{ analysis.pipeline.test.sample.pk }}</td>
+                <td class="font-mono">#{{ analysis.pipeline.test.pk }} - {{ analysis.pipeline.test.test_type }}</td>
+                <td class="font-mono">#{{ analysis.pipeline.pk }} - {{ analysis.pipeline.type }}</td>
+                <td>{{ analysis.type }}</td>
+                <td>{{ analysis.performed_by.all|join:", " }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="modal-action mt-6 pt-4 border-t border-base-200">
+    <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('generic-modal').close()">Done</button>
+</div>

@@ -1,0 +1,14 @@
+<select name="{{ field_name }}"
+        id="{{ field_id }}"
+        class="select select-bordered select-sm w-full"
+        x-bind:disabled="!linked{% if not analyses %} || true{% endif %}">
+    <option value="">{% if pipeline_selected %}Choose analysis{% else %}Choose pipeline first{% endif %}</option>
+    {% for analysis in analyses %}
+    <option value="{{ analysis.pk }}" {% if selected_analysis_id == analysis.pk|stringformat:"s" %}selected{% endif %}>
+        #{{ analysis.pk }} - {{ analysis.type|default:"Analysis" }}
+    </option>
+    {% endfor %}
+</select>
+{% if pipeline_selected and not analyses %}
+<div class="text-error text-[10px] mt-1" x-show="linked">Selected pipeline has no analyses.</div>
+{% endif %}

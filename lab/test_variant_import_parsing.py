@@ -59,6 +59,17 @@ class VariantImportParsingTests(SimpleTestCase):
         self.assertEqual(record["end"], 120000)
         self.assertEqual(record["sv_type"], "deletion")
 
+    def test_parses_attached_deletion_suffix_as_sv(self):
+        records = _extract_variant_records("chr20:35679278-35685149del")
+
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record["kind"], "sv")
+        self.assertEqual(record["chromosome"], "chr20")
+        self.assertEqual(record["start"], 35679278)
+        self.assertEqual(record["end"], 35685149)
+        self.assertEqual(record["sv_type"], "deletion")
+
     def test_parses_inversion_range_as_sv(self):
         records = _extract_variant_records("chr2:200000-250000 inversion")
 
