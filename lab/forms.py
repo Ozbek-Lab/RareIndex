@@ -1015,6 +1015,21 @@ class ProjectCreateWithCopyForm(ProjectForm):
 
 
 class ProjectMembershipForm(BaseForm):
+    project = forms.ModelMultipleChoiceField(
+        queryset=Project.objects.none(),
+        required=True,
+        label="Projects",
+        widget=forms.SelectMultiple(attrs={"size": 6}),
+        error_messages={"required": "Choose at least one project."},
+    )
+    user = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=True,
+        label="Users",
+        widget=forms.SelectMultiple(attrs={"size": 6}),
+        error_messages={"required": "Choose at least one user."},
+    )
+
     class Meta:
         model = ProjectMembership
         fields = ["project", "user", "role"]
@@ -1026,27 +1041,85 @@ class ProjectMembershipForm(BaseForm):
         self.fields["user"].queryset = User.objects.order_by(
             "last_name", "first_name", "username"
         )
+        self.fields["project"].widget.attrs.update(
+            {"class": "select select-bordered w-full min-h-32"}
+        )
+        self.fields["user"].widget.attrs.update(
+            {"class": "select select-bordered w-full min-h-32"}
+        )
+        if self.instance and self.instance.pk:
+            self.initial["project"] = [self.instance.project_id]
+            self.initial["user"] = [self.instance.user_id]
         if self.fixed_project is not None:
-            self.initial.setdefault("project", self.fixed_project)
+            self.initial["project"] = [self.fixed_project.pk]
             self.fields["project"].required = False
             self.fields["project"].disabled = True
 
     def clean(self):
         cleaned_data = super().clean()
         if self.fixed_project is not None:
-            cleaned_data["project"] = self.fixed_project
+            cleaned_data["project"] = [self.fixed_project]
         return cleaned_data
 
-    def save(self, commit=True, **kwargs):
-        obj = super().save(commit=False)
+    def _post_clean(self):
+        # Project and user are intentionally plural form fields for this
+        # single-row model, so ModelForm's FK assignment step does not apply.
+        return None
+
+    def _selected_projects(self):
         if self.fixed_project is not None:
-            obj.project = self.fixed_project
-        user = kwargs.get("user")
-        if user and not getattr(obj, "created_by_id", None):
-            obj.created_by = user
+            return [self.fixed_project]
+        return list(self.cleaned_data.get("project") or [])
+
+    def _selected_users(self):
+        return list(self.cleaned_data.get("user") or [])
+
+    def save_bulk(self, commit=True, **kwargs):
+        role = self.cleaned_data["role"]
+        created_by = kwargs.get("user")
+        memberships = []
+
+        for project in self._selected_projects():
+            for member in self._selected_users():
+                membership, created = ProjectMembership.objects.get_or_create(
+                    project=project,
+                    user=member,
+                    defaults={
+                        "role": role,
+                        "created_by": created_by,
+                    },
+                )
+                update_fields = []
+                if not created and membership.role != role:
+                    membership.role = role
+                    update_fields.append("role")
+                if (
+                    not created
+                    and created_by
+                    and not getattr(membership, "created_by_id", None)
+                ):
+                    membership.created_by = created_by
+                    update_fields.append("created_by")
+                if commit and update_fields:
+                    membership.save(update_fields=update_fields)
+                memberships.append(membership)
+
+        return memberships
+
+    def save(self, commit=True, **kwargs):
         if commit:
-            obj.save()
-            self.save_m2m()
+            return self.save_bulk(commit=commit, **kwargs)
+
+        projects = self._selected_projects()
+        users = self._selected_users()
+        obj = ProjectMembership(
+            project=projects[0] if projects else self.fixed_project,
+            user=users[0] if users else None,
+            role=self.cleaned_data.get("role"),
+        )
+        user = kwargs.get("user")
+        if user:
+            obj.created_by = user
         return obj
 
 

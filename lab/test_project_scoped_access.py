@@ -168,6 +168,7 @@ class ProjectMembershipManagementUITests(TestCase):
         )
         self.member = User.objects.create_user(username="membership-member", password="password")
         self.target_user = User.objects.create_user(username="target-user", password="password")
+        self.second_target_user = User.objects.create_user(username="second-target", password="password")
         self.project = Project.objects.create(name="Membership Project", created_by=self.staff)
         self.member.user_permissions.add(
             Permission.objects.get(
@@ -254,6 +255,32 @@ class ProjectMembershipManagementUITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(ProjectMembership.objects.filter(pk=membership.pk).exists())
 
+    def test_project_membership_add_from_project_page_accepts_multiple_users(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("lab:project_membership_add", args=[self.project.pk]),
+            {
+                "user": [self.target_user.pk, self.second_target_user.pk],
+                "role": ProjectMembership.Role.EDITOR,
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        created_pairs = set(
+            ProjectMembership.objects.filter(
+                project=self.project,
+                user__in=[self.target_user, self.second_target_user],
+            ).values_list("user__username", "role")
+        )
+        self.assertEqual(
+            created_pairs,
+            {
+                ("target-user", ProjectMembership.Role.EDITOR),
+                ("second-target", ProjectMembership.Role.EDITOR),
+            },
+        )
+
 
 @override_settings(ALLOWED_HOSTS=["testserver"], SECURE_SSL_REDIRECT=False)
 class ProjectMembershipConfigurationTests(TestCase):
@@ -266,7 +293,10 @@ class ProjectMembershipConfigurationTests(TestCase):
         self.view_user = User.objects.create_user(username="config-viewer", password="password")
         self.manager = User.objects.create_user(username="config-manager", password="password")
         self.target_user = User.objects.create_user(username="config-target", password="password")
+        self.second_target_user = User.objects.create_user(username="config-second-target", password="password")
         self.project = Project.objects.create(name="Config Project", created_by=self.staff)
+        self.second_project = Project.objects.create(name="Second Config Project", created_by=self.staff)
+        self.third_project = Project.objects.create(name="Third Config Project", created_by=self.staff)
         self.existing_membership = ProjectMembership.objects.create(
             project=self.project,
             user=self.view_user,
@@ -372,6 +402,82 @@ class ProjectMembershipConfigurationTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(ProjectMembership.objects.filter(pk=membership.pk).exists())
+
+    def test_project_membership_config_add_creates_all_project_user_combinations(self):
+        self.manager.user_permissions.add(
+            self._permission("view_projectmembership"),
+            self._permission("add_projectmembership"),
+            self._permission("change_projectmembership"),
+            self._permission("delete_projectmembership"),
+        )
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("lab:config_form_add", args=["projectmembership"]),
+            {
+                "project": [
+                    self.project.pk,
+                    self.second_project.pk,
+                    self.third_project.pk,
+                ],
+                "user": [
+                    self.target_user.pk,
+                    self.second_target_user.pk,
+                ],
+                "role": ProjectMembership.Role.EDITOR,
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        created_pairs = set(
+            ProjectMembership.objects.filter(
+                project__in=[self.project, self.second_project, self.third_project],
+                user__in=[self.target_user, self.second_target_user],
+            ).values_list("project__name", "user__username", "role", "created_by")
+        )
+        self.assertEqual(
+            created_pairs,
+            {
+                ("Config Project", "config-target", ProjectMembership.Role.EDITOR, self.manager.pk),
+                ("Config Project", "config-second-target", ProjectMembership.Role.EDITOR, self.manager.pk),
+                ("Second Config Project", "config-target", ProjectMembership.Role.EDITOR, self.manager.pk),
+                ("Second Config Project", "config-second-target", ProjectMembership.Role.EDITOR, self.manager.pk),
+                ("Third Config Project", "config-target", ProjectMembership.Role.EDITOR, self.manager.pk),
+                ("Third Config Project", "config-second-target", ProjectMembership.Role.EDITOR, self.manager.pk),
+            },
+        )
+
+    def test_project_membership_config_add_updates_existing_combination_role(self):
+        self.manager.user_permissions.add(
+            self._permission("view_projectmembership"),
+            self._permission("add_projectmembership"),
+            self._permission("change_projectmembership"),
+            self._permission("delete_projectmembership"),
+        )
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("lab:config_form_add", args=["projectmembership"]),
+            {
+                "project": [self.project.pk],
+                "user": [self.view_user.pk, self.target_user.pk],
+                "role": ProjectMembership.Role.MANAGER,
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.existing_membership.refresh_from_db()
+        self.assertEqual(self.existing_membership.role, ProjectMembership.Role.MANAGER)
+        self.assertTrue(
+            ProjectMembership.objects.filter(
+                project=self.project,
+                user=self.target_user,
+                role=ProjectMembership.Role.MANAGER,
+                created_by=self.manager,
+            ).exists()
+        )
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"], SECURE_SSL_REDIRECT=False)

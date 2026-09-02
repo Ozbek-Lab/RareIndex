@@ -132,6 +132,7 @@
                         <th>Location</th>
                         <th>Zyg.</th>
                         <th>Type</th>
+                        <th>Status</th>
                         <th>Genes</th>
                         <th>Added</th>
                         {% if perms.variant.delete_variant %}<th class="w-8"></th>{% endif %}
@@ -158,6 +159,7 @@
                         </td>
                         <td class="text-xs">{{ variant.get_zygosity_display }}</td>
                         <td class="text-xs">{{ variant.type_label }}</td>
+                        <td class="text-xs">{% partial variant_status_badge %}</td>
                         <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
                         <td class="text-xs text-base-content/50">{{ variant.created_at|date:"M d, Y" }}</td>
                         {% if perms.variant.delete_variant %}
@@ -167,7 +169,7 @@
                         {% endif %}
                     </tr>
                     <tr x-cloak x-show="open" class="bg-base-50/40">
-                        <td colspan="{% if perms.variant.delete_variant %}6{% else %}5{% endif %}" class="px-1 pt-0 pb-1">
+                        <td colspan="{% if perms.variant.delete_variant %}7{% else %}6{% endif %}" class="px-1 pt-0 pb-1">
                             <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
                                 <div id="variant-detail-previous-{{ variant.id }}" class="p-2">
                                     <div class="text-[10px] text-base-content/40 italic px-1 py-2">
@@ -758,6 +760,7 @@
                                                                                         </td>
                                                                                         <td class="text-[9px]">{{ variant.get_zygosity_display }}</td>
                                                                                         <td class="text-[9px]">{{ variant.type_label }}</td>
+                                                                                        <td class="text-[9px]">{% partial variant_status_badge %}</td>
                                                                                         <td class="italic text-[9px]">{{ variant.genes.all|join:", "|default:"--" }}</td>
                                                                                         {% if perms.variant.delete_variant %}
                                                                                         <td class="text-right">
@@ -766,7 +769,7 @@
                                                                                         {% endif %}
                                                                                     </tr>
                                                                                     <tr x-cloak x-show="open" class="bg-base-50/40">
-                                                                                        <td colspan="{% if perms.variant.delete_variant %}5{% else %}4{% endif %}" class="px-1 pt-0 pb-1">
+                                                                                        <td colspan="{% if perms.variant.delete_variant %}6{% else %}5{% endif %}" class="px-1 pt-0 pb-1">
                                                                                             <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
                                                                                                 <div id="variant-detail-report-{{ report.id }}-{{ variant.id }}" class="p-2">
                                                                                                     <div class="text-[10px] text-base-content/40 italic px-1 py-2">
@@ -824,6 +827,7 @@
                                                                                     <th>Location</th>
                                                                                     <th>Zyg.</th>
                                                                                     <th>Type</th>
+                                                                                    <th>Status</th>
                                                                                     <th>Genes</th>
                                                                                     {% if perms.variant.delete_variant %}<th class="w-8"></th>{% endif %}
                                                                                 </tr>
@@ -851,6 +855,7 @@
                                                                                         </td>
                                                                                         <td class="text-xs">{{ variant.get_zygosity_display }}</td>
                                                                                         <td class="text-xs">{{ variant.type_label }}</td>
+                                                                                        <td class="text-xs">{% partial variant_status_badge %}</td>
                                                                                         <td class="italic text-xs">{{ variant.genes.all|join:", "|default:"--" }}</td>
                                                                                         {% if perms.variant.delete_variant %}
                                                                                         <td class="text-right">
@@ -859,7 +864,7 @@
                                                                                         {% endif %}
                                                                                     </tr>
                                                                                     <tr x-cloak x-show="open" class="bg-base-50/40">
-                                                                                        <td colspan="{% if perms.variant.delete_variant %}6{% else %}5{% endif %}" class="px-1 pt-0 pb-1">
+                                                                                        <td colspan="{% if perms.variant.delete_variant %}7{% else %}6{% endif %}" class="px-1 pt-0 pb-1">
                                                                                             <div class="rounded-lg border border-base-200 bg-base-100 shadow-sm overflow-hidden">
                                                                                                 <div id="variant-detail-analysis-{{ analysis.id }}-{{ variant.id }}" class="p-2">
                                                                                                     <div class="text-[10px] text-base-content/40 italic px-1 py-2">
@@ -1140,6 +1145,85 @@
                 {% endfor %}
             {% endfor %}
         </ul>
+    </div>
+{% endpartialdef %}
+
+{% partialdef variant_status_badge %}
+    <div class="dropdown dropdown-end dropdown-bottom" id="workflow-variant-status-{{ variant.id }}">
+        {% get_object_statuses variant as active_statuses %}
+        {% if perms.variant.change_variant or perms.variant.change_annotation %}
+        <div tabindex="0" role="button" class="flex items-center gap-0.5 cursor-pointer rounded-md hover:bg-base-200 px-1 py-0.5 transition-all">
+            {% if active_statuses %}
+                {% for s in active_statuses %}
+                    <span class="badge badge-sm badge-ghost gap-1 font-normal text-xs border-base-content/5">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[9px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        {{ s.display_name }}
+                    </span>
+                {% endfor %}
+            {% else %}
+                <span class="badge badge-sm badge-ghost font-normal text-xs opacity-40"><i class="fa-solid fa-tag text-[9px]"></i> No Status</span>
+            {% endif %}
+            <i class="fa-solid fa-chevron-down text-[6px] opacity-40"></i>
+        </div>
+        <ul tabindex="0" class="dropdown-content z-[100] menu menu-xs p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-64 md:w-72 mt-1">
+            {% get_statuses variant as available_statuses %}
+            {% get_content_type_id variant as ct_id %}
+            {% regroup available_statuses by group.name as grouped_statuses %}
+            {% for grp in grouped_statuses %}
+                {% if grp.grouper %}
+                <li class="menu-title text-[7px] uppercase opacity-50 px-2.5 pt-1.5 pb-0.5 flex items-center gap-1">
+                    <i class="fa-regular fa-circle-dot text-[6px]"></i> {{ grp.grouper }}
+                </li>
+                {% endif %}
+                {% for s in grp.list %}
+                {% is_status_active variant s as s_active %}
+                <li>
+                    <a hx-post="{% url 'lab:update_status' ct_id variant.id s.id %}"
+                       hx-target="#workflow-variant-status-{{ variant.id }}"
+                       hx-swap="outerHTML"
+                       class="flex items-center gap-2 py-2 px-2.5 hover:bg-base-200 {% if s_active %}bg-base-200/60 font-semibold{% endif %}">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[9px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        <span class="flex-1 text-[10px]">{{ s.name }}</span>
+                        {% if grp.grouper %}
+                            <i class="fa-{% if s_active %}solid fa-circle-dot{% else %}regular fa-circle{% endif %} text-[9px] {% if s_active %}opacity-60{% else %}opacity-20{% endif %}"></i>
+                        {% elif s_active %}
+                            <i class="fa-solid fa-check text-[9px] opacity-50"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                {% empty %}
+                <li><span class="text-[10px] text-base-content/40 italic px-2 py-1">No statuses available.</span></li>
+                {% endfor %}
+            {% empty %}
+                <li><span class="text-[10px] text-base-content/40 italic px-2 py-1">No statuses available.</span></li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="flex items-center gap-0.5 px-1 py-0.5">
+            {% if active_statuses %}
+                {% for s in active_statuses %}
+                    <span class="badge badge-sm badge-ghost gap-1 font-normal text-xs border-base-content/5">
+                        {% if s.icon %}
+                            <i class="fa-solid {{ s.icon }} text-[9px]" style="color: {{ s.color }};"></i>
+                        {% else %}
+                            <span class="size-1 rounded-full ring-1 ring-base-content/10" style="background-color: {{ s.color }};"></span>
+                        {% endif %}
+                        {{ s.display_name }}
+                    </span>
+                {% endfor %}
+            {% else %}
+                <span class="badge badge-sm badge-ghost font-normal text-xs opacity-40"><i class="fa-solid fa-tag text-[9px]"></i> No Status</span>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 {% endpartialdef %}
 
