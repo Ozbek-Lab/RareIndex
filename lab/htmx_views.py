@@ -1080,7 +1080,31 @@ def update_status(request, content_type_id, object_id, status_id):
     }
 
     if ct.app_label == "variant" and ct.model == "variant":
-        response = render(request, "lab/partials/variant_detail.html#variant_status_controls", context)
+        def render_oob_partial(template_name, target_id):
+            html = render(request, template_name, context).content.decode("utf-8")
+            html = html.replace(
+                f'id="{target_id}"',
+                f'id="{target_id}" hx-swap-oob="outerHTML"',
+                1,
+            )
+            return html.encode("utf-8")
+
+        detail_target_id = f"variant-status-controls-{obj.pk}"
+        workflow_target_id = f"workflow-variant-status-{obj.pk}"
+        request_target_id = request.headers.get("HX-Target", "").lstrip("#")
+
+        if request_target_id == workflow_target_id:
+            response = render(request, "lab/partials/tabs/_workflow.html#variant_status_badge", context)
+            response.content += render_oob_partial(
+                "lab/partials/variant_detail.html#variant_status_controls",
+                detail_target_id,
+            )
+        else:
+            response = render(request, "lab/partials/variant_detail.html#variant_status_controls", context)
+            response.content += render_oob_partial(
+                "lab/partials/tabs/_workflow.html#variant_status_badge",
+                workflow_target_id,
+            )
 
         from lab.tables import _render_status_badges
         from django.utils.html import format_html
@@ -5275,12 +5299,15 @@ def config_form(request, model_name, pk=None):
     if request.method == "POST":
         form = FormClass(request.POST, instance=instance)
         if form.is_valid():
-            obj = form.save(commit=False)
-            if not getattr(obj, "created_by_id", None):
-                obj.created_by = request.user
-            obj.save()
-            if hasattr(form, "save_m2m"):
-                form.save_m2m()
+            if model_name == "projectmembership":
+                form.save(user=request.user)
+            else:
+                obj = form.save(commit=False)
+                if not getattr(obj, "created_by_id", None):
+                    obj.created_by = request.user
+                obj.save()
+                if hasattr(form, "save_m2m"):
+                    form.save_m2m()
 
             # Return the refreshed section as primary + close-modal snippet as OOB
             ctx = {"section": _build_section_context(request, model_name, config)}

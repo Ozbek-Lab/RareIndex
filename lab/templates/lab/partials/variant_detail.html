@@ -284,7 +284,7 @@
                   {% endif %}
                   <i class="fa-solid fa-chevron-down ml-auto text-[10px] opacity-40"></i>
                 </button>
-                <ul tabindex="0" class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-72 mt-2">
+                <ul tabindex="0" class="dropdown-content z-[100] menu p-1 shadow-2xl border border-base-200 bg-base-100 rounded-box w-80 mt-2">
                   {% regroup variant_available_statuses by group.name as grouped_variant_statuses %}
                   {% for grp in grouped_variant_statuses %}
                     {% if grp.grouper %}

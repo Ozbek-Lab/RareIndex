@@ -1,6 +1,7 @@
 from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_save
+from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 
 from lab.htmx_views import update_status, variant_detail_partial
@@ -65,10 +66,28 @@ class VariantStatusControlsTests(TestCase):
         request.user = self.user
         return request
 
-    def post_request(self):
-        request = self.factory.post("/", HTTP_HX_REQUEST="true")
+    def post_request(self, hx_target=None):
+        request_kwargs = {"HTTP_HX_REQUEST": "true"}
+        if hx_target:
+            request_kwargs["HTTP_HX_TARGET"] = hx_target
+        request = self.factory.post("/", **request_kwargs)
         request.user = self.user
         return request
+
+    def test_workflow_variant_rows_show_editable_status_controls(self):
+        self.user.user_permissions.add(self.annotation_change_permission)
+        Variant.objects.get(pk=self.variant.pk).statuses.add(self.status)
+
+        html = render_to_string(
+            "lab/partials/tabs/_workflow.html",
+            {"individual": self.individual},
+            request=self.get_request(),
+        )
+
+        self.assertIn("<th>Status</th>", html)
+        self.assertIn(f'id="workflow-variant-status-{self.variant.pk}"', html)
+        self.assertIn("Needs Review", html)
+        self.assertIn(f'hx-target="#workflow-variant-status-{self.variant.pk}"', html)
 
     def test_annotation_editors_can_render_and_toggle_variant_status_controls(self):
         self.user.user_permissions.add(self.annotation_change_permission)
@@ -91,9 +110,34 @@ class VariantStatusControlsTests(TestCase):
             update_response,
             f'id="variant-status-controls-{self.variant.pk}"',
         )
+        self.assertContains(
+            update_response,
+            f'id="workflow-variant-status-{self.variant.pk}"',
+        )
         self.assertContains(update_response, 'id="variant-row-status-')
         self.assertTrue(
             Variant.objects.get(pk=self.variant.pk).statuses.filter(pk=self.status.pk).exists()
+        )
+
+    def test_workflow_variant_status_target_refreshes_workflow_badge(self):
+        self.user.user_permissions.add(self.annotation_change_permission)
+
+        update_response = update_status(
+            self.post_request(hx_target=f"workflow-variant-status-{self.variant.pk}"),
+            self.variant_ct.pk,
+            self.variant.pk,
+            self.status.pk,
+        )
+
+        self.assertEqual(update_response.status_code, 200)
+        self.assertContains(
+            update_response,
+            f'id="workflow-variant-status-{self.variant.pk}"',
+        )
+        self.assertContains(update_response, "Needs Review")
+        self.assertContains(
+            update_response,
+            f'id="variant-status-controls-{self.variant.pk}" hx-swap-oob="outerHTML"',
         )
 
     def test_view_only_users_do_not_see_or_toggle_variant_status_controls(self):
