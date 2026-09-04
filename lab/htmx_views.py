@@ -24,17 +24,29 @@ from .access import (
     get_accessible_family_or_404,
     get_accessible_individual_or_404,
     get_accessible_project_or_404,
+    user_can_change_object,
+    user_can_create_related_object,
+    user_can_delete_object,
     user_can_access_object,
+    user_can_manage_project,
 )
 from .search_utils import filter_normalized_contains
 
 
-def _user_can_manage_project_memberships_from_project(user):
+def _user_has_vertical_permission(user, permission):
     return bool(
         user
         and getattr(user, "is_authenticated", False)
-        and (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False))
+        and (
+            getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)
+            or user.has_perm(permission)
+        )
     )
+
+
+def _user_can_manage_project_memberships_from_project(user, project, permission=None):
+    return user_can_manage_project(user, project, permission)
 
 
 def _project_membership_context(project, form=None):
@@ -57,12 +69,39 @@ def _get_scoped_object_or_404(request, model_or_queryset, **kwargs):
     return obj
 
 
-def _individual_projects_context(request, individual):
+def _can_change_individual(user, individual):
+    return user_can_change_object(user, individual, "lab.change_individual")
+
+
+def _can_change_family(user, family):
+    return user_can_change_object(user, family, "lab.change_family")
+
+
+def _has_project_assignment_scope(user):
+    return (
+        _user_has_vertical_permission(user, "lab.change_project")
+        and accessible_projects(
+            user,
+            Project.objects.all(),
+            min_role=ProjectMembership.Role.MANAGER,
+        ).exists()
+    )
+
+
+def _individual_projects_context(request, individual, edit=False):
+    projects = accessible_projects(request.user, individual.projects.all())
+    if edit:
+        projects = accessible_projects(
+            request.user,
+            projects,
+            min_role=ProjectMembership.Role.MANAGER,
+        )
     return {
         "individual": individual,
-        "visible_individual_projects": accessible_projects(
-            request.user,
-            individual.projects.all(),
+        "visible_individual_projects": projects,
+        "can_change_project_assignments": (
+            _can_change_individual(request.user, individual)
+            and _has_project_assignment_scope(request.user)
         ),
     }
 
@@ -203,7 +242,7 @@ def add_individual_row(request):
 class IndividualHPOEditView(View):
     def get(self, request, pk):
         individual = get_accessible_individual_or_404(request.user, pk=pk)
-        if not request.user.has_perm("lab.change_individual"):
+        if not _can_change_individual(request.user, individual):
             return HttpResponseForbidden("You do not have permission to edit this individual.")
         return render(request, "lab/partials/tabs/_phenotype.html#hpo_edit", {"individual": individual})
 
@@ -211,7 +250,7 @@ class IndividualHPOEditView(View):
 @require_POST
 def manage_hpo_term(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     action = request.POST.get("action")
     term_id = request.POST.get("term_id")
@@ -260,7 +299,9 @@ def note_create(request):
              return HttpResponse(f"Error: Invalid content type '{content_type_str}'", status=400)
 
         content_type = ContentType.objects.get_for_model(model)
-        _get_scoped_object_or_404(request, model, pk=object_id)
+        obj = _get_scoped_object_or_404(request, model, pk=object_id)
+        if not user_can_create_related_object(request.user, obj, "lab.add_note"):
+            return HttpResponseForbidden("You do not have permission to add notes.")
         
         # Create the note
         is_private = request.POST.get("private") in ["1", "true", "on", "True"]
@@ -310,7 +351,8 @@ def note_update(request, pk):
         raise Http404
 
     # Only allow the note creator or staff to edit
-    if request.user == note.user or request.user.is_staff:
+    can_edit_note = request.user == note.user or request.user.is_staff
+    if can_edit_note and user_can_change_object(request.user, note.content_object or note, "lab.change_note"):
         note.content = request.POST.get("content")
         note.save()
         
@@ -332,7 +374,8 @@ def note_delete(request, pk):
         object_id = note.object_id
 
         # Only allow the note creator or staff to delete
-        if request.user == note.user or request.user.is_staff:
+        can_delete_note = request.user == note.user or request.user.is_staff
+        if can_delete_note and user_can_delete_object(request.user, note.content_object or note, "lab.delete_note"):
             note.delete()
             
             # Fetch remaining notes
@@ -429,7 +472,7 @@ def note_count(request):
 @login_required
 def individual_identification_edit(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualIdentificationForm
     from .models import IdentifierType
@@ -459,7 +502,7 @@ def individual_identification_edit(request, pk):
 @require_POST
 def individual_identification_save(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualIdentificationForm
     can_edit_sensitive = request.user.has_perm("lab.view_sensitive_data")
@@ -494,7 +537,7 @@ def individual_identification_save(request, pk):
 @login_required
 def individual_demographics_edit(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualDemographicsForm
     can_edit_sensitive = request.user.has_perm("lab.view_sensitive_data")
@@ -514,7 +557,7 @@ def individual_demographics_edit(request, pk):
 @require_POST
 def individual_demographics_save(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualDemographicsForm
     can_edit_sensitive = request.user.has_perm("lab.view_sensitive_data")
@@ -614,7 +657,7 @@ def individual_contact_information_edit(request, pk):
         Individual.objects.prefetch_related("institution", "physicians"),
         pk=pk,
     )
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     return render(
         request,
@@ -627,7 +670,7 @@ def individual_contact_information_edit(request, pk):
 @require_POST
 def individual_contact_information_save(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import IndividualContactInformationForm
 
@@ -678,9 +721,9 @@ def family_search(request):
 
 @login_required
 def individual_parents_edit(request, pk):
-    if not request.user.has_perm("lab.change_family"):
-        return HttpResponseForbidden("You do not have permission to edit family relationships.")
     member = get_accessible_individual_or_404(request.user, pk=pk)
+    if not user_can_change_object(request.user, member, "lab.change_family"):
+        return HttpResponseForbidden("You do not have permission to edit family relationships.")
     individual_pk = request.GET.get("individual_pk")
     individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else member
     family_members = (
@@ -716,7 +759,7 @@ def family_id_save(request, pk):
     from .models import Family
     from django.core.exceptions import ValidationError
     family = get_accessible_family_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_family"):
+    if not _can_change_family(request.user, family):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden()
     individual_pk = request.POST.get("individual_pk", "")
@@ -780,7 +823,7 @@ def family_add_member(request, pk):
     from .forms import QuickAddMemberForm
     from django.http import HttpResponseForbidden
     family = get_accessible_family_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.add_individual"):
+    if not user_can_create_related_object(request.user, family, "lab.add_individual"):
         return HttpResponseForbidden()
     individual_pk = request.POST.get("individual_pk", "")
     form = QuickAddMemberForm(request.POST)
@@ -854,7 +897,7 @@ def family_remove_member(request, pk):
     """Remove an individual from their family (set family=None)."""
     from django.http import HttpResponseForbidden
     member = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, member):
         return HttpResponseForbidden()
     member.family = None
     member.save(update_fields=["family"])
@@ -893,7 +936,7 @@ def individual_family_section(request, pk):
 def individual_toggle_index(request, pk):
     """Toggle the is_index flag on a family member and re-render the row."""
     member = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, member):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden()
     member.is_index = not member.is_index
@@ -909,7 +952,7 @@ def individual_toggle_index(request, pk):
 def individual_toggle_affected(request, pk):
     """Toggle the is_affected flag on a family member and re-render the row."""
     member = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, member):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden()
     member.is_affected = not member.is_affected
@@ -932,9 +975,9 @@ def individual_parents_display(request, pk):
 @login_required
 @require_POST
 def individual_parents_save(request, pk):
-    if not request.user.has_perm("lab.change_family"):
-        return HttpResponseForbidden("You do not have permission to edit family relationships.")
     member = get_accessible_individual_or_404(request.user, pk=pk)
+    if not user_can_change_object(request.user, member, "lab.change_family"):
+        return HttpResponseForbidden("You do not have permission to edit family relationships.")
     individual_pk = request.POST.get("individual_pk")
     individual = get_accessible_individual_or_404(request.user, pk=individual_pk) if individual_pk else member
 
@@ -943,7 +986,7 @@ def individual_parents_save(request, pk):
 
     member.father_id = int(father_id) if father_id else None
     member.mother_id = int(mother_id) if mother_id else None
-    if request.user.has_perm("lab.change_individual"):
+    if _can_change_individual(request.user, member):
         member.is_index = request.POST.get("is_index") == "1"
         member.is_affected = request.POST.get("is_affected") == "1"
     member.save()
@@ -960,7 +1003,7 @@ def individual_parents_save(request, pk):
 @login_required
 def individual_clinical_summary_edit(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import ClinicalSummaryForm
     form = ClinicalSummaryForm(instance=individual)
@@ -972,7 +1015,7 @@ def individual_clinical_summary_edit(request, pk):
 @require_POST
 def individual_clinical_summary_save(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import ClinicalSummaryForm
     form = ClinicalSummaryForm(request.POST, instance=individual)
@@ -998,7 +1041,7 @@ def individual_clinical_summary_display(request, pk):
 @login_required
 def individual_age_of_onset_months_edit(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import AgeOfOnsetMonthsForm
     form = AgeOfOnsetMonthsForm(instance=individual)
@@ -1014,7 +1057,7 @@ def individual_age_of_onset_months_edit(request, pk):
 @require_POST
 def individual_age_of_onset_months_save(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     from .forms import AgeOfOnsetMonthsForm
     form = AgeOfOnsetMonthsForm(request.POST, instance=individual)
@@ -1055,7 +1098,7 @@ def update_status(request, content_type_id, object_id, status_id):
     change_perms = [f"{ct.app_label}.change_{ct.model}"]
     if ct.app_label == "variant" and ct.model == "variant":
         change_perms.append("variant.change_annotation")
-    if not any(request.user.has_perm(perm) for perm in change_perms):
+    if not user_can_change_object(request.user, obj, change_perms):
         return HttpResponseForbidden("You do not have permission to change this status.")
 
     # Toggle: remove if already present, add if not
@@ -1166,6 +1209,8 @@ def sample_create_modal(request, individual_id):
         return HttpResponseForbidden("You do not have permission to add samples.")
 
     individual = get_accessible_individual_or_404(request.user, pk=individual_id)
+    if not user_can_create_related_object(request.user, individual, "lab.add_sample"):
+        return HttpResponseForbidden("You do not have permission to add samples.")
 
     if request.method == "POST":
         form = WorkflowSampleCreateForm(request.POST, individual=individual)
@@ -1238,12 +1283,7 @@ def bulk_sample_create_modal(request):
     if request.method == "POST" and form.is_valid():
         parsed_ids = form.parsed_ids
         unique_ids = list(dict.fromkeys(parsed_ids))
-        matched_individuals = list(
-            Individual.objects.prefetch_related("cross_ids__id_type")
-            .filter(cross_ids__id_value__in=unique_ids)
-            .distinct()
-            .order_by("id")
-        )
+        matched_individuals = _bulk_lookup_matched_individuals(request.user, unique_ids)
 
     context = {
         "form": form,
@@ -1270,19 +1310,46 @@ def _ordered_unique_ints(values):
     return ids
 
 
-def _bulk_sample_rows_for_formset(formset):
+def _editable_individual_queryset(user, queryset):
+    return accessible_individuals(
+        user,
+        queryset,
+        min_role=ProjectMembership.Role.EDITOR,
+    )
+
+
+def _bulk_lookup_matched_individuals(user, unique_ids):
+    return list(
+        _editable_individual_queryset(
+            user,
+            Individual.objects.prefetch_related("cross_ids__id_type")
+            .filter(cross_ids__id_value__in=unique_ids),
+        )
+        .distinct()
+        .order_by("id")
+    )
+
+
+def _bulk_individuals_by_id(user, individual_ids):
+    return _editable_individual_queryset(
+        user,
+        Individual.objects.prefetch_related("cross_ids__id_type")
+        .filter(pk__in=individual_ids),
+    ).in_bulk(individual_ids)
+
+
+def _bulk_sample_rows_for_formset(formset, user):
     from .models import Individual, Sample, SampleType
 
     individual_ids = _ordered_unique_ints(
         form["individual"].value() for form in formset.forms
     )
-    individuals_by_id = Individual.objects.prefetch_related(
-        "cross_ids__id_type"
-    ).in_bulk(individual_ids)
-    sample_type_ids_by_individual = {pk: [] for pk in individual_ids}
-    seen_sample_types = {pk: set() for pk in individual_ids}
+    individuals_by_id = _bulk_individuals_by_id(user, individual_ids)
+    editable_individual_ids = set(individuals_by_id)
+    sample_type_ids_by_individual = {pk: [] for pk in editable_individual_ids}
+    seen_sample_types = {pk: set() for pk in editable_individual_ids}
     for individual_id, sample_type_id in (
-        Sample.objects.filter(individual_id__in=individual_ids)
+        Sample.objects.filter(individual_id__in=editable_individual_ids)
         .select_related("sample_type")
         .order_by("sample_type__name")
         .values_list("individual_id", "sample_type_id")
@@ -1330,7 +1397,7 @@ def bulk_sample_create_form(request):
 
     if request.POST.get("bulk_sample_action") == "create":
         formset = BulkSampleCreateFormSet(request.POST, prefix=formset_prefix)
-        rows = _bulk_sample_rows_for_formset(formset)
+        rows = _bulk_sample_rows_for_formset(formset, request.user)
         can_create_samples = bool(rows) and has_sample_types and all(
             row["has_sample_type_options"] for row in rows
         )
@@ -1369,7 +1436,7 @@ def bulk_sample_create_form(request):
         )
 
     individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
-    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals_by_id = _bulk_individuals_by_id(request.user, individual_ids)
     individuals = [
         individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
     ]
@@ -1378,7 +1445,7 @@ def bulk_sample_create_form(request):
         initial=[{"individual": individual.pk} for individual in individuals],
         prefix=formset_prefix,
     )
-    rows = _bulk_sample_rows_for_formset(formset)
+    rows = _bulk_sample_rows_for_formset(formset, request.user)
     can_create_samples = bool(rows) and has_sample_types and all(
         row["has_sample_type_options"] for row in rows
     )
@@ -1414,12 +1481,7 @@ def bulk_test_create_modal(request):
     if request.method == "POST" and form.is_valid():
         parsed_ids = form.parsed_ids
         unique_ids = list(dict.fromkeys(parsed_ids))
-        matched_individuals = list(
-            Individual.objects.prefetch_related("cross_ids__id_type")
-            .filter(cross_ids__id_value__in=unique_ids)
-            .distinct()
-            .order_by("id")
-        )
+        matched_individuals = _bulk_lookup_matched_individuals(request.user, unique_ids)
 
     context = {
         "form": form,
@@ -1432,18 +1494,17 @@ def bulk_test_create_modal(request):
     return render(request, "lab/partials/modals/bulk_test_create_modal.html", context)
 
 
-def _bulk_test_rows_for_formset(formset):
+def _bulk_test_rows_for_formset(formset, user):
     from .models import Individual, Sample
 
     individual_ids = _ordered_unique_ints(
         form["individual"].value() for form in formset.forms
     )
-    individuals_by_id = Individual.objects.prefetch_related(
-        "cross_ids__id_type"
-    ).in_bulk(individual_ids)
-    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    individuals_by_id = _bulk_individuals_by_id(user, individual_ids)
+    editable_individual_ids = set(individuals_by_id)
+    sample_ids_by_individual = {pk: [] for pk in editable_individual_ids}
     for sample_id, individual_id in (
-        Sample.objects.filter(individual_id__in=individual_ids)
+        Sample.objects.filter(individual_id__in=editable_individual_ids)
         .order_by("id")
         .values_list("id", "individual_id")
     ):
@@ -1489,7 +1550,7 @@ def bulk_test_create_form(request):
 
     if request.POST.get("bulk_test_action") == "create":
         formset = BulkTestCreateFormSet(request.POST, prefix=formset_prefix)
-        rows = _bulk_test_rows_for_formset(formset)
+        rows = _bulk_test_rows_for_formset(formset, request.user)
         can_create_tests = bool(rows) and has_test_types and all(
             row["has_sample_options"] for row in rows
         )
@@ -1533,7 +1594,7 @@ def bulk_test_create_form(request):
         )
 
     individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
-    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals_by_id = _bulk_individuals_by_id(request.user, individual_ids)
     individuals = [
         individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
     ]
@@ -1542,7 +1603,7 @@ def bulk_test_create_form(request):
         initial=[{"individual": individual.pk} for individual in individuals],
         prefix=formset_prefix,
     )
-    rows = _bulk_test_rows_for_formset(formset)
+    rows = _bulk_test_rows_for_formset(formset, request.user)
     can_create_tests = bool(rows) and has_test_types and all(
         row["has_sample_options"] for row in rows
     )
@@ -1578,12 +1639,7 @@ def bulk_pipeline_create_modal(request):
     if request.method == "POST" and form.is_valid():
         parsed_ids = form.parsed_ids
         unique_ids = list(dict.fromkeys(parsed_ids))
-        matched_individuals = list(
-            Individual.objects.prefetch_related("cross_ids__id_type")
-            .filter(cross_ids__id_value__in=unique_ids)
-            .distinct()
-            .order_by("id")
-        )
+        matched_individuals = _bulk_lookup_matched_individuals(request.user, unique_ids)
 
     context = {
         "form": form,
@@ -1609,19 +1665,18 @@ def _first_int(values):
     return None
 
 
-def _bulk_pipeline_rows_for_formset(formset):
+def _bulk_pipeline_rows_for_formset(formset, user):
     from .models import Individual, Sample, Test
 
     individual_ids = _ordered_unique_ints(
         form["individual"].value() for form in formset.forms
     )
-    individuals_by_id = Individual.objects.prefetch_related(
-        "cross_ids__id_type"
-    ).in_bulk(individual_ids)
-    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    individuals_by_id = _bulk_individuals_by_id(user, individual_ids)
+    editable_individual_ids = set(individuals_by_id)
+    sample_ids_by_individual = {pk: [] for pk in editable_individual_ids}
     sample_ids = []
     for sample_id, individual_id in (
-        Sample.objects.filter(individual_id__in=individual_ids)
+        Sample.objects.filter(individual_id__in=editable_individual_ids)
         .order_by("id")
         .values_list("id", "individual_id")
     ):
@@ -1757,6 +1812,12 @@ def bulk_pipeline_test_options(request):
     tests = (
         Test.objects.select_related("test_type", "sample")
         .filter(**filters)
+        .filter(
+            sample__individual__in=_editable_individual_queryset(
+                request.user,
+                Individual.objects.all(),
+            )
+        )
         .order_by("id")
         if filters.get("sample_id")
         else Test.objects.none()
@@ -1793,7 +1854,7 @@ def bulk_pipeline_create_form(request):
 
     if request.POST.get("bulk_pipeline_action") == "create":
         formset = BulkPipelineCreateFormSet(request.POST, prefix=formset_prefix)
-        rows = _bulk_pipeline_rows_for_formset(formset)
+        rows = _bulk_pipeline_rows_for_formset(formset, request.user)
         can_create_pipelines = _can_create_pipeline_rows(
             rows,
             has_pipeline_types,
@@ -1843,7 +1904,7 @@ def bulk_pipeline_create_form(request):
         )
 
     individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
-    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals_by_id = _bulk_individuals_by_id(request.user, individual_ids)
     individuals = [
         individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
     ]
@@ -1855,7 +1916,7 @@ def bulk_pipeline_create_form(request):
         ],
         prefix=formset_prefix,
     )
-    rows = _bulk_pipeline_rows_for_formset(formset)
+    rows = _bulk_pipeline_rows_for_formset(formset, request.user)
     can_create_pipelines = _can_create_pipeline_rows(
         rows,
         has_pipeline_types,
@@ -1895,12 +1956,7 @@ def bulk_analysis_create_modal(request):
     if request.method == "POST" and form.is_valid():
         parsed_ids = form.parsed_ids
         unique_ids = list(dict.fromkeys(parsed_ids))
-        matched_individuals = list(
-            Individual.objects.prefetch_related("cross_ids__id_type")
-            .filter(cross_ids__id_value__in=unique_ids)
-            .distinct()
-            .order_by("id")
-        )
+        matched_individuals = _bulk_lookup_matched_individuals(request.user, unique_ids)
 
     context = {
         "form": form,
@@ -1917,19 +1973,18 @@ def bulk_analysis_create_modal(request):
     )
 
 
-def _bulk_analysis_rows_for_formset(formset):
+def _bulk_analysis_rows_for_formset(formset, user):
     from .models import Individual, Pipeline, Sample, Test
 
     individual_ids = _ordered_unique_ints(
         form["individual"].value() for form in formset.forms
     )
-    individuals_by_id = Individual.objects.prefetch_related(
-        "cross_ids__id_type"
-    ).in_bulk(individual_ids)
-    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    individuals_by_id = _bulk_individuals_by_id(user, individual_ids)
+    editable_individual_ids = set(individuals_by_id)
+    sample_ids_by_individual = {pk: [] for pk in editable_individual_ids}
     sample_ids = []
     for sample_id, individual_id in (
-        Sample.objects.filter(individual_id__in=individual_ids)
+        Sample.objects.filter(individual_id__in=editable_individual_ids)
         .order_by("id")
         .values_list("id", "individual_id")
     ):
@@ -2113,6 +2168,12 @@ def bulk_analysis_test_options(request):
     tests = (
         Test.objects.select_related("test_type", "sample")
         .filter(**filters)
+        .filter(
+            sample__individual__in=_editable_individual_queryset(
+                request.user,
+                Individual.objects.all(),
+            )
+        )
         .order_by("id")
         if filters.get("sample_id")
         else Test.objects.none()
@@ -2180,6 +2241,12 @@ def bulk_analysis_pipeline_options(request):
     pipelines = (
         Pipeline.objects.select_related("type", "test__test_type")
         .filter(**filters)
+        .filter(
+            test__sample__individual__in=_editable_individual_queryset(
+                request.user,
+                Individual.objects.all(),
+            )
+        )
         .order_by("id")
         if filters.get("test_id")
         else Pipeline.objects.none()
@@ -2216,7 +2283,7 @@ def bulk_analysis_create_form(request):
 
     if request.POST.get("bulk_analysis_action") == "create":
         formset = BulkAnalysisCreateFormSet(request.POST, prefix=formset_prefix)
-        rows = _bulk_analysis_rows_for_formset(formset)
+        rows = _bulk_analysis_rows_for_formset(formset, request.user)
         can_create_analyses = _can_create_analysis_rows(
             rows,
             has_analysis_types,
@@ -2266,7 +2333,7 @@ def bulk_analysis_create_form(request):
         )
 
     individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
-    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals_by_id = _bulk_individuals_by_id(request.user, individual_ids)
     individuals = [
         individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
     ]
@@ -2281,7 +2348,7 @@ def bulk_analysis_create_form(request):
         ],
         prefix=formset_prefix,
     )
-    rows = _bulk_analysis_rows_for_formset(formset)
+    rows = _bulk_analysis_rows_for_formset(formset, request.user)
     can_create_analyses = _can_create_analysis_rows(
         rows,
         has_analysis_types,
@@ -2321,12 +2388,7 @@ def bulk_variant_create_modal(request):
     if request.method == "POST" and form.is_valid():
         parsed_ids = form.parsed_ids
         unique_ids = list(dict.fromkeys(parsed_ids))
-        matched_individuals = list(
-            Individual.objects.prefetch_related("cross_ids__id_type")
-            .filter(cross_ids__id_value__in=unique_ids)
-            .distinct()
-            .order_by("id")
-        )
+        matched_individuals = _bulk_lookup_matched_individuals(request.user, unique_ids)
 
     context = {
         "form": form,
@@ -2349,19 +2411,18 @@ def _boolish(value):
     return str(value).lower() in {"1", "true", "on", "yes"}
 
 
-def _bulk_variant_rows_for_formset(formset):
+def _bulk_variant_rows_for_formset(formset, user):
     from .models import Analysis, Individual, Pipeline, Sample, Test
 
     individual_ids = _ordered_unique_ints(
         form["individual"].value() for form in formset.forms
     )
-    individuals_by_id = Individual.objects.prefetch_related(
-        "cross_ids__id_type"
-    ).in_bulk(individual_ids)
-    sample_ids_by_individual = {pk: [] for pk in individual_ids}
+    individuals_by_id = _bulk_individuals_by_id(user, individual_ids)
+    editable_individual_ids = set(individuals_by_id)
+    sample_ids_by_individual = {pk: [] for pk in editable_individual_ids}
     sample_ids = []
     for sample_id, individual_id in (
-        Sample.objects.filter(individual_id__in=individual_ids)
+        Sample.objects.filter(individual_id__in=editable_individual_ids)
         .order_by("id")
         .values_list("id", "individual_id")
     ):
@@ -2600,6 +2661,12 @@ def bulk_variant_test_options(request):
     tests = (
         Test.objects.select_related("test_type", "sample")
         .filter(**filters)
+        .filter(
+            sample__individual__in=_editable_individual_queryset(
+                request.user,
+                Individual.objects.all(),
+            )
+        )
         .order_by("id")
         if filters.get("sample_id")
         else Test.objects.none()
@@ -2676,6 +2743,12 @@ def bulk_variant_pipeline_options(request):
     pipelines = (
         Pipeline.objects.select_related("type", "test__test_type")
         .filter(**filters)
+        .filter(
+            test__sample__individual__in=_editable_individual_queryset(
+                request.user,
+                Individual.objects.all(),
+            )
+        )
         .order_by("id")
         if filters.get("test_id")
         else Pipeline.objects.none()
@@ -2747,6 +2820,12 @@ def bulk_variant_analysis_options(request):
     analyses = (
         Analysis.objects.select_related("type", "pipeline")
         .filter(**filters)
+        .filter(
+            pipeline__test__sample__individual__in=_editable_individual_queryset(
+                request.user,
+                Individual.objects.all(),
+            )
+        )
         .order_by("id")
         if filters.get("pipeline_id")
         else Analysis.objects.none()
@@ -2831,9 +2910,10 @@ def bulk_variant_create_form(request):
 
     if request.POST.get("bulk_variant_action") == "create":
         formset = BulkVariantCreateFormSet(request.POST, prefix=formset_prefix)
-        rows = _bulk_variant_rows_for_formset(formset)
+        rows = _bulk_variant_rows_for_formset(formset, request.user)
+        can_create_variants = bool(rows) and all(row["individual"] for row in rows)
 
-        if rows and formset.is_valid():
+        if can_create_variants and formset.is_valid():
             created_variants = []
             with transaction.atomic():
                 for form in formset:
@@ -2861,12 +2941,12 @@ def bulk_variant_create_form(request):
                 "formset": formset,
                 "rows": rows,
                 "action_url": action_url,
-                "can_create_variants": bool(rows),
+                "can_create_variants": can_create_variants,
             },
         )
 
     individual_ids = _ordered_unique_ints(request.POST.getlist("individual_ids"))
-    individuals_by_id = Individual.objects.in_bulk(individual_ids)
+    individuals_by_id = _bulk_individuals_by_id(request.user, individual_ids)
     individuals = [
         individuals_by_id[pk] for pk in individual_ids if pk in individuals_by_id
     ]
@@ -2884,7 +2964,7 @@ def bulk_variant_create_form(request):
         ],
         prefix=formset_prefix,
     )
-    rows = _bulk_variant_rows_for_formset(formset)
+    rows = _bulk_variant_rows_for_formset(formset, request.user)
 
     return render(
         request,
@@ -2893,7 +2973,7 @@ def bulk_variant_create_form(request):
             "formset": formset,
             "rows": rows,
             "action_url": action_url,
-            "can_create_variants": bool(rows),
+            "can_create_variants": bool(rows) and all(row["individual"] for row in rows),
             "empty_selection": not bool(individuals),
         },
     )
@@ -2910,6 +2990,8 @@ def test_create_modal(request, sample_id):
         return HttpResponseForbidden("You do not have permission to add tests.")
     
     sample = _get_scoped_object_or_404(request, Sample, pk=sample_id)
+    if not user_can_create_related_object(request.user, sample, "lab.add_test"):
+        return HttpResponseForbidden("You do not have permission to add tests.")
     individual = sample.individual
     
     if request.method == "POST":
@@ -3012,6 +3094,8 @@ def pipeline_create_modal(request, test_id):
         return HttpResponseForbidden("You do not have permission to add pipelines.")
     
     test = _get_scoped_object_or_404(request, Test, pk=test_id)
+    if not user_can_create_related_object(request.user, test, "lab.add_pipeline"):
+        return HttpResponseForbidden("You do not have permission to add pipelines.")
     individual = test.sample.individual
     
     if request.method == "POST":
@@ -3107,6 +3191,8 @@ def analysis_create_modal(request, pipeline_id):
         return HttpResponseForbidden("You do not have permission to add analyses.")
     
     pipeline = _get_scoped_object_or_404(request, Pipeline, pk=pipeline_id)
+    if not user_can_create_related_object(request.user, pipeline, "lab.add_analysis"):
+        return HttpResponseForbidden("You do not have permission to add analyses.")
     individual = pipeline.test.sample.individual
     
     if request.method == "POST":
@@ -3197,6 +3283,8 @@ def task_create_modal(request, content_type_id, object_id):
     ct = get_object_or_404(ContentType, pk=content_type_id)
     Model = ct.model_class()
     obj = _get_scoped_object_or_404(request, Model, pk=object_id)
+    if not user_can_create_related_object(request.user, obj, "lab.add_task"):
+        return HttpResponseForbidden("You do not have permission to add tasks here.")
     
     
     # Determine target ID and partial name
@@ -3391,7 +3479,7 @@ def task_create_modal(request, content_type_id, object_id):
 @login_required
 def individual_projects_edit(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
     if request.GET.get("display"):
         return render(
@@ -3399,10 +3487,12 @@ def individual_projects_edit(request, pk):
             "lab/partials/tabs/_info.html#projects_display",
             _individual_projects_context(request, individual),
         )
+    if not _has_project_assignment_scope(request.user):
+        return HttpResponseForbidden("You do not have permission to change project assignments.")
     return render(
         request,
         "lab/partials/tabs/_info.html#projects_edit",
-        _individual_projects_context(request, individual),
+        _individual_projects_context(request, individual, edit=True),
     )
 
 
@@ -3410,25 +3500,35 @@ def individual_projects_edit(request, pk):
 @require_POST
 def individual_projects_save(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_individual"):
+    if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
+    if not _has_project_assignment_scope(request.user):
+        return HttpResponseForbidden("You do not have permission to change project assignments.")
     # Expecting a list of project IDs
     project_ids = request.POST.getlist("projects")
     from .models import Project
-    selected_projects = accessible_projects(
-        request.user,
-        Project.objects.filter(id__in=project_ids),
+    selected_project_ids = set(
+        accessible_projects(
+            request.user,
+            Project.objects.filter(id__in=project_ids),
+            min_role=ProjectMembership.Role.MANAGER,
+        ).values_list("pk", flat=True)
+    )
+    current_project_ids = set(individual.projects.values_list("pk", flat=True))
+    manageable_current_ids = set(
+        accessible_projects(
+            request.user,
+            Project.objects.filter(pk__in=current_project_ids),
+            min_role=ProjectMembership.Role.MANAGER,
+        ).values_list("pk", flat=True)
+    )
+    preserved_project_ids = current_project_ids - manageable_current_ids
+    selected_projects = Project.objects.filter(
+        pk__in=preserved_project_ids | selected_project_ids,
     )
     if request.user.is_staff or request.user.is_superuser:
-        individual.projects.set(selected_projects)
-    else:
-        hidden_project_ids = individual.projects.exclude(
-            pk__in=accessible_projects(request.user, Project.objects.all())
-        ).values_list("pk", flat=True)
-        individual.projects.set(
-            list(hidden_project_ids)
-            + list(selected_projects.values_list("pk", flat=True))
-        )
+        selected_projects = Project.objects.filter(id__in=project_ids)
+    individual.projects.set(selected_projects)
     return render(
         request,
         "lab/partials/tabs/_info.html#projects_display",
@@ -3438,8 +3538,14 @@ def individual_projects_save(request, pk):
 
 @login_required
 def project_search(request):
+    if not _user_has_vertical_permission(request.user, "lab.change_project"):
+        return HttpResponseForbidden("You do not have permission to change projects.")
     query = request.GET.get("q", "")
-    projects = accessible_projects(request.user, Project.objects.all())
+    projects = accessible_projects(
+        request.user,
+        Project.objects.all(),
+        min_role=ProjectMembership.Role.MANAGER,
+    )
     if query:
         projects = filter_normalized_contains(projects, ["name"], query)
     return render(request, "lab/partials/project_picker_results.html", {"projects": projects[:10]})
@@ -3448,7 +3554,7 @@ def project_search(request):
 @login_required
 def project_individual_search(request, pk):
     project = get_accessible_project_or_404(request.user, pk=pk)
-    if not request.user.has_perm("lab.change_project"):
+    if not user_can_manage_project(request.user, project, "lab.change_project"):
         return HttpResponseForbidden("You do not have permission to change projects.")
     query = (request.GET.get("search") or request.GET.get("q") or "").strip()
     individuals = Individual.objects.none()
@@ -3466,6 +3572,7 @@ def project_individual_search(request, pk):
         "individuals": individuals,
         "project": project,
         "already_in_project": already_in_project,
+        "can_change_project": True,
         "query": query,
     })
 
@@ -3510,6 +3617,11 @@ def _project_individuals_page_context(request, project, per_page: int = 25):
         "project_individuals_search": search,
         "project_individuals_sort": sort,
         "project_individuals_dir": direction,
+        "can_change_project": user_can_manage_project(
+            request.user,
+            project,
+            "lab.change_project",
+        ),
     }
 
 
@@ -3524,9 +3636,13 @@ def project_individuals_page(request, pk):
 
 @login_required
 def project_memberships_panel(request, pk):
-    if not _user_can_manage_project_memberships_from_project(request.user):
-        return HttpResponseForbidden("You do not have permission to manage project memberships.")
     project = get_object_or_404(Project, pk=pk)
+    if not _user_can_manage_project_memberships_from_project(
+        request.user,
+        project,
+        "lab.view_projectmembership",
+    ):
+        return HttpResponseForbidden("You do not have permission to manage project memberships.")
     return render(
         request,
         "lab/partials/tabs/_project_members.html",
@@ -3537,9 +3653,13 @@ def project_memberships_panel(request, pk):
 @login_required
 @require_POST
 def project_membership_add(request, pk):
-    if not _user_can_manage_project_memberships_from_project(request.user):
-        return HttpResponseForbidden("You do not have permission to manage project memberships.")
     project = get_object_or_404(Project, pk=pk)
+    if not _user_can_manage_project_memberships_from_project(
+        request.user,
+        project,
+        "lab.add_projectmembership",
+    ):
+        return HttpResponseForbidden("You do not have permission to manage project memberships.")
     from .forms import ProjectMembershipForm
 
     form = ProjectMembershipForm(request.POST, project=project)
@@ -3553,9 +3673,13 @@ def project_membership_add(request, pk):
 @login_required
 @require_POST
 def project_membership_update(request, project_pk, membership_pk):
-    if not _user_can_manage_project_memberships_from_project(request.user):
-        return HttpResponseForbidden("You do not have permission to manage project memberships.")
     project = get_object_or_404(Project, pk=project_pk)
+    if not _user_can_manage_project_memberships_from_project(
+        request.user,
+        project,
+        "lab.change_projectmembership",
+    ):
+        return HttpResponseForbidden("You do not have permission to manage project memberships.")
     membership = get_object_or_404(ProjectMembership, pk=membership_pk, project=project)
     role = request.POST.get("role")
     valid_roles = {choice[0] for choice in ProjectMembership.Role.choices}
@@ -3575,9 +3699,13 @@ def project_membership_remove(request, project_pk, membership_pk):
         from django.http import HttpResponseNotAllowed
 
         return HttpResponseNotAllowed(["DELETE", "POST"])
-    if not _user_can_manage_project_memberships_from_project(request.user):
-        return HttpResponseForbidden("You do not have permission to manage project memberships.")
     project = get_object_or_404(Project, pk=project_pk)
+    if not _user_can_manage_project_memberships_from_project(
+        request.user,
+        project,
+        "lab.delete_projectmembership",
+    ):
+        return HttpResponseForbidden("You do not have permission to manage project memberships.")
     membership = get_object_or_404(ProjectMembership, pk=membership_pk, project=project)
     membership.delete()
     return render(
@@ -3592,6 +3720,8 @@ def task_detail_edit(request, pk):
     """Return the edit form partial for a task's details."""
     from .forms import TaskEditForm
     task = _get_scoped_object_or_404(request, Task, pk=pk)
+    if not user_can_change_object(request.user, task, "lab.change_task"):
+        return HttpResponseForbidden("You do not have permission to change this task.")
     form = TaskEditForm(instance=task)
     return render(request, "lab/task_detail.html#task_details", {
         "task": task,
@@ -3606,6 +3736,8 @@ def task_detail_save(request, pk):
     """Save edited task details and return the display partial."""
     from .forms import TaskEditForm
     task = _get_scoped_object_or_404(request, Task, pk=pk)
+    if not user_can_change_object(request.user, task, "lab.change_task"):
+        return HttpResponseForbidden("You do not have permission to change this task.")
     form = TaskEditForm(request.POST, instance=task)
     if form.is_valid():
         task = form.save()
@@ -3651,9 +3783,9 @@ def project_tasks_page(request, pk):
 @login_required
 @require_POST
 def project_individual_add(request, project_pk, individual_pk):
-    if not request.user.has_perm("lab.change_project"):
-        return HttpResponseForbidden("You do not have permission to change projects.")
     project = get_accessible_project_or_404(request.user, pk=project_pk)
+    if not user_can_manage_project(request.user, project, "lab.change_project"):
+        return HttpResponseForbidden("You do not have permission to change projects.")
     individual = get_accessible_individual_or_404(request.user, pk=individual_pk)
     project.individuals.add(individual)
     project.refresh_from_db()
@@ -3675,9 +3807,9 @@ def project_individual_remove(request, project_pk, individual_pk):
     if request.method not in ("DELETE", "POST"):
         from django.http import HttpResponseNotAllowed
         return HttpResponseNotAllowed(["DELETE", "POST"])
-    if not request.user.has_perm("lab.change_project"):
-        return HttpResponseForbidden("You do not have permission to change projects.")
     project = get_accessible_project_or_404(request.user, pk=project_pk)
+    if not user_can_manage_project(request.user, project, "lab.change_project"):
+        return HttpResponseForbidden("You do not have permission to change projects.")
     individual = get_accessible_individual_or_404(request.user, pk=individual_pk)
     project.individuals.remove(individual)
     project.refresh_from_db()
@@ -3824,7 +3956,7 @@ def project_delete_modal(request, pk):
     """Confirm and delete a project from the project detail page."""
     project = get_accessible_project_or_404(request.user, pk=pk)
 
-    if not request.user.has_perm("lab.delete_project"):
+    if not user_can_delete_object(request.user, project, "lab.delete_project"):
         return HttpResponseForbidden("You do not have permission to delete projects.")
 
     if request.method == "POST":
@@ -3847,10 +3979,13 @@ def request_form_create_modal(request, individual_id):
     from .forms import AnalysisRequestFormForm
     from .models import Individual
 
-    if not request.user.has_perm("lab.add_analysisrequestform"):
-        return HttpResponseForbidden("You do not have permission to upload request forms.")
-    
     individual = get_accessible_individual_or_404(request.user, pk=individual_id)
+    if not user_can_create_related_object(
+        request.user,
+        individual,
+        "lab.add_analysisrequestform",
+    ):
+        return HttpResponseForbidden("You do not have permission to upload request forms.")
     
     if request.method == "POST":
         form = AnalysisRequestFormForm(request.POST, request.FILES)
@@ -3880,10 +4015,9 @@ def report_create_modal(request, analysis_id):
     from .forms import AnalysisReportForm
     from .models import Analysis
 
-    if not request.user.has_perm("lab.add_analysisreport"):
-        return HttpResponseForbidden("You do not have permission to upload analysis reports.")
-    
     analysis = _get_scoped_object_or_404(request, Analysis, pk=analysis_id)
+    if not user_can_create_related_object(request.user, analysis, "lab.add_analysisreport"):
+        return HttpResponseForbidden("You do not have permission to upload analysis reports.")
     individual = analysis.pipeline.test.sample.individual
     workflow_target_id = f"#workflow-content-{individual.pk}"
     
@@ -3932,14 +4066,13 @@ def generate_analysis_report_docx(request, analysis_id):
     )
     from .forms import AnalysisReportGenerateForm
 
-    if not request.user.has_perm("lab.add_analysisreport"):
-        return HttpResponseForbidden("You do not have permission to generate analysis reports.")
-
     analysis = _get_scoped_object_or_404(
         request,
         Analysis.objects.select_related("pipeline__test__sample__individual", "pipeline__test__test_type"),
         pk=analysis_id,
     )
+    if not user_can_create_related_object(request.user, analysis, "lab.add_analysisreport"):
+        return HttpResponseForbidden("You do not have permission to generate analysis reports.")
     if not analysis.pipeline_id or not analysis.pipeline.test_id or not analysis.pipeline.test.sample_id:
         return HttpResponseBadRequest("Analysis is missing pipeline/test/sample linkage.")
 
@@ -4240,8 +4373,16 @@ def report_replace_modal(request, report_id):
 
     @require_http_methods(["GET", "POST"])
     def _inner(request):
-        can_change_report = request.user.has_perm("lab.change_analysisreport")
-        can_delete_report = request.user.has_perm("lab.delete_analysisreport")
+        can_change_report = user_can_change_object(
+            request.user,
+            report,
+            "lab.change_analysisreport",
+        )
+        can_delete_report = user_can_delete_object(
+            request.user,
+            report,
+            "lab.delete_analysisreport",
+        )
 
         if not (can_change_report or can_delete_report):
             return HttpResponseForbidden("You do not have permission to modify or delete analysis reports.")
@@ -4426,10 +4567,9 @@ def workflow_delete_confirm(request, model_name, pk):
     config = registry.get(model_name)
     if not config:
         return HttpResponse(status=404)
-    if not request.user.has_perm(config["permission"]):
-        return HttpResponseForbidden("You do not have permission to delete this item.")
-
     obj = _get_scoped_object_or_404(request, config["model"], pk=pk)
+    if not user_can_delete_object(request.user, obj, config["permission"]):
+        return HttpResponseForbidden("You do not have permission to delete this item.")
     context = _workflow_delete_context(model_name, obj, config)
     return render(request, "lab/partials/modals/workflow_delete_confirm.html", context)
 
@@ -4443,10 +4583,9 @@ def workflow_delete(request, model_name, pk):
     config = registry.get(model_name)
     if not config:
         return HttpResponse(status=404)
-    if not request.user.has_perm(config["permission"]):
-        return HttpResponseForbidden("You do not have permission to delete this item.")
-
     obj = _get_scoped_object_or_404(request, config["model"], pk=pk)
+    if not user_can_delete_object(request.user, obj, config["permission"]):
+        return HttpResponseForbidden("You do not have permission to delete this item.")
     individual = _resolve_workflow_individual(obj)
     blockers = _workflow_delete_blockers(obj, config)
     if blockers:
@@ -4509,9 +4648,6 @@ def variant_create_modal(request, individual_id=None, analysis_id=None):
     from variant.forms import VARIANT_FORM_CLASSES, VariantTypeForm
     from lab.models import Individual, Analysis
 
-    if not request.user.has_perm("variant.add_variant"):
-        return HttpResponseForbidden("You do not have permission to add variants.")
-
     analysis = None
     individual = None
     title = ""
@@ -4527,10 +4663,14 @@ def variant_create_modal(request, individual_id=None, analysis_id=None):
         if not pipeline:
             return HttpResponse("Analysis has no pipeline attached.", status=400)
         individual = pipeline.test.sample.individual
+        if not user_can_create_related_object(request.user, analysis, "variant.add_variant"):
+            return HttpResponseForbidden("You do not have permission to add variants.")
         title = f"Add Variant for {analysis.type.name if analysis.type else 'Analysis'}"
         post_url = reverse("lab:variant_create_for_analysis_modal", kwargs={"analysis_id": analysis.id})
     elif individual_id:
         individual = get_accessible_individual_or_404(request.user, pk=individual_id)
+        if not user_can_create_related_object(request.user, individual, "variant.add_variant"):
+            return HttpResponseForbidden("You do not have permission to add variants.")
         title = f"Add Variant for {individual.primary_id}"
         post_url = reverse("lab:variant_create_for_individual_modal", kwargs={"individual_id": individual.id})
     else:
@@ -4921,11 +5061,8 @@ def variant_genebe_fetch(request, pk):
     from variant.services import AnnotationService
     from variant.forms import VariantACMGEvidenceOverrideForm
 
-    if not request.user.has_perm("variant.change_variant"):
-        return HttpResponseForbidden("You do not have permission to fetch GeneBe classifications.")
-
-
-    variant = get_object_or_404(
+    variant = _get_scoped_object_or_404(
+        request,
         Variant.objects.select_related(
             "individual",
             "analysis",
@@ -4937,6 +5074,8 @@ def variant_genebe_fetch(request, pk):
         ).prefetch_related("annotations"),
         pk=pk,
     )
+    if not user_can_change_object(request.user, variant, "variant.change_variant"):
+        return HttpResponseForbidden("You do not have permission to fetch GeneBe classifications.")
 
     service = AnnotationService()
     genebe_data = service.fetch_genebe(variant)
@@ -4977,7 +5116,7 @@ def variant_acmg_evidence_save(request, pk):
         pk=pk,
     )
 
-    if not request.user.has_perm("variant.change_variant"):
+    if not user_can_change_object(request.user, variant, "variant.change_variant"):
         return HttpResponseForbidden("You do not have permission to change ACMG evidence.")
 
     catalog_criteria = set(ACMG_CRITERIA_INFO)
@@ -5179,21 +5318,51 @@ def _compute_status_usage():
     return dict(usage)
 
 
+def _manageable_project_membership_projects(user):
+    return accessible_projects(
+        user,
+        Project.objects.all(),
+        min_role=ProjectMembership.Role.MANAGER,
+    ).order_by("name")
+
+
+def _limit_project_membership_form_scope(form, user):
+    if "project" in form.fields and getattr(form, "fixed_project", None) is None:
+        form.fields["project"].queryset = _manageable_project_membership_projects(user)
+
+
 def _build_section_context(request, key, config):
     """Build per-section context dict for the config_section partial."""
     from django.db.models import Count
 
     usage_relation = config.get("usage_relation")
     if key == "projectmembership":
+        project_scope = accessible_projects(request.user, Project.objects.all())
         objects = config["model"].objects.select_related(
             "project", "user", "created_by"
-        ).order_by("project__name", "user__last_name", "user__first_name", "user__username")
+        ).filter(project__in=project_scope).order_by(
+            "project__name",
+            "user__last_name",
+            "user__first_name",
+            "user__username",
+        )
     elif usage_relation:
         objects = config["model"].objects.annotate(
             usage_count=Count(usage_relation, distinct=True)
         )
     else:
         objects = config["model"].objects.all()
+
+    can_add = request.user.has_perm(f"lab.add_{key}")
+    can_change = request.user.has_perm(f"lab.change_{key}")
+    can_delete = request.user.has_perm(f"lab.delete_{key}")
+    if key == "projectmembership":
+        has_manageable_project = _manageable_project_membership_projects(
+            request.user
+        ).exists()
+        can_add = can_add and has_manageable_project
+        can_change = can_change and has_manageable_project
+        can_delete = can_delete and has_manageable_project
 
     ctx = {
         "key": key,
@@ -5202,9 +5371,9 @@ def _build_section_context(request, key, config):
         "fields": config["fields"],
         "objects": objects,
         "usage_label": config.get("usage_label", ""),
-        "can_add": request.user.has_perm(f"lab.add_{key}"),
-        "can_change": request.user.has_perm(f"lab.change_{key}"),
-        "can_delete": request.user.has_perm(f"lab.delete_{key}"),
+        "can_add": can_add,
+        "can_change": can_change,
+        "can_delete": can_delete,
     }
 
     if key == "status":
@@ -5295,11 +5464,25 @@ def config_form(request, model_name, pk=None):
         return HttpResponseForbidden("Permission denied.")
 
     instance = get_object_or_404(Model, pk=pk) if pk else None
+    if (
+        model_name == "projectmembership"
+        and instance is not None
+        and not user_can_manage_project(request.user, instance.project, required_perm)
+    ):
+        return HttpResponseForbidden("Permission denied.")
 
     if request.method == "POST":
         form = FormClass(request.POST, instance=instance)
+        if model_name == "projectmembership":
+            _limit_project_membership_form_scope(form, request.user)
         if form.is_valid():
             if model_name == "projectmembership":
+                projects = form._selected_projects()
+                if not projects or not all(
+                    user_can_manage_project(request.user, project, required_perm)
+                    for project in projects
+                ):
+                    return HttpResponseForbidden("Permission denied.")
                 form.save(user=request.user)
             else:
                 obj = form.save(commit=False)
@@ -5335,6 +5518,8 @@ def config_form(request, model_name, pk=None):
 
     # GET – render empty/pre-filled form
     form = FormClass(instance=instance)
+    if model_name == "projectmembership":
+        _limit_project_membership_form_scope(form, request.user)
     ctx = {
         "model_name": model_name,
         "label": config["label"],
@@ -5354,10 +5539,17 @@ def config_delete_confirm(request, model_name, pk):
         return HttpResponse(status=404)
 
     config = registry[model_name]
-    if not request.user.has_perm(f"lab.delete_{model_name}"):
-        return HttpResponseForbidden("Permission denied.")
-
     obj = get_object_or_404(config["model"], pk=pk)
+    if model_name == "projectmembership":
+        can_delete_config_obj = user_can_manage_project(
+            request.user,
+            obj.project,
+            f"lab.delete_{model_name}",
+        )
+    else:
+        can_delete_config_obj = request.user.has_perm(f"lab.delete_{model_name}")
+    if not can_delete_config_obj:
+        return HttpResponseForbidden("Permission denied.")
 
     # Collect related objects (Django-admin style).
     # PROTECT fields raise ProtectedError inside collector.collect() itself,
@@ -5408,10 +5600,17 @@ def config_delete(request, model_name, pk):
         return HttpResponse(status=404)
 
     config = registry[model_name]
-    if not request.user.has_perm(f"lab.delete_{model_name}"):
-        return HttpResponseForbidden("Permission denied.")
-
     obj = get_object_or_404(config["model"], pk=pk)
+    if model_name == "projectmembership":
+        can_delete_config_obj = user_can_manage_project(
+            request.user,
+            obj.project,
+            f"lab.delete_{model_name}",
+        )
+    else:
+        can_delete_config_obj = request.user.has_perm(f"lab.delete_{model_name}")
+    if not can_delete_config_obj:
+        return HttpResponseForbidden("Permission denied.")
 
     # Block on M2M protections before attempting deletion.
     m2m_blocked = _check_m2m_protections(obj, config)

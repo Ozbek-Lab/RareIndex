@@ -7,7 +7,16 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from lab.forms import parse_bulk_create_id_text
-from lab.models import CrossIdentifier, IdentifierType, Individual, Sample, SampleType, Status
+from lab.models import (
+    CrossIdentifier,
+    IdentifierType,
+    Individual,
+    Project,
+    ProjectMembership,
+    Sample,
+    SampleType,
+    Status,
+)
 
 
 @override_settings(
@@ -53,6 +62,14 @@ class BulkSampleCreateModalTests(TestCase):
         )
         self.first = Individual.objects.create(full_name="First Individual", created_by=self.user)
         self.second = Individual.objects.create(full_name="Second Individual", created_by=self.user)
+        self.project = Project.objects.create(name="Bulk Sample Project", created_by=self.user)
+        self.project.individuals.add(self.first, self.second)
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=self.user,
+            role=ProjectMembership.Role.EDITOR,
+            created_by=self.user,
+        )
         CrossIdentifier.objects.create(
             individual=self.first,
             id_type=self.id_type,

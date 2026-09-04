@@ -91,6 +91,17 @@ def is_status_active(obj, status):
     except AttributeError:
         return False
 
+
+@register.simple_tag(takes_context=True)
+def can_change_object(context, obj, *permissions):
+    request = context.get("request")
+    if request is None:
+        return False
+    from lab.access import user_can_change_object
+
+    return user_can_change_object(request.user, obj, permissions or None)
+
+
 @register.simple_tag(takes_context=True)
 def clean_pagination_url(context, page):
     """

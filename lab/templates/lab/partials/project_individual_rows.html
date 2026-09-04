@@ -56,7 +56,7 @@
             </td>
             <td class="text-xs text-base-content/60 capitalize">{{ individual.sex|default:"—" }}</td>
             <td class="text-xs text-base-content/50">{{ individual.created_at|date:"d/m/Y H:i" }}</td>
-            {% if perms.lab.change_project %}
+            {% if can_change_project %}
             <td class="text-right">
                 <button class="btn btn-ghost btn-xs text-error hover:bg-error/10"
                         hx-delete="{% url 'lab:project_individual_remove' project.pk individual.pk %}"
@@ -71,7 +71,7 @@
     {% endfor %}
     {% if not individual_page.has_next %}
     <tr class="end-of-list-indicator">
-        <td colspan="{% if perms.lab.change_project %}8{% else %}7{% endif %}" class="text-center text-xs text-base-content/40 py-3">
+        <td colspan="{% if can_change_project %}8{% else %}7{% endif %}" class="text-center text-xs text-base-content/40 py-3">
             <i class="fa-solid fa-check-circle mr-1"></i>
             End of individuals
         </td>

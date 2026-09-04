@@ -38,6 +38,7 @@ from .models import (
     PlotTemplate,
     DashboardWidget,
     Family,
+    ProjectMembership,
 )
 from .access import (
     accessible_individuals,
@@ -45,6 +46,10 @@ from .access import (
     accessible_variants,
     get_accessible_individual_or_404,
     user_can_access_object,
+    user_can_change_object,
+    user_can_delete_object,
+    user_can_manage_project,
+    user_has_permission,
     user_has_project_scope_bypass,
 )
 from .tables import IndividualTable, SampleTable, ProjectTable, VariantTable
@@ -1234,6 +1239,15 @@ def generic_detail(request):
             request.user,
             obj.projects.all(),
         )
+        context["can_change_project_assignments"] = (
+            user_can_change_object(request.user, obj, "lab.change_individual")
+            and user_has_permission(request.user, "lab.change_project")
+            and accessible_projects(
+                request.user,
+                Project.objects.all(),
+                min_role=ProjectMembership.Role.MANAGER,
+            ).exists()
+        )
         context["tests"] = [
             test for sample in obj.samples.all() for test in sample.tests.all()
         ]
@@ -2033,8 +2047,20 @@ class ProjectDetailView(LoginRequiredMixin, MainAppPermissionRequiredMixin, Deta
         context["project_individuals_search"] = search
         context["project_individuals_sort"] = sort
         context["project_individuals_dir"] = direction
-        context["can_manage_project_memberships"] = (
-            request.user.is_staff or request.user.is_superuser
+        context["can_change_project"] = user_can_manage_project(
+            request.user,
+            self.object,
+            "lab.change_project",
+        )
+        context["can_delete_project"] = user_can_delete_object(
+            request.user,
+            self.object,
+            "lab.delete_project",
+        )
+        context["can_manage_project_memberships"] = user_can_manage_project(
+            request.user,
+            self.object,
+            "lab.view_projectmembership",
         )
         if context["can_manage_project_memberships"]:
             from .forms import ProjectMembershipForm
@@ -2094,6 +2120,15 @@ class IndividualDetailView(LoginRequiredMixin, MainAppPermissionRequiredMixin, D
         context['visible_individual_projects'] = accessible_projects(
             self.request.user,
             individual.projects.all(),
+        )
+        context['can_change_project_assignments'] = (
+            user_can_change_object(self.request.user, individual, "lab.change_individual")
+            and user_has_permission(self.request.user, "lab.change_project")
+            and accessible_projects(
+                self.request.user,
+                Project.objects.all(),
+                min_role=ProjectMembership.Role.MANAGER,
+            ).exists()
         )
         context['workflow_content_id'] = f"workflow-content-{individual.pk}"
         context['workflow_target_id'] = f"#{context['workflow_content_id']}"
@@ -2374,6 +2409,8 @@ class CompleteTaskView(LoginRequiredMixin, TemplateView):
         task = get_object_or_404(Task, pk=pk)
         if not user_can_access_object(request.user, task):
             raise Http404
+        if not user_can_change_object(request.user, task, "lab.change_task"):
+            return HttpResponseForbidden("You do not have permission to change this task.")
         
         if task.assigned_to != request.user and not request.user.is_superuser:
             return HttpResponseForbidden("You are not assigned to this task.")
@@ -2393,32 +2430,34 @@ class ReopenTaskView(LoginRequiredMixin, TemplateView):
         task = get_object_or_404(Task, pk=pk)
         if not user_can_access_object(request.user, task):
             raise Http404
+        if not user_can_change_object(request.user, task, "lab.change_task"):
+            return HttpResponseForbidden("You do not have permission to change this task.")
 
         # Permission check
         if task.assigned_to != request.user and not request.user.is_superuser:
             return HttpResponseForbidden("You cannot reopen this task.")
 
         # Reopen logic
-            if task.statuses.filter(name__iexact="completed").exists():
-                if task.previous_status:
-                    task.statuses.set([task.previous_status])
-                    task.previous_status = None
-                else:
-                    task_ct = ContentType.objects.get_for_model(Task)
-                    pending_status = (
-                        Status.objects.filter(content_type=task_ct, name__iexact="Assigned").first()
-                        or Status.objects.filter(content_type=task_ct).first()
-                    )
-                    if pending_status:
-                        task.statuses.set([pending_status])
+        if task.statuses.filter(name__iexact="completed").exists():
+            if task.previous_status:
+                task.statuses.set([task.previous_status])
+                task.previous_status = None
+            else:
+                task_ct = ContentType.objects.get_for_model(Task)
+                pending_status = (
+                    Status.objects.filter(content_type=task_ct, name__iexact="Assigned").first()
+                    or Status.objects.filter(content_type=task_ct).first()
+                )
+                if pending_status:
+                    task.statuses.set([pending_status])
 
-            task.save(update_fields=["previous_status"])
+        task.save(update_fields=["previous_status"])
 
-            if request.htmx:
-                response = HttpResponse("")
-                response["HX-Trigger"] = "taskChanged"
-                return response
-            return redirect("lab:task_detail", pk=pk)
+        if request.htmx:
+            response = HttpResponse("")
+            response["HX-Trigger"] = "taskChanged"
+            return response
+        return redirect("lab:task_detail", pk=pk)
 
         if request.htmx:
             return HttpResponse("")

@@ -66,7 +66,7 @@ class VariantCreateViewTests(TestCase):
         ProjectMembership.objects.create(
             project=self.project,
             user=self.user,
-            role=ProjectMembership.Role.VIEWER,
+            role=ProjectMembership.Role.EDITOR,
             created_by=self.user,
         )
         self.individual = Individual.objects.create(

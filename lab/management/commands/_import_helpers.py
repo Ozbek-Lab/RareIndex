@@ -384,8 +384,16 @@ def get_or_create_status(
 # HPO / notes
 # ---------------------------------------------------------------------------
 
+HPO_CODE_RE = re.compile(r"(?i)\bHP\s*:?\s*(\d{4,7})\b")
+
+
+def _normalize_hpo_identifier(value):
+    digits = re.sub(r"\D", "", str(value or ""))
+    return digits.zfill(7) if digits else ""
+
+
 def get_hpo_terms(hpo_codes_str, stdout=None):
-    """Parse newline-separated 'Description HP:NNNNN' strings and return matching Term objects."""
+    """Parse imported HPO text and return matching Term objects."""
     from ontologies.models import Term, Ontology
     if not hpo_codes_str:
         return []
@@ -395,20 +403,28 @@ def get_hpo_terms(hpo_codes_str, stdout=None):
             stdout.write('HP ontology not found')
         return []
     terms = []
+    seen_term_ids = set()
+
+    def add_term(term):
+        if term and term.pk not in seen_term_ids:
+            terms.append(term)
+            seen_term_ids.add(term.pk)
+
     for line in str(hpo_codes_str).split('\n'):
         line = line.strip()
         if not line or line == '+':
             continue
-        hp_match = re.search(r'HP:(\d+)', line)
-        if not hp_match:
-            continue
-        code = hp_match.group(1)
-        description = line[:hp_match.start()].strip()
-        term = Term.objects.filter(ontology=hp_ontology, identifier=code).first()
-        if not term:
-            term = Term.objects.filter(ontology=hp_ontology, label__icontains=description).first()
-        if term:
-            terms.append(term)
+
+        for hp_match in HPO_CODE_RE.finditer(line):
+            code = _normalize_hpo_identifier(hp_match.group(1))
+            description = line[:hp_match.start()].strip(" ,;:-")
+            term = Term.objects.filter(ontology=hp_ontology, identifier=code).first()
+            if not term and description:
+                term = Term.objects.filter(
+                    ontology=hp_ontology,
+                    label__icontains=description,
+                ).first()
+            add_term(term)
     return terms
 
 
