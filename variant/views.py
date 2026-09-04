@@ -2,18 +2,41 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
-from lab.models import Analysis, Pipeline, Individual
+from lab.models import Analysis, Pipeline, Individual, ProjectMembership
 from .models import Variant
 from .forms import VARIANT_FORM_CLASSES, VariantContextForm, VariantUpdateForm
 from django.urls import reverse
 from urllib.parse import urlencode
-from lab.access import get_accessible_individual_or_404, user_can_access_object
+from lab.access import (
+    accessible_individuals,
+    get_accessible_individual_or_404,
+    user_can_access_object,
+    user_can_change_object,
+    user_can_create_related_object,
+    user_has_permission,
+)
+
+
+def _scope_variant_context_form(form, user):
+    editable_individuals = accessible_individuals(
+        user,
+        Individual.objects.all(),
+        min_role=ProjectMembership.Role.EDITOR,
+    )
+    form.fields["individual"].queryset = editable_individuals
+    form.fields["test"].queryset = form.fields["test"].queryset.filter(
+        sample__individual__in=editable_individuals,
+    )
+    form.fields["pipeline"].queryset = form.fields["pipeline"].queryset.filter(
+        test__sample__individual__in=editable_individuals,
+    )
+
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def variant_create(request):
     analysis_id = request.GET.get("analysis_id") or request.GET.get("analysis")
-    if not request.user.has_perm("variant.add_variant"):
+    if not user_has_permission(request.user, "variant.add_variant"):
         return HttpResponseForbidden("You do not have permission to add variants.")
 
     pipeline_id = request.GET.get("pipeline_id") or request.GET.get("pipeline")
@@ -25,6 +48,7 @@ def variant_create(request):
         # If this is an HTMX request for the selection form (filtering)
         # We re-render the form with the current data to update querysets
         form = VariantContextForm(data=request.GET)
+        _scope_variant_context_form(form, request.user)
         
         context = {"form": form}
         
@@ -51,6 +75,8 @@ def variant_create(request):
         pipeline = analysis.pipeline
         if pipeline is None:
             return HttpResponseBadRequest("Selected analysis has no pipeline.")
+        if not user_can_create_related_object(request.user, analysis, "variant.add_variant"):
+            return HttpResponseForbidden("You do not have permission to add variants.")
     elif pipeline_id:
         pipeline = get_object_or_404(
             Pipeline.objects.select_related("test__sample__individual"),
@@ -58,6 +84,8 @@ def variant_create(request):
         )
         if not user_can_access_object(request.user, pipeline):
             raise Http404
+        if not user_can_create_related_object(request.user, pipeline, "variant.add_variant"):
+            return HttpResponseForbidden("You do not have permission to add variants.")
     else:
         return HttpResponseBadRequest("Missing Variant Context.")
 
@@ -106,7 +134,7 @@ def variant_update(request, pk):
     variant = get_object_or_404(Variant, pk=pk)
     if not user_can_access_object(request.user, variant):
         raise Http404
-    if not request.user.has_perm("variant.change_variant"):
+    if not user_can_change_object(request.user, variant, "variant.change_variant"):
         return HttpResponseForbidden("You do not have permission to change variants.")
     
     # Handle cancel request

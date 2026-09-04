@@ -9,7 +9,12 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from lab.access import accessible_individuals, accessible_projects
+from lab.access import (
+    accessible_individuals,
+    accessible_projects,
+    user_can_change_object,
+    user_can_manage_project,
+)
 from lab.management.commands.create_groups import expected_permission_codenames
 from lab.management.commands.import_all import Command as ImportAllCommand
 
@@ -20,6 +25,8 @@ from .models import CrossIdentifier, IdentifierType, Individual, Project, Projec
 class ProjectScopedAccessTests(TestCase):
     def setUp(self):
         self.member = User.objects.create_user(username="project-member", password="password")
+        self.editor = User.objects.create_user(username="project-editor", password="password")
+        self.mixed_member = User.objects.create_user(username="mixed-member", password="password")
         self.outsider = User.objects.create_user(username="outsider", password="password")
         self.staff = User.objects.create_user(
             username="staff-user",
@@ -29,20 +36,45 @@ class ProjectScopedAccessTests(TestCase):
         self.superuser = User.objects.create_superuser(username="root", password="password")
 
         self.visible_project = Project.objects.create(name="Visible Project", created_by=self.staff)
+        self.manager_project = Project.objects.create(name="Manager Project", created_by=self.staff)
+        self.viewer_project = Project.objects.create(name="Viewer Project", created_by=self.staff)
         self.hidden_project = Project.objects.create(name="Hidden Project", created_by=self.staff)
         self.visible_individual = Individual.objects.create(full_name="Visible Person", created_by=self.staff)
         self.hidden_individual = Individual.objects.create(full_name="Hidden Person", created_by=self.staff)
         self.visible_project.individuals.add(self.visible_individual)
+        self.manager_project.individuals.add(self.visible_individual)
+        self.viewer_project.individuals.add(self.visible_individual)
         self.hidden_project.individuals.add(self.hidden_individual)
+        view_individual_perm = Permission.objects.get(
+            content_type=ContentType.objects.get_for_model(Individual),
+            codename="view_individual",
+        )
+        change_individual_perm = Permission.objects.get(
+            content_type=ContentType.objects.get_for_model(Individual),
+            codename="change_individual",
+        )
+        view_project_perm = Permission.objects.get(
+            content_type=ContentType.objects.get_for_model(Project),
+            codename="view_project",
+        )
+        change_project_perm = Permission.objects.get(
+            content_type=ContentType.objects.get_for_model(Project),
+            codename="change_project",
+        )
         self.member.user_permissions.add(
-            Permission.objects.get(
-                content_type=ContentType.objects.get_for_model(Individual),
-                codename="view_individual",
-            ),
-            Permission.objects.get(
-                content_type=ContentType.objects.get_for_model(Project),
-                codename="view_project",
-            ),
+            view_individual_perm,
+            view_project_perm,
+        )
+        self.editor.user_permissions.add(
+            view_individual_perm,
+            change_individual_perm,
+            view_project_perm,
+        )
+        self.mixed_member.user_permissions.add(
+            view_individual_perm,
+            change_individual_perm,
+            view_project_perm,
+            change_project_perm,
         )
         self.outsider.user_permissions.add(
             Permission.objects.get(
@@ -58,6 +90,30 @@ class ProjectScopedAccessTests(TestCase):
             project=self.visible_project,
             user=self.member,
             role=ProjectMembership.Role.VIEWER,
+            created_by=self.staff,
+        )
+        ProjectMembership.objects.create(
+            project=self.visible_project,
+            user=self.editor,
+            role=ProjectMembership.Role.EDITOR,
+            created_by=self.staff,
+        )
+        ProjectMembership.objects.create(
+            project=self.visible_project,
+            user=self.mixed_member,
+            role=ProjectMembership.Role.VIEWER,
+            created_by=self.staff,
+        )
+        ProjectMembership.objects.create(
+            project=self.viewer_project,
+            user=self.mixed_member,
+            role=ProjectMembership.Role.VIEWER,
+            created_by=self.staff,
+        )
+        ProjectMembership.objects.create(
+            project=self.manager_project,
+            user=self.mixed_member,
+            role=ProjectMembership.Role.MANAGER,
             created_by=self.staff,
         )
 
@@ -152,6 +208,66 @@ class ProjectScopedAccessTests(TestCase):
                 ).status_code,
                 200,
             )
+
+    def test_viewer_role_cannot_change_individual_even_with_model_permission(self):
+        self.member.user_permissions.add(
+            Permission.objects.get(
+                content_type=ContentType.objects.get_for_model(Individual),
+                codename="change_individual",
+            )
+        )
+
+        self.assertFalse(
+            user_can_change_object(
+                self.member,
+                self.visible_individual,
+                "lab.change_individual",
+            )
+        )
+
+        self.client.force_login(self.member)
+        response = self.client.get(
+            reverse("lab:individual_demographics_edit", args=[self.visible_individual.pk])
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_editor_role_can_change_individual_with_model_permission(self):
+        self.assertTrue(
+            user_can_change_object(
+                self.editor,
+                self.visible_individual,
+                "lab.change_individual",
+            )
+        )
+
+        self.client.force_login(self.editor)
+        response = self.client.get(
+            reverse("lab:individual_demographics_edit", args=[self.visible_individual.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_strongest_project_role_wins_for_individual_access(self):
+        self.assertTrue(
+            user_can_change_object(
+                self.mixed_member,
+                self.visible_individual,
+                "lab.change_individual",
+            )
+        )
+        self.assertTrue(
+            user_can_manage_project(
+                self.mixed_member,
+                self.manager_project,
+                "lab.change_project",
+            )
+        )
+        self.assertFalse(
+            user_can_manage_project(
+                self.mixed_member,
+                self.viewer_project,
+                "lab.change_project",
+            )
+        )
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"], SECURE_SSL_REDIRECT=False)
@@ -303,6 +419,13 @@ class ProjectMembershipConfigurationTests(TestCase):
             role=ProjectMembership.Role.VIEWER,
             created_by=self.staff,
         )
+        for project in (self.project, self.second_project, self.third_project):
+            ProjectMembership.objects.create(
+                project=project,
+                user=self.manager,
+                role=ProjectMembership.Role.MANAGER,
+                created_by=self.staff,
+            )
         self.content_type = ContentType.objects.get_for_model(ProjectMembership)
 
     def _permission(self, codename):

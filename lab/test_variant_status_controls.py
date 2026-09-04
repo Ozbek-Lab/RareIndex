@@ -61,6 +61,12 @@ class VariantStatusControlsTests(TestCase):
             codename="change_annotation",
         )
 
+    def set_project_role(self, role):
+        ProjectMembership.objects.filter(
+            project=self.project,
+            user=self.user,
+        ).update(role=role)
+
     def get_request(self):
         request = self.factory.get("/")
         request.user = self.user
@@ -75,6 +81,7 @@ class VariantStatusControlsTests(TestCase):
         return request
 
     def test_workflow_variant_rows_show_editable_status_controls(self):
+        self.set_project_role(ProjectMembership.Role.EDITOR)
         self.user.user_permissions.add(self.annotation_change_permission)
         Variant.objects.get(pk=self.variant.pk).statuses.add(self.status)
 
@@ -90,6 +97,7 @@ class VariantStatusControlsTests(TestCase):
         self.assertIn(f'hx-target="#workflow-variant-status-{self.variant.pk}"', html)
 
     def test_annotation_editors_can_render_and_toggle_variant_status_controls(self):
+        self.set_project_role(ProjectMembership.Role.EDITOR)
         self.user.user_permissions.add(self.annotation_change_permission)
 
         detail_response = variant_detail_partial(self.get_request(), self.variant.pk)
@@ -120,6 +128,7 @@ class VariantStatusControlsTests(TestCase):
         )
 
     def test_workflow_variant_status_target_refreshes_workflow_badge(self):
+        self.set_project_role(ProjectMembership.Role.EDITOR)
         self.user.user_permissions.add(self.annotation_change_permission)
 
         update_response = update_status(
@@ -141,6 +150,8 @@ class VariantStatusControlsTests(TestCase):
         )
 
     def test_view_only_users_do_not_see_or_toggle_variant_status_controls(self):
+        self.user.user_permissions.add(self.annotation_change_permission)
+
         detail_response = variant_detail_partial(self.get_request(), self.variant.pk)
         self.assertEqual(detail_response.status_code, 200)
         self.assertNotContains(detail_response, "variant-status-controls")

@@ -55,6 +55,7 @@ import csv
 import json
 import os
 import re
+from collections import defaultdict
 from pathlib import Path
 
 import openpyxl
@@ -63,6 +64,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.files import File
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 
 from lab.models import (
     Analysis,
@@ -81,6 +83,7 @@ from lab.models import (
     Status,
     Task,
     Test,
+    TestType,
 )
 from ontologies.models import Ontology
 from variant.models import Classification, CNV, Gene, SNV, SV, Repeat, Variant, delins, normalize_chromosome
@@ -390,6 +393,50 @@ def _build_clinician_assignments(
     return list(zip(names, assignments))
 
 
+def _build_clinician_assignments_from_combined_field(value) -> list[tuple[str, list[str]]]:
+    """
+    Parse the legacy combined clinician/contact field.
+
+    Common shapes are:
+      - "Dr. Name"
+      - "Dr. Name / email@example.com / 0555..."
+      - "Dr. Name, Prof. Dr. Other Name"
+    """
+    text = str(value or "").strip()
+    if not text:
+        return []
+
+    assignments: list[tuple[str, list[str]]] = []
+    for line in re.split(r"[\n;]+", text):
+        for entry in _split_csv_values(line):
+            parts = [part.strip() for part in str(entry).split("/") if part and part.strip()]
+            if not parts:
+                continue
+            clinician_name = parts[0]
+            contact_values: list[str] = []
+            for raw_contact in parts[1:]:
+                for token in _split_csv_values(raw_contact):
+                    normalized = _normalize_contact_value(token)
+                    if normalized:
+                        contact_values.append(normalized)
+            assignments.append((clinician_name, contact_values))
+
+    return assignments
+
+
+def _build_clinician_assignments_from_row(row: dict) -> list[tuple[str, list[str]]]:
+    assignments = _build_clinician_assignments(
+        row.get("Klinisyen"),
+        row.get("İletişim Bilgileri - Mail/telefon?"),
+        row.get("İletişim Bilgileri - Telefon/mail?"),
+    )
+    if assignments:
+        return assignments
+    return _build_clinician_assignments_from_combined_field(
+        row.get("Klinisyen & İletişim Bilgileri")
+    )
+
+
 def _extract_variant_records(token: str) -> list[dict]:
     """
     Best-effort parser for Yayın_İçi variant text.
@@ -632,8 +679,8 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def add_arguments(self, parser):
-        parser.add_argument("xlsx_file", type=str, help="Path to the master XLSX file")
-        parser.add_argument("--admin-username", required=True,
+        parser.add_argument("xlsx_file", type=str, nargs="?", help="Path to the master XLSX file")
+        parser.add_argument("--admin-username",
                             help="Username for created_by / performed_by fallback")
         parser.add_argument("--rarepipe-tsv", dest="rarepipe_tsv",
                             help="Path to legacy RarePipe TSV samplesheet")
@@ -647,6 +694,38 @@ class Command(BaseCommand):
                             help="Skip HGNC gene data download check")
         parser.add_argument("--dry-run", dest="dry_run", action="store_true",
                             help="Validate without writing to the database")
+        parser.add_argument("--backfill-testtype-report-fields", action="store_true",
+                            help="Backfill TestType report defaults from report_text_field_reference.md")
+        parser.add_argument("--overwrite-testtype-report-fields", action="store_true",
+                            help="Replace existing TestType report defaults during backfill")
+        parser.add_argument("--report-text-reference",
+                            help="Path to report_text_field_reference.md")
+        parser.add_argument("--test-type", action="append", dest="test_types",
+                            help="Limit report-field backfill to one TestType name; may be repeated")
+        parser.add_argument("--backfill-diagnosis-dates", action="store_true",
+                            help="Backfill Individual.diagnosis_date from linked reports")
+        parser.add_argument("--apply", action="store_true",
+                            help="Write diagnosis-date backfill changes; otherwise it previews")
+        parser.add_argument("--overwrite", action="store_true",
+                            help="Replace existing diagnosis_date values during diagnosis-date backfill")
+        parser.add_argument("--strategy", choices=("earliest", "latest"), default="earliest",
+                            help="Which matching report date to use for diagnosis-date backfill")
+        parser.add_argument("--individual-id", type=int, action="append", dest="individual_ids",
+                            help="Limit diagnosis-date backfill to one individual id; may be repeated")
+        parser.add_argument("--limit", type=int,
+                            help="Limit diagnosis-date backfill updates, useful for inspection")
+        parser.add_argument("--solved-status", default="Solved",
+                            help="Individual status name that marks a solved case")
+        parser.add_argument("--causative-status", default="Causative",
+                            help="Variant status name that marks a causative variant")
+        parser.add_argument("--positive-report-status", default="Positive",
+                            help="AnalysisReport status name that marks a positive report")
+        parser.add_argument("--include-unsolved", action="store_true",
+                            help="Also backfill individuals without the solved status")
+        parser.add_argument("--include-noncausative", action="store_true",
+                            help="Also use non-causative variants and analysis-linked reports")
+        parser.add_argument("--include-negative", action="store_true",
+                            help="Also use reports without the positive report status")
 
     def _resolve_admin_user(self, admin_username: str):
         """Get the admin user, creating or promoting it when needed."""
@@ -740,6 +819,17 @@ class Command(BaseCommand):
         )
         return assignments
 
+    def _build_clinician_assignments_from_row(self, row):
+        assignments = _build_clinician_assignments_from_row(row)
+        if row.get("Klinisyen"):
+            self._report_clinician_edge_cases(
+                row.get("Klinisyen"),
+                row.get("İletişim Bilgileri - Mail/telefon?"),
+                row.get("İletişim Bilgileri - Telefon/mail?"),
+                assignments,
+            )
+        return assignments
+
     def _report_clinician_edge_cases(
         self,
         clinician_field,
@@ -796,12 +886,31 @@ class Command(BaseCommand):
         if self.dry_run:
             self.stdout.write(self.style.WARNING("-- DRY RUN: nothing will be saved --"))
 
+        # Lazily loaded on-demand by _backfill_testtype_report_fields().
+        self._report_text_reference_cache = None
+        self.report_text_reference_path = options.get("report_text_reference")
+        self.overwrite_testtype_report_fields = options.get("overwrite_testtype_report_fields", False)
+
+        file_path = options.get("xlsx_file")
+        if not file_path and (
+            options.get("backfill_testtype_report_fields")
+            or options.get("backfill_diagnosis_dates")
+        ):
+            if options.get("backfill_testtype_report_fields"):
+                self._backfill_all_testtype_report_fields(options.get("test_types") or [])
+            if options.get("backfill_diagnosis_dates"):
+                self._run_diagnosis_date_backfill(options)
+            return
+
         admin_username = options["admin_username"]
+        if not admin_username:
+            raise CommandError("--admin-username is required for spreadsheet import.")
         self.admin_user = self._resolve_admin_user(admin_username)
         if not self.dry_run:
             call_command("create_groups")
 
-        file_path = options["xlsx_file"]
+        if not file_path:
+            raise CommandError("xlsx_file is required unless using a backfill-only mode.")
         if not os.path.exists(file_path):
             raise CommandError(f"File not found: {file_path}")
 
@@ -809,9 +918,6 @@ class Command(BaseCommand):
 
         # Instance-level state shared between steps
         self.analysis_map: dict = {}       # (lab_id, tt_name) → Analysis
-
-        # Lazily loaded on-demand by _backfill_testtype_report_fields().
-        self._report_text_reference_cache = None
 
         # Step 0a — ontologies
         self._step0a_ensure_ontologies()
@@ -821,6 +927,9 @@ class Command(BaseCommand):
 
         # Step 1
         self.statuses, self.id_types = self._step1_setup()
+
+        if options.get("backfill_testtype_report_fields"):
+            self._backfill_all_testtype_report_fields(options.get("test_types") or [])
 
         # Load workbook
         self.stdout.write(f"Loading workbook: {file_path}")
@@ -875,6 +984,9 @@ class Command(BaseCommand):
         # Step 20 — Yayın_İçi
         if options.get("yayin_ici"):
             self._step_yayin_ici(options["yayin_ici"])
+
+        if options.get("backfill_diagnosis_dates"):
+            self._run_diagnosis_date_backfill(options)
 
         self._write_issue_log()
         self.stdout.write(self.style.SUCCESS("Import completed successfully."))
@@ -1006,8 +1118,11 @@ class Command(BaseCommand):
         if self._report_text_reference_cache is not None:
             return self._report_text_reference_cache
 
-        repo_root = Path(__file__).resolve().parents[3]
-        md_path = repo_root / "report_text_field_reference.md"
+        if getattr(self, "report_text_reference_path", None):
+            md_path = Path(self.report_text_reference_path)
+        else:
+            repo_root = Path(__file__).resolve().parents[3]
+            md_path = repo_root / "report_text_field_reference.md"
         if not md_path.exists():
             self._report_text_reference_cache = {}
             return self._report_text_reference_cache
@@ -1017,6 +1132,35 @@ class Command(BaseCommand):
         )
         return self._report_text_reference_cache
 
+    def _testtype_report_field_updates(self, test_type) -> dict[str, str] | None:
+        if not test_type or not getattr(test_type, "pk", None):
+            return None
+        if not getattr(test_type, "name", None):
+            return None
+
+        parsed = self._load_report_text_reference()
+        if not parsed:
+            return None
+
+        lower_to_canonical = {k.strip().lower(): k for k in parsed.keys()}
+        canonical_name = lower_to_canonical.get(test_type.name.strip().lower())
+        if not canonical_name:
+            return None
+
+        payload = _normalize_testtype_report_payload(parsed.get(canonical_name) or {})
+        model_fields = {f.name for f in type(test_type)._meta.fields}
+        overwrite = getattr(self, "overwrite_testtype_report_fields", False)
+
+        updates = {}
+        for field_name, value in payload.items():
+            if field_name not in model_fields:
+                continue
+            current = getattr(test_type, field_name, "")
+            if overwrite or current is None or (isinstance(current, str) and current.strip() == ""):
+                updates[field_name] = value
+
+        return updates
+
     def _backfill_testtype_report_fields(self, test_type) -> None:
         """
         Populate empty TestType report fields from the markdown reference.
@@ -1024,33 +1168,420 @@ class Command(BaseCommand):
         """
         if self.dry_run:
             return
-        if not test_type or not getattr(test_type, "pk", None):
-            return
-        if not getattr(test_type, "name", None):
-            return
-
-        parsed = self._load_report_text_reference()
-        if not parsed:
-            return
-
-        lower_to_canonical = {k.strip().lower(): k for k in parsed.keys()}
-        canonical_name = lower_to_canonical.get(test_type.name.strip().lower())
-        if not canonical_name:
-            return
-
-        payload = _normalize_testtype_report_payload(parsed.get(canonical_name) or {})
-        model_fields = {f.name for f in type(test_type)._meta.fields}
-
-        updates = {}
-        for field_name, value in payload.items():
-            if field_name not in model_fields:
-                continue
-            current = getattr(test_type, field_name, "")
-            if current is None or (isinstance(current, str) and current.strip() == ""):
-                updates[field_name] = value
-
+        updates = self._testtype_report_field_updates(test_type)
         if updates:
             type(test_type).objects.filter(pk=test_type.pk).update(**updates)
+
+    def _backfill_all_testtype_report_fields(self, selected_names) -> None:
+        selected_lookup = {
+            str(name).strip().lower()
+            for name in selected_names
+            if str(name).strip()
+        }
+        matched_count = 0
+        updated_type_count = 0
+        updated_field_count = 0
+        skipped_names = []
+
+        for test_type in TestType.objects.order_by("name"):
+            normalized_name = test_type.name.strip().lower()
+            if selected_lookup and normalized_name not in selected_lookup:
+                continue
+
+            updates = self._testtype_report_field_updates(test_type)
+            if updates is None:
+                skipped_names.append(test_type.name)
+                continue
+
+            matched_count += 1
+            if not updates:
+                continue
+
+            updated_type_count += 1
+            updated_field_count += len(updates)
+            prefix = "Would update" if self.dry_run else "Updated"
+            self.stdout.write(f"{prefix} {test_type.name}: {', '.join(sorted(updates))}")
+
+            if not self.dry_run:
+                TestType.objects.filter(pk=test_type.pk).update(**updates)
+
+        mode = "Dry run" if self.dry_run else "Applied"
+        self.stdout.write(self.style.SUCCESS(
+            f"{mode}: matched {matched_count} TestType(s); "
+            f"{updated_field_count} field(s) on {updated_type_count} TestType(s) "
+            f"{'would be updated' if self.dry_run else 'updated'}."
+        ))
+
+        if skipped_names:
+            self.stdout.write(self.style.WARNING(
+                "No reference defaults for: " + ", ".join(sorted(skipped_names))
+            ))
+
+    def _run_diagnosis_date_backfill(self, options) -> None:
+        apply_changes = bool(options.get("apply")) and not self.dry_run
+        overwrite = options["overwrite"]
+        strategy = options["strategy"]
+        individual_ids = options.get("individual_ids") or []
+        limit = options.get("limit")
+        solved_status = options["solved_status"]
+        causative_status = options["causative_status"]
+        positive_report_status = options["positive_report_status"]
+        include_unsolved = options["include_unsolved"]
+        include_noncausative = options["include_noncausative"]
+        include_negative = options["include_negative"]
+
+        matches = self._diagnosis_date_matching_reports(
+            individual_ids=individual_ids,
+            solved_status=solved_status,
+            causative_status=causative_status,
+            positive_report_status=positive_report_status,
+            include_unsolved=include_unsolved,
+            include_noncausative=include_noncausative,
+            include_negative=include_negative,
+        )
+        if not matches:
+            scope = "individuals" if include_unsolved else "solved individuals"
+            variant_scope = (
+                "reported variants or analysis-linked reports"
+                if include_noncausative
+                else "causative variants"
+            )
+            report_scope = "reports" if include_negative else "positive reports"
+            self.stdout.write(
+                self.style.WARNING(
+                    f"No matching {scope} found for {report_scope} linked to "
+                    f"{variant_scope}."
+                )
+            )
+            self._print_diagnosis_date_diagnostics(
+                solved_status=solved_status,
+                causative_status=causative_status,
+                positive_report_status=positive_report_status,
+                include_unsolved=include_unsolved,
+                include_noncausative=include_noncausative,
+                include_negative=include_negative,
+                individual_ids=individual_ids,
+            )
+            return
+
+        selected = []
+        skipped_existing = []
+        for _individual_id, rows in sorted(matches.items()):
+            rows = sorted(
+                rows,
+                key=lambda row: (row["report_date"], row["report_id"]),
+                reverse=(strategy == "latest"),
+            )
+            chosen = rows[0]
+            individual = chosen["individual"]
+            current_date = individual.diagnosis_date
+            new_date = chosen["report_date"]
+            if current_date and current_date != new_date and not overwrite:
+                skipped_existing.append((individual, current_date, new_date, chosen))
+                continue
+            if current_date == new_date:
+                continue
+            selected.append((individual, new_date, chosen))
+            if limit and len(selected) >= limit:
+                break
+
+        self._print_diagnosis_date_summary(
+            selected=selected,
+            skipped_existing=skipped_existing,
+            apply_changes=apply_changes,
+            overwrite=overwrite,
+            strategy=strategy,
+            include_unsolved=include_unsolved,
+            include_noncausative=include_noncausative,
+            include_negative=include_negative,
+        )
+
+        if not apply_changes or not selected:
+            return
+
+        with transaction.atomic():
+            for individual, new_date, _chosen in selected:
+                individual.diagnosis_date = new_date
+                individual.save(update_fields=["diagnosis_date"])
+
+        self.stdout.write(
+            self.style.SUCCESS(f"Updated diagnosis_date for {len(selected)} individuals.")
+        )
+
+    def _diagnosis_date_matching_reports(
+        self,
+        *,
+        individual_ids=None,
+        solved_status,
+        causative_status,
+        positive_report_status,
+        include_unsolved,
+        include_noncausative,
+        include_negative,
+    ):
+        matches = defaultdict(list)
+
+        variant_qs = (
+            Variant.objects.filter(
+                reports__created_at__isnull=False,
+                reports__isnull=False,
+            )
+            .select_related("individual")
+            .values(
+                "id",
+                "individual_id",
+                "individual__diagnosis_date",
+                "reports__id",
+                "reports__created_at",
+            )
+            .distinct()
+        )
+        if not include_unsolved:
+            variant_qs = variant_qs.filter(individual__statuses__name__iexact=solved_status)
+        if not include_noncausative:
+            variant_qs = variant_qs.filter(statuses__name__iexact=causative_status)
+        if not include_negative:
+            variant_qs = variant_qs.filter(reports__statuses__name__iexact=positive_report_status)
+        if individual_ids:
+            variant_qs = variant_qs.filter(individual_id__in=individual_ids)
+
+        individuals = Individual.objects.in_bulk(
+            {row["individual_id"] for row in variant_qs}
+        )
+        for row in variant_qs:
+            report_created_at = row["reports__created_at"]
+            if not report_created_at:
+                continue
+            individual = individuals.get(row["individual_id"])
+            if not individual:
+                continue
+            matches[row["individual_id"]].append(
+                {
+                    "individual": individual,
+                    "report_id": row["reports__id"],
+                    "report_date": report_created_at.date(),
+                    "variant_id": row["id"],
+                    "source": "variant",
+                }
+            )
+
+        if include_noncausative:
+            report_qs = (
+                AnalysisReport.objects.filter(
+                    analysis__pipeline__test__sample__individual__isnull=False,
+                    created_at__isnull=False,
+                )
+                .values(
+                    "id",
+                    "created_at",
+                    "analysis__pipeline__test__sample__individual_id",
+                )
+                .distinct()
+            )
+            if not include_unsolved:
+                report_qs = report_qs.filter(
+                    analysis__pipeline__test__sample__individual__statuses__name__iexact=solved_status,
+                )
+            if not include_negative:
+                report_qs = report_qs.filter(statuses__name__iexact=positive_report_status)
+            if individual_ids:
+                report_qs = report_qs.filter(
+                    analysis__pipeline__test__sample__individual_id__in=individual_ids,
+                )
+
+            report_individuals = Individual.objects.in_bulk(
+                {
+                    row["analysis__pipeline__test__sample__individual_id"]
+                    for row in report_qs
+                }
+            )
+            for row in report_qs:
+                report_created_at = row["created_at"]
+                individual_id = row["analysis__pipeline__test__sample__individual_id"]
+                individual = report_individuals.get(individual_id)
+                if not report_created_at or not individual:
+                    continue
+                matches[individual_id].append(
+                    {
+                        "individual": individual,
+                        "report_id": row["id"],
+                        "report_date": report_created_at.date(),
+                        "variant_id": None,
+                        "source": "analysis",
+                    }
+                )
+        return matches
+
+    def _print_diagnosis_date_diagnostics(
+        self,
+        *,
+        solved_status,
+        causative_status,
+        positive_report_status,
+        include_unsolved,
+        include_noncausative,
+        include_negative,
+        individual_ids,
+    ):
+        individual_filter = {}
+        if individual_ids:
+            individual_filter["pk__in"] = individual_ids
+
+        individual_scope = Individual.objects.filter(**individual_filter)
+        solved_individuals = individual_scope.filter(
+            statuses__name__iexact=solved_status,
+        ).distinct()
+        causative_variants = Variant.objects.filter(
+            individual__in=individual_scope,
+            statuses__name__iexact=causative_status,
+        ).distinct()
+        positive_reports = AnalysisReport.objects.filter(
+            variants__individual__in=individual_scope,
+            statuses__name__iexact=positive_report_status,
+        ).distinct()
+        positive_reports_by_analysis = AnalysisReport.objects.filter(
+            analysis__pipeline__test__sample__individual__in=individual_scope,
+            statuses__name__iexact=positive_report_status,
+        ).distinct()
+        reports_with_variants = AnalysisReport.objects.filter(
+            variants__individual__in=individual_scope,
+            variants__isnull=False,
+        ).distinct()
+        reports_with_analysis_individual = AnalysisReport.objects.filter(
+            analysis__pipeline__test__sample__individual__in=individual_scope,
+        ).distinct()
+        causative_variants_with_reports = causative_variants.filter(
+            reports__isnull=False,
+        ).distinct()
+        causative_variants_with_positive_reports = causative_variants.filter(
+            reports__statuses__name__iexact=positive_report_status,
+        ).distinct()
+        scoped_variants = Variant.objects.filter(
+            individual__in=individual_scope,
+            reports__created_at__isnull=False,
+            reports__isnull=False,
+        ).distinct()
+        if not include_unsolved:
+            scoped_variants = scoped_variants.filter(
+                individual__statuses__name__iexact=solved_status,
+            )
+        if not include_noncausative:
+            scoped_variants = scoped_variants.filter(
+                statuses__name__iexact=causative_status,
+            )
+        if not include_negative:
+            scoped_variants = scoped_variants.filter(
+                reports__statuses__name__iexact=positive_report_status,
+            )
+        scoped_analysis_reports = AnalysisReport.objects.filter(
+            analysis__pipeline__test__sample__individual__in=individual_scope,
+            created_at__isnull=False,
+        ).distinct()
+        if not include_unsolved:
+            scoped_analysis_reports = scoped_analysis_reports.filter(
+                analysis__pipeline__test__sample__individual__statuses__name__iexact=solved_status,
+            )
+        if not include_negative:
+            scoped_analysis_reports = scoped_analysis_reports.filter(
+                statuses__name__iexact=positive_report_status,
+            )
+
+        self.stdout.write("Diagnosis date diagnostics:")
+        self.stdout.write(
+            f"  Individuals with status {solved_status!r}: {solved_individuals.count()}"
+        )
+        self.stdout.write(
+            f"  Variants with status {causative_status!r}: {causative_variants.count()}"
+        )
+        self.stdout.write(
+            f"  Reports with status {positive_report_status!r}: {positive_reports.count()}"
+        )
+        self.stdout.write(
+            "  Reports with status "
+            f"{positive_report_status!r} via analysis path: {positive_reports_by_analysis.count()}"
+        )
+        self.stdout.write(
+            f"  Reports linked to any variant: {reports_with_variants.count()}"
+        )
+        self.stdout.write(
+            "  Reports linked to an individual through analysis: "
+            f"{reports_with_analysis_individual.count()}"
+        )
+        self.stdout.write(
+            "  Causative variants linked to any report: "
+            f"{causative_variants_with_reports.count()}"
+        )
+        self.stdout.write(
+            "  Causative variants linked to a positive report: "
+            f"{causative_variants_with_positive_reports.count()}"
+        )
+        self.stdout.write(
+            "  Matching variants after selected scope filters: "
+            f"{scoped_variants.count()}"
+        )
+        self.stdout.write(
+            "  Matching reports via analysis after selected scope filters: "
+            f"{scoped_analysis_reports.count() if include_noncausative else 0}"
+        )
+
+    def _print_diagnosis_date_summary(
+        self,
+        *,
+        selected,
+        skipped_existing,
+        apply_changes,
+        overwrite,
+        strategy,
+        include_unsolved,
+        include_noncausative,
+        include_negative,
+    ):
+        mode = "APPLY" if apply_changes else "DRY RUN"
+        solved_scope = "solved + unsolved" if include_unsolved else "solved only"
+        variant_scope = (
+            "reported variants or analysis-linked reports"
+            if include_noncausative
+            else "causative variants"
+        )
+        report_scope = "all report statuses" if include_negative else "positive reports"
+        self.stdout.write(
+            f"{mode}: diagnosis_date strategy={strategy}, overwrite={overwrite}, "
+            f"scope={solved_scope}, {variant_scope}, {report_scope}"
+        )
+        self.stdout.write(f"Candidates to update: {len(selected)}")
+        self.stdout.write(f"Skipped existing different dates: {len(skipped_existing)}")
+
+        for individual, new_date, chosen in selected[:25]:
+            current = individual.diagnosis_date or "-"
+            variant_label = chosen["variant_id"] if chosen["variant_id"] is not None else "-"
+            self.stdout.write(
+                "  "
+                f"Individual {individual.pk}: {current} -> {new_date} "
+                f"(report {chosen['report_id']}, variant {variant_label}, "
+                f"source {chosen['source']})"
+            )
+
+        if len(selected) > 25:
+            self.stdout.write(f"  ... {len(selected) - 25} more updates not shown")
+
+        for individual, current_date, new_date, chosen in skipped_existing[:10]:
+            variant_label = chosen["variant_id"] if chosen["variant_id"] is not None else "-"
+            self.stdout.write(
+                self.style.WARNING(
+                    "  "
+                    f"Skipped Individual {individual.pk}: existing {current_date}, "
+                    f"candidate {new_date} "
+                    f"(report {chosen['report_id']}, variant {variant_label}, "
+                    f"source {chosen['source']})"
+                )
+            )
+
+        if skipped_existing and not overwrite:
+            self.stdout.write(
+                self.style.WARNING(
+                    "Pass --overwrite to replace existing differing diagnosis_date values."
+                )
+            )
 
     def _step18_ensure_plot_templates(self) -> None:
         """
@@ -1409,11 +1940,7 @@ class Command(BaseCommand):
             if fid:
                 unique_fids.add(fid)
 
-            clinician_assignments = _build_clinician_assignments(
-                row.get("Klinisyen"),
-                row.get("İletişim Bilgileri - Mail/telefon?"),
-                row.get("İletişim Bilgileri - Telefon/mail?"),
-            )
+            clinician_assignments = _build_clinician_assignments_from_row(row)
 
             inst_raw = str(row.get("Gönderen Kurum/Birim") or "")
             for name in [n.strip() for n in inst_raw.split(",") if n.strip()]:
@@ -1607,11 +2134,7 @@ class Command(BaseCommand):
                 family.is_consanguineous = consanguinity
                 family.save()
 
-            clinician_assignments = _build_clinician_assignments(
-                row.get("Klinisyen"),
-                row.get("İletişim Bilgileri - Mail/telefon?"),
-                row.get("İletişim Bilgileri - Telefon/mail?"),
-            )
+            clinician_assignments = self._build_clinician_assignments_from_row(row)
             for clinician_name, contact_values in clinician_assignments:
                 physician = get_or_create_contact(clinician_name, self.admin_user)
                 self._link_physician_to_individual_and_institutions(
@@ -2457,11 +2980,7 @@ class Command(BaseCommand):
 
             self._parse_other_ids(d.get("Other IDs"), individual)
 
-            clinician_assignments = _build_clinician_assignments(
-                d.get("Klinisyen"),
-                d.get("İletişim Bilgileri - Mail/telefon?"),
-                d.get("İletişim Bilgileri - Telefon/mail?"),
-            )
+            clinician_assignments = self._build_clinician_assignments_from_row(d)
             for clinician_name, contact_values in clinician_assignments:
                 physician = get_or_create_contact(clinician_name, self.admin_user)
                 self._link_physician_to_individual_and_institutions(
@@ -3472,11 +3991,7 @@ class Command(BaseCommand):
                     name=geldi_merkez, defaults={"created_by": self.admin_user})
                 individual.institution.add(inst)
                 # Physicians for this institution
-                clinician_assignments = _build_clinician_assignments(
-                    d.get("Klinisyen"),
-                    d.get("İletişim Bilgileri - Mail/telefon?"),
-                    d.get("İletişim Bilgileri - Telefon/mail?"),
-                )
+                clinician_assignments = self._build_clinician_assignments_from_row(d)
                 for klin, contact_values in clinician_assignments:
                     physician = get_or_create_contact(klin, self.admin_user)
                     self._link_physician_to_individual_and_institutions(

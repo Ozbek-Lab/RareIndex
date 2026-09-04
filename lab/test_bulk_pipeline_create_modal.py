@@ -17,6 +17,8 @@ from lab.models import (
     Individual,
     Pipeline,
     PipelineType,
+    Project,
+    ProjectMembership,
     Sample,
     SampleType,
     Status,
@@ -71,6 +73,14 @@ class BulkPipelineCreateModalTests(TestCase):
         self.second = Individual.objects.create(full_name="Second Individual", created_by=self.user)
         self.no_test = Individual.objects.create(
             full_name="No Test Individual",
+            created_by=self.user,
+        )
+        self.project = Project.objects.create(name="Bulk Pipeline Project", created_by=self.user)
+        self.project.individuals.add(self.first, self.second, self.no_test)
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=self.user,
+            role=ProjectMembership.Role.EDITOR,
             created_by=self.user,
         )
         CrossIdentifier.objects.create(

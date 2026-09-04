@@ -32,7 +32,7 @@
                             {{ s.display_name }}
                         </div>
                         {% endfor %}
-                        {% if perms.lab.delete_project %}
+                        {% if can_delete_project %}
                             <button
                                 class="btn btn-ghost btn-xs text-error border-error/30 hover:border-error hover:bg-error/10"
                                 hx-get="{% url 'lab:project_delete_modal' project.pk %}"

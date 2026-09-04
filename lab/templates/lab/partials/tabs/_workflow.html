@@ -1151,7 +1151,8 @@
 {% partialdef variant_status_badge %}
     <div class="dropdown dropdown-end dropdown-bottom" id="workflow-variant-status-{{ variant.id }}">
         {% get_object_statuses variant as active_statuses %}
-        {% if perms.variant.change_variant or perms.variant.change_annotation %}
+        {% can_change_object variant "variant.change_variant" "variant.change_annotation" as can_change_variant_status %}
+        {% if can_change_variant_status %}
         <div tabindex="0" role="button" class="flex items-center gap-0.5 cursor-pointer rounded-md hover:bg-base-200 px-1 py-0.5 transition-all">
             {% if active_statuses %}
                 {% for s in active_statuses %}

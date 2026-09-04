@@ -29,6 +29,7 @@ def _():
         "sex": "Sex",
         "is_index": "Index status",
         "is_affected": "Affected status",
+        "none": "No color",
     }
 
     def parse_date(value):
@@ -153,7 +154,41 @@ def _():
             return round(months / 12, 2)
         return months
 
-    return FIELD_LABELS, build_delay_rows, unit_value
+    def percentile(values, quantile):
+        if not values:
+            return 0
+        ordered = sorted(values)
+        if len(ordered) == 1:
+            return ordered[0]
+
+        position = (len(ordered) - 1) * quantile
+        lower_index = int(position)
+        upper_index = min(lower_index + 1, len(ordered) - 1)
+        fraction = position - lower_index
+        lower_value = ordered[lower_index]
+        upper_value = ordered[upper_index]
+        return lower_value + (upper_value - lower_value) * fraction
+
+    def delay_distribution_stats(delay_months):
+        if not delay_months:
+            return {"q1": 0, "median": 0, "q3": 0, "min": 0, "max": 0}
+        return {
+            "q1": percentile(delay_months, 0.25),
+            "median": percentile(delay_months, 0.5),
+            "q3": percentile(delay_months, 0.75),
+            "min": min(delay_months),
+            "max": max(delay_months),
+        }
+
+    def format_duration(months, unit):
+        value = unit_value(months, unit)
+        if isinstance(value, float):
+            value = round(value, 2)
+            if value.is_integer():
+                value = int(value)
+        return f"{value:,} {unit}"
+
+    return FIELD_LABELS, build_delay_rows, delay_distribution_stats, format_duration, unit_value
 
 
 @app.cell
@@ -192,6 +227,7 @@ def _(default_color, default_include_negative, default_unit, default_x_axis, mo)
     }
     unit_options = {"Years": "years", "Months": "months"}
     color_options = {
+        "None": "none",
         "Affected status": "is_affected",
         "Index status": "is_index",
         "Sex": "sex",
@@ -269,7 +305,17 @@ def _(build_delay_rows, include_negative, rows):
 
 
 @app.cell
-def _(FIELD_LABELS, color_by, delay_rows, fullscreen, unit, unit_value, x_axis):
+def _(
+    FIELD_LABELS,
+    color_by,
+    delay_distribution_stats,
+    delay_rows,
+    format_duration,
+    fullscreen,
+    unit,
+    unit_value,
+    x_axis,
+):
     import plotly.graph_objects as go
 
     def scatter_figure():
@@ -280,7 +326,6 @@ def _(FIELD_LABELS, color_by, delay_rows, fullscreen, unit, unit_value, x_axis):
         unit_label = "years" if selected_unit == "years" else "months"
         x_field = x_axis.value
         color_field = color_by.value
-        categories = sorted({row[color_field] for row in delay_rows})
         title_by_x = {
             "diagnosis_date": "Diagnosis date",
             "age_of_onset_months": f"Age at onset ({unit_label})",
@@ -288,24 +333,16 @@ def _(FIELD_LABELS, color_by, delay_rows, fullscreen, unit, unit_value, x_axis):
             "delay_distribution": "Diagnosis delay distribution",
         }
 
-        fig = go.Figure()
-        for category in categories:
-            category_rows = [row for row in delay_rows if row[color_field] == category]
-            if x_field == "diagnosis_date":
-                x_values = [row["diagnosis_date"] for row in category_rows]
-            elif x_field == "delay_distribution":
-                x_values = ["Diagnosis delay"] * len(category_rows)
-            else:
-                x_values = [
-                    unit_value(row[x_field], selected_unit)
-                    for row in category_rows
-                ]
-
-            y_values = [
-                unit_value(row["delay_months"], selected_unit)
-                for row in category_rows
+        def grouped_rows():
+            if color_field == "none":
+                return [("All individuals", delay_rows)]
+            return [
+                (category, [row for row in delay_rows if row[color_field] == category])
+                for category in sorted({row[color_field] for row in delay_rows})
             ]
-            customdata = [
+
+        def row_customdata(source_rows):
+            return [
                 [
                     row["id"],
                     row["age_of_onset"] or "Not recorded",
@@ -315,9 +352,134 @@ def _(FIELD_LABELS, color_by, delay_rows, fullscreen, unit, unit_value, x_axis):
                     unit_value(row["age_at_diagnosis_months"], selected_unit),
                     row["diagnosis"],
                 ]
+                for row in source_rows
+            ]
+
+        def distribution_x_values(x_center, item_count):
+            if item_count <= 1:
+                return [x_center] * item_count
+
+            slot_count = min(item_count, 9)
+            step = 0.012
+            midpoint = (slot_count - 1) / 2
+            offsets = [
+                (slot_index - midpoint) * step
+                for slot_index in range(slot_count)
+            ]
+            return [
+                x_center + offsets[index % slot_count]
+                for index in range(item_count)
+            ]
+
+        hovertemplate = (
+            "<b>Individual %{customdata[0]}</b><br>"
+            "Delay: %{y} "
+            + unit_label
+            + "<br>"
+            "Age of onset: %{customdata[1]} (%{customdata[2]} "
+            + unit_label
+            + ")<br>"
+            "Estimated onset date: %{customdata[3]}<br>"
+            "Diagnosis date: %{customdata[4]}<br>"
+            "Age at diagnosis: %{customdata[5]} "
+            + unit_label
+            + "<br>"
+            "Diagnosis: %{customdata[6]}"
+            "<extra></extra>"
+        )
+
+        groups = grouped_rows()
+        fig = go.Figure()
+        for group_index, (category, category_rows) in enumerate(groups):
+            y_values = [
+                unit_value(row["delay_months"], selected_unit)
                 for row in category_rows
             ]
-            marker_sizes = [13 if row["is_index"] == "Index" else 9 for row in category_rows]
+            marker_sizes = [
+                13 if row["is_index"] == "Index" else 9
+                for row in category_rows
+            ]
+            marker = {
+                "size": marker_sizes,
+                "opacity": 0.82,
+                "line": {"color": "rgba(17, 24, 39, 0.35)", "width": 1},
+            }
+            if color_field == "none":
+                marker["color"] = "rgba(75, 85, 99, 0.72)"
+
+            if x_field == "delay_distribution":
+                box_stats = delay_distribution_stats(
+                    [row["delay_months"] for row in category_rows]
+                )
+                x_center = group_index
+                x_values = distribution_x_values(x_center, len(category_rows))
+                box_hovertemplate = (
+                    f"<b>{category}</b><br>"
+                    f"Q1: {format_duration(box_stats['q1'], selected_unit)}<br>"
+                    f"Median: {format_duration(box_stats['median'], selected_unit)}<br>"
+                    f"Q3: {format_duration(box_stats['q3'], selected_unit)}"
+                    "<extra></extra>"
+                )
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_values,
+                        y=y_values,
+                        mode="markers",
+                        name=f"{category} individuals",
+                        customdata=row_customdata(category_rows),
+                        marker={
+                            "color": "rgba(31, 41, 55, 0.58)",
+                            "size": 8,
+                            "line": {"color": "white", "width": 0.5},
+                        },
+                        hovertemplate=hovertemplate,
+                        showlegend=False,
+                    )
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x_center],
+                        y=[unit_value(box_stats["median"], selected_unit)],
+                        mode="markers",
+                        name=str(category),
+                        marker={
+                            "color": "rgba(17, 24, 39, 0.95)",
+                            "size": 9,
+                            "line": {"color": "white", "width": 1},
+                        },
+                        error_y={
+                            "type": "data",
+                            "symmetric": False,
+                            "array": [
+                                unit_value(
+                                    box_stats["q3"] - box_stats["median"],
+                                    selected_unit,
+                                )
+                            ],
+                            "arrayminus": [
+                                unit_value(
+                                    box_stats["median"] - box_stats["q1"],
+                                    selected_unit,
+                                )
+                            ],
+                            "color": "rgba(17, 24, 39, 0.92)",
+                            "thickness": 1.6,
+                            "width": 9,
+                        },
+                        hovertemplate=box_hovertemplate,
+                        showlegend=False,
+                    )
+                )
+                continue
+
+            if x_field == "diagnosis_date":
+                x_values = [row["diagnosis_date"] for row in category_rows]
+            else:
+                x_values = [
+                    unit_value(row[x_field], selected_unit)
+                    for row in category_rows
+                ]
 
             fig.add_trace(
                 go.Scatter(
@@ -325,46 +487,43 @@ def _(FIELD_LABELS, color_by, delay_rows, fullscreen, unit, unit_value, x_axis):
                     y=y_values,
                     mode="markers",
                     name=str(category),
-                    customdata=customdata,
-                    marker={
-                        "size": marker_sizes,
-                        "opacity": 0.82,
-                        "line": {"color": "rgba(17, 24, 39, 0.35)", "width": 1},
-                    },
-                    hovertemplate=(
-                        "<b>Individual %{customdata[0]}</b><br>"
-                        "Delay: %{y} "
-                        + unit_label
-                        + "<br>"
-                        "Age of onset: %{customdata[1]} (%{customdata[2]} "
-                        + unit_label
-                        + ")<br>"
-                        "Estimated onset date: %{customdata[3]}<br>"
-                        "Diagnosis date: %{customdata[4]}<br>"
-                        "Age at diagnosis: %{customdata[5]} "
-                        + unit_label
-                        + "<br>"
-                        "Diagnosis: %{customdata[6]}"
-                        "<extra></extra>"
-                    ),
+                    customdata=row_customdata(category_rows),
+                    marker=marker,
+                    hovertemplate=hovertemplate,
+                    showlegend=color_field != "none",
                 )
             )
 
+        if x_field == "delay_distribution":
+            fig.update_xaxes(
+                tickmode="array",
+                tickvals=list(range(len(groups))),
+                ticktext=[str(category) for category, _rows in groups],
+                range=[-0.2, max(0.2, len(groups) - 0.8)],
+                showgrid=False,
+                zeroline=False,
+            )
         fig.add_hline(
             y=0,
             line_dash="dot",
-            line_color="rgba(107, 114, 128, 0.75)",
-            annotation_text="diagnosis before onset",
-            annotation_position="bottom right",
+            line_color="rgba(107, 114, 128, 0.48)",
         )
         fig.update_layout(
             autosize=True,
             height=1100 if fullscreen else 780,
             margin={"t": 20, "l": 10, "r": 10, "b": 10},
+            template="plotly_white",
+            paper_bgcolor="white",
+            plot_bgcolor="white",
             xaxis_title=title_by_x.get(x_field, "X"),
             yaxis_title=f"Time from onset to diagnosis ({unit_label})",
-            legend_title_text=FIELD_LABELS.get(color_field, color_field),
+            legend_title_text=(
+                FIELD_LABELS.get(color_field, color_field)
+                if color_field != "none"
+                else ""
+            ),
             hovermode="closest",
+            boxmode="group",
         )
         return fig
 
@@ -373,14 +532,8 @@ def _(FIELD_LABELS, color_by, delay_rows, fullscreen, unit, unit_value, x_axis):
 
 
 @app.cell
-def _(delay_rows, include_negative, skipped_rows, unit, unit_value):
-    if delay_rows:
-        delays = [row["delay_months"] for row in delay_rows]
-        median_delay = sorted(delays)[len(delays) // 2]
-        max_delay = max(delays)
-        min_delay = min(delays)
-    else:
-        median_delay = max_delay = min_delay = 0
+def _(delay_distribution_stats, delay_rows, format_duration, include_negative, skipped_rows, unit):
+    stats = delay_distribution_stats([row["delay_months"] for row in delay_rows])
 
     negative_label = (
         "Negative delays shown"
@@ -389,10 +542,12 @@ def _(delay_rows, include_negative, skipped_rows, unit, unit_value):
     )
     summary = {
         "Plotted individuals": f"{len(delay_rows):,}",
-        "Median delay": f"{unit_value(median_delay, unit.value):,} {unit.value}",
+        "Q1 delay": format_duration(stats["q1"], unit.value),
+        "Median delay": format_duration(stats["median"], unit.value),
+        "Q3 delay": format_duration(stats["q3"], unit.value),
         "Range": (
-            f"{unit_value(min_delay, unit.value):,} to "
-            f"{unit_value(max_delay, unit.value):,} {unit.value}"
+            f"{format_duration(stats['min'], unit.value)} to "
+            f"{format_duration(stats['max'], unit.value)}"
         ),
         "Missing birth date": f"{skipped_rows['missing_birth_date']:,}",
         "Missing diagnosis date": f"{skipped_rows['missing_diagnosis_date']:,}",

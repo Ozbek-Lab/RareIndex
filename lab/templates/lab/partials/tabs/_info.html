@@ -756,13 +756,15 @@
 {% partialdef projects_display %}
     <div class="flex justify-between items-center mb-4">
         <h3 class="card-title text-sm uppercase text-base-content/50">Projects</h3>
-        <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
-                data-tip="Edit Project Assignments"
-                hx-get="{% url 'lab:individual_projects_edit' individual.pk %}"
-                hx-target="#projects-card-{{ individual.pk }} .card-body"
-                hx-swap="innerHTML">
-            <i class="fa-solid fa-pencil"></i>
-        </button>
+        {% if can_change_project_assignments %}
+            <button class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary tooltip tooltip-left"
+                    data-tip="Edit Project Assignments"
+                    hx-get="{% url 'lab:individual_projects_edit' individual.pk %}"
+                    hx-target="#projects-card-{{ individual.pk }} .card-body"
+                    hx-swap="innerHTML">
+                <i class="fa-solid fa-pencil"></i>
+            </button>
+        {% endif %}
     </div>
     {% if visible_individual_projects %}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
