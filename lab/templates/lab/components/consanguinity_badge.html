@@ -1,0 +1,8 @@
+<span class="badge badge-sm gap-1 normal-case font-normal {% if family.is_consanguineous == 'true' %}badge-warning{% elif family.is_consanguineous == 'same_village' %}badge-info{% elif family.is_consanguineous == 'nearby_villages' %}badge-secondary{% else %}badge-ghost text-base-content/60{% endif %}"
+      style="height: auto; min-height: 20px; padding-top: 2px; padding-bottom: 2px; white-space: normal;"
+      title="Family consanguinity">
+    {% if family.is_consanguineous == 'true' %}<i class="fa-solid fa-circle-nodes text-[10px]" aria-hidden="true"></i>{% endif %}
+    {% if family.is_consanguineous == 'same_village' %}<i class="fa-solid fa-house text-[10px]" aria-hidden="true"></i>{% endif %}
+    {% if family.is_consanguineous == 'nearby_villages' %}<i class="fa-solid fa-map-location-dot text-[10px]" aria-hidden="true"></i>{% endif %}
+    {{ family.get_is_consanguineous_display|default:'Unknown' }}
+</span>

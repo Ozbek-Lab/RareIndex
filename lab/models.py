@@ -19,6 +19,7 @@ import re
 from taggit.managers import TaggableManager
 from taggit.models import GenericTaggedItemBase
 from .middleware import get_current_user
+from .consanguinity import CONSANGUINITY_CHOICES, normalize_consanguinity
 
 
 RAREBOOST_ID_VALUE_REGEX = r"^RB_20[0-9][0-9]_[0-9]+(\.1)?\.[0-9]+$"
@@ -403,7 +404,10 @@ class Institution(HistoryMixin, models.Model):
 
 class Family(HistoryMixin, models.Model):
     family_id = models.CharField(max_length=100, unique=True)
-    is_consanguineous = models.BooleanField(blank=True, null=True)
+    is_consanguineous = models.CharField(
+        max_length=20, choices=CONSANGUINITY_CHOICES, blank=True, null=True,
+        default=None, verbose_name="Consanguinity",
+    )
     description = models.TextField(blank=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     history = HistoricalRecords()
@@ -414,6 +418,10 @@ class Family(HistoryMixin, models.Model):
 
     def __str__(self):
         return self.family_id
+
+    def save(self, *args, **kwargs):
+        self.is_consanguineous = normalize_consanguinity(self.is_consanguineous)
+        super().save(*args, **kwargs)
 
     @property
     def is_solved(self):

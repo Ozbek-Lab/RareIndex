@@ -855,6 +855,7 @@
               <thead class="bg-base-200/60 text-base-content/50 uppercase tracking-wider text-[10px]">
                 <tr>
                   <th>Individual</th>
+                  <th>Variant</th>
                   <th>Sex</th>
                   <th>Affected</th>
                   <th>Institution</th>
@@ -883,6 +884,7 @@
                       {% endif %}
                     </div>
                   </td>
+                  <td class="whitespace-nowrap text-base-content/80">{{ entry.variant.display_name }}</td>
                   <td class="capitalize text-base-content/70">{{ entry.individual.sex|default:"—" }}</td>
                   <td>
                     {% if entry.individual.is_affected %}

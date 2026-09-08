@@ -1,0 +1,15 @@
+<div class="space-y-1" style="width: 100%; min-width: 0;">
+    <div class="rounded-lg border border-base-300 bg-base-200/50"
+         role="group" aria-label="Consanguinity"
+         style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); gap: 4px; padding: 4px; width: 100%;"
+         x-data="{ value: '{{ value|default_if_none:""|escapejs }}'.toLowerCase() }">
+        <input type="hidden" name="{{ name|default:'is_consanguineous' }}" :value="value">
+        {% for option, label in choices %}
+        <button type="button" class="rounded-md border transition-colors"
+                style="min-width: 0; min-height: 40px; padding: 8px 10px; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere;"
+                :class="value === '{{ option|escapejs }}' ? 'bg-base-content text-base-100 border-base-content shadow-sm font-semibold' : 'border-transparent text-base-content/70 hover:bg-base-100 hover:text-base-content'"
+                :aria-pressed="value === '{{ option|escapejs }}'"
+                @click="value = '{{ option|escapejs }}'">{{ label }}</button>
+        {% endfor %}
+    </div>
+</div>

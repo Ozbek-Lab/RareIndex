@@ -38,25 +38,9 @@
                     {{ form.family_id }}
                     {% if form.family_id.errors %}<p class="mt-1 text-sm text-error">{{ form.family_id.errors.0 }}</p>{% endif %}
                 </div>
-                <div>
+                <div class="md:col-span-2">
                     <label class="block mb-2 text-sm font-medium text-base-content">Consanguinity</label>
-                    <div
-                        class="rounded-lg border border-base-content/25 bg-base-100 text-[10px] font-medium shadow-sm ring-1 ring-base-content/10"
-                        style="display: flex; align-items: center; gap: 3px; padding: 3px; width: 300px; max-width: 100%;"
-                        x-data="{
-                            value: '{{ form.is_consanguineous.value|default_if_none:"" }}',
-                            buttonClass(option) {
-                                return this.value === option
-                                    ? 'bg-base-content text-base-100'
-                                    : 'text-base-content/60 hover:text-base-content';
-                            }
-                        }"
-                    >
-                        <input type="hidden" name="{{ form.is_consanguineous.html_name }}" :value="value">
-                        <button type="button" class="rounded text-center" style="width: 122px; padding: 2px 4px;" :class="buttonClass('false')" @click="value = 'false'">Non-Consanguineous</button>
-                        <button type="button" class="rounded text-center" style="width: 68px; padding: 2px 4px;" :class="buttonClass('')" @click="value = ''">Unknown</button>
-                        <button type="button" class="rounded text-center" style="width: 98px; padding: 2px 4px;" :class="buttonClass('true')" @click="value = 'true'">Consanguineous</button>
-                    </div>
+                    {% include "lab/components/consanguinity_select.html" with choices=form.is_consanguineous.field.choices value=form.is_consanguineous.value name=form.is_consanguineous.html_name %}
                     {% if form.is_consanguineous.errors %}<p class="mt-1 text-sm text-error">{{ form.is_consanguineous.errors.0 }}</p>{% endif %}
                 </div>
                 <div class="md:col-span-2">

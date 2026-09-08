@@ -732,15 +732,7 @@
                 <dd class="text-sm text-base-content col-span-2">
                     {% if individual.family %}
                         <span class="font-mono font-semibold">{{ individual.family.family_id }}</span>
-                        {% if individual.family.is_consanguineous %}
-                            <span class="badge badge-warning badge-sm ml-2 gap-1">
-                                <i class="fa-solid fa-circle-nodes text-[10px]"></i> Consanguineous
-                            </span>
-                        {% elif individual.family.is_consanguineous is False %}
-                            <span class="badge badge-ghost badge-sm ml-2 text-base-content/40">Non-consanguineous</span>
-                        {% else %}
-                            <span class="badge badge-ghost badge-sm ml-2 text-base-content/40">Unknown consanguinity</span>
-                        {% endif %}
+                        {% include "lab/components/consanguinity_badge.html" with family=individual.family %}
                         {% if individual.is_index %}
                             <div class="badge badge-primary badge-sm ml-2">Index Case</div>
                         {% endif %}

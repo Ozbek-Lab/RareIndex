@@ -409,11 +409,13 @@ def _individual_filter_counts_for_queryset(individual_qs):
         "is_affected": _choice_count_dict(individual_qs, "is_affected", ((True, "Affected"), (False, "Unaffected"))),
         "is_index": _choice_count_dict(individual_qs, "is_index", ((True, "Yes"), (False, "No"))),
         "family_consanguinity": {
-            "false": individual_qs.filter(family__is_consanguineous=False).distinct().count(),
+            "false": individual_qs.filter(family__is_consanguineous="false").distinct().count(),
             "unknown": individual_qs.filter(
                 Q(family__isnull=True) | Q(family__is_consanguineous__isnull=True)
             ).distinct().count(),
-            "true": individual_qs.filter(family__is_consanguineous=True).distinct().count(),
+            "true": individual_qs.filter(family__is_consanguineous="true").distinct().count(),
+            "same_village": individual_qs.filter(family__is_consanguineous="same_village").distinct().count(),
+            "nearby_villages": individual_qs.filter(family__is_consanguineous="nearby_villages").distinct().count(),
         },
         "has_report": {
             "true": individual_qs.filter(samples__tests__pipelines__analyses__reports__isnull=False).distinct().count(),
@@ -686,6 +688,8 @@ def _variant_filter_counts(user=None):
             Q(individual__family__is_consanguineous__isnull=True)
         ).distinct().count(),
         "true": 0,
+        "same_village": 0,
+        "nearby_villages": 0,
     }
     family_consanguinity_counts.update({
         str(row["individual__family__is_consanguineous"]).lower(): row["c"]
@@ -932,6 +936,8 @@ def _individual_filter_counts(user=None):
             Q(family__is_consanguineous__isnull=True)
         ).distinct().count(),
         "true": 0,
+        "same_village": 0,
+        "nearby_villages": 0,
     }
     family_consanguinity_counts.update({
         str(row["family__is_consanguineous"]).lower(): row["c"]
@@ -1876,10 +1882,9 @@ def _best_hpo_match(query):
     ).first()
 
 
-@login_required
-def hpo_bulk_match(request):
-    raw_query = request.GET.get("q", "")
-    chunks = [chunk.strip() for chunk in raw_query.split(",") if chunk.strip()]
+def match_hpo_queries(raw_query):
+    """Match comma/newline-separated HPO entries, preserving order without duplicates."""
+    chunks = [chunk.strip() for chunk in re.split(r"[,\r\n]+", raw_query) if chunk.strip()]
     results = []
     seen_ids = set()
 
@@ -1897,7 +1902,12 @@ def hpo_bulk_match(request):
             }
         )
 
-    return JsonResponse({"results": results})
+    return results
+
+
+@login_required
+def hpo_bulk_match(request):
+    return JsonResponse({"results": match_hpo_queries(request.GET.get("q", ""))})
 
 
 class HPOTermSearchView(LoginRequiredMixin, ListView):
@@ -1946,7 +1956,7 @@ class HPOTermSearchView(LoginRequiredMixin, ListView):
             qs = qs.exclude(pk__in=selected_term_ids)
 
         individual_id = self.request.GET.get('individual_id')
-        if individual_id:
+        if individual_id and self.request.GET.get("draft") != "1":
             try:
                 individual = accessible_individuals(
                     self.request.user,
