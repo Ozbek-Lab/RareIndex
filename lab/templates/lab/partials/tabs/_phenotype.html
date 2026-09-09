@@ -80,62 +80,91 @@
 {% endpartialdef %}
 
 {% partialdef hpo_edit %}
-<div class="card-body p-4">
-    <div class="flex justify-between items-center mb-4">
+<form id="hpo-edit-form-{{ individual.pk }}" class="card-body p-4" x-data
+      hx-post="{% url 'lab:hpo_manage' individual.pk %}"
+      hx-target="closest .hpo-container" hx-swap="innerHTML"
+      hx-disabled-elt="#hpo-edit-form-{{ individual.pk }} button">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save">
+    <div class="flex justify-between items-center mb-2">
         <h3 class="card-title text-sm uppercase text-base-content/50">Edit HPO Terms</h3>
-        <button hx-get="{% url 'lab:individual_detail' individual.pk %}?partial=hpo_card" 
-                hx-target="closest .hpo-container"
-                class="btn btn-primary btn-xs">Done</button>
+        <div class="flex items-center gap-2">
+            <button type="button"
+                    hx-get="{% url 'lab:individual_detail' individual.pk %}?partial=hpo_card"
+                    hx-target="closest .hpo-container"
+                    class="btn btn-ghost btn-xs">Cancel</button>
+            <button type="submit" class="btn btn-primary btn-xs">Save</button>
+        </div>
     </div>
-
+    <p class="text-xs text-base-content/60 mb-4">Changes are saved only when you click Save. Cancel discards this selection.</p>
     <div class="space-y-4">
-        <!-- Search -->
+        <div>
+            <label for="bulk-hpo-query-{{ individual.pk }}" class="block text-xs font-medium text-base-content/80 mb-1">Paste HPOs</label>
+            <div class="flex items-start gap-2">
+                <textarea id="bulk-hpo-query-{{ individual.pk }}" name="bulk_query" rows="2"
+                          class="textarea textarea-bordered textarea-sm min-w-0 grow text-xs"
+                          placeholder="Paste HPO names or IDs..."
+                          aria-describedby="bulk-hpo-help-{{ individual.pk }}"
+                          @keydown.enter.exact.prevent="$refs.bulkAdd.click()"></textarea>
+                <button type="button" x-ref="bulkAdd" class="btn btn-primary btn-sm"
+                        hx-post="{% url 'lab:hpo_manage' individual.pk %}"
+                        hx-vals='{"action": "bulk_add"}'
+                        hx-include="#hpo-edit-form-{{ individual.pk }}"
+                        hx-target="#hpo-selection-{{ individual.pk }}"
+                        hx-indicator="#bulk-hpo-spinner-{{ individual.pk }}"
+                        hx-on::after-request="if (event.detail.successful) document.getElementById('bulk-hpo-query-{{ individual.pk }}').value = ''"
+                        title="Add matching HPO terms to selection">
+                    <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i> Add
+                </button>
+                <span id="bulk-hpo-spinner-{{ individual.pk }}" class="htmx-indicator loading loading-spinner loading-xs mt-2" aria-label="Matching HPO terms"></span>
+            </div>
+            <p id="bulk-hpo-help-{{ individual.pk }}" class="text-xs text-base-content/50 mt-1">Separate terms with commas or new lines. Enter to add; Shift+Enter for a new line.</p>
+        </div>
         <div class="relative">
             <label class="input input-bordered input-sm flex items-center w-full">
-                <input type="text" 
-                       class="grow min-w-0" 
-                       placeholder="Search HPO terms..." 
-                       name="q"
-                       hx-get="{% url 'lab:hpo_picker' %}?individual_id={{ individual.id }}"
+                <input type="text" class="grow min-w-0" placeholder="Search HPO terms..." name="q"
+                       @keydown.enter.prevent
+                       hx-get="{% url 'lab:hpo_picker' %}"
+                       hx-vals='{"individual_id": "{{ individual.pk }}", "draft": "1"}'
+                       hx-include="#hpo-selection-{{ individual.pk }}"
+                       hx-params="not csrfmiddlewaretoken,action,bulk_query"
                        hx-trigger="keyup changed delay:500ms"
-                       hx-target="#search-results"
-                       hx-indicator="#search-spinner" />
-                
-                <div id="search-spinner" class="htmx-indicator">
+                       hx-target="#hpo-search-results-{{ individual.pk }}"
+                       hx-indicator="#hpo-search-spinner-{{ individual.pk }}" />
+                <div id="hpo-search-spinner-{{ individual.pk }}" class="htmx-indicator">
                     <span class="loading loading-spinner loading-xs text-primary"></span>
                 </div>
-                
                 <i class="fa-solid fa-search text-base-content/40 text-xs"></i>
             </label>
-            <div id="search-results" class="absolute z-[100] w-full mt-1 bg-base-100"></div>
+            <div id="hpo-search-results-{{ individual.pk }}" class="absolute z-[100] w-full mt-1 bg-base-100"></div>
         </div>
-
-        <!-- Selected Terms -->
-        <div id="individual-hpo-terms">
+        <div id="hpo-selection-{{ individual.pk }}">
             {% partial hpo_edit_list %}
         </div>
     </div>
-</div>
+</form>
 {% endpartialdef %}
 
 {% partialdef hpo_edit_list %}
 <div class="space-y-2">
-    <h4 class="text-xs font-bold text-base-content/50">Current Terms</h4>
+    {% if bulk_hpo_message %}<p class="text-xs text-base-content/70" role="status">{{ bulk_hpo_message }}</p>{% endif %}
+    <h4 class="text-xs font-bold text-base-content/50">Selected Terms</h4>
     <div class="flex flex-wrap gap-2">
-        {% for term in individual.hpo_terms.all %}
+        {% for term in selected_hpo_terms %}
         <div class="badge badge-outline gap-2 h-auto py-1 pl-2 pr-1">
+            <input type="hidden" name="hpo_terms" value="{{ term.pk }}">
             <span class="font-mono text-xs font-bold {% if term.source == 'HP' %}text-primary{% else %}text-secondary{% endif %}">{{ term.term }}</span>
             <span class="text-xs truncate max-w-[200px]">{{ term.label }}</span>
-            <button hx-post="{% url 'lab:hpo_manage' individual.pk %}"
-                    hx-vals='{"action": "remove", "term_id": "{{ term.id }}"}'
-                    hx-target="#individual-hpo-terms"
+            <button type="button" hx-post="{% url 'lab:hpo_manage' individual.pk %}"
+                    hx-vals='{"action": "remove", "term_id": "{{ term.pk }}"}'
+                    hx-include="#hpo-edit-form-{{ individual.pk }}"
+                    hx-target="#hpo-selection-{{ individual.pk }}"
+                    aria-label="Remove {{ term.label }} from selection"
                     class="btn btn-ghost btn-xs btn-circle h-4 w-4 min-h-0 min-w-0">
                 <i class="fa-solid fa-xmark text-[10px]"></i>
             </button>
         </div>
-        {% empty %}
-        <span class="text-xs italic text-base-content/40">No terms selected</span>
-        {% endfor %}
+        {% empty %}<span class="text-xs italic text-base-content/40">No terms selected</span>{% endfor %}
     </div>
 </div>
 {% endpartialdef %}

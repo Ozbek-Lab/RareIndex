@@ -55,7 +55,7 @@
                                 {% if field == "family_id" %}Family ID
                                 {% elif field == "use_priority" %}Priority
                                 {% elif field == "is_shown_in_table" %}Show in Table
-                                {% elif field == "is_consanguineous" %}Consanguineous
+                                {% elif field == "is_consanguineous" %}Consanguinity
                                 {% elif field == "short_name" %}Short Name
                                 {% elif field == "content_type" %}Scope
                                 {% elif field == "full_name" %}Name
@@ -100,15 +100,7 @@
                                             <i class="fa-solid fa-xmark text-error"></i>
                                         {% endif %}
                                     {% elif obj|class_name == "Family" and field == "is_consanguineous" %}
-                                        {% if obj.is_consanguineous is None %}
-                                            <span class="text-base-content/40 text-xs">—</span>
-                                        {% elif obj.is_consanguineous %}
-                                            <span class="badge badge-warning badge-sm">Consanguineous</span>
-                                        {% elif obj.is_consanguineous is False %}
-                                            <span class="badge badge-ghost badge-sm">Non</span>
-                                        {% else %}
-                                            <span class="text-base-content/40 text-xs">—</span>
-                                        {% endif %}
+                                        {% include "lab/components/consanguinity_badge.html" with family=obj %}
                                     {% else %}
                                         {{ obj|class_name }}
                                     {% endif %}

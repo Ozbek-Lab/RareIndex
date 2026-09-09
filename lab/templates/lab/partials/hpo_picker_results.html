@@ -8,8 +8,9 @@
                 hx-post="{% url 'lab:hpo_manage' individual.id %}"
                 {% endif %}
                 hx-vals='{"action": "add", "term_id": "{{ term.id }}"}'
-                hx-target="#individual-hpo-terms"
-                hx-on::after-request="const res = document.getElementById('search-results'); if(res) res.innerHTML = ''"
+                hx-include="#hpo-edit-form-{{ individual.pk }}"
+                hx-target="#hpo-selection-{{ individual.pk }}"
+                hx-on::after-request="if(event.detail.successful) { const res = document.getElementById('hpo-search-results-{{ individual.pk }}'); if(res) res.innerHTML = ''; }"
                 class="flex flex-col items-start px-3 py-2 text-left w-full hover:bg-base-200">
             <span class="text-sm font-bold text-base-content">{{ term.label }}</span>
             <span class="text-xs font-mono opacity-50">{{ term.term|default:term.identifier }}</span>

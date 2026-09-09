@@ -17,6 +17,8 @@
             'has_request_form': 'Request form availability',
             'projects': 'Project',
             'institution_name': 'Institution name',
+            'institution': 'Institution',
+            'clinicians': 'Clinicians',
             'institution__city': 'Institution city',
             'institution__speciality': 'Institution speciality',
             'institution__center_name': 'Institution center',
@@ -37,6 +39,7 @@
         expanded: JSON.parse(localStorage.getItem('filterSidebarExpanded')) || {
             'individual': true, 
             'institution': false,
+            'clinicians': false,
             'sample': false, 
             'test': false, 
             'pipeline': false, 
@@ -557,7 +560,20 @@
       </div>
     </div>
 
-    <!-- Institution Section -->
+    <div class="collapse bg-base-100 border border-base-200 rounded-box">
+      <input type="checkbox" x-model="expanded.clinicians" @change.stop />
+      <div class="collapse-title font-medium flex items-center justify-between hover:!bg-transparent">
+        <span>Clinicians</span>
+        <button type="button" @click.stop="expanded.clinicians = !expanded.clinicians"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary relative z-10" aria-label="Toggle clinician filters">
+          <i class="fa-solid fa-chevron-right transition-transform duration-200" :class="{ 'rotate-90': expanded.clinicians }"></i>
+        </button>
+      </div>
+      <div class="collapse-content">
+        {% include "lab/components/related_filter_picker.html" with name="clinicians" title="Names" placeholder="Search clinicians..." options=filter.clinician_picker_options %}
+      </div>
+    </div>
+
     <div class="collapse bg-base-100 border border-base-200 rounded-box">
       <input type="checkbox" x-model="expanded.institution" @change.stop />
       <div
@@ -576,37 +592,8 @@
       <div class="collapse-content">
         <div class="space-y-6 pt-2">
 
-          <!-- Name search -->
-          <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">
-            <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">
-              Name
-            </h3>
-            <label class="input input-bordered input-sm flex items-center w-full rounded-lg">
-              <input
-                type="text"
-                name="institution_name"
-                class="grow min-w-0"
-                placeholder="Search institution…"
-                value="{{ request.GET.institution_name|default:'' }}"
-                @keyup.debounce.500ms="$el.closest('form').dispatchEvent(new Event('filter-changed', {bubbles:true}))"
-                autocomplete="off"
-              />
-              {% if request.GET.institution_name %}
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content -mr-2"
-                  @click="$el.previousElementSibling.value=''; $el.closest('form').dispatchEvent(new Event('filter-changed', {bubbles:true}))"
-                >
-                  <i class="fa-solid fa-times"></i>
-                </button>
-              {% endif %}
-              <div class="text-base-content/40">
-                <i class="fa-solid fa-search text-xs"></i>
-              </div>
-            </label>
-          </div>
+          {% include "lab/components/related_filter_picker.html" with name="institution" title="Name" placeholder="Search institutions..." options=filter.institution_picker_options %}
 
-          <!-- City -->
           {% with choices=filter.form.institution__city.field.choices %}
             {% if choices %}
               <div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3">

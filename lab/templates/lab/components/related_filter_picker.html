@@ -1,0 +1,88 @@
+{% load lab_tags %}
+<div class="rounded-lg border border-base-200 bg-base-100/70 p-3 space-y-3"
+     data-related-picker="{{ name }}"
+     x-data="{
+       search: '',
+       included: [{% for value in request.GET|get_list:name %}'{{ value|escapejs }}',{% endfor %}],
+       excluded: [{% with exclude_name=name|add:'__exclude' %}{% for value in request.GET|get_list:exclude_name %}'{{ value|escapejs }}',{% endfor %}{% endwith %}],
+       normalize(value) {
+         return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i');
+       },
+       matches(id, label) {
+         return !this.included.includes(id) && !this.excluded.includes(id)
+           && this.normalize(label).includes(this.normalize(this.search.trim()));
+       },
+       hasResults() {
+         return Array.from(this.$refs.results.querySelectorAll('button')).some(button => this.matches(button.dataset.value, button.dataset.label));
+       },
+       change(id, state) {
+         this.included = this.included.filter(value => value !== id);
+         this.excluded = this.excluded.filter(value => value !== id);
+         if (state === 'include') this.included.push(id);
+         if (state === 'exclude') this.excluded.push(id);
+         this.$nextTick(() => this.$el.closest('form').dispatchEvent(new Event('filter-changed', { bubbles: true })));
+       },
+       chooseFirst() {
+         const button = Array.from(this.$refs.results.querySelectorAll('button')).find(button => this.matches(button.dataset.value, button.dataset.label));
+         if (this.search.trim() && button) button.click();
+       }
+     }"
+     @click.outside="search = ''"
+     @keydown.escape.stop="search = ''">
+  <div class="flex items-center justify-between gap-2">
+    <h3 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">{{ title }}</h3>
+    {% include "lab/components/filter_logic_mode.html" with name=name %}
+  </div>
+  {% if name == 'institution' and request.GET.institution_name %}
+    <div x-data="{ active: true }" x-show="active"
+         class="badge badge-success gap-2 h-auto p-2 w-full justify-between"
+         data-filter-option data-filter-label="{{ request.GET.institution_name }}">
+      <input type="hidden" name="institution_name" value="{{ request.GET.institution_name }}" :disabled="!active">
+      <span class="text-xs break-words">Name contains: {{ request.GET.institution_name }}</span>
+      <button type="button" class="btn btn-ghost btn-xs btn-circle" aria-label="Remove institution name search"
+              @click="active = false; $nextTick(() => $el.closest('form').dispatchEvent(new Event('filter-changed', { bubbles: true })))">
+        <i class="fa-solid fa-times"></i>
+      </button>
+    </div>
+  {% endif %}
+  <div class="flex flex-wrap gap-1.5" x-show="included.length || excluded.length" style="display: none;">
+    {% for value, label in options %}
+      <div class="badge badge-lg gap-2 p-2 h-auto w-full justify-between text-left"
+           x-show="included.includes('{{ value }}') || excluded.includes('{{ value }}')"
+           :class="excluded.includes('{{ value }}') ? 'badge-error text-error-content' : 'badge-success text-success-content'"
+           data-filter-option data-filter-name="{{ name }}" data-filter-value="{{ value }}" data-filter-label="{{ label }}">
+        <input type="checkbox" name="{{ name }}" value="{{ value }}" class="hidden"
+               :checked="included.includes('{{ value }}')" :disabled="!included.includes('{{ value }}')">
+        <input type="checkbox" name="{{ name }}__exclude" value="{{ value }}" class="hidden"
+               :checked="excluded.includes('{{ value }}')" :disabled="!excluded.includes('{{ value }}')">
+        <button type="button" class="font-bold text-xs text-left min-w-0 flex-1 break-words"
+                :aria-label="(excluded.includes('{{ value }}') ? 'Remove exclusion: ' : 'Exclude: ') + $el.textContent.trim()"
+                @click="change('{{ value }}', included.includes('{{ value }}') ? 'exclude' : '')">{{ label }}</button>
+        <button type="button" class="btn btn-ghost btn-xs btn-circle shrink-0" aria-label="Remove {{ label }}"
+                @click="change('{{ value }}', '')"><i class="fa-solid fa-times"></i></button>
+      </div>
+    {% endfor %}
+  </div>
+  <label class="input input-bordered input-sm flex items-center w-full rounded-lg">
+    <input type="text" class="grow min-w-0" placeholder="{{ placeholder }}" aria-label="{{ placeholder }}"
+           x-model="search" x-ref="pickerSearch" autocomplete="off"
+           @change.stop @keydown.enter.prevent="chooseFirst()"
+           @keydown.arrow-down.prevent="Array.from($refs.results.querySelectorAll('button')).find(button => matches(button.dataset.value, button.dataset.label))?.focus()">
+    <button type="button" class="btn btn-ghost btn-xs btn-circle text-base-content/50 -mr-2"
+            x-show="search" style="display: none;" aria-label="Clear search"
+            @click="search = ''; $refs.pickerSearch.focus()"><i class="fa-solid fa-times"></i></button>
+    <i class="fa-solid fa-search text-xs text-base-content/40" x-show="!search"></i>
+  </label>
+  <div x-show="search.trim().length > 0" style="display: none;">
+    <ul x-ref="results" class="menu flex-nowrap bg-base-100 w-full rounded-box p-2 shadow-lg border border-base-200 max-h-80 overflow-y-auto overflow-x-hidden" style="flex-wrap: nowrap;">
+      {% for value, label in options %}
+        <li x-show="matches('{{ value }}', $el.firstElementChild.dataset.label)" class="shrink-0">
+          <button type="button" data-value="{{ value }}" data-label="{{ label }}"
+                  class="font-bold text-sm whitespace-normal break-words text-left py-2"
+                  @click="change('{{ value }}', 'include'); $refs.pickerSearch.focus()">{{ label }}</button>
+        </li>
+      {% endfor %}
+      <li x-show="!hasResults()" class="p-2 text-sm text-base-content/50">No matching options found.</li>
+    </ul>
+  </div>
+</div>

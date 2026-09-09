@@ -3,13 +3,7 @@
     <div class="flex items-center gap-2">
         <h3 class="card-title text-sm uppercase text-base-content/50">
             Family {{ family.family_id }}
-            {% if family.is_consanguineous %}
-                <span class="badge badge-sm badge-warning gap-1 normal-case font-normal">
-                    <i class="fa-solid fa-circle-nodes text-[10px]"></i> Consanguineous
-                </span>
-            {% elif family.is_consanguineous is False %}
-                <span class="badge badge-sm badge-ghost text-base-content/40 normal-case font-normal">Non-consanguineous</span>
-            {% endif %}
+            {% include "lab/components/consanguinity_badge.html" with family=family %}
         </h3>
         {% if perms.lab.change_family %}
         <button hx-get="{% url 'lab:family_id_edit' family.pk %}?individual_pk={{ individual.pk }}"

@@ -1,3 +1,4 @@
+from .consanguinity import CONSANGUINITY_FILTER_CHOICES
 import django_filters
 from django import forms
 from django.db.models import Count, Exists, OuterRef, Q
@@ -5,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from .models import (
     Individual, Sample, Project, SampleType, TestType, Status, PipelineType,
     Institution, Test, Pipeline, Analysis, AnalysisType, TaggedStatus, Family,
-    AnalysisReport, AnalysisRequestForm, Note,
+    AnalysisReport, AnalysisRequestForm, Note, Contact,
 )
 from .search_utils import filter_normalized_contains, normalized_contains, normalized_contains_q
 
@@ -279,6 +280,15 @@ class TristateMultipleChoiceFilter(TristateFilterMixin, django_filters.MultipleC
 class TristateModelMultipleChoiceFilter(TristateFilterMixin, django_filters.ModelMultipleChoiceFilter):
     pass
 
+def _family_consanguinity_query(values, prefix="family__"):
+    values = {str(value).lower() for value in values}
+    known = [key for key, _ in CONSANGUINITY_FILTER_CHOICES if key != "unknown" and key in values]
+    query = Q(**{f"{prefix}is_consanguineous__in": known})
+    if "unknown" in values:
+        query |= Q(**{f"{prefix}is_consanguineous__isnull": True})
+    return query
+
+
 class FamilyConsanguinityFilter(TristateMultipleChoiceFilter):
     def filter(self, queryset, value):
         if not self.parent or not self.parent.data:
@@ -294,22 +304,6 @@ class FamilyConsanguinityFilter(TristateMultipleChoiceFilter):
                 raw = [raw]
             return [item for item in raw if item != ""]
 
-        def build_query(values):
-            query = Q()
-            known_values = []
-            if "true" in values:
-                known_values.append(True)
-            if "false" in values:
-                known_values.append(False)
-            if known_values:
-                query |= Q(family__is_consanguineous__in=known_values)
-            if "unknown" in values:
-                query |= (
-                    Q(family__isnull=True) |
-                    Q(family__is_consanguineous__isnull=True)
-                )
-            return query
-
         selected_values = values_for(self.field_name)
         excluded_values = values_for(f"{self.field_name}__exclude")
 
@@ -318,10 +312,10 @@ class FamilyConsanguinityFilter(TristateMultipleChoiceFilter):
             if mode == FILTER_MODE_ALL and len(set(selected_values)) > 1:
                 queryset = queryset.none()
             else:
-                queryset = queryset.filter(build_query(selected_values))
+                queryset = queryset.filter(_family_consanguinity_query(selected_values))
 
         if excluded_values:
-            queryset = queryset.exclude(build_query(excluded_values))
+            queryset = queryset.exclude(_family_consanguinity_query(excluded_values))
 
         return queryset.distinct()
 
@@ -331,6 +325,58 @@ class OpenMultipleChoiceField(forms.MultipleChoiceField):
 
 class OpenMultipleChoiceFilter(django_filters.MultipleChoiceFilter):
     field_class = OpenMultipleChoiceField
+
+class RelatedSelectionFilter(OpenMultipleChoiceFilter):
+    """Select related records by ID, with Any/All and chip exclusions."""
+
+    def __init__(self, *args, relation, **kwargs):
+        self.relation = relation
+        super().__init__(*args, **kwargs)
+
+    def filter(self, queryset, value):
+        if value:
+            try:
+                ids = [int(item) for item in value]
+            except (TypeError, ValueError):
+                return queryset.none()
+            queryset = _filter_lookup_values(
+                queryset, self.relation, ids,
+                _get_filter_mode(self.parent.data, self.field_name),
+            )
+        return self.exclude_selected(queryset).distinct()
+
+    def exclude_selected(self, queryset):
+        values = _exclude_values_for_data(self.parent.data, self.field_name)
+        ids = [int(value) for value in values if str(value).isascii() and str(value).isdigit()]
+        if ids:
+            queryset = queryset.exclude(**{f"{self.relation}__in": ids})
+        return queryset
+
+
+class RelatedPickerMixin:
+    def _picker_options(self, model, reverse_relation, label_field):
+        individuals = Individual.objects.all()
+        if self.queryset.model is Variant:
+            individuals = individuals.filter(pk__in=self.queryset.values("individual_id"))
+        else:
+            individuals = individuals.filter(pk__in=self.queryset.values("pk"))
+        if self.request is not None:
+            from .access import accessible_individuals
+
+            individuals = accessible_individuals(self.request.user, individuals)
+        return list(
+            model.objects.filter(**{f"{reverse_relation}__in": individuals})
+            .order_by(label_field, "pk").values_list("pk", label_field).distinct()
+        )
+
+    @property
+    def institution_picker_options(self):
+        return self._picker_options(Institution, "individuals", "name")
+
+    @property
+    def clinician_picker_options(self):
+        return self._picker_options(Contact, "patients", "full_name")
+
 
 def _filter_by_tagged_status(queryset, model_class, status_values, exclude=False):
     """
@@ -432,7 +478,7 @@ def _filter_annotation_acmg_classification_values(queryset, relation_path, value
     return queryset.filter(_annotation_acmg_classification_q(relation_path, values))
 
 
-class IndividualFilter(django_filters.FilterSet):
+class IndividualFilter(RelatedPickerMixin, django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")
 
     # Individual Fields
@@ -457,11 +503,7 @@ class IndividualFilter(django_filters.FilterSet):
         label="Maximum Age of Onset (months)",
     )
     family__is_consanguineous = FamilyConsanguinityFilter(
-        choices=[
-            ("false", "Non-Consanguineous"),
-            ("unknown", "Unknown"),
-            ("true", "Consanguineous"),
-        ],
+        choices=CONSANGUINITY_FILTER_CHOICES,
         label="Family Consanguinity",
     )
 
@@ -562,6 +604,13 @@ class IndividualFilter(django_filters.FilterSet):
         label="Project",
     )
     
+    institution = RelatedSelectionFilter(
+        relation="institution", choices=[], label="Institution",
+    )
+    clinicians = RelatedSelectionFilter(
+        relation="physicians", choices=[], label="Clinicians",
+    )
+
     # Institution filters (all go through the M2M Individual.institution)
     institution_name = django_filters.CharFilter(
         method='filter_institution_name',
@@ -1156,6 +1205,12 @@ class IndividualFilter(django_filters.FilterSet):
             excluded_values = self._exclude_values_for(name)
             if not excluded_values:
                 continue
+            if name == "family__is_consanguineous":
+                queryset = queryset.exclude(_family_consanguinity_query(excluded_values))
+                continue
+            if isinstance(self.filters[name], RelatedSelectionFilter):
+                queryset = self.filters[name].exclude_selected(queryset)
+                continue
             if name == "variants__annotation_acmg_classification":
                 queryset = self._apply_variant_annotation_acmg_classification_exclusions(queryset)
                 continue
@@ -1323,7 +1378,7 @@ class IndividualFilter(django_filters.FilterSet):
         queryset = self._apply_variant_annotation_acmg_classification_exclusions(queryset)
         return queryset.distinct()
 
-class VariantFilter(django_filters.FilterSet):
+class VariantFilter(RelatedPickerMixin, django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")
 
     # Core variant fields
@@ -1405,11 +1460,7 @@ class VariantFilter(django_filters.FilterSet):
         label="Maximum Age of Onset (months)",
     )
     family__is_consanguineous = django_filters.MultipleChoiceFilter(
-        choices=[
-            ("false", "Non-Consanguineous"),
-            ("unknown", "Unknown"),
-            ("true", "Consanguineous"),
-        ],
+        choices=CONSANGUINITY_FILTER_CHOICES,
         method='filter_family_consanguinity',
         label="Family Consanguinity",
     )
@@ -1432,6 +1483,13 @@ class VariantFilter(django_filters.FilterSet):
         choices=[],
         label="HPO Terms",
         method='filter_hpo_terms',
+    )
+
+    institution = RelatedSelectionFilter(
+        relation="individual__institution", choices=[], label="Institution",
+    )
+    clinicians = RelatedSelectionFilter(
+        relation="individual__physicians", choices=[], label="Clinicians",
     )
 
     # Institution filters
@@ -1687,21 +1745,7 @@ class VariantFilter(django_filters.FilterSet):
         return queryset.filter(q_obj) if q_obj.children else queryset
 
     def _family_consanguinity_q(self, values):
-        values = {str(value).lower() for value in values}
-        query = Q()
-        known_values = []
-        if "true" in values:
-            known_values.append(True)
-        if "false" in values:
-            known_values.append(False)
-        if known_values:
-            query |= Q(individual__family__is_consanguineous__in=known_values)
-        if "unknown" in values:
-            query |= (
-                Q(individual__family__isnull=True) |
-                Q(individual__family__is_consanguineous__isnull=True)
-            )
-        return query
+        return _family_consanguinity_query(values, prefix="individual__family__")
 
     def _report_exists_qs(self):
         return AnalysisReport.objects.filter(
@@ -2039,6 +2083,8 @@ class VariantFilter(django_filters.FilterSet):
         return queryset.distinct()
 
     def _exclude_filter_values(self, queryset, name, values):
+        if isinstance(self.filters[name], RelatedSelectionFilter):
+            return self.filters[name].exclude_selected(queryset)
         if name == "status":
             status_values = self._status_queryset_from_names(Variant, values)
             matched_ids = _matching_tagged_object_ids(Variant, status_values)

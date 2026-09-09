@@ -1,3 +1,4 @@
+from .consanguinity import CONSANGUINITY_FORM_CHOICES, normalize_consanguinity
 # forms.py
 from collections import OrderedDict
 
@@ -1834,12 +1835,9 @@ class StatusForm(BaseForm):
 
 class CreateFamilyForm(BaseForm):
     is_consanguineous = forms.TypedChoiceField(
-        choices=[
-            ("false", "Non-Consanguineous"),
-            ("", "Unknown"),
-            ("true", "Consanguineous"),
-        ],
-        coerce=lambda value: {"true": True, "false": False}.get(value, None),
+        choices=CONSANGUINITY_FORM_CHOICES,
+        label="Consanguinity",
+        coerce=normalize_consanguinity,
         empty_value=None,
         required=False,
     )
@@ -2651,12 +2649,9 @@ class StatusConfigForm(BaseForm):
 
 class FamilyConfigForm(BaseForm):
     is_consanguineous = forms.TypedChoiceField(
-        choices=[
-            ("false", "Non-Consanguineous"),
-            ("", "Unknown"),
-            ("true", "Consanguineous"),
-        ],
-        coerce=lambda value: {"true": True, "false": False}.get(value, None),
+        choices=CONSANGUINITY_FORM_CHOICES,
+        label="Consanguinity",
+        coerce=normalize_consanguinity,
         empty_value=None,
         required=False,
     )

@@ -1,3 +1,4 @@
+from .consanguinity import CONSANGUINITY_FORM_CHOICES, normalize_consanguinity
 import json
 from calendar import monthrange
 from datetime import timedelta
@@ -244,7 +245,10 @@ class IndividualHPOEditView(View):
         individual = get_accessible_individual_or_404(request.user, pk=pk)
         if not _can_change_individual(request.user, individual):
             return HttpResponseForbidden("You do not have permission to edit this individual.")
-        return render(request, "lab/partials/tabs/_phenotype.html#hpo_edit", {"individual": individual})
+        return render(request, "lab/partials/tabs/_phenotype.html#hpo_edit", {
+            "individual": individual,
+            "selected_hpo_terms": individual.hpo_terms.all(),
+        })
 
 @login_required
 @require_POST
@@ -252,19 +256,45 @@ def manage_hpo_term(request, pk):
     individual = get_accessible_individual_or_404(request.user, pk=pk)
     if not _can_change_individual(request.user, individual):
         return HttpResponseForbidden("You do not have permission to edit this individual.")
-    action = request.POST.get("action")
-    term_id = request.POST.get("term_id")
-    
     from ontologies.models import Term
-    term = get_object_or_404(Term, pk=term_id)
-    
-    if action == "add":
-        individual.hpo_terms.add(term)
-    elif action == "remove":
-        individual.hpo_terms.remove(term)
-        
-    return render(request, "lab/partials/tabs/_phenotype.html#hpo_edit_list", {"individual": individual})
-    return render(request, "lab/partials/tabs/_phenotype.html#hpo_edit_list", {"individual": individual})
+    from .views import match_hpo_queries
+
+    action = request.POST.get("action")
+    if action not in {"add", "bulk_add", "remove", "save"}:
+        return HttpResponse("Invalid HPO action.", status=400)
+    try:
+        selected_ids = {int(value) for value in request.POST.getlist("hpo_terms")}
+    except (ValueError, TypeError):
+        return HttpResponse("Invalid HPO selection.", status=400)
+    selected = Term.objects.filter(pk__in=selected_ids)
+    if selected.count() != len(selected_ids):
+        return HttpResponse("Unknown HPO term in selection.", status=400)
+
+    message = ""
+    if action == "save":
+        individual.hpo_terms.set(selected)
+        return render(request, "lab/partials/tabs/_phenotype.html#hpo_card", {"individual": individual})
+    if action == "bulk_add":
+        matches = match_hpo_queries(request.POST.get("bulk_query", ""))
+        selected_ids.update(match["id"] for match in matches)
+        message = f"Matched {len(matches)} HPO term(s)." if matches else "No matching HPO terms found."
+    else:
+        try:
+            term_id = int(request.POST.get("term_id", ""))
+        except (ValueError, TypeError):
+            return HttpResponse("Invalid HPO term.", status=400)
+        term = get_object_or_404(Term, pk=term_id)
+        if action == "add":
+            selected_ids.add(term.pk)
+        else:
+            selected_ids.discard(term.pk)
+
+    return render(request, "lab/partials/tabs/_phenotype.html#hpo_edit_list", {
+        "individual": individual,
+        "selected_hpo_terms": Term.objects.filter(pk__in=selected_ids).select_related("ontology").order_by("label", "pk"),
+        "bulk_hpo_message": message,
+    })
+
 
 # Note Views
 
@@ -749,6 +779,8 @@ def family_id_edit(request, pk):
     return render(request, "lab/partials/family_id_edit.html", {
         "family": family,
         "individual_pk": individual_pk,
+        "consanguinity_value": family.is_consanguineous,
+        "consanguinity_choices": CONSANGUINITY_FORM_CHOICES,
     })
 
 
@@ -771,6 +803,8 @@ def family_id_save(request, pk):
         error = "Family name cannot be empty."
     elif Family.objects.filter(family_id=new_id).exclude(pk=pk).exists():
         error = f'"{new_id}" is already used by another family.'
+    elif consanguinity_value not in dict(CONSANGUINITY_FORM_CHOICES):
+        error = "Select a valid consanguinity option."
     if error:
         return render(request, "lab/partials/family_id_edit.html", {
             "family": family,
@@ -778,14 +812,10 @@ def family_id_save(request, pk):
             "error": error,
             "value": new_id,
             "consanguinity_value": consanguinity_value,
+            "consanguinity_choices": CONSANGUINITY_FORM_CHOICES,
         })
     family.family_id = new_id
-    if consanguinity_value == "true":
-        family.is_consanguineous = True
-    elif consanguinity_value == "false":
-        family.is_consanguineous = False
-    else:
-        family.is_consanguineous = None
+    family.is_consanguineous = normalize_consanguinity(consanguinity_value)
     family.save(update_fields=["family_id", "is_consanguineous"])
     # Re-render the title div (display mode)
     ctx = {
@@ -4401,7 +4431,6 @@ def report_replace_modal(request, report_id):
                     report.preview_file.delete(save=False)
                 report.delete()
 
-                workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
                 html = (
                     render(
                         request,
@@ -4428,7 +4457,6 @@ def report_replace_modal(request, report_id):
             if form.is_valid():
                 report.file = form.cleaned_data["file"]
                 report.save(update_fields=["file"])
-                workflow_target_id = f"#workflow-content-{individual.pk}" if individual else "#workflow-content"
                 html = (
                     render(
                         request,

@@ -6,7 +6,7 @@
     
     <!-- Header / Delete -->
     <div class="flex justify-between items-start mb-2 border-b border-base-200 pb-1">
-        <h3 class="text-base font-medium text-base-content" x-text="members.find(m => m.index === index)?.name || 'New Member'"></h3>
+        <h3 class="text-base font-medium text-base-content" x-text="members.find(m => m.index === index)?.name || 'Member ' + (index + 1)"></h3>
         <button type="button" @click="removeMember(index)" class="text-gray-400 hover:text-red-500 transition-colors">
             <span class="sr-only">Remove</span>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -263,12 +263,13 @@
                     <label class="block text-xs font-medium text-base-content/80">HPO Terms</label>
                     <div class="flex min-w-0 items-center gap-1">
                         <label class="input input-bordered input-xs flex h-7 w-44 min-w-0 items-center gap-1 bg-base-100/60">
-                            <input type="text"
-                                   class="min-w-0 grow text-[11px]"
+                            <textarea rows="1"
+                                   class="min-w-0 grow resize-none border-0 bg-transparent p-0 text-[11px] focus:outline-none"
                                    placeholder="Paste HPOs..."
+                                   aria-label="Paste HPO terms separated by commas or new lines"
                                    x-model="bulkHpoQuery"
-                                   @keydown.enter.prevent="bulkAddHpoTerms()"
-                                   autocomplete="off" />
+                                   @keydown.enter.exact.prevent="bulkAddHpoTerms()"
+                                   autocomplete="off"></textarea>
                         </label>
                         <button type="button"
                                 class="btn btn-ghost btn-xs h-7 min-h-0 w-7 rounded-full border border-base-300 p-0"
