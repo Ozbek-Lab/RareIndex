@@ -14,6 +14,19 @@ class Command(BaseCommand):
 
         templates = [
             {
+                "name": "Individual Test Venn Diagram",
+                "slug": "individual-test-venn",
+                "description": "Distinct individuals with each selected test combination, including those with none of the selected tests.",
+                "target_model": "Individual",
+                "default_col_span": 2,
+                "show_download_menu": False,
+                "notebook_filename": "test_venn.py",
+                "query_config": {
+                    "values": ["id", "samples__tests__test_type_id"]
+                },
+                "is_published": True,
+            },
+            {
                 "name": "Sample Distribution Sunburst",
                 "slug": "sample-distribution-sunburst",
                 "description": "Interactive hierarchy of samples by type and status.",

@@ -158,6 +158,24 @@ This command is committed at
 =lab/management/commands/seed_plot_templates.py=. It requires at least one staff
 user to exist, because templates need an owner.
 
+The Visualizations tab lists all published =PlotTemplate= records dynamically.
+Adding a notebook file alone does not publish it: register it in the admin or
+add it to the seed command above and run the command.
+The bundled Individual Test Venn Diagram also appears in Visualizations before
+seeding, using a fallback entry when no published template references its
+notebook. Seeding registers it for the plot gallery and dashboard as well.
+
+=test_venn.py= shows distinct individuals by selectable test types from the
+system catalog, defaulting to WGS, WES, and RNA-seq when available. One to three
+selected types use Venn circles; four or five use overlapping ellipses. More
+types use a schematic circle overview with test totals in the legend. Every
+selection also includes a table of exact combination counts, since circles
+cannot represent every intersection for larger selections.
+The outside count includes everyone in the accessible, filtered cohort with
+none of the selected tests, including individuals without samples or tests.
+Repeated tests across samples count once per individual. Circle areas are
+schematic; the numbers give the exact counts.
+
 * Identifier Priorities
 
 ID priorities will need to be set ( check ozbek_set_id_priorities lab management command for an example):
