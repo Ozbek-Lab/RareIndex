@@ -1830,9 +1830,22 @@ class MapVisualizationView(LoginRequiredMixin, MainAppPermissionRequiredMixin, T
         context["filter"] = filterset
         context["status_metadata"] = build_status_metadata_by_model()
         context["filter_counts"] = _individual_filter_counts(self.request.user)
-        context["plot_templates"] = PlotTemplate.objects.filter(
+        plot_templates = list(PlotTemplate.objects.filter(
             is_published=True
-        ).order_by("name")
+        ).order_by("name"))
+        # Keep the bundled Venn plot available in installations that have not
+        # run seed_plot_templates yet, without duplicating a published entry.
+        if not any(template.notebook_filename == "test_venn.py" for template in plot_templates):
+            plot_templates.append(PlotTemplate(
+                name="Individual Test Venn Diagram",
+                slug="individual-test-venn",
+                description="Distinct individuals with each selected test combination, including those with none of the selected tests.",
+                target_model="Individual",
+                notebook_filename="test_venn.py",
+                show_download_menu=False,
+                is_published=True,
+            ))
+        context["plot_templates"] = sorted(plot_templates, key=lambda template: template.name.casefold())
         hpo_term_ids = self.request.GET.getlist("hpo_terms")
         if hpo_term_ids:
             from ontologies.models import Term
@@ -2884,6 +2897,13 @@ def _scope_plot_queryset_for_user(qs, model_name, user):
 
 
 def _plot_data_for_model(model_name, config, request=None, user=None):
+    if model_name == "TestType":
+        # The shared catalog is independent of cohort filters. Restrict its
+        # projection so reverse joins cannot expose tests outside project scope.
+        if config != {"values": ["id", "name"]}:
+            raise ValueError("TestType only supports the id/name catalog query")
+        return list(TestType.objects.order_by("name", "id").values("id", "name"))
+
     try:
         model = apps.get_model("lab", model_name)
     except LookupError:
