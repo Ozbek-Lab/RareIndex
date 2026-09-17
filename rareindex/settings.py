@@ -38,6 +38,8 @@ SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
 
 # Marimo configuration
 PLOT_ALLOWED_MODELS = ['Individual', 'Sample', 'Test', 'TestType', 'Analysis', 'Pipeline', 'Project', 'Variant']
