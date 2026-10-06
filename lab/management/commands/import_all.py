@@ -3,7 +3,7 @@
 Sheets processed from the master XLSX
 ---------------------------------------
   OZBEK LAB          – Families, Institutions, Individuals, Samples
-  Analiz Takip        – Test + Analysis per row (pipeline linked later by Gennext sheet)
+  Analiz Takip        – Tests + queued analyses (created after pipeline import)
   Variant List        – SNV, delins, CNV, SV, and Repeat variants
   Kurumlar            – Institution coordinate / metadata lookup (replaces Gönderen Kurum Harita)
   Sanger Konfirmasyonları – Sanger tests
@@ -13,7 +13,7 @@ Sheets processed from the master XLSX
   Dubai-Uzun Okuma Hastaları – Long Read WGS (Dubai)
   CP_COHORT           – CP cohort project assignment
   RNA SEQ             – RNA Seq tests
-  Gennext Analiz Listesi – Gennext pipelines (links Analiz Takip analyses)
+  Gennext Analiz Listesi – Gennext pipelines
   RarePipe Analiz Listesi – RarePipe pipelines
 
 Optional external inputs
@@ -29,8 +29,8 @@ Processing order
   1  Setup statuses / IdentifierTypes / ozbek_set_id_priorities
   2  Families + Institutions (OZBEK LAB pass 1)
   3  Individuals + CrossIdentifiers (OZBEK LAB pass 2)
-  4  Samples (OZBEK LAB pass 3)
-  5  Analiz Takip → Test + Analysis (pipeline=None, linked in step 9)
+  4  Samples, then individual-level planned/completed tests (OZBEK LAB pass 3)
+  5  Analiz Takip → Tests + queued analysis rows
   6  RarePipe TSV (--rarepipe-tsv)
   7  Parent links
   8  Sanger Konfirmasyonları
@@ -39,12 +39,14 @@ Processing order
  11  Katar / Dubai long-read sheets
  12  CP_COHORT
  13  RNA SEQ
- 14  Gennext Analiz Listesi (creates Pipelines and links to analyses from step 5)
+ 14  Gennext Analiz Listesi
  15  RarePipe Analiz Listesi
+ 15b Analiz Takip analyses → RarePipe, Gennext, or Franklin fallback
  16  Variant List
  17  link_imported_genes
- 18  File attachments
- 19  Yayın_İçi (--yayin-ici)
+ 18  Plot templates
+ 19  File attachments
+ 20  Yayın_İçi (--yayin-ici; supplements the already imported OZBEK LAB data)
 
 REMINDERS (ask after implementation):
   • RarePipe Analiz Listesi: confirm whether Matching Sample ID / ID should also be preserved as notes
@@ -56,6 +58,7 @@ import json
 import os
 import re
 from collections import defaultdict
+from datetime import date
 from pathlib import Path
 
 import openpyxl
@@ -81,7 +84,9 @@ from lab.models import (
     IdentifierType,
     Individual,
     Institution,
+    Note,
     Pipeline,
+    PipelineType,
     Project,
     Sample,
     PlotTemplate,
@@ -114,6 +119,7 @@ from lab.management.commands._import_helpers import (
     map_inheritance,
     normalize_id,
     normalize_sex,
+    normalize_test_type_name,
     parse_and_add_notes,
     parse_date,
     parse_date_from_filename,
@@ -125,7 +131,7 @@ User = get_user_model()
 
 def normalize_consanguinity_value(value):
     """Map imported consanguinity values to the family choice keys."""
-    bool_value = to_bool(value)
+    bool_value = to_bool(value.strip().casefold() if isinstance(value, str) else value)
     if bool_value is not None:
         return "true" if bool_value else "false"
 
@@ -141,6 +147,17 @@ def normalize_consanguinity_value(value):
     if text in {"unknown", "bilinmiyor", "belirsiz", "na", "n/a", "-"}:
         return None
     return None
+
+
+def normalize_life_status(value):
+    """Yayın_İçi uses Alive/Exitus as well as boolean spellings."""
+    if isinstance(value, str):
+        value = value.strip().casefold()
+        if value == "alive":
+            return True
+        if value in {"ex", "exitus", "dead", "deceased"}:
+            return False
+    return to_bool(value)
 
 
 # ---------------------------------------------------------------------------
@@ -229,15 +246,13 @@ ANALYSIS_IMPORT_STATUS_NAMES = {
 
 
 def _map_zygosity_strict(value, warn_fn=None):
-    """Return model key for *value*, or None and call warn_fn if unrecognised."""
-    if not value:
+    """Return a known model key, or an empty value with a warning."""
+    normalized = re.sub(r"\s+", " ", str(value or "").strip().lower())
+    mapped = ZYGOSITY_MAP.get(normalized, YAYIN_ZYGOSITY_MAP.get(normalized))
+    if mapped in (None, "unknown"):
         if warn_fn:
-            warn_fn(f"  Zygosity is empty — skipping variant")
-        return None
-    normalized = re.sub(r"\s+", " ", str(value).strip().lower())
-    mapped = ZYGOSITY_MAP.get(normalized)
-    if mapped is None and warn_fn:
-        warn_fn(f"  Unrecognised zygosity {value!r} — skipping variant")
+            warn_fn(f"  Empty or unknown zygosity {value!r} — continuing with empty zygosity")
+        return ""
     return mapped
 
 
@@ -263,10 +278,11 @@ def _normalize_variant_chromosome(value) -> str:
 
 def _normalize_yayin_zygosity(value) -> str:
     if value is None:
-        return "unknown"
+        return ""
     text = re.sub(r"\s+", " ", str(value).strip().lower())
     text = re.sub(r"\s+", " ", text)
-    return YAYIN_ZYGOSITY_MAP.get(text, YAYIN_ZYGOSITY_MAP.get(text.replace(" ", "-"), "unknown"))
+    mapped = YAYIN_ZYGOSITY_MAP.get(text, YAYIN_ZYGOSITY_MAP.get(text.replace(" ", "-")))
+    return mapped if mapped and mapped != "unknown" else ""
 
 
 def _split_yayin_variant_text(value) -> list[str]:
@@ -834,9 +850,10 @@ class Command(BaseCommand):
             raise CommandError(f"File not found: {file_path}")
 
         self._init_issue_log(file_path)
+        self.import_source_name = Path(file_path).name
 
         # Instance-level state shared between steps
-        self.analysis_map: dict = {}       # (lab_id, tt_name) → Analysis
+        self.pending_analyses: list = []
 
         # Step 0a — ontologies
         self._step0a_ensure_ontologies()
@@ -882,8 +899,9 @@ class Command(BaseCommand):
                              "Dubai - Long Read WGS Project")
         # self._step_cp_cohort(wb)
         self._step_rna_seq(wb)
-        self._step_gennext_analiz(wb)       # links Analiz Takip analyses to pipelines
-        self._step_rarepipe_analiz(wb)      # ⚠ skipped — no date column yet
+        self._step_gennext_analiz(wb)
+        self._step_rarepipe_analiz(wb)
+        self._finalize_imported_analyses()
 
         # Step 16 — Variant List
         self._step_variants(wb)
@@ -2082,26 +2100,10 @@ class Command(BaseCommand):
             parse_and_add_notes(row.get("Genel Notlar/Sonuçlar"), individual, self.admin_user)
             planned_tests = row.get("İleri tetkik / planlanan")
             parse_and_add_notes(planned_tests, individual, self.admin_user)
-            if planned_tests:
-                self._import_tests_from_field(
-                    individual,
-                    planned_tests,
-                    self.statuses["test"].get("planned"),
-                    notes=row.get("İleri tetkik / planlanan Notları"),
-                )
             tamamlanan = row.get("Tamamlanan Tetkik")
             if tamamlanan:
                 parse_and_add_notes(
                     f"Tamamlanan tetkikler\n{tamamlanan}", individual, self.admin_user)
-                self._import_completed_tests_from_field(
-                    individual,
-                    tamamlanan,
-                    notes=row.get("Tamamlanan Tetkik Notları"),
-                    step="step3",
-                    sheet="OZBEK LAB",
-                    lab_id=lab_id,
-                    row=row,
-                )
 
             # CrossIdentifiers
             rb_type = self.id_types.get("RareBoost")
@@ -2302,8 +2304,32 @@ class Command(BaseCommand):
 
                 parse_and_add_notes(row.get("Örnek Notları"), sample, self.admin_user)
 
+            # These are individual-level test summaries. Import them only after
+            # every real sample in this row has been created, so they do not
+            # manufacture a placeholder sample that later causes a duplicate
+            # test of the same type in Analiz Takip.
+            planned_tests = row.get("İleri tetkik / planlanan")
+            if planned_tests:
+                self._import_tests_from_field(
+                    individual,
+                    planned_tests,
+                    self.statuses["test"].get("planned"),
+                    notes=row.get("İleri tetkik / planlanan Notları"),
+                )
+            tamamlanan = row.get("Tamamlanan Tetkik")
+            if tamamlanan:
+                self._import_completed_tests_from_field(
+                    individual,
+                    tamamlanan,
+                    notes=row.get("Tamamlanan Tetkik Notları"),
+                    step="step4",
+                    sheet="OZBEK LAB",
+                    lab_id=lab_id,
+                    row=row,
+                )
+
     # ==================================================================
-    # Step 5 — Analiz Takip → Test + Analysis (pipeline linked later)
+    # Step 5 — Analiz Takip → Tests + analysis rows for later reconciliation
     # ==================================================================
 
     def _step5_analiz_takip(self, wb) -> None:
@@ -2314,14 +2340,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("  Sheet 'Analiz Takip' not found."))
             return
 
-        raw_headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
-        headers = [h for h in raw_headers if h is not None]
+        headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
         leftover_rows = []
 
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row_number, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             if all(c is None for c in row):
                 continue
-            d = dict(zip(headers, row[:len(headers)]))
+            d = {header: value for header, value in zip(headers, row) if header is not None}
             lab_id = d.get("Özbek Lab. ID")
             if not lab_id:
                 leftover_rows.append(d)
@@ -2408,55 +2433,137 @@ class Command(BaseCommand):
             parse_and_add_notes(d.get("Veri İçeriği"), test, self.admin_user)
             parse_and_add_notes(d.get("Veri Notları"), test, self.admin_user)
 
-            # Performed_by for Analysis (comma-separated names in one column)
-            performers = self._parse_analysis_performers(d.get("Analizi Yapan"))
-
-            analiz_tarihi  = parse_date(d.get("Reanaliz bitiş tarihi/ayça bitirdiğinde"))
-            analiz_turu    = str(d.get("Analiz Türü") or "").strip()
-            analiz_durumu  = str(d.get("Analiz Durumu") or "").strip()
-            analysis_type  = get_or_create_analysis_type(analiz_turu, self.admin_user) \
-                             if analiz_turu else None
-
-            # Analysis — pipeline=None for now; linked by Gennext step
-            analysis = Analysis.objects.create(
-                pipeline=None,
-                type=analysis_type,
-                performed_date=analiz_tarihi,
-                created_by=self.admin_user,
-            )
-            if performers:
-                analysis.performed_by.set(performers)
-
-            if analiz_durumu:
-                a_st = self._analysis_status_for_import_value(analiz_durumu)
-                if a_st:
-                    analysis.statuses.set([a_st])
-                else:
-                    self._record_issue(
-                        step="step5",
-                        sheet="Analiz Takip",
-                        severity="warning",
-                        reason="Analysis status was not found for imported Analiz Durumu.",
-                        lab_id=lab_id,
-                        row=d,
-                        context={"analiz_durumu": analiz_durumu},
-                    )
-
-            # Notes on Analysis (Test Notları goes HERE, not on Test)
-            parse_and_add_notes(d.get("Test Notları"), analysis, self.admin_user)
-            plan_note = "\n".join(filter(None, [
-                str(d.get("PLAN") or "").strip(),
-                str(d.get("ANALİZ STATUS") or "").strip(),
-            ]))
-            if plan_note:
-                parse_and_add_notes(plan_note, analysis, self.admin_user)
-
-            self.analysis_map[(str(lab_id), tt_name)] = analysis
+            # Preserve every row, including repeated individual/test pairs.
+            # No Analysis is saved until both pipeline sheets have been read.
+            self.pending_analyses.append({
+                "test": test,
+                "individual_id": individual.pk,
+                "lab_id": str(lab_id),
+                "row_number": row_number,
+                "row": d,
+            })
 
         if leftover_rows:
             self.stdout.write(self.style.WARNING(
                 f"  {len(leftover_rows)} Analiz Takip rows could not be matched."))
-        self.stdout.write(f"  Analyses created: {len(self.analysis_map)}")
+        self.stdout.write(f"  Analysis rows queued: {len(self.pending_analyses)}")
+
+    def _preferred_import_pipeline(self, pipelines):
+        """Use the requested provider priority; keep the oldest ID for ties."""
+        for name in ("RarePipe", "Gennext", "Franklin"):
+            pipeline = pipelines.filter(type__name__iexact=name).order_by("id").first()
+            if pipeline:
+                return pipeline
+        return None
+
+    def _pipeline_for_import_test(self, test):
+        """Resolve within the individual's matching test type, or create Franklin."""
+        candidates = Pipeline.objects.filter(
+            test__sample__individual_id=test.sample.individual_id,
+            test__test_type__name__iexact=test.test_type.name,
+        )
+        pipeline = self._preferred_import_pipeline(candidates)
+        if pipeline:
+            return pipeline
+
+        # Match an unversioned type explicitly: a name-only get_or_create can
+        # fail when versioned pipeline types already exist.
+        franklin_type = PipelineType.objects.filter(
+            name__iexact="Franklin", version=""
+        ).order_by("id").first() or PipelineType.objects.filter(
+            name__iexact="Franklin", version__isnull=True
+        ).order_by("id").first()
+        if franklin_type is None:
+            franklin_type = PipelineType.objects.create(
+                name="Franklin", version="", description="Import fallback",
+                created_by=self.admin_user,
+            )
+        pipeline = Pipeline.objects.create(
+            test=test,
+            type=franklin_type,
+            performed_date=date.today(),
+            performed_by=self.admin_user,
+            created_by=self.admin_user,
+        )
+        unsure = self.statuses["pipeline"].get("unsure_import")
+        if unsure:
+            pipeline.statuses.add(unsure)
+        Note.objects.create(
+            content=(
+                "Import placeholder: no RarePipe or Gennext pipeline was found "
+                f"for individual_id={test.sample.individual_id}, "
+                f"test_id={test.pk}, test_type={test.test_type.name}. "
+                "The pipeline performed date is the import date, not a known run date; "
+                "the performer is the importing user, not a confirmed operator."
+            ),
+            user=self.admin_user,
+            content_object=pipeline,
+        )
+        self._record_issue(
+            step="analysis_pipeline", severity="info",
+            reason="Created Franklin placeholder pipeline for imported analysis/report.",
+            context={
+                "individual_id": test.sample.individual_id,
+                "test_id": test.pk, "pipeline_id": pipeline.pk,
+                "performed_date_is_import_date": True,
+            },
+        )
+        return pipeline
+
+    def _finalize_imported_analyses(self):
+        """Create analyses with a pipeline already selected, before variant import."""
+        if self.dry_run:
+            return
+        created = reused = 0
+        for entry in self.pending_analyses:
+            d, test = entry["row"], entry["test"]
+            source_note = "Import source: " + json.dumps({
+                "workbook": getattr(self, "import_source_name", ""),
+                "sheet": "Analiz Takip", "row_number": entry["row_number"],
+                "individual_id": entry["individual_id"], "lab_id": entry["lab_id"],
+                "test_id": test.pk, "source_row": d,
+            }, ensure_ascii=False, sort_keys=True, default=str)
+            with transaction.atomic():
+                analysis = Analysis.objects.filter(notes__content=source_note).first()
+                if analysis:
+                    update_fields = []
+                    if analysis.pipeline_id is None:
+                        analysis.pipeline = self._pipeline_for_import_test(test)
+                        update_fields.append("pipeline")
+                    if analysis.type_id is None:
+                        analysis.type = get_or_create_analysis_type("Initial", self.admin_user)
+                        update_fields.append("type")
+                    if update_fields:
+                        analysis.save(update_fields=update_fields)
+                    reused += 1
+                    continue
+                pipeline = self._pipeline_for_import_test(test)
+                type_name = str(d.get("Analiz Türü") or "").strip() or "Initial"
+                analysis = Analysis.objects.create(
+                    pipeline=pipeline,
+                    type=get_or_create_analysis_type(type_name, self.admin_user),
+                    performed_date=parse_date(d.get("Reanaliz bitiş tarihi/ayça bitirdiğinde")),
+                    created_by=self.admin_user,
+                )
+                analysis.performed_by.set(self._parse_analysis_performers(d.get("Analizi Yapan")))
+                status_name = str(d.get("Analiz Durumu") or "").strip()
+                if status_name:
+                    status = self._analysis_status_for_import_value(status_name)
+                    if status:
+                        analysis.statuses.add(status)
+                    else:
+                        self._record_issue(
+                            step="step5", sheet="Analiz Takip", severity="warning",
+                            reason="Analysis status was not found for imported Analiz Durumu.",
+                            lab_id=entry["lab_id"], row=d,
+                            context={"analiz_durumu": status_name, "analysis_id": analysis.pk},
+                        )
+                Note.objects.create(content=source_note, user=self.admin_user, content_object=analysis)
+                for column in ("Test Notları", "PLAN", "ANALİZ STATUS"):
+                    parse_and_add_notes(d.get(column), analysis, self.admin_user)
+                created += 1
+
+        self.stdout.write(f"  Analiz Takip analyses: created={created} reused={reused}")
 
     def _parse_analysis_performers(self, field) -> list:
         """Split the performer column into a list of User objects."""
@@ -2572,9 +2679,11 @@ class Command(BaseCommand):
                 skipped += 1; continue
 
             pipeline_type = type_map[version]
-            if Pipeline.objects.filter(test=test, type=pipeline_type,
-                                        performed_date=performed_date,
-                                        output_location=output_loc).exists():
+            existing_pipeline = Pipeline.objects.filter(
+                test=test, type=pipeline_type, performed_date=performed_date,
+                output_location=output_loc,
+            ).order_by("id").first()
+            if existing_pipeline:
                 self._record_issue(
                     step="step6",
                     sheet="RarePipe TSV",
@@ -2595,9 +2704,6 @@ class Command(BaseCommand):
                 created_by=self.admin_user)
             if p_completed:
                 pipeline.statuses.set([p_completed])
-            Analysis.objects.get_or_create(
-                pipeline=pipeline,
-                defaults={"created_by": self.admin_user})
             created += 1
 
         self.stdout.write(self.style.SUCCESS(
@@ -3142,7 +3248,7 @@ class Command(BaseCommand):
         self.stdout.write(f"  RNA SEQ: created={created} skipped={skipped}")
 
     # ==================================================================
-    # Step 14 — Gennext Analiz Listesi (creates Pipelines, links analyses)
+    # Step 14 — Gennext Analiz Listesi (analyses are resolved after RarePipe)
     # ==================================================================
 
     def _step_gennext_analiz(self, wb) -> None:
@@ -3196,6 +3302,10 @@ class Command(BaseCommand):
                                        test_type__name__icontains="WGS").order_by("id").first()
             )
             if not test:
+                if self.dry_run:
+                    self.stdout.write(f"  [DRY] Gennext fallback WES test for {lab_id}")
+                    skipped += 1
+                    continue
                 self.stdout.write(self.style.WARNING(
                     f"  Gennext: no WES/WGS test for {lab_id} — creating fallback WES test"))
                 wes_tt = get_or_create_test_type("WES", self.admin_user)
@@ -3254,13 +3364,6 @@ class Command(BaseCommand):
                     note_lines.append(f"Gennext Hash: {gennext_hash}")
                 if note_lines:
                     parse_and_add_notes("\n".join(note_lines), pipeline, self.admin_user)
-
-                # Link an unlinked Analysis from analysis_map for this individual
-                tt_name = test.test_type.name
-                analysis = self.analysis_map.get((str(lab_id), tt_name))
-                if analysis and analysis.pipeline_id is None:
-                    analysis.pipeline = pipeline
-                    analysis.save()
 
                 created += 1
             except Exception as exc:
@@ -3387,11 +3490,12 @@ class Command(BaseCommand):
                 f"Sample ID: {sample_id}" if sample_id else "",
             ) if line]
 
-            if Pipeline.objects.filter(
+            existing_pipeline = Pipeline.objects.filter(
                 test=test,
                 type=rarepipe_type,
                 performed_date=performed_date,
-            ).exists():
+            ).order_by("id").first()
+            if existing_pipeline:
                 self._record_issue(
                     step="step15",
                     sheet="RarePipe Analiz Listesi",
@@ -3421,10 +3525,6 @@ class Command(BaseCommand):
                 if note_lines:
                     parse_and_add_notes("\n".join(note_lines), pipeline, self.admin_user)
 
-                Analysis.objects.get_or_create(
-                    pipeline=pipeline,
-                    defaults={"created_by": self.admin_user},
-                )
                 created += 1
             except Exception as exc:
                 self._record_issue(
@@ -3493,20 +3593,20 @@ class Command(BaseCommand):
                 )
                 skipped += 1; continue
 
-            # Zygosity — strict mapping, skip if unrecognised
+            # Missing zygosity must not discard an otherwise importable variant.
             zyg = _map_zygosity_strict(
                 d.get("Zygosity"),
-                warn_fn=lambda msg: self.stdout.write(self.style.WARNING(msg)))
-            if zyg is None:
+                warn_fn=lambda msg: self.stdout.write(self.style.WARNING(
+                    f"{msg}; Variant List, {lab_id}, {d.get('Chromosomal Position')}")))
+            if not zyg:
                 self._record_issue(
                     step="step16",
                     sheet="Variant List",
                     severity="warning",
-                    reason="Invalid or empty zygosity; variant skipped.",
+                    reason="Empty or unknown zygosity; continuing with empty zygosity.",
                     lab_id=lab_id,
                     row=d,
                 )
-                errors += 1; continue
 
             records = []
             for variant_line in _split_yayin_variant_text(d.get("Chromosomal Position")):
@@ -3528,14 +3628,10 @@ class Command(BaseCommand):
             if self.dry_run:
                 imported += len(records); continue
 
-            # First analysis for this individual (no Veri Kaynağı mapping available)
+            # No test modality is supplied here. All Analiz Takip analyses now
+            # have pipelines, so the old in-memory orphan fallback is unnecessary.
             analysis = Analysis.objects.filter(
                 pipeline__test__sample__individual=individual).order_by("id").first()
-            # Fallback: check analysis_map
-            if analysis is None:
-                for (lid, _), a in self.analysis_map.items():
-                    if lid == str(lab_id):
-                        analysis = a; break
 
             try:
                 for record in records:
@@ -3701,30 +3797,35 @@ class Command(BaseCommand):
                         continue
                     fn_lower = fp.name.lower()
                     pqs = Pipeline.objects.filter(test__sample__individual=ind)
-                    target = (
-                        pqs.filter(type__name__icontains="wgs").last() if "wgs" in fn_lower
-                        else pqs.filter(type__name__icontains="wes").last() if "wes" in fn_lower
-                        else pqs.filter(type__name__icontains="sanger").last() if "sanger" in fn_lower
-                        else pqs.last())
+                    report_modality = next((name for token, name in (
+                        ("wgs", "WGS"), ("wes", "WES"), ("sanger", "Sanger"),
+                        ("rna seq", "RNA Seq"), ("rna-seq", "RNA Seq"),
+                        ("rnaseq", "RNA Seq"), ("ces", "CES"),
+                    ) if token in fn_lower), None)
+                    report_tests = ind.get_all_tests()
+                    if report_modality:
+                        pqs = pqs.filter(test__test_type__name__iexact=report_modality)
+                        report_tests = report_tests.filter(test_type__name__iexact=report_modality)
+                    target = self._preferred_import_pipeline(pqs)
                     if not target:
-                        report_test = ind.get_all_tests().order_by("id").first()
+                        report_test = report_tests.order_by("id").first()
                         if self.dry_run:
                             self._record_issue(
                                 step="step18",
                                 sheet="reports_dir",
                                 severity="info",
-                                reason="No matching pipeline found; dry-run would create Franklin fallback pipeline on the individual's first test with Unsure Import.",
+                                reason="No matching pipeline found; dry-run would create Franklin fallback on a matching test with Unsure Import.",
                                 lab_id=m.group("lab_id"),
                                 context={"file": fp.name, "pipeline_type": "Franklin", "test": str(report_test) if report_test else ""},
                             )
                             continue
                         if not report_test:
-                            wes_tt = get_or_create_test_type("WES", self.admin_user)
-                            self._backfill_testtype_report_fields(wes_tt)
+                            report_tt = get_or_create_test_type(report_modality or "WES", self.admin_user)
+                            self._backfill_testtype_report_fields(report_tt)
                             sample = ind.samples.first() or self._get_placeholder_sample(ind)
                             report_test = Test.objects.create(
                                 sample=sample,
-                                test_type=wes_tt,
+                                test_type=report_tt,
                                 created_by=self.admin_user,
                             )
                             synthetic_statuses = [
@@ -3732,25 +3833,12 @@ class Command(BaseCommand):
                                 self.statuses["test"].get("unsure_import"),
                             ]
                             report_test.statuses.set([s for s in synthetic_statuses if s])
-                        franklin_type = get_or_create_pipeline_type(
-                            "Franklin", self.admin_user, description="Import fallback"
-                        )
-                        from datetime import date as date_cls
-                        target = Pipeline.objects.create(
-                            test=report_test,
-                            performed_date=date_cls.today(),
-                            performed_by=self.admin_user,
-                            type=franklin_type,
-                            created_by=self.admin_user,
-                        )
-                        pipeline_unsure_import = self.statuses["pipeline"].get("unsure_import")
-                        if pipeline_unsure_import:
-                            target.statuses.set([pipeline_unsure_import])
+                        target = self._pipeline_for_import_test(report_test)
                         self._record_issue(
                             step="step18",
                             sheet="reports_dir",
                             severity="info",
-                            reason="No matching pipeline found; created Franklin fallback pipeline on the individual's first test with Unsure Import.",
+                            reason="No matching pipeline found; selected Franklin fallback on a matching test with Unsure Import.",
                             lab_id=m.group("lab_id"),
                             context={"file": fp.name, "pipeline_type": "Franklin", "test": str(report_test)},
                         )
@@ -3762,6 +3850,7 @@ class Command(BaseCommand):
                         if not target_analysis:
                             target_analysis = Analysis.objects.create(
                                 pipeline=target,
+                                type=get_or_create_analysis_type("Initial", self.admin_user),
                                 created_by=self.admin_user,
                             )
                             target_analysis.performed_by.add(self.admin_user)
@@ -3819,18 +3908,15 @@ class Command(BaseCommand):
             return
 
         ws = wb[sheet_name]
-        headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))
-                   if c.value is not None]
-        rb_type  = self.id_types.get("RareBoost")
+        headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
         bb_type  = self.id_types.get("Biobank")
         ct_ind   = ContentType.objects.get_for_model(Individual)
-        ct_test  = ContentType.objects.get_for_model(Test)
         updated = skipped = 0
         variant_imported = variant_skipped = 0
 
         for vals in ws.iter_rows(min_row=2, values_only=True):
             if all(v is None for v in vals): continue
-            d = dict(zip(headers, vals[:len(headers)]))
+            d = {header: value for header, value in zip(headers, vals) if header is not None}
             if not any(
                 v is not None and str(v).strip()
                 for k, v in d.items()
@@ -3859,30 +3945,44 @@ class Command(BaseCommand):
             if self.dry_run:
                 updated += 1; continue
 
+            # Anything not successfully handled below is retained verbatim as
+            # a source-labeled note, including future/unknown workbook columns.
+            consumed_columns = {
+                "RareBoost ID", "Biyobanka ID",
+            }
             changed = False
             # Demographic updates (only if missing)
             sex_val = normalize_sex(d.get("Sex"))
             if sex_val and not individual.sex:
                 individual.sex = sex_val; changed = True
-            alive_val = to_bool(d.get("Status (ex-alive)"))
+            if sex_val and sex_val == individual.sex:
+                consumed_columns.add("Sex")
+            alive_val = normalize_life_status(d.get("Status (ex-alive)"))
             if alive_val is not None and individual.is_alive != alive_val:
                 individual.is_alive = alive_val; changed = True
+            if alive_val is not None:
+                consumed_columns.add("Status (ex-alive)")
             dob = parse_date(d.get("Date of Birth"))
             if dob and not individual.birth_date:
                 individual.birth_date = dob; changed = True
+            if dob and dob == individual.birth_date:
+                consumed_columns.add("Date of Birth")
             aoo = str(d.get("Age of Onset") or "").strip()
             if aoo and not individual.age_of_onset:
                 individual.age_of_onset = aoo; changed = True
+            if aoo and aoo == individual.age_of_onset:
+                consumed_columns.add("Age of Onset")
             if changed:
                 individual.save()
 
             # Consanguinity
             consanguinity_raw = d.get("Consanguinity")
             cons = normalize_consanguinity_value(consanguinity_raw)
-            if str(consanguinity_raw or "").strip() and individual.family and \
-                    individual.family.is_consanguineous != cons:
-                individual.family.is_consanguineous = cons
-                individual.family.save()
+            if cons is not None and individual.family:
+                if individual.family.is_consanguineous != cons:
+                    individual.family.is_consanguineous = cons
+                    individual.family.save(update_fields=["is_consanguineous"])
+                consumed_columns.add("Consanguinity")
 
             # Statuses (two separate columns)
             for col in ("Solved (P/LP and clinically relevant VUS), Candidate gene-variant, Unsolved",
@@ -3890,9 +3990,11 @@ class Command(BaseCommand):
                 status_name = str(d.get(col) or "").strip()
                 if status_name:
                     st = Status.objects.filter(
-                        name=status_name, content_type=ct_ind).first()
-                    if st and not individual.statuses.filter(pk=st.pk).exists():
-                        individual.statuses.add(st)
+                        name__iexact=status_name, content_type=ct_ind).first()
+                    if st:
+                        if not individual.statuses.filter(pk=st.pk).exists():
+                            individual.statuses.add(st)
+                        consumed_columns.add(col)
 
             # Disease Group → project
             disease_group = str(d.get("Disease Group") or "").strip()
@@ -3902,6 +4004,7 @@ class Command(BaseCommand):
                         name=pg,
                         defaults={"created_by": self.admin_user, "priority": "medium"})
                     proj.individuals.add(individual)
+                    consumed_columns.add("Disease Group")
 
             # Institution
             geldi_merkez = str(d.get("Geldiği merkez") or "").strip()
@@ -3909,6 +4012,7 @@ class Command(BaseCommand):
                 inst, _ = Institution.objects.get_or_create(
                     name=geldi_merkez, defaults={"created_by": self.admin_user})
                 individual.institution.add(inst)
+                consumed_columns.add("Geldiği merkez")
                 # Physicians for this institution
                 clinician_assignments = self._build_clinician_assignments_from_row(d)
                 for klin, contact_values in clinician_assignments:
@@ -3919,26 +4023,43 @@ class Command(BaseCommand):
                         [inst],
                     )
                     self._apply_contact_details(physician, contact_values)
+                if clinician_assignments:
+                    if d.get("Klinisyen"):
+                        consumed_columns.update({
+                            "Klinisyen", "İletişim Bilgileri - Mail/telefon?",
+                            "İletişim Bilgileri - Telefon/mail?",
+                        })
+                    else:
+                        consumed_columns.add("Klinisyen & İletişim Bilgileri")
 
             # HPO
             hpo_source = d.get("HPO")
             hpo_terms = get_hpo_terms(hpo_source, self.stdout)
             self._apply_hpo_terms_to_individual(individual, hpo_terms, hpo_source)
+            if hpo_terms or str(hpo_source or "").strip().casefold() == "ss":
+                consumed_columns.add("HPO")
 
             # OMIM note
             omim = str(d.get("OMIM") or "").strip()
             if omim:
                 parse_and_add_notes(f"OMIM: {omim}", individual, self.admin_user)
+                consumed_columns.add("OMIM")
 
             # Previous tests
             prev_raw = d.get("Previous test")
             if prev_raw:
-                prev_status = Status.objects.filter(
-                    name="Previous", content_type=ct_test).first()
-                for tt_name in self._normalize_test_tokens(str(prev_raw)):
+                # n/a is an understood "no test" marker, not unused text.
+                # The shared normalizer also removes it from mixed lists.
+                consumed_columns.add("Previous test")
+                previous_types = self._normalize_test_tokens(str(prev_raw))
+                prev_status = self.statuses["test"].get("previous")
+                for tt_name in previous_types:
                     tt = get_or_create_test_type(tt_name, self.admin_user)
                     self._backfill_testtype_report_fields(tt)
-                    if not individual.get_all_tests().filter(test_type=tt).exists():
+                    if not any(
+                        normalize_test_type_name(test.test_type.name).casefold() == tt.name.casefold()
+                        for test in individual.get_all_tests().select_related("test_type")
+                    ):
                         sample = (individual.samples.first()
                                   or self._get_placeholder_sample(individual))
                         test = Test.objects.create(
@@ -3949,36 +4070,40 @@ class Command(BaseCommand):
                         ]
                         test.statuses.set([s for s in synthetic_statuses if s])
 
-            # RareBoost Reanaliz/WGS/WES/RNA seq
+            # This column summarizes tests recorded elsewhere. Preserve it as
+            # an individual note; later steps do not depend on analyses here.
             rb_raw = d.get("RareBoost Reanaliz/WGS/WES/RNA seq")
             if rb_raw:
                 self._process_rb_reanaliz(individual, str(rb_raw))
+                consumed_columns.add("RareBoost Reanaliz/WGS/WES/RNA seq")
 
-            # Singleton-Trio notes on non-previous tests
-            singleton_trio = str(d.get("Singleton-Trio") or "").strip()
-            if singleton_trio:
-                non_prev_tests = list(
-                    individual.get_all_tests()
-                    .exclude(statuses__name="Previous")
-                    .order_by("id"))
-                trio_values = [v.strip() for v in singleton_trio.split(",") if v.strip()]
-                if not trio_values:
-                    trio_values = [singleton_trio]
-                last_val = trio_values[-1]
-                for idx, test_obj in enumerate(non_prev_tests):
-                    note_val = trio_values[idx] if idx < len(trio_values) else last_val
-                    parse_and_add_notes(note_val, test_obj, self.admin_user)
+            self._apply_yayin_singleton_trio(individual, d)
+            if str(d.get("Singleton-Trio") or "").strip():
+                consumed_columns.add("Singleton-Trio")
 
             # Variant import — prefer the importable Chromosomal Position column.
-            variant_text = str(
-                d.get("Chromosomal Position")
-                or d.get("Variant")
-                or ""
-            ).strip()
+            variant_column = (
+                "Chromosomal Position"
+                if str(d.get("Chromosomal Position") or "").strip()
+                else "Variant"
+            )
+            variant_text = str(d.get(variant_column) or "").strip()
             if variant_text:
-                for line in _split_yayin_variant_text(variant_text):
+                zyg = _normalize_yayin_zygosity(d.get("Zygosity"))
+                if not zyg:
+                    warning = "Empty or unknown zygosity; continuing with empty zygosity."
+                    self.stdout.write(self.style.WARNING(
+                        f"  {warning} {sheet_name}, {lab_id}, {variant_text}; source={d.get('Zygosity')!r}"))
+                    self._record_issue(
+                        step="step20", sheet=sheet_name, severity="warning",
+                        reason=warning, lab_id=lab_id, row=d,
+                    )
+                lines = _split_yayin_variant_text(variant_text)
+                fully_imported = bool(lines)
+                for line in lines:
                     records = _extract_variant_records(line)
                     if not records:
+                        fully_imported = False
                         variant_skipped += 1
                         self._record_issue(
                             step="step20",
@@ -3994,7 +4119,6 @@ class Command(BaseCommand):
                         continue
 
                     for record in records:
-                        zyg = _normalize_yayin_zygosity(d.get("Zygosity"))
                         model_cls, lookup, defaults = _variant_lookup_and_defaults(
                             record,
                             individual,
@@ -4002,6 +4126,7 @@ class Command(BaseCommand):
                             self.admin_user,
                         )
                         if not model_cls:
+                            fully_imported = False
                             variant_skipped += 1
                             self._record_issue(
                                 step="step20",
@@ -4019,6 +4144,8 @@ class Command(BaseCommand):
                                 **lookup, defaults=defaults)
 
                             if not created_variant:
+                                if zyg and variant_obj.zygosity == zyg:
+                                    consumed_columns.add("Zygosity")
                                 variant_skipped += 1
                                 self._record_issue(
                                     step="step20",
@@ -4031,11 +4158,14 @@ class Command(BaseCommand):
                                 )
                                 continue
 
+                            if zyg:
+                                consumed_columns.add("Zygosity")
                             if record.get("note"):
                                 parse_and_add_notes(record["note"], variant_obj, self.admin_user)
 
                             variant_imported += 1
                         except Exception as exc:
+                            fully_imported = False
                             variant_skipped += 1
                             self._record_issue(
                                 step="step20",
@@ -4048,6 +4178,12 @@ class Command(BaseCommand):
                             )
                             self.stdout.write(self.style.ERROR(
                                 f"  Yayın_İçi: variant import failed for {lab_id} -> {line}: {exc}"))
+                if fully_imported:
+                    consumed_columns.add(variant_column)
+
+            for column, value in d.items():
+                if column not in consumed_columns:
+                    self._add_yayin_note(individual, value, str(column).strip())
 
             updated += 1
 
@@ -4067,105 +4203,90 @@ class Command(BaseCommand):
             if tl == "gene panel" and i + 1 < len(tokens) \
                     and tokens[i + 1].lower() == "single gene":
                 result.append("Targeted Panel"); skip_next = True
-            elif tl in {"wes", "wgs", "cma", "karyotype"}:
-                result.append(tok.upper())
-            elif tl in {"targeted panel", "gene panel single gene"}:
-                result.append("Targeted Panel")
-            elif tl in {"rna seq", "rnaseq", "rna-seq"}:
-                result.append("RNA Seq")
             else:
-                result.append(tok.strip('" '))
+                result.append(normalize_test_type_name(tok))
         return [r for r in result if r]
 
+    def _add_yayin_note(self, target, value, column=None):
+        """Preserve a complete source value once, including False/0 and newlines."""
+        text = str(value).strip() if value is not None else ""
+        if not text or self.dry_run:
+            return
+        label = f"{column}: " if column else ""
+        Note.objects.get_or_create(
+            content_type=ContentType.objects.get_for_model(target),
+            object_id=target.pk,
+            content=f"Yayın İçi: {label}{text}",
+            defaults={"user": self.admin_user},
+        )
+
+    def _test_for_yayin_singleton(self, individual, name):
+        """Reuse the individual's matching assay, or record a missing test."""
+        name = normalize_test_type_name(name)
+        for test in individual.get_all_tests().select_related("test_type").order_by("id"):
+            if normalize_test_type_name(test.test_type.name).casefold() == name.casefold():
+                return test
+        test_type = get_or_create_test_type(name, self.admin_user)
+        self._backfill_testtype_report_fields(test_type)
+        sample = individual.samples.first() or self._get_placeholder_sample(individual)
+        test = Test.objects.create(sample=sample, test_type=test_type, created_by=self.admin_user)
+        unsure = self.statuses["test"].get("unsure_import")
+        if unsure:
+            test.statuses.add(unsure)
+        self._add_yayin_note(test, f"Created for Singleton-Trio; source test type: {name}.")
+        return test
+
+    def _apply_yayin_singleton_trio(self, individual, row):
+        """Use the sheet's named tests, not the database insertion order."""
+        raw = str(row.get("Singleton-Trio") or "").strip()
+        if not raw or self.dry_run:
+            return
+        summary = str(row.get("RareBoost Reanaliz/WGS/WES/RNA seq") or "")
+        names = self._normalize_test_tokens(summary)
+        # In this sheet, standalone Reanalysis refers to a WES test.
+        # Keep source positions for Singleton-Trio and the original summary note.
+        names = ["WES" if name.casefold() == "reanalysis" else name for name in names]
+        values = [value.strip() for value in re.split(r"[,\n]", raw) if value.strip()]
+        if not values:
+            self._add_yayin_note(individual, raw, "Singleton-Trio")
+            return
+        if names:
+            tests = [self._test_for_yayin_singleton(individual, name) for name in names]
+        else:
+            existing = list(individual.get_all_tests().exclude(statuses__name="Previous").order_by("id"))
+            if len(existing) == 1 and len(values) == 1:
+                tests = existing
+            else:
+                # There is no assay name to infer from "Trio" alone. Retain
+                # that uncertainty in the test type instead of guessing WES/WGS.
+                tests = [self._test_for_yayin_singleton(individual, "Unspecified")]
+                self._add_yayin_note(tests[0], "No unambiguous test type was supplied for Singleton-Trio.")
+
+        # One value applies to the named tests; multiple values require a
+        # corresponding source position. Do not repeat a last value arbitrarily.
+        if len(values) == 1:
+            pairs = [(test, values[0]) for test in tests]
+        elif len(values) == len(tests):
+            pairs = list(zip(tests, values))
+        else:
+            self._add_yayin_note(individual, raw, "Singleton-Trio")
+            self._record_issue(
+                step="step20", sheet="GÜNCELyayıniciyedek", severity="warning",
+                reason="Singleton-Trio values cannot be matched to source tests; preserved as an individual note.",
+                lab_id=row.get("RareBoost ID"), row=row,
+                context={"individual_id": individual.pk, "test_ids": [test.pk for test in tests]},
+            )
+            return
+        for test, value in pairs:
+            Note.objects.get_or_create(
+                content_type=ContentType.objects.get_for_model(Test), object_id=test.pk,
+                content=value, defaults={"user": self.admin_user},
+            )
+
     def _process_rb_reanaliz(self, individual, text: str) -> None:
-        """Handle the 'RareBoost Reanaliz/WGS/WES/RNA seq' column."""
-        parts = [p.strip() for p in text.replace("\n", ",").split(",") if p.strip()]
-        if not parts:
-            return
-
-        def _normalize_analysis_token(part: str) -> str:
-            lower = part.lower().strip()
-            if "rna seq" in lower or "rnaseq" in lower or "rna-seq" in lower:
-                return "RNA Seq"
-            if "targeted panel" in lower:
-                return "Targeted Panel"
-            if "wes" in lower:
-                return "WES"
-            if "wgs" in lower:
-                return "WGS"
-            return part.strip()
-
-        normalized_tokens: list[str] = []
-        seen_tokens: set[str] = set()
-        for part in parts:
-            token = _normalize_analysis_token(part)
-            if token and token not in seen_tokens:
-                normalized_tokens.append(token)
-                seen_tokens.add(token)
-
-        if not normalized_tokens:
-            return
-
-        unsure_import = self.statuses["analysis"].get("unsure_import")
-        analysis_type_cache: dict[str, object] = {}
-        from datetime import date as date_cls
-
-        for token in normalized_tokens:
-            analysis_type = analysis_type_cache.get(token)
-            if analysis_type is None:
-                analysis_type = get_or_create_analysis_type(token, self.admin_user)
-                analysis_type_cache[token] = analysis_type
-
-            target_pipeline = (
-                Pipeline.objects.filter(
-                    test__sample__individual=individual,
-                    type__name__iexact=token,
-                )
-                .order_by("id")
-                .first()
-            )
-            if not target_pipeline:
-                target_pipeline = (
-                    Pipeline.objects.filter(
-                        test__sample__individual=individual,
-                        type__name__icontains=token,
-                    )
-                    .order_by("id")
-                    .first()
-                )
-
-            analysis = Analysis.objects.create(
-                pipeline=target_pipeline,
-                type=analysis_type,
-                performed_date=date_cls.today(),
-                created_by=self.admin_user,
-            )
-            analysis.performed_by.add(self.admin_user)
-            parse_and_add_notes(
-                "\n".join(filter(None, [
-                    f"RareBoost Reanaliz/WGS/WES/RNA seq: {text}",
-                    f"Normalized token: {token}",
-                ])),
-                analysis,
-                self.admin_user,
-            )
-
-            if not target_pipeline:
-                self.stdout.write(self.style.WARNING(
-                    f"  RareBoost reanalysis: no matching pipeline found for {individual.primary_id} -> {token}; created Analysis with Unsure Import"))
-                self._record_issue(
-                    step="step20",
-                    sheet="GÜNCELyayıniciyedek",
-                    severity="warning",
-                    reason="No matching pipeline found for RareBoost reanalysis entry; created Analysis with Unsure Import.",
-                    lab_id=individual.primary_id,
-                    context={
-                        "raw_value": text,
-                        "normalized_token": token,
-                    },
-                )
-                if unsure_import:
-                    analysis.statuses.set([unsure_import])
+        """Preserve the Yayın_İçi test summary without synthesizing analyses."""
+        # Keep the entire cell, including commas and newlines, in one note.
+        self._add_yayin_note(individual, text)
 
     # ==================================================================
     # Internal helpers

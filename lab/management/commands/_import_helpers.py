@@ -284,23 +284,60 @@ def get_or_create_sample_type(name, admin_user):
     return st
 
 
+_TEST_TYPE_NAMES = {
+    'rnaseq': 'RNA Seq', 'rnasequencing': 'RNA Seq',
+    'wes': 'WES', 'wholeexomesequencing': 'WES',
+    'wgs': 'WGS', 'wholegenomesequencing': 'WGS',
+    'ces': 'CES', 'clinicalexomesequencing': 'CES',
+    'cma': 'CMA', 'karyotype': 'Karyotype', 'sanger': 'Sanger',
+    'targetedpanel': 'Targeted Panel', 'genepanel': 'Targeted Panel',
+    'genepanelsinglegene': 'Targeted Panel',
+    'longreadwgs': 'Long Read WGS', 'longreadwholegenomesequencing': 'Long Read WGS',
+    'reanalysis': 'Reanalysis', 'functionalanalysis': 'Functional Analysis',
+    'unspecified': 'Unspecified',
+}
+
+
+def normalize_test_type_name(value):
+    """Canonicalize known assay aliases without merging distinct modalities."""
+    text = re.sub(r'\s+', ' ', str(value or '').strip().strip('"')).strip()
+    if re.sub(r'\s+', '', text).casefold() in {'', '-', 'na', 'n/a', 'none', 'null'}:
+        return ''
+    text = re.sub(r'\s*\(\s*rb\s*\)\s*$', '', text, flags=re.I).strip()
+    key = re.sub(r'[\s_-]+', '', text).casefold()
+    # Reanalysis describes the occasion when an actual modality is supplied.
+    for modality in ('wes', 'wgs', 'ces', 'rnaseq'):
+        if key in {modality + 'reanalysis', 'reanalysis' + modality}:
+            key = modality
+            break
+    return _TEST_TYPE_NAMES.get(key, text)
+
+
 def get_or_create_test_type(name, admin_user):
-    """Get or create a TestType by name."""
+    """Reuse equivalent test types across every sheet, including legacy spellings."""
     from lab.models import TestType
+    name = normalize_test_type_name(name)
     if not name:
         return None
-    tt, _ = TestType.objects.get_or_create(name=name, defaults={'created_by': admin_user})
-    return tt
+    matches = [
+        tt for tt in TestType.objects.order_by('id')
+        if normalize_test_type_name(tt.name).casefold() == name.casefold()
+    ]
+    if matches:
+        tt = next((tt for tt in matches if tt.name == name), matches[0])
+        if name in _TEST_TYPE_NAMES.values() and tt.name != name:
+            tt.name = name
+            tt.save(update_fields=['name'])
+        return tt
+    return TestType.objects.create(name=name, created_by=admin_user)
 
 
 def get_or_create_pipeline_type(name, admin_user, description='', version=''):
-    """Get or create a PipelineType, optionally scoped by version."""
+    """Get or create a PipelineType; absent versions mean an unversioned type."""
     from lab.models import PipelineType
     if not name:
         return None
-    lookup = {'name': name}
-    if version:
-        lookup['version'] = version
+    lookup = {'name': name, 'version': version or None}
     pt, _ = PipelineType.objects.get_or_create(
         **lookup,
         defaults={'description': description, 'created_by': admin_user},

@@ -130,10 +130,36 @@ class AnnotationService:
                 self._save_annotation(variant, "vep", data)
                 return data
             else:
-                print(f"VEP Error: {response.status_code} {response.text}")
+                self._log_vep_error(
+                    variant, concrete_variant, url, params,
+                    f"HTTP {response.status_code}: {response.text}",
+                )
         except Exception as e:
-            print(f"Error fetching VEP: {e}")
+            self._log_vep_error(
+                variant, concrete_variant, url, params,
+                f"{type(e).__name__}: {e}",
+            )
         return None
+
+    def _log_vep_error(self, variant, concrete_variant, url, params, error):
+        """Print enough context to locate a failed import without extra DB queries."""
+        context = {
+            "variant_id": variant.pk,
+            "variant_type": variant.type,
+            "individual_id": variant.individual_id,
+            "analysis_id": variant.analysis_id,
+            "assembly_version": variant.assembly_version,
+            "chromosome": variant.chromosome,
+            "start": variant.start,
+            "end": variant.end,
+            "reference": getattr(concrete_variant, "reference", None),
+            "alternate": getattr(concrete_variant, "alternate", None),
+            "sv_type": getattr(concrete_variant, "sv_type", None),
+            "cnv_type": getattr(concrete_variant, "cnv_type", None),
+            "request_method": "GET",
+            "request_url": requests.Request("GET", url, params=params).prepare().url,
+        }
+        print(f"VEP Error: {error}\nVEP context: {json.dumps(context, ensure_ascii=False)}")
 
     def fetch_genebe(self, variant):
         """Fetch annotation from GeneBe."""
